@@ -2,6 +2,10 @@ import type { ComponentType, ReactNode } from "react";
 
 import type { PredicateRef } from "../graph/client.js";
 import type { AnyTypeOutput, EdgeOutput } from "../graph/schema.js";
+import {
+  genericWebFieldEditorCapabilities,
+  genericWebFieldViewCapabilities,
+} from "./generic-fields.js";
 import { getPredicateDisplayKind, getPredicateEditorKind } from "./predicate.js";
 
 export type PredicateFieldProps<
@@ -133,7 +137,10 @@ export function createWebFieldResolver(input?: {
   };
 }
 
-export const defaultWebFieldResolver = createWebFieldResolver();
+export const defaultWebFieldResolver = createWebFieldResolver({
+  view: genericWebFieldViewCapabilities,
+  editor: genericWebFieldEditorCapabilities,
+});
 
 function UnsupportedField({
   kind,
