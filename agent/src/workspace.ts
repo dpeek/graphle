@@ -507,21 +507,44 @@ export class CheckoutManager {
     return result.exitCode === 0;
   }
 
-  async #mergeIntoControlRepo(issue: IssueRuntimeState) {
+  async #refreshControlRepoMain(controlPath: string) {
     const checkoutMain = await this.#runCommand(
       ["git", "checkout", "main"],
-      issue.controlPath,
+      controlPath,
       this.#hooks.timeoutMs,
     );
     if (checkoutMain.exitCode !== 0) {
-      await this.#runOrThrow(["git", "checkout", "-B", "main", "origin/main"], issue.controlPath);
-    } else {
-      await this.#runCommand(
-        ["git", "pull", "--ff-only", "origin", "main"],
-        issue.controlPath,
-        this.#hooks.timeoutMs,
-      );
+      await this.#runOrThrow(["git", "checkout", "-B", "main", "origin/main"], controlPath);
+      return;
     }
+    await this.#runOrThrow(["git", "pull", "--ff-only", "origin", "main"], controlPath);
+  }
+
+  async #refreshMainAndRebaseIssueBranch(issue: IssueRuntimeState) {
+    if (issue.sourceRepoPath && issue.controlPath === issue.sourceRepoPath) {
+      await this.#refreshSourceRepoMain(issue.sourceRepoPath);
+    } else {
+      await this.#refreshControlRepoMain(issue.controlPath);
+    }
+    await this.#runOrThrow(["git", "rebase", "main"], issue.worktreePath);
+  }
+
+  async #refreshSourceRepoMain(repoPath: string) {
+    const currentBranch = await this.#currentBranch(repoPath);
+    if (currentBranch === "main") {
+      if (await this.#isDirty(repoPath)) {
+        throw new Error(`source_repo_dirty_on_main:${repoPath}`);
+      }
+      await this.#runOrThrow(["git", "pull", "--ff-only", "origin", "main"], repoPath);
+      return;
+    }
+    await this.#runOrThrow(["git", "fetch", "--prune", "origin"], repoPath);
+    const originMain = await this.#revParse(repoPath, "origin/main");
+    await this.#runOrThrow(["git", "update-ref", "refs/heads/main", originMain], repoPath);
+  }
+
+  async #mergeIntoControlRepo(issue: IssueRuntimeState) {
+    await this.#runOrThrow(["git", "checkout", "main"], issue.controlPath);
     await this.#runOrThrow(["git", "merge", "--no-edit", issue.branchName], issue.controlPath);
     await this.#runOrThrow(["git", "push", "origin", "main"], issue.controlPath);
   }
@@ -562,6 +585,7 @@ export class CheckoutManager {
   }
 
   async #mergeIssueBranch(issue: IssueRuntimeState) {
+    await this.#refreshMainAndRebaseIssueBranch(issue);
     if (issue.sourceRepoPath && issue.controlPath === issue.sourceRepoPath) {
       await this.#mergeIntoSourceRepo(issue);
       return;
@@ -601,7 +625,11 @@ export class CheckoutManager {
   }
 
   async #revParseHead(cwd: string) {
-    const result = await this.#runOrThrow(["git", "rev-parse", "HEAD"], cwd);
+    return await this.#revParse(cwd, "HEAD");
+  }
+
+  async #revParse(cwd: string, ref: string) {
+    const result = await this.#runOrThrow(["git", "rev-parse", ref], cwd);
     return result.stdout.trim();
   }
 
