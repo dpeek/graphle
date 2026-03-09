@@ -3,11 +3,13 @@ import { resolve } from "node:path";
 
 import { AgentService } from "./service.js";
 import { loadWorkflowFile } from "./workflow.js";
+import { readIssueRuntimeState } from "./workspace.js";
 
 function printHelp() {
   console.log(`Usage:
   surf agent start [workflowPath] [--once] [--worker-id ID] [--worker-count N] [--worker-index N]
   surf agent worker <workerId> [workflowPath] [--once] [--worker-count N] [--worker-index N]
+  surf agent tail <issue> [workflowPath]
   surf agent validate [workflowPath]
   `);
 }
@@ -85,6 +87,38 @@ export async function runAgentCli(args: string[]) {
         projectSlug: result.value.tracker.projectSlug,
         workspaceRoot: result.value.workspace.root,
       });
+      return;
+    }
+    case "tail": {
+      const [issueIdentifier, workflowArg] = rest;
+      if (!issueIdentifier || issueIdentifier.startsWith("--")) {
+        throw new Error("Usage: surf agent tail <issue> [workflowPath]");
+      }
+      const workflowPath = resolve(process.cwd(), workflowArg ?? "WORKFLOW.md");
+      const result = await loadWorkflowFile(workflowPath);
+      if (!result.ok) {
+        for (const error of result.errors) {
+          console.error(`${error.path}: ${error.message}`);
+        }
+        process.exitCode = 1;
+        return;
+      }
+      const issueState = await readIssueRuntimeState(result.value.workspace.root, issueIdentifier);
+      if (!issueState) {
+        console.error(`No retained worker output for ${issueIdentifier}`);
+        process.exitCode = 1;
+        return;
+      }
+      const proc = Bun.spawn({
+        cmd: ["tail", "-n", "200", "-f", issueState.outputPath],
+        stderr: "inherit",
+        stdin: "inherit",
+        stdout: "inherit",
+      });
+      const exitCode = await proc.exited;
+      if (exitCode !== 0) {
+        process.exitCode = exitCode;
+      }
       return;
     }
     case "help":

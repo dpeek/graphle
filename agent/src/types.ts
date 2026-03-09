@@ -87,9 +87,12 @@ export type ValidationResult<T> = { ok: true; value: T } | { errors: ValidationE
 
 export interface PreparedWorkspace {
   branchName: string;
+  controlPath: string;
   createdNow: boolean;
   originPath: string;
+  outputPath?: string;
   path: string;
+  runtimePath?: string;
   sourceRepoPath?: string;
   workerId: string;
 }
@@ -98,6 +101,7 @@ export interface IssueRunResult {
   issue: AgentIssue;
   logPaths?: {
     eventLog: string;
+    mainOutput: string;
     stderrLog: string;
     stdoutLog: string;
   };

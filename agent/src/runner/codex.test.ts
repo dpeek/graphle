@@ -167,6 +167,7 @@ test("auto-approves requestUserInput prompts for the session", () => {
 test("default turn sandbox includes checkout and local origin", () => {
   const sandbox = createDefaultTurnSandbox({
     branchName: "ope-43",
+    controlPath: "/Users/dpeek/code/io",
     createdNow: false,
     originPath: "/Users/dpeek/code/io",
     path: "/Users/dpeek/code/io/tmp/workspace/workers/worker-1/repo",
