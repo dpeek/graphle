@@ -135,6 +135,10 @@ function uniquePaths(paths: Array<string | undefined>) {
 }
 
 export function createDefaultTurnSandbox(workspace: PreparedWorkspace) {
+  const controlGitPath =
+    basename(workspace.controlPath) === ".git" || workspace.controlPath.endsWith(".git")
+      ? workspace.controlPath
+      : join(workspace.controlPath, ".git");
   const originGitPath =
     basename(workspace.originPath) === ".git" || workspace.originPath.endsWith(".git")
       ? undefined
@@ -145,7 +149,13 @@ export function createDefaultTurnSandbox(workspace: PreparedWorkspace) {
     networkAccess: true,
     readOnlyAccess: { type: "fullAccess" } as const,
     type: "workspaceWrite" as const,
-    writableRoots: uniquePaths([workspace.path, workspace.originPath, originGitPath]),
+    writableRoots: uniquePaths([
+      workspace.path,
+      workspace.controlPath,
+      controlGitPath,
+      workspace.originPath,
+      originGitPath,
+    ]),
   };
 }
 
@@ -174,8 +184,14 @@ function summarizeParams(params: unknown) {
   };
 }
 
-function printDirectOutput(issueIdentifier: string, stream: "stderr" | "stdout", line: string) {
+function printDirectOutput(
+  issueIdentifier: string,
+  stream: "stderr" | "stdout",
+  line: string,
+  writeMain?: (text: string) => void,
+) {
   const text = `[${issueIdentifier} ${stream}] ${line}\n`;
+  writeMain?.(text);
   if (stream === "stderr") {
     process.stderr.write(text);
     return;
@@ -186,7 +202,9 @@ function printDirectOutput(issueIdentifier: string, stream: "stderr" | "stdout",
 type WorkspaceLogWriter = {
   displayLogPath: string;
   eventLogPath: string;
+  mainOutputPath: string;
   writeDisplay: (text: string) => void;
+  writeMain: (text: string) => void;
   stderrLogPath: string;
   stdoutLogPath: string;
   writeEvent: (event: string, data?: Record<string, unknown>) => void;
@@ -334,7 +352,11 @@ export function renderCodexSessionMessage(options: {
   const { issueIdentifier, issueTitle, message, state, workerId, writeDisplay } = options;
   if (!state.headerPrinted) {
     const titlePrefix = workerId ? `${workerId} ` : "";
-    renderSessionLine(`=== ${titlePrefix}${issueIdentifier} ${issueTitle} ===`, state, writeDisplay);
+    renderSessionLine(
+      `=== ${titlePrefix}${issueIdentifier} ${issueTitle} ===`,
+      state,
+      writeDisplay,
+    );
     state.headerPrinted = true;
   }
   switch (message.method) {
@@ -455,10 +477,14 @@ export function renderCodexSessionMessage(options: {
 }
 
 async function createWorkspaceLogWriter(workspace: PreparedWorkspace): Promise<WorkspaceLogWriter> {
-  const logDir = join(workspace.path, ".agent");
+  if (!workspace.runtimePath) {
+    throw new Error("workspace_runtime_path_missing");
+  }
+  const logDir = workspace.runtimePath;
   await mkdir(logDir, { recursive: true });
   const displayLogPath = join(logDir, "codex.session.log");
   const eventLogPath = join(logDir, "events.log");
+  const mainOutputPath = workspace.outputPath ?? join(logDir, "output.log");
   const stderrLogPath = join(logDir, "codex.stderr.log");
   const stdoutLogPath = join(logDir, "codex.stdout.jsonl");
 
@@ -469,10 +495,15 @@ async function createWorkspaceLogWriter(workspace: PreparedWorkspace): Promise<W
   return {
     displayLogPath,
     eventLogPath,
+    mainOutputPath,
     stderrLogPath,
     stdoutLogPath,
     writeDisplay(text) {
       void appendFile(displayLogPath, text);
+      void appendFile(mainOutputPath, text);
+    },
+    writeMain(text) {
+      void appendFile(mainOutputPath, text);
     },
     writeEvent(event, data) {
       appendLine(
@@ -563,7 +594,7 @@ export class CodexAppServerRunner {
           }
           queue.push(message);
         } catch (error) {
-          printDirectOutput(options.issue.identifier, "stdout", line);
+          printDirectOutput(options.issue.identifier, "stdout", line, logs.writeMain);
           queue.push({
             error: { message: `malformed:${(error as Error).message}` },
             method: "malformed",
@@ -579,7 +610,7 @@ export class CodexAppServerRunner {
       proc.stderr,
       (line) => {
         state.stderr.push(line);
-        printDirectOutput(options.issue.identifier, "stderr", line);
+        printDirectOutput(options.issue.identifier, "stderr", line, logs.writeMain);
         const data = {
           issueIdentifier: options.issue.identifier,
           line,
@@ -688,6 +719,7 @@ export class CodexAppServerRunner {
         issue: options.issue,
         logPaths: {
           eventLog: logs.eventLogPath,
+          mainOutput: logs.mainOutputPath,
           stderrLog: logs.stderrLogPath,
           stdoutLog: logs.stdoutLogPath,
         },

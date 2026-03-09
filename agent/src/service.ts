@@ -1,4 +1,5 @@
 import { createLogger, type Logger } from "@io/lib";
+import { appendFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
 import type { AgentIssue, IssueRunResult, Workflow } from "./types.js";
@@ -89,13 +90,19 @@ export class AgentService {
       await this.runOnce(workflow);
       return;
     }
-    await this.runOnce(workflow);
+    const initialResults = await this.runOnce(workflow);
+    if (initialResults.length) {
+      return;
+    }
     this.#timer = setInterval(async () => {
       if (this.#running) {
         return;
       }
       try {
-        await this.runOnce();
+        const results = await this.runOnce();
+        if (results.length) {
+          await this.stop();
+        }
       } catch (error) {
         this.#log.error("tick.failed", error instanceof Error ? error : new Error(String(error)));
       }
@@ -116,9 +123,17 @@ export class AgentService {
     try {
       const activeWorkflow = workflow ?? (await this.#loadWorkflow());
       await this.#ensureWorkerReady(activeWorkflow);
+      const workspaceManager = this.#createWorkspaceManager(activeWorkflow);
       const tracker = new LinearTrackerAdapter(activeWorkflow.tracker, this.#log);
+      await workspaceManager.reconcileTerminalIssues(
+        tracker,
+        activeWorkflow.tracker.terminalStates,
+      );
       const issues = await tracker.fetchCandidateIssues();
-      const workerCount = Math.max(1, this.#workerCount ?? activeWorkflow.agent.maxConcurrentAgents);
+      const workerCount = Math.max(
+        1,
+        this.#workerCount ?? activeWorkflow.agent.maxConcurrentAgents,
+      );
       const assigned = pickAssignedIssue(issues, workerCount, this.#workerIndex);
       if (!assigned) {
         this.#log.info("tick.idle");
@@ -142,10 +157,8 @@ export class AgentService {
   async #runIssue(workflow: Workflow, issue: AgentIssue, workerCount: number) {
     const workspaceManager = this.#createWorkspaceManager(workflow);
     const workspace = await workspaceManager.prepare(issue);
-    await workspaceManager.runBeforeRunHook(workspace.path);
-    process.stdout.write(
-      `${this.#workerId}: ${issue.identifier} -> ${workspace.path} [${workspace.branchName}]\n`,
-    );
+    const assignmentLine = `${this.#workerId}: ${issue.identifier} -> ${workspace.path} [${workspace.branchName}]\n`;
+    await this.#appendIssueOutput(workspace.outputPath, assignmentLine);
     const prompt = renderPrompt(workflow.promptTemplate, {
       attempt: 1,
       issue,
@@ -153,45 +166,66 @@ export class AgentService {
       workspace,
     });
     const runner = new CodexAppServerRunner(workflow.codex, this.#log);
-    let result: IssueRunResult | undefined;
+    let beforeRunCompleted = false;
+    let result: IssueRunResult;
     try {
+      await workspaceManager.runBeforeRunHook(workspace.path);
+      beforeRunCompleted = true;
+      process.stdout.write(assignmentLine);
       result = await runner.run({ issue, prompt, workspace });
+    } catch (error) {
+      if (beforeRunCompleted) {
+        await workspaceManager.runAfterRunHook(workspace.path);
+      }
+      await workspaceManager.markBlocked(workspace, issue);
+      await this.#appendIssueOutput(
+        workspace.outputPath,
+        `${this.#workerId}: blocked ${issue.identifier}\n`,
+      );
+      throw error;
+    }
+
+    await workspaceManager.runAfterRunHook(workspace.path);
+    if (!result.success) {
+      await workspaceManager.markBlocked(workspace, issue);
+      await this.#appendIssueOutput(
+        workspace.outputPath,
+        `${this.#workerId}: blocked ${issue.identifier}\n`,
+      );
+      this.#log.info("issue.checkout.preserved", {
+        branchName: workspace.branchName,
+        issueIdentifier: issue.identifier,
+        workspace: workspace.path,
+      });
+      return result;
+    }
+
+    try {
+      const completion = await workspaceManager.complete(workspace, issue);
+      await this.#appendIssueOutput(
+        workspace.outputPath,
+        `${this.#workerId}: committed ${completion.commitSha} and pushed ${workspace.branchName}\n`,
+      );
       this.#log.info("issue.completed", {
         branchName: workspace.branchName,
+        commitSha: completion.commitSha,
         issueIdentifier: issue.identifier,
         success: result.success,
         workspace: workspace.path,
       });
+      this.#log.info("issue.worktree.retained", {
+        branchName: workspace.branchName,
+        issueIdentifier: issue.identifier,
+        workspace: workspace.path,
+      });
       return result;
-    } finally {
-      await workspaceManager.runAfterRunHook(workspace.path);
-      if (result?.success) {
-        try {
-          await workspaceManager.cleanup(workspace);
-          this.#log.info("issue.checkout.released", {
-            branchName: workspace.branchName,
-            issueIdentifier: issue.identifier,
-            workspace: workspace.path,
-          });
-        } catch (error) {
-          this.#log.error(
-            "issue.checkout.release_failed",
-            error instanceof Error ? error : new Error(String(error)),
-            {
-              branchName: workspace.branchName,
-              issueIdentifier: issue.identifier,
-              workspace: workspace.path,
-            },
-          );
-        }
-      } else {
-        await workspaceManager.markBlocked(workspace, issue);
-        this.#log.info("issue.checkout.preserved", {
-          branchName: workspace.branchName,
-          issueIdentifier: issue.identifier,
-          workspace: workspace.path,
-        });
-      }
+    } catch (error) {
+      await workspaceManager.markBlocked(workspace, issue);
+      await this.#appendIssueOutput(
+        workspace.outputPath,
+        `${this.#workerId}: blocked ${issue.identifier}\n`,
+      );
+      throw error;
     }
   }
 
@@ -219,5 +253,12 @@ export class AgentService {
     await workspaceManager.cleanup(workspace);
     process.stdout.write(`${this.#workerId}: ready at ${path}\n`);
     this.#ready = true;
+  }
+
+  async #appendIssueOutput(path: string | undefined, text: string) {
+    if (!path) {
+      return;
+    }
+    await appendFile(path, text);
   }
 }
