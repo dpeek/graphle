@@ -272,6 +272,12 @@ export function CompanyProofSurface({
                 </p>
               </div>
               <div className="flex gap-2 text-xs text-slate-500 dark:text-slate-400">
+                <a
+                  className="rounded-full border border-current/20 px-3 py-1"
+                  href="?surface=relationships"
+                >
+                  Relationships
+                </a>
                 <a className="rounded-full border border-current/20 px-3 py-1" href="?surface=explorer">
                   Explorer
                 </a>

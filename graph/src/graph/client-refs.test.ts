@@ -102,6 +102,11 @@ describe("typed refs", () => {
 
   it("addresses entity-reference leaves as typed predicate refs", () => {
     const { graph, companyId } = setupGraph();
+    const secondCompanyId = graph.company.create({
+      name: "Estii",
+      website: new URL("https://estii.com"),
+      status: app.status.values.paused.id,
+    });
     const personId = graph.person.create({
       name: "Alice",
       worksAt: [companyId],
@@ -111,10 +116,14 @@ describe("typed refs", () => {
     const worksAtRef: PredicateRef<typeof app.person.fields.worksAt, typeof app & typeof core> =
       personRef.fields.worksAt;
     const employers: string[] = worksAtRef.get();
+    const companyRef = worksAtRef.resolveEntity(companyId);
 
     expect(worksAtRef.subjectId).toBe(personId);
     expect(worksAtRef.predicateId).toBe(edgeId(app.person.fields.worksAt));
     expect(employers).toEqual([companyId]);
+    expect(companyRef).toBe(graph.company.ref(companyId));
+    expect(companyRef?.fields.name.get()).toBe("Acme");
+    expect(worksAtRef.listEntities().map((entity) => entity.id)).toEqual([companyId, secondCompanyId]);
   });
 
   it("supports cardinality-aware predicate mutation helpers", () => {

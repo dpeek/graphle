@@ -4,6 +4,7 @@ import { createRoot } from "react-dom/client";
 import { CompanyProofPage } from "./company-proof.js";
 import { Explorer } from "./explorer.js";
 import { Outliner } from "./outliner.js";
+import { RelationshipProofPage } from "./relationship-proof.js";
 
 function resolveSurface() {
   const params = new URLSearchParams(window.location.search);
@@ -11,6 +12,7 @@ function resolveSurface() {
 
   if (surface === "explorer") return <Explorer />;
   if (surface === "outliner") return <Outliner />;
+  if (surface === "relationships") return <RelationshipProofPage />;
   return <CompanyProofPage />;
 }
 

@@ -4,6 +4,7 @@ import {
   fieldTreeId,
   fieldTreeKey,
   fieldsMeta,
+  isEntityType,
   isEnumType,
   isFieldsOutput,
   isScalarType,
@@ -139,6 +140,10 @@ export type PredicateRangeTypeOf<
   T extends EdgeOutput,
   Defs extends Record<string, AnyTypeOutput> = CoreDefs,
 > = TypeByKey<Defs, T["range"]> | undefined;
+type PredicateRangeEntityTypeOf<
+  T extends EdgeOutput,
+  Defs extends Record<string, AnyTypeOutput> = CoreDefs,
+> = Extract<NonNullable<PredicateRangeTypeOf<T, Defs>>, TypeOutput>;
 type PredicateItemOf<
   T extends EdgeOutput,
   Defs extends Record<string, AnyTypeOutput> = CoreDefs,
@@ -147,6 +152,12 @@ type PredicateSetValueOf<
   T extends EdgeOutput,
   Defs extends Record<string, AnyTypeOutput> = CoreDefs,
 > = Exclude<PredicateValueOf<T, Defs>, undefined>;
+type PredicateRangeEntityRefOf<
+  T extends EdgeOutput,
+  Defs extends Record<string, AnyTypeOutput> = CoreDefs,
+> = [PredicateRangeEntityTypeOf<T, Defs>] extends [never]
+  ? never
+  : EntityRef<PredicateRangeEntityTypeOf<T, Defs>, Defs>;
 
 type RefTree<T, Defs extends Record<string, AnyTypeOutput>> = T extends EdgeOutput
   ? PredicateRef<T, Defs>
@@ -166,6 +177,8 @@ export type PredicateRef<
   predicateId: string;
   field: T;
   rangeType: PredicateRangeTypeOf<T, Defs>;
+  resolveEntity(id: string): PredicateRangeEntityRefOf<T, Defs> | undefined;
+  listEntities(): PredicateRangeEntityRefOf<T, Defs>[];
   get(): PredicateValueOf<T, Defs>;
   subscribe(listener: PredicateSlotListener): () => void;
   batch<TResult>(fn: () => TResult): TResult;
@@ -197,6 +210,11 @@ export type EntityRef<
   update(patch: Partial<CreateInputOfType<T, Defs>>): EntityOfType<T, Defs>;
   batch<TResult>(fn: () => TResult): TResult;
   delete(): void;
+};
+
+type EntityLookup<Defs extends Record<string, AnyTypeOutput>> = {
+  resolve<T extends TypeOutput>(typeDef: T, id: string): EntityRef<T, Defs>;
+  list<T extends TypeOutput>(typeDef: T): EntityRef<T, Defs>[];
 };
 
 type FlatPredicateEntry = {
@@ -751,12 +769,28 @@ function createPredicateRef<T extends EdgeOutput, Defs extends Record<string, An
   scalarByKey: Map<string, ScalarTypeOutput<any>>,
   typeByKey: Map<string, AnyTypeOutput>,
   enumValuesByRange: Map<string, Set<string>>,
+  entityLookup: EntityLookup<Defs>,
 ): PredicateRef<T, Defs> {
   const base = {
     subjectId,
     predicateId: edgeId(field),
     field,
     rangeType: typeByKey.get(field.range) as TypeByKey<Defs, T["range"]> | undefined,
+    resolveEntity(id: string) {
+      const rangeType = typeByKey.get(field.range);
+      if (!rangeType || !isEntityType(rangeType)) return undefined;
+      return entityLookup.resolve(
+        rangeType as PredicateRangeEntityTypeOf<T, Defs>,
+        id,
+      ) as PredicateRangeEntityRefOf<T, Defs>;
+    },
+    listEntities() {
+      const rangeType = typeByKey.get(field.range);
+      if (!rangeType || !isEntityType(rangeType)) return [];
+      return entityLookup.list(
+        rangeType as PredicateRangeEntityTypeOf<T, Defs>,
+      ) as PredicateRangeEntityRefOf<T, Defs>[];
+    },
     get() {
       return readPredicateValue(store, subjectId, field, scalarByKey, typeByKey, {
         strictRequired: true,
@@ -844,6 +878,7 @@ function buildFieldRefs<T extends FieldsOutput, Defs extends Record<string, AnyT
   scalarByKey: Map<string, ScalarTypeOutput<any>>,
   typeByKey: Map<string, AnyTypeOutput>,
   enumValuesByRange: Map<string, Set<string>>,
+  entityLookup: EntityLookup<Defs>,
 ): FieldGroupRef<T, Defs> {
   const out: Record<string, unknown> = {};
   Object.defineProperty(out, fieldGroupMeta, {
@@ -867,6 +902,7 @@ function buildFieldRefs<T extends FieldsOutput, Defs extends Record<string, AnyT
         scalarByKey,
         typeByKey,
         enumValuesByRange,
+        entityLookup,
       );
       continue;
     }
@@ -880,6 +916,7 @@ function buildFieldRefs<T extends FieldsOutput, Defs extends Record<string, AnyT
         scalarByKey,
         typeByKey,
         enumValuesByRange,
+        entityLookup,
       );
     }
   }
@@ -894,6 +931,7 @@ function createEntityRef<T extends TypeOutput, Defs extends Record<string, AnyTy
   scalarByKey: Map<string, ScalarTypeOutput<any>>,
   typeByKey: Map<string, AnyTypeOutput>,
   enumValuesByRange: Map<string, Set<string>>,
+  entityLookup: EntityLookup<Defs>,
 ): EntityRef<T, Defs> {
   const applyMutation = (path: string[], fieldName: string, value: unknown | ClearFieldValue) => {
     const patch: Record<string, unknown> = {};
@@ -913,6 +951,7 @@ function createEntityRef<T extends TypeOutput, Defs extends Record<string, AnyTy
       scalarByKey,
       typeByKey,
       enumValuesByRange,
+      entityLookup,
     ) as RefTree<T["fields"], Defs>,
     get() {
       return projectEntity(store, id, typeDef, scalarByKey, typeByKey) as EntityOfType<T, Defs>;
@@ -1091,6 +1130,34 @@ export function createTypeClient<const T extends Record<string, AnyTypeOutput>>(
   const typeByKey = collectTypeIndex(namespace);
   const enumValuesByRange = collectEnumValueIds(namespace, typeByKey);
   const entityRefs = new Map<string, EntityRef<any, any>>();
+  const getEntityRef = <U extends TypeOutput>(typeDef: U, id: string): EntityRef<U, AllDefs<T>> => {
+    const cacheKey = `${typeId(typeDef)}\0${id}`;
+    const cached = entityRefs.get(cacheKey);
+    if (cached) return cached as EntityRef<U, AllDefs<T>>;
+    const entityRef = createEntityRef(
+      store,
+      id,
+      typeDef,
+      scalarByKey,
+      typeByKey,
+      enumValuesByRange,
+      entityLookup,
+    );
+    entityRefs.set(cacheKey, entityRef);
+    return entityRef as EntityRef<U, AllDefs<T>>;
+  };
+  const listEntityRefs = <U extends TypeOutput>(typeDef: U): EntityRef<U, AllDefs<T>>[] =>
+    store
+      .facts(undefined, nodeTypePredicateId, typeId(typeDef))
+      .map((edge) => getEntityRef(typeDef, edge.s));
+  const entityLookup: EntityLookup<AllDefs<T>> = {
+    resolve(typeDef, id) {
+      return getEntityRef(typeDef, id);
+    },
+    list(typeDef) {
+      return listEntityRefs(typeDef);
+    },
+  };
   return new Proxy(
     {},
     {
@@ -1098,21 +1165,6 @@ export function createTypeClient<const T extends Record<string, AnyTypeOutput>>(
         if (typeof key !== "string") return undefined;
         const typeDef = namespace[key as keyof T];
         if (!typeDef || typeDef.kind !== "entity") return undefined;
-        const getEntityRef = (id: string): EntityRef<any, any> => {
-          const cacheKey = `${typeId(typeDef)}\0${id}`;
-          const cached = entityRefs.get(cacheKey);
-          if (cached) return cached;
-          const entityRef = createEntityRef(
-            store,
-            id,
-            typeDef,
-            scalarByKey,
-            typeByKey,
-            enumValuesByRange,
-          );
-          entityRefs.set(cacheKey, entityRef);
-          return entityRef;
-        };
 
         const handle: TypeHandle<any, any> = {
           create(input: unknown) {
@@ -1143,15 +1195,13 @@ export function createTypeClient<const T extends Record<string, AnyTypeOutput>>(
             deleteEntity(store, id);
           },
           list() {
-            return store
-              .facts(undefined, nodeTypePredicateId, typeId(typeDef))
-              .map((edge) => projectEntity(store, edge.s, typeDef as any, scalarByKey, typeByKey));
+            return listEntityRefs(typeDef as any).map((entityRef) => entityRef.get());
           },
           ref(id: string) {
-            return getEntityRef(id);
+            return getEntityRef(typeDef as any, id);
           },
           node(id: string) {
-            return getEntityRef(id);
+            return getEntityRef(typeDef as any, id);
           },
         };
         return handle;

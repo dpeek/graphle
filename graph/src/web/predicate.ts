@@ -1,7 +1,12 @@
 import { useMemo, useRef, useSyncExternalStore } from "react";
 
-import type { PredicateRangeTypeOf, PredicateRef, PredicateValueOf } from "../graph/client.js";
-import { isEnumType, type AnyTypeOutput, type EdgeOutput } from "../graph/schema.js";
+import type { EntityRef, PredicateRangeTypeOf, PredicateRef, PredicateValueOf } from "../graph/client.js";
+import {
+  entityReferenceChecklistEditorKind,
+  entityReferenceListDisplayKind,
+  type ExistingEntityReferencePolicy,
+} from "../graph/web-policy.js";
+import { isEntityType, isEnumType, type AnyTypeOutput, type EdgeOutput } from "../graph/schema.js";
 
 export type PredicateFieldMeta<T extends EdgeOutput> = T extends { meta: infer Meta } ? Meta : never;
 export type PredicateCollectionKind = "ordered" | "unordered";
@@ -24,6 +29,11 @@ export type PredicateEnumOption = {
   id: string;
   key: string;
   label: string;
+};
+
+export type PredicateEntityReferenceOption = {
+  entity: EntityRef<any, any>;
+  id: string;
 };
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -63,14 +73,25 @@ export function getPredicateFieldMeta<T extends EdgeOutput>(
   return (field as T & { meta?: PredicateFieldMeta<T> }).meta;
 }
 
+export function getPredicateEntityReferencePolicy<T extends EdgeOutput>(
+  field: T,
+): ExistingEntityReferencePolicy | undefined {
+  const meta = getPredicateFieldMeta(field) as { reference?: ExistingEntityReferencePolicy } | undefined;
+  return meta?.reference;
+}
+
 export function getPredicateDisplayKind<T extends EdgeOutput>(field: T): string | undefined {
   const meta = getPredicateFieldMeta(field) as { display?: { kind?: string } } | undefined;
-  return meta?.display?.kind;
+  return meta?.display?.kind ?? (
+    getPredicateEntityReferencePolicy(field) ? entityReferenceListDisplayKind : undefined
+  );
 }
 
 export function getPredicateEditorKind<T extends EdgeOutput>(field: T): string | undefined {
   const meta = getPredicateFieldMeta(field) as { editor?: { kind?: string } } | undefined;
-  return meta?.editor?.kind;
+  return meta?.editor?.kind ?? (
+    getPredicateEntityReferencePolicy(field) ? entityReferenceChecklistEditorKind : undefined
+  );
 }
 
 export function getPredicateEditorPlaceholder<T extends EdgeOutput>(field: T): string | undefined {
@@ -140,6 +161,41 @@ export function formatPredicateValue<
 
   if (formatter) return formatter(value);
   return stringifyPredicateValue(value);
+}
+
+export function getPredicateEntityReferenceOptions<
+  T extends EdgeOutput,
+  Defs extends Record<string, AnyTypeOutput>,
+>(predicate: PredicateRef<T, Defs>): PredicateEntityReferenceOption[] {
+  if (!predicate.rangeType || !isEntityType(predicate.rangeType)) return [];
+  if (!getPredicateEntityReferencePolicy(predicate.field)) return [];
+  return predicate.listEntities().map((entity) => ({
+    entity,
+    id: entity.id,
+  }));
+}
+
+export function getPredicateEntityReferenceSelection<
+  T extends EdgeOutput,
+  Defs extends Record<string, AnyTypeOutput>,
+>(
+  predicate: PredicateRef<T, Defs>,
+  value: PredicateValueOf<T, Defs>,
+): PredicateEntityReferenceOption[] {
+  if (!predicate.rangeType || !isEntityType(predicate.rangeType)) return [];
+  if (!getPredicateEntityReferencePolicy(predicate.field)) return [];
+
+  const ids = Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string")
+    : typeof value === "string"
+      ? [value]
+      : [];
+
+  return ids.flatMap((id) => {
+    const entity = predicate.resolveEntity(id);
+    if (!entity) return [];
+    return [{ entity, id }];
+  });
 }
 
 export function usePredicateValue<

@@ -6,6 +6,8 @@ import {
   formatPredicateValue,
   getPredicateEditorKind,
   getPredicateEditorPlaceholder,
+  getPredicateEntityReferenceOptions,
+  getPredicateEntityReferenceSelection,
   getPredicateEnumOptions,
   usePredicateField,
 } from "./predicate.js";
@@ -29,18 +31,17 @@ function clearPredicateValue(predicate: AnyPredicate): boolean {
   return true;
 }
 
-function addPredicateValue(predicate: AnyPredicate, value: unknown): boolean {
+function addPredicateItem(predicate: AnyPredicate, value: unknown): boolean {
   if (typeof (predicate as { add?: unknown }).add !== "function") return false;
   (predicate as { add(nextValue: unknown): void }).add(value);
   return true;
 }
 
-function removePredicateValue(predicate: AnyPredicate, value: unknown): boolean {
+function removePredicateItem(predicate: AnyPredicate, value: unknown): boolean {
   if (typeof (predicate as { remove?: unknown }).remove !== "function") return false;
   (predicate as { remove(nextValue: unknown): void }).remove(value);
   return true;
 }
-
 function normalizeTextValue(value: unknown): string {
   if (typeof value === "string") return value;
   if (value === undefined) return "";
@@ -105,6 +106,43 @@ function ExternalLinkFieldView({ predicate }: AnyFieldProps) {
 function BadgeFieldView({ predicate }: AnyFieldProps) {
   const { value } = usePredicateField(predicate);
   return <span data-web-field-kind="badge">{formatPredicateValue(predicate, value)}</span>;
+}
+
+function getEntityReferenceLabel(entity: { id: string; get(): Record<string, unknown> }): string {
+  const snapshot = entity.get();
+  const name = snapshot.name;
+  if (typeof name === "string" && name.length > 0) return name;
+  const label = snapshot.label;
+  if (typeof label === "string" && label.length > 0) return label;
+  return entity.id;
+}
+
+function EntityReferenceSummary({
+  entity,
+}: {
+  entity: { id: string; get(): Record<string, unknown> };
+}) {
+  return (
+    <span className="inline-flex items-center gap-2">
+      <span>{getEntityReferenceLabel(entity)}</span>
+      <code>{entity.id}</code>
+    </span>
+  );
+}
+
+function EntityReferenceListView({ predicate }: AnyFieldProps) {
+  const { value } = usePredicateField(predicate);
+  const references = getPredicateEntityReferenceSelection(predicate, value);
+
+  return (
+    <ul data-web-field-kind="entity-reference-list">
+      {references.map(({ entity, id }) => (
+        <li data-web-reference-id={id} key={id}>
+          <EntityReferenceSummary entity={entity} />
+        </li>
+      ))}
+    </ul>
+  );
 }
 
 function TextFieldEditor({ predicate }: AnyFieldProps) {
@@ -266,7 +304,7 @@ function TokenListFieldEditor({ predicate }: AnyFieldProps) {
   function commitDraft(): void {
     const nextToken = draftRef.current.trim();
     if (!nextToken) return;
-    addPredicateValue(predicate, nextToken);
+    addPredicateItem(predicate, nextToken);
     draftRef.current = "";
     setDraft("");
   }
@@ -281,7 +319,7 @@ function TokenListFieldEditor({ predicate }: AnyFieldProps) {
             data-web-token-value={token}
             key={token}
             onClick={() => {
-              removePredicateValue(predicate, token);
+              removePredicateItem(predicate, token);
             }}
             type="button"
           >
@@ -320,12 +358,59 @@ function TokenListFieldEditor({ predicate }: AnyFieldProps) {
   );
 }
 
+function EntityReferenceChecklistEditor({ predicate }: AnyFieldProps) {
+  const { value } = usePredicateField(predicate);
+  const options = getPredicateEntityReferenceOptions(predicate);
+  const selected = getPredicateEntityReferenceSelection(predicate, value);
+  const selectedIds = new Set(selected.map((option) => option.id));
+
+  if (predicate.field.cardinality !== "many") {
+    return <span data-web-field-status="unsupported">unsupported-editor-kind:entity-reference-checklist</span>;
+  }
+
+  return (
+    <div data-web-field-kind="entity-reference-checklist">
+      <ul data-web-reference-selected="">
+        {selected.map(({ entity, id }) => (
+          <li data-web-reference-selected-id={id} key={id}>
+            <EntityReferenceSummary entity={entity} />
+            <button onClick={() => removePredicateItem(predicate, id)} type="button">
+              Remove
+            </button>
+          </li>
+        ))}
+      </ul>
+      <div data-web-reference-options="">
+        {options.map(({ entity, id }) => {
+          const checked = selectedIds.has(id);
+          return (
+            <label data-web-reference-option-id={id} key={id}>
+              <input
+                checked={checked}
+                onChange={(event) => {
+                  if (event.target.checked) {
+                    if (!checked) addPredicateItem(predicate, id);
+                    return;
+                  }
+                  removePredicateItem(predicate, id);
+                }}
+                type="checkbox"
+              />
+              <EntityReferenceSummary entity={entity} />
+            </label>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 export const genericWebFieldViewCapabilities = [
   { kind: "text", Component: TextFieldView },
   { kind: "number", Component: NumberFieldView },
   { kind: "link", Component: LinkFieldView },
   { kind: "external-link", Component: ExternalLinkFieldView },
   { kind: "badge", Component: BadgeFieldView },
+  { kind: "entity-reference-list", Component: EntityReferenceListView },
 ] satisfies readonly PredicateFieldViewCapability<any, any>[];
 
 export const genericWebFieldEditorCapabilities = [
@@ -335,4 +420,5 @@ export const genericWebFieldEditorCapabilities = [
   { kind: "url", Component: UrlFieldEditor },
   { kind: "select", Component: SelectFieldEditor },
   { kind: "token-list", Component: TokenListFieldEditor },
+  { kind: "entity-reference-checklist", Component: EntityReferenceChecklistEditor },
 ] satisfies readonly PredicateFieldEditorCapability<any, any>[];

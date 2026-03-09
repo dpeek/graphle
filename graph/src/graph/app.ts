@@ -1,6 +1,7 @@
 import ids from "./app.json";
 import { core } from "./core";
 import { defineNamespace, defineType, rangeOf } from "./schema.js";
+import { existingEntityReferenceFieldMeta } from "./web-policy.js";
 import { addressFields } from "../type/address.js";
 import { booleanTypeModule } from "../type/boolean.js";
 import { numberTypeModule } from "../type/number.js";
@@ -72,7 +73,13 @@ export const person = defineType({
   values: { key: "app:person", name: "Person" },
   fields: {
     ...core.node.fields,
-    worksAt: { range: rangeOf(company), cardinality: "many" },
+    worksAt: {
+      range: rangeOf(company),
+      cardinality: "many",
+      meta: existingEntityReferenceFieldMeta({
+        label: "Works at",
+      }),
+    },
   },
 });
 

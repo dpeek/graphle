@@ -423,7 +423,85 @@ describe("web predicate bindings", () => {
       renderer?.unmount();
     });
   });
+  it("renders entity-reference fields through the explicit relationship policy", () => {
+    const { graph, companyId } = setupGraph();
+    const secondCompanyId = graph.company.create({
+      name: "Estii",
+      website: new URL("https://estii.com"),
+      status: app.status.values.paused.id,
+    });
+    const personId = graph.person.create({
+      name: "Alice",
+      worksAt: [companyId],
+    });
+    const worksAtRef = graph.person.ref(personId).fields.worksAt;
 
+    expect(app.person.fields.worksAt.meta.reference).toEqual({
+      selection: "existing-only",
+      create: false,
+    });
+
+    let renderer: ReturnType<typeof create> | undefined;
+    act(() => {
+      renderer = create(
+        <Fragment>
+          <PredicateFieldView predicate={worksAtRef} />
+          <PredicateFieldEditor predicate={worksAtRef} />
+        </Fragment>,
+      );
+    });
+
+    expect(
+      renderer?.root
+        .findAll(
+          (node) =>
+            !!node.props && typeof node.props["data-web-reference-id"] === "string",
+        )
+        .map((node) => node.props["data-web-reference-id"] as string),
+    ).toEqual([companyId]);
+    expect(
+      renderer?.root.findAllByType("code").map((node) => node.children.join("")),
+    ).toContain(companyId);
+    expect(
+      renderer?.root.findAllByType("span").some((node) => node.children.join("") === "Acme"),
+    ).toBe(true);
+
+    const secondCompanyToggle = renderer?.root.find(
+      (node) =>
+        node.type === "label" &&
+        node.props["data-web-reference-option-id"] === secondCompanyId,
+    );
+
+    act(() => {
+      secondCompanyToggle?.findByType("input").props.onChange({ target: { checked: true } });
+    });
+
+    expect(worksAtRef.get()).toEqual([companyId, secondCompanyId]);
+    expect(
+      renderer?.root
+        .findAll(
+          (node) =>
+            !!node.props && typeof node.props["data-web-reference-selected-id"] === "string",
+        )
+        .map((node) => node.props["data-web-reference-selected-id"] as string),
+    ).toEqual([companyId, secondCompanyId]);
+
+    const removeCurrentEmployer = renderer?.root.find(
+      (node) =>
+        node.type === "li" &&
+        node.props["data-web-reference-selected-id"] === companyId,
+    );
+
+    act(() => {
+      removeCurrentEmployer?.findByType("button").props.onClick();
+    });
+
+    expect(worksAtRef.get()).toEqual([secondCompanyId]);
+
+    act(() => {
+      renderer?.unmount();
+    });
+  });
   it("keeps generic field rerenders scoped to each predicate slot", () => {
     const { graph, companyId } = setupGraph();
     const companyRef = graph.company.ref(companyId);
