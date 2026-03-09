@@ -1,0 +1,78 @@
+import { statusTypeModule } from "../type/status/index.js";
+import { stringTypeModule } from "../type/string/index.js";
+import { defineScalar } from "./schema.js";
+import { defineScalarModule } from "./type-module.js";
+
+const probeStringType = defineScalar({
+  values: { key: "probe:string", name: "Probe String" },
+  encode: (value: string) => value,
+  decode: (raw) => raw,
+});
+
+void stringTypeModule.field({
+  cardinality: "one",
+  meta: {
+    editor: {
+      kind: "textarea",
+      multiline: true,
+    },
+  },
+});
+
+void stringTypeModule.field({
+  cardinality: "one",
+  meta: {
+    editor: {
+      // @ts-expect-error string fields cannot switch to an unrelated editor kind
+      kind: "checkbox",
+    },
+  },
+});
+
+void stringTypeModule.field({
+  cardinality: "one",
+  filter: {
+    // @ts-expect-error string fields cannot narrow to unknown filter operators
+    operators: ["gt"] as const,
+  },
+});
+
+void statusTypeModule.field({
+  cardinality: "one",
+  filter: {
+    operators: ["is"] as const,
+    // @ts-expect-error the chosen default operator must belong to the narrowed operator set
+    defaultOperator: "oneOf",
+  },
+});
+
+void defineScalarModule({
+  type: probeStringType,
+  meta: {
+    summary: {
+      kind: "value",
+      // @ts-expect-error scalar metadata formatters must align with the decoded scalar value type
+      format: (value: number) => String(value),
+    },
+    display: {
+      kind: "text",
+      allowed: ["text"] as const,
+      format: (value: string) => value,
+    },
+    editor: {
+      kind: "text",
+      allowed: ["text"] as const,
+    },
+  },
+  filter: {
+    defaultOperator: "equals",
+    operators: {
+      equals: {
+        label: "Equals",
+        parse: (raw: string) => raw,
+        format: (operand: string) => operand,
+        test: (value: string, operand: string) => value === operand,
+      },
+    },
+  },
+});

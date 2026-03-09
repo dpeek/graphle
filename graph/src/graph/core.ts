@@ -1,17 +1,12 @@
 import coreIdMap from "./core.json";
 import { defineEnum, defineNamespace, defineScalar, defineType, rangeOf } from "./schema.js";
+import { numberTypeModule } from "../type/number/index.js";
+import { stringTypeModule } from "../type/string/index.js";
+import { urlTypeModule } from "../type/url/index.js";
 
-const string = defineScalar({
-  values: { key: "core:string", name: "String" },
-  encode: (value: string) => value,
-  decode: (string) => string,
-});
+const string = stringTypeModule.type;
 
-const number = defineScalar({
-  values: { key: "core:number", name: "Number" },
-  encode: (value: number) => String(value),
-  decode: (string) => Number(string),
-});
+const number = numberTypeModule.type;
 
 const date = defineScalar({
   values: { key: "core:date", name: "Date" },
@@ -25,19 +20,38 @@ const boolean = defineScalar({
   decode: (string) => string === "true",
 });
 
-const url = defineScalar({
-  values: { key: "core:url", name: "URL" },
-  encode: (value: URL) => value.toString(),
-  decode: (string) => new URL(string),
-});
+const url = urlTypeModule.type;
 
 const node = defineType({
   values: { key: "core:node", name: "Node" },
   fields: {
     type: { range: "core:type", cardinality: "many" },
-    name: { range: string.values.key, cardinality: "one" },
-    label: { range: string.values.key, cardinality: "one?" },
-    description: { range: string.values.key, cardinality: "one?" },
+    name: stringTypeModule.field({
+      cardinality: "one",
+      meta: {
+        label: "Name",
+      },
+    }),
+    label: stringTypeModule.field({
+      cardinality: "one?",
+      meta: {
+        label: "Label",
+      },
+    }),
+    description: stringTypeModule.field({
+      cardinality: "one?",
+      meta: {
+        label: "Description",
+        editor: {
+          kind: "textarea",
+          multiline: true,
+        },
+      },
+      filter: {
+        operators: ["contains", "equals"] as const,
+        defaultOperator: "contains",
+      },
+    }),
     createdAt: {
       range: date.values.key,
       cardinality: "one?",
@@ -86,7 +100,16 @@ const predicate = defineType({
   values: { key: "core:predicate", name: "Predicate" },
   fields: {
     ...node.fields,
-    key: { range: string.values.key, cardinality: "one" },
+    key: stringTypeModule.field({
+      cardinality: "one",
+      meta: {
+        label: "Key",
+      },
+      filter: {
+        operators: ["equals", "prefix"] as const,
+        defaultOperator: "equals",
+      },
+    }),
     range: { range: type.values.key, cardinality: "one?" },
     cardinality: { range: rangeOf(cardinality), cardinality: "one" },
   },
