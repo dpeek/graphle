@@ -1,18 +1,30 @@
 import { createLogger, type Logger } from "@io/lib";
-import { appendFile } from "node:fs/promises";
+import { appendFile, readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
-import type { AgentIssue, IssueRunResult, Workflow } from "./types.js";
+import type { AgentIssue, IssueRunResult, PreparedWorkspace, Workflow } from "./types.js";
 
 import { CodexAppServerRunner } from "./runner/codex.js";
 import { LinearTrackerAdapter } from "./tracker/linear.js";
 import { loadWorkflowFile, renderPrompt } from "./workflow.js";
 import { WorkspaceManager } from "./workspace.js";
 
+const BACKLOG_LABEL = "io";
+const BACKLOG_PROMPT_PATH = "llm/agent/backlog.md";
+
+type IssueRunner = {
+  run: (options: {
+    issue: AgentIssue;
+    prompt: string;
+    workspace: PreparedWorkspace;
+  }) => Promise<IssueRunResult>;
+};
+
 export interface AgentServiceOptions {
   log?: Logger;
   once?: boolean;
   repoRoot?: string;
+  runnerFactory?: (workflow: Workflow) => IssueRunner;
   workspaceManagerFactory?: (workflow: Workflow, issueIdentifier?: string) => WorkspaceManager;
   workflowPath?: string;
 }
@@ -49,6 +61,7 @@ export class AgentService {
   readonly #log: Logger;
   readonly #once: boolean;
   readonly #repoRoot: string;
+  readonly #runnerFactory?: (workflow: Workflow) => IssueRunner;
   readonly #workflowPath: string;
   readonly #workspaceManagerFactory?: (
     workflow: Workflow,
@@ -65,6 +78,7 @@ export class AgentService {
     });
     this.#once = options.once ?? false;
     this.#repoRoot = options.repoRoot ?? process.cwd();
+    this.#runnerFactory = options.runnerFactory;
     this.#workflowPath = resolve(this.#repoRoot, options.workflowPath ?? "WORKFLOW.md");
     this.#workspaceManagerFactory = options.workspaceManagerFactory;
   }
@@ -172,16 +186,17 @@ export class AgentService {
     const workspace = await workspaceManager.prepare(issue);
     const assignmentLine = `${issue.identifier}: ${workspace.path} [${workspace.branchName}]\n`;
     await this.#appendIssueOutput(workspace.outputPath, assignmentLine);
-    const prompt = renderPrompt(workflow.promptTemplate, {
-      attempt: 1,
-      issue,
-      worker: { count: maxConcurrentAgents, id: issue.identifier, index: runIndex },
-      workspace,
-    });
-    const runner = new CodexAppServerRunner(workflow.codex, this.#log);
     let beforeRunCompleted = false;
     let result: IssueRunResult;
     try {
+      const prompt = renderPrompt(await this.#loadPromptTemplate(workflow, issue), {
+        attempt: 1,
+        issue,
+        worker: { count: maxConcurrentAgents, id: issue.identifier, index: runIndex },
+        workspace,
+      });
+      const runner =
+        this.#runnerFactory?.(workflow) ?? new CodexAppServerRunner(workflow.codex, this.#log);
       await workspaceManager.runBeforeRunHook(workspace.path);
       beforeRunCompleted = true;
       process.stdout.write(assignmentLine);
@@ -273,5 +288,17 @@ export class AgentService {
       return;
     }
     await appendFile(path, text);
+  }
+
+  async #loadPromptTemplate(workflow: Workflow, issue: AgentIssue) {
+    if (!issue.labels.includes(BACKLOG_LABEL)) {
+      return workflow.promptTemplate;
+    }
+    const promptPath = resolve(this.#repoRoot, BACKLOG_PROMPT_PATH);
+    const prompt = (await readFile(promptPath, "utf8")).trim();
+    if (!prompt) {
+      throw new Error(`workflow_prompt_empty:${promptPath}`);
+    }
+    return prompt;
   }
 }

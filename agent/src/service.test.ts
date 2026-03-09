@@ -1,5 +1,5 @@
 import { expect, mock, test } from "bun:test";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 
@@ -152,6 +152,127 @@ Issue {{ issue.identifier }}
   } finally {
     globalThis.fetch = originalFetch;
     process.stdout.write = originalWrite;
+    await rm(root, { force: true, recursive: true });
+  }
+});
+
+test("AgentService uses backlog prompt for io-labeled issues", async () => {
+  const root = await mkdtemp(resolve(tmpdir(), "agent-service-"));
+  const workflowPath = resolve(root, "WORKFLOW.md");
+  const backlogPromptPath = resolve(root, "llm", "agent", "backlog.md");
+  const workspacePath = resolve(root, "workspace", "workers", "OPE-55", "repo");
+  let capturedPrompt = "";
+
+  await mkdir(resolve(root, "llm", "agent"), { recursive: true });
+  await writeFile(
+    workflowPath,
+    `---
+tracker:
+  kind: linear
+  api_key: $LINEAR_API_KEY
+  project_slug: $LINEAR_PROJECT_SLUG
+workspace:
+  root: ${resolve(root, "workspace")}
+agent:
+  max_concurrent_agents: 1
+---
+EXECUTE {{ issue.identifier }}
+`,
+  );
+  await writeFile(backlogPromptPath, "BACKLOG {{ issue.identifier }} {{ issue.labels }}\n");
+  process.env.LINEAR_API_KEY = "linear-token";
+  process.env.LINEAR_PROJECT_SLUG = "project-slug";
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = mock(
+    async () =>
+      new Response(
+        JSON.stringify({
+          data: {
+            issues: {
+              nodes: [
+                {
+                  createdAt: "2024-01-01T00:00:00.000Z",
+                  description: "Refine backlog item",
+                  id: "1",
+                  identifier: "OPE-55",
+                  labels: { nodes: [{ name: " io " }] },
+                  priority: 0,
+                  state: { name: "Todo" },
+                  title: "Backlog agent",
+                  updatedAt: "2024-01-01T00:00:00.000Z",
+                },
+              ],
+              pageInfo: {
+                endCursor: null,
+                hasNextPage: false,
+              },
+            },
+          },
+        }),
+        { status: 200 },
+      ),
+  ) as unknown as typeof fetch;
+
+  try {
+    const service = new AgentService({
+      once: true,
+      repoRoot: root,
+      runnerFactory: () => ({
+        run: async ({ issue, prompt, workspace }) => {
+          capturedPrompt = prompt;
+          return {
+            issue,
+            prompt,
+            stderr: [],
+            stdout: [],
+            success: true,
+            workspace,
+          };
+        },
+      }),
+      workflowPath,
+      workspaceManagerFactory: (_workflow, issueIdentifier) =>
+        ({
+          cleanup: async () => undefined,
+          complete: async () => ({ commitSha: "a".repeat(40) }),
+          createIdleWorkspace: () => ({
+            branchName: "main",
+            controlPath: root,
+            createdNow: true,
+            originPath: root,
+            path: resolve(root, "workspace", "workers", issueIdentifier ?? "supervisor", "repo"),
+            sourceRepoPath: root,
+            workerId: issueIdentifier ?? "supervisor",
+          }),
+          ensureCheckout: async () => ({
+            createdNow: true,
+            path: workspacePath,
+          }),
+          ensureSessionStartState: async () => ({
+            createdNow: true,
+            path: resolve(root, "workspace", "workers"),
+          }),
+          markBlocked: async () => undefined,
+          prepare: async () => ({
+            branchName: "ope-55",
+            controlPath: root,
+            createdNow: true,
+            originPath: root,
+            path: workspacePath,
+            sourceRepoPath: root,
+            workerId: "OPE-55",
+          }),
+          reconcileTerminalIssues: async () => undefined,
+          runAfterRunHook: async () => undefined,
+          runBeforeRunHook: async () => undefined,
+        }) as unknown as never,
+    });
+
+    await service.start();
+    expect(capturedPrompt).toBe('BACKLOG OPE-55 ["io"]');
+  } finally {
+    globalThis.fetch = originalFetch;
     await rm(root, { force: true, recursive: true });
   }
 });
