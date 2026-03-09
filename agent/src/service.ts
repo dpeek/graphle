@@ -52,7 +52,7 @@ export class AgentService {
   #timer?: Timer;
 
   constructor(options: AgentServiceOptions = {}) {
-    this.#log = (options.log ?? createLogger({ pkg: "agent" })).child({
+    this.#log = (options.log ?? createLogger({ level: "error", pkg: "agent" })).child({
       event_prefix: "service",
     });
     this.#once = options.once ?? false;

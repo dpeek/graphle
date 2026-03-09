@@ -13,6 +13,7 @@
   "scripts": {
     "clean": "rm -rf out",
     "build": "tsgo",
+    "check": "bun run lint && bun run types && bun test src",
     "format": "oxfmt",
     "lint": "oxlint",
     "types": "tsgo --noEmit",

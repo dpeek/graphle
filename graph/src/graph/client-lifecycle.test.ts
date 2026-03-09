@@ -1,8 +1,8 @@
 import { describe, expect, it } from "bun:test";
 import { bootstrap } from "./bootstrap";
 import { createTypeClient } from "./client";
-import { app } from "./schema/app";
-import { core } from "./schema/core";
+import { app } from "./app";
+import { core } from "./core";
 import { createStore } from "./store";
 
 describe("predicate lifecycle hooks", () => {

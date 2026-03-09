@@ -293,34 +293,36 @@ function createEntity<T extends TypeOutput>(
   typeByKey: Map<string, AnyTypeOutput>,
   enumValuesByRange: Map<string, Set<string>>,
 ): string {
-  const entries = flattenPredicates(typeDef.fields);
-  const nodeTypePredicate = core.node.fields.type as EdgeOutput;
-  const nodeTypePredicateId = edgeId(nodeTypePredicate);
-  const id = store.newNode();
-  const input = cloneInput(data as Record<string, unknown>);
-  applyLifecycleHooks("create", input, entries, store, id, scalarByKey, typeByKey);
-  store.assert(id, nodeTypePredicateId, typeId(typeDef));
+  return store.batch(() => {
+    const entries = flattenPredicates(typeDef.fields);
+    const nodeTypePredicate = core.node.fields.type as EdgeOutput;
+    const nodeTypePredicateId = edgeId(nodeTypePredicate);
+    const id = store.newNode();
+    const input = cloneInput(data as Record<string, unknown>);
+    applyLifecycleHooks("create", input, entries, store, id, scalarByKey, typeByKey);
+    store.assert(id, nodeTypePredicateId, typeId(typeDef));
 
-  for (const entry of entries) {
-    const value = getNestedValue(input, entry.path, entry.field);
-    if (value === undefined) {
-      if (entry.path.length === 0 && entry.predicate.key === nodeTypePredicate.key) {
+    for (const entry of entries) {
+      const value = getNestedValue(input, entry.path, entry.field);
+      if (value === undefined) {
+        if (entry.path.length === 0 && entry.predicate.key === nodeTypePredicate.key) {
+          continue;
+        }
+        if (entry.predicate.cardinality === "one") {
+          throw new Error(`Missing required field "${[...entry.path, entry.field].join(".")}"`);
+        }
         continue;
       }
-      if (entry.predicate.cardinality === "one") {
-        throw new Error(`Missing required field "${[...entry.path, entry.field].join(".")}"`);
+      if (entry.predicate.cardinality === "many") {
+        if (!Array.isArray(value))
+          throw new Error(`Field "${[...entry.path, entry.field].join(".")}" must be an array`);
+        assertMany(store, id, entry.predicate, value, scalarByKey, typeByKey, enumValuesByRange);
+        continue;
       }
-      continue;
+      assertOne(store, id, entry.predicate, value, scalarByKey, typeByKey, enumValuesByRange);
     }
-    if (entry.predicate.cardinality === "many") {
-      if (!Array.isArray(value))
-        throw new Error(`Field "${[...entry.path, entry.field].join(".")}" must be an array`);
-      assertMany(store, id, entry.predicate, value, scalarByKey, typeByKey, enumValuesByRange);
-      continue;
-    }
-    assertOne(store, id, entry.predicate, value, scalarByKey, typeByKey, enumValuesByRange);
-  }
-  return id;
+    return id;
+  })
 }
 
 function projectEntity<T extends TypeOutput>(
@@ -353,26 +355,30 @@ function updateEntity<T extends TypeOutput>(
   typeByKey: Map<string, AnyTypeOutput>,
   enumValuesByRange: Map<string, Set<string>>,
 ): EntityOfType<T, Record<string, AnyTypeOutput>> {
-  const entries = flattenPredicates(typeDef.fields);
-  const input = cloneInput(patch as Record<string, unknown>);
-  applyLifecycleHooks("update", input, entries, store, id, scalarByKey, typeByKey);
-  for (const entry of entries) {
-    const nextValue = getNestedValue(input, entry.path, entry.field);
-    if (nextValue === undefined) continue;
-    for (const edge of store.facts(id, edgeId(entry.predicate))) store.retract(edge.id);
-    if (entry.predicate.cardinality === "many") {
-      if (!Array.isArray(nextValue))
-        throw new Error(`Field "${[...entry.path, entry.field].join(".")}" must be an array`);
-      assertMany(store, id, entry.predicate, nextValue, scalarByKey, typeByKey, enumValuesByRange);
-    } else {
-      assertOne(store, id, entry.predicate, nextValue, scalarByKey, typeByKey, enumValuesByRange);
+  return store.batch(() => {
+    const entries = flattenPredicates(typeDef.fields);
+    const input = cloneInput(patch as Record<string, unknown>);
+    applyLifecycleHooks("update", input, entries, store, id, scalarByKey, typeByKey);
+    for (const entry of entries) {
+      const nextValue = getNestedValue(input, entry.path, entry.field);
+      if (nextValue === undefined) continue;
+      for (const edge of store.facts(id, edgeId(entry.predicate))) store.retract(edge.id);
+      if (entry.predicate.cardinality === "many") {
+        if (!Array.isArray(nextValue))
+          throw new Error(`Field "${[...entry.path, entry.field].join(".")}" must be an array`);
+        assertMany(store, id, entry.predicate, nextValue, scalarByKey, typeByKey, enumValuesByRange);
+      } else {
+        assertOne(store, id, entry.predicate, nextValue, scalarByKey, typeByKey, enumValuesByRange);
+      }
     }
-  }
-  return projectEntity(store, id, typeDef, scalarByKey, typeByKey);
+    return projectEntity(store, id, typeDef, scalarByKey, typeByKey);
+  })
 }
 
 function deleteEntity(store: Store, id: string): void {
-  for (const edge of store.facts(id)) store.retract(edge.id);
+  store.batch(() => {
+    for (const edge of store.facts(id)) store.retract(edge.id);
+  })
 }
 
 type TypeHandle<T extends TypeOutput, Defs extends Record<string, AnyTypeOutput>> = {

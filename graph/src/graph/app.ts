@@ -2,7 +2,7 @@ import ids from "./app.json";
 import { core } from "./core";
 import { defineEnum, defineNamespace, defineType, rangeOf } from "./schema.js";
 
-const status = defineEnum({
+export const status = defineEnum({
   values: { key: "app:status", name: "Status" },
   options: {
     active: {
@@ -16,7 +16,7 @@ const status = defineEnum({
   },
 });
 
-const company = defineType({
+export const company = defineType({
   values: { key: "app:company", name: "Company" },
   fields: {
     ...core.node.fields,
@@ -27,7 +27,7 @@ const company = defineType({
   },
 });
 
-const person = defineType({
+export const person = defineType({
   values: { key: "app:person", name: "Person" },
   fields: {
     ...core.node.fields,
@@ -35,7 +35,7 @@ const person = defineType({
   },
 });
 
-const block = defineType({
+export const block = defineType({
   values: { key: "app:block", name: "Outline Node" },
   fields: {
     ...core.node.fields,

@@ -18,6 +18,7 @@
     "dev": "tsgo --watch"
   },
   "dependencies": {
+    "@io/agent": "workspace:*",
     "@io/lib": "workspace:*",
     "zod": "^4.3.6"
   },

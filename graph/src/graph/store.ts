@@ -13,6 +13,8 @@ export type Edge = {
   readonly o: Id // object: entity id or scalar payload
 }
 
+export type PredicateSlotListener = () => void
+
 export interface Store {
   /** Create a new node (entity, predicate, type — all the same thing) */
   newNode(): Id
@@ -29,12 +31,19 @@ export interface Store {
   facts(s?: Id, p?: Id, o?: Id): Edge[]
   /** Shorthand: get the single current object for a subject/predicate pair */
   get(s: Id, p: Id): Id | undefined
+  /** Group related writes so logical slot notifications flush once after the batch completes */
+  batch<T>(fn: () => T): T
+  /** Subscribe to one logical predicate slot keyed by `(subject id, predicate id)` */
+  subscribePredicateSlot(s: Id, p: Id, listener: PredicateSlotListener): () => void
 }
 
 export function createStore(): Store {
   const edges = new Map<Id, Edge>()
   const retracted = new Set<Id>()
   const usedIds = new Set<Id>()
+  const predicateSlotListeners = new Map<string, Set<PredicateSlotListener>>()
+  const pendingPredicateSlots = new Map<string, { s: Id; p: Id; before: Scalar[] }>()
+  let batchDepth = 0
 
   function nextId(): Id {
     // Keep node and edge ids globally unique for reification safety.
@@ -44,14 +53,55 @@ export function createStore(): Store {
     return id
   }
 
+  function predicateSlotKey(s: Id, p: Id): string {
+    return `${s}\0${p}`
+  }
+
+  function snapshotPredicateSlot(s: Id, p: Id): Scalar[] {
+    return facts(s, p).map((edge) => edge.o)
+  }
+
+  function samePredicateSlotValue(left: Scalar[], right: Scalar[]): boolean {
+    if (left.length !== right.length) return false
+    for (let index = 0; index < left.length; index += 1) {
+      if (left[index] !== right[index]) return false
+    }
+    return true
+  }
+
+  function beginPredicateSlotMutation(s: Id, p: Id): void {
+    const key = predicateSlotKey(s, p)
+    if (pendingPredicateSlots.has(key)) return
+    pendingPredicateSlots.set(key, { s, p, before: snapshotPredicateSlot(s, p) })
+  }
+
+  function flushPredicateSlotNotifications(): void {
+    if (batchDepth > 0 || pendingPredicateSlots.size === 0) return
+    const pending = [...pendingPredicateSlots.values()]
+    pendingPredicateSlots.clear()
+
+    for (const slot of pending) {
+      const listeners = predicateSlotListeners.get(predicateSlotKey(slot.s, slot.p))
+      if (!listeners?.size) continue
+      const after = snapshotPredicateSlot(slot.s, slot.p)
+      if (samePredicateSlotValue(slot.before, after)) continue
+      for (const listener of new Set(listeners)) listener()
+    }
+  }
+
   function assert(s: Id, p: Id, o: Scalar): Edge {
+    beginPredicateSlotMutation(s, p)
     const edge: Edge = { id: nextId(), s, p, o }
     edges.set(edge.id, edge)
+    flushPredicateSlotNotifications()
     return edge
   }
 
   function retract(edgeId: Id): void {
+    const edge = edges.get(edgeId)
+    if (edge) beginPredicateSlotMutation(edge.s, edge.p)
     retracted.add(edgeId)
+    flushPredicateSlotNotifications()
   }
 
   function find(s?: Id, p?: Id, o?: Id): Edge[] {
@@ -73,5 +123,41 @@ export function createStore(): Store {
     return facts(s, p)[0]?.o
   }
 
-  return { newNode: () => nextId(), assert, retract, find, facts, get }
+  function batch<T>(fn: () => T): T {
+    batchDepth += 1
+    try {
+      return fn()
+    } finally {
+      batchDepth -= 1
+      flushPredicateSlotNotifications()
+    }
+  }
+
+  function subscribePredicateSlot(s: Id, p: Id, listener: PredicateSlotListener): () => void {
+    const key = predicateSlotKey(s, p)
+    let listeners = predicateSlotListeners.get(key)
+    if (!listeners) {
+      listeners = new Set()
+      predicateSlotListeners.set(key, listeners)
+    }
+    listeners.add(listener)
+
+    return () => {
+      const currentListeners = predicateSlotListeners.get(key)
+      if (!currentListeners) return
+      currentListeners.delete(listener)
+      if (currentListeners.size === 0) predicateSlotListeners.delete(key)
+    }
+  }
+
+  return {
+    newNode: () => nextId(),
+    assert,
+    retract,
+    find,
+    facts,
+    get,
+    batch,
+    subscribePredicateSlot,
+  }
 }

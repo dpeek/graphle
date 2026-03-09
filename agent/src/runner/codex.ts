@@ -24,10 +24,17 @@ type JsonRpcMessage = {
 };
 
 type PendingTurnState = {
+  display: SessionDisplayState;
   inputRequired: boolean;
   lastEvent?: string;
   stderr: string[];
   stdout: string[];
+};
+
+export type SessionDisplayState = {
+  activeAgentMessageId?: string;
+  headerPrinted: boolean;
+  lineOpen: boolean;
 };
 
 class MessageQueue {
@@ -169,7 +176,9 @@ function printDirectOutput(issueIdentifier: string, stream: "stderr" | "stdout",
 }
 
 type WorkspaceLogWriter = {
+  displayLogPath: string;
   eventLogPath: string;
+  writeDisplay: (text: string) => void;
   stderrLogPath: string;
   stdoutLogPath: string;
   writeEvent: (event: string, data?: Record<string, unknown>) => void;
@@ -177,9 +186,266 @@ type WorkspaceLogWriter = {
   writeStdout: (line: string) => void;
 };
 
+function createSessionDisplayState(): SessionDisplayState {
+  return {
+    headerPrinted: false,
+    lineOpen: false,
+  };
+}
+
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  if (!value || typeof value !== "object") {
+    return undefined;
+  }
+  return value as Record<string, unknown>;
+}
+
+function asString(value: unknown): string | undefined {
+  return typeof value === "string" ? value : undefined;
+}
+
+function summarizeCommandAction(action: unknown) {
+  const record = asRecord(action);
+  return asString(record?.command) ?? asString(record?.cmd);
+}
+
+function summarizeCommandExecution(item: Record<string, unknown>) {
+  const actions = Array.isArray(item.commandActions) ? item.commandActions : [];
+  const actionCommand = actions.map(summarizeCommandAction).find(Boolean);
+  return actionCommand ?? asString(item.command) ?? "command";
+}
+
+function summarizeToolCall(item: Record<string, unknown>) {
+  const server = asString(item.server) ?? "tool";
+  const tool = asString(item.tool) ?? "call";
+  const argumentsText =
+    item.arguments && typeof item.arguments === "object" ? ` ${JSON.stringify(item.arguments)}` : "";
+  return `${server}.${tool}${argumentsText}`;
+}
+
+function formatQuestionSummary(question: unknown) {
+  const record = asRecord(question);
+  const header = asString(record?.header);
+  const prompt = asString(record?.question);
+  return [header, prompt].filter(Boolean).join(": ");
+}
+
+function chooseApprovalOptionLabel(question: unknown) {
+  const record = asRecord(question);
+  const options = Array.isArray(record?.options) ? record.options : [];
+  const labels = options
+    .map((option) => asString(asRecord(option)?.label))
+    .filter((label): label is string => Boolean(label));
+  return (
+    labels.find((label) => /^approve this session$/i.test(label)) ??
+    labels.find((label) => /^approve once$/i.test(label)) ??
+    labels.find((label) => /^(approve|allow|accept|yes)\b/i.test(label)) ??
+    labels.find((label) => !/^(deny|decline|cancel)\b/i.test(label))
+  );
+}
+
+export function buildAutomaticUserInputResponse(
+  params: unknown,
+): ToolRequestUserInputResponse | undefined {
+  const record = asRecord(params);
+  const questions = Array.isArray(record?.questions) ? record.questions : [];
+  if (!questions.length) {
+    return undefined;
+  }
+
+  const answers: ToolRequestUserInputResponse["answers"] = {};
+  for (const question of questions) {
+    const questionRecord = asRecord(question);
+    const questionId = asString(questionRecord?.id);
+    const label = chooseApprovalOptionLabel(question);
+    if (!questionId || !label) {
+      return undefined;
+    }
+    answers[questionId] = { answers: [label] };
+  }
+  return { answers };
+}
+
+function renderSessionText(
+  text: string,
+  state: SessionDisplayState,
+  writeDisplay: (text: string) => void,
+) {
+  if (!text) {
+    return;
+  }
+  writeDisplay(text);
+  state.lineOpen = !text.endsWith("\n");
+}
+
+function renderSessionLine(
+  text: string,
+  state: SessionDisplayState,
+  writeDisplay: (text: string) => void,
+) {
+  if (state.lineOpen) {
+    writeDisplay("\n");
+  }
+  writeDisplay(`${text}\n`);
+  state.lineOpen = false;
+}
+
+function closeSessionLine(state: SessionDisplayState, writeDisplay: (text: string) => void) {
+  if (!state.lineOpen) {
+    return;
+  }
+  writeDisplay("\n");
+  state.lineOpen = false;
+}
+
+function renderCommandOutput(
+  output: string,
+  state: SessionDisplayState,
+  writeDisplay: (text: string) => void,
+) {
+  const normalized = output.replace(/\r\n/g, "\n").replace(/\n$/, "");
+  if (!normalized) {
+    return;
+  }
+  closeSessionLine(state, writeDisplay);
+  for (const line of normalized.split("\n")) {
+    renderSessionLine(`| ${line}`, state, writeDisplay);
+  }
+}
+
+export function renderCodexSessionMessage(options: {
+  issueIdentifier: string;
+  issueTitle: string;
+  message: JsonRpcMessage;
+  state: SessionDisplayState;
+  writeDisplay: (text: string) => void;
+}) {
+  const { issueIdentifier, issueTitle, message, state, writeDisplay } = options;
+  if (!state.headerPrinted) {
+    renderSessionLine(`=== ${issueIdentifier} ${issueTitle} ===`, state, writeDisplay);
+    state.headerPrinted = true;
+  }
+  switch (message.method) {
+    case "thread/started":
+      renderSessionLine("Session started", state, writeDisplay);
+      return;
+    case "turn/started":
+      renderSessionLine("Turn started", state, writeDisplay);
+      return;
+    case "turn/completed":
+      closeSessionLine(state, writeDisplay);
+      renderSessionLine("Turn completed", state, writeDisplay);
+      return;
+    case "turn/cancelled":
+      closeSessionLine(state, writeDisplay);
+      renderSessionLine("Turn cancelled", state, writeDisplay);
+      return;
+    case "turn/failed":
+      closeSessionLine(state, writeDisplay);
+      renderSessionLine("Turn failed", state, writeDisplay);
+      return;
+    case "thread/status/changed": {
+      const params = asRecord(message.params);
+      const status = asRecord(params?.status);
+      const activeFlags = Array.isArray(status?.activeFlags) ? status.activeFlags : [];
+      if (activeFlags.includes("waitingOnUserInput")) {
+        renderSessionLine("Waiting for user input", state, writeDisplay);
+      }
+      return;
+    }
+    case "item/started": {
+      const params = asRecord(message.params);
+      const item = asRecord(params?.item);
+      const itemType = asString(item?.type);
+      if (!item || !itemType) {
+        return;
+      }
+      if (itemType === "agentMessage") {
+        state.activeAgentMessageId = asString(item.id);
+        return;
+      }
+      closeSessionLine(state, writeDisplay);
+      if (itemType === "commandExecution") {
+        renderSessionLine(`$ ${summarizeCommandExecution(item)}`, state, writeDisplay);
+        return;
+      }
+      if (itemType === "mcpToolCall") {
+        renderSessionLine(`Tool: ${summarizeToolCall(item)}`, state, writeDisplay);
+      }
+      return;
+    }
+    case "item/agentMessage/delta": {
+      const params = asRecord(message.params);
+      const itemId = asString(params?.itemId);
+      const delta = asString(params?.delta) ?? "";
+      if (!delta) {
+        return;
+      }
+      if (itemId && state.activeAgentMessageId && itemId !== state.activeAgentMessageId) {
+        closeSessionLine(state, writeDisplay);
+        state.activeAgentMessageId = itemId;
+      }
+      renderSessionText(delta, state, writeDisplay);
+      return;
+    }
+    case "item/tool/requestUserInput": {
+      const params = asRecord(message.params);
+      const questions = Array.isArray(params?.questions) ? params.questions : [];
+      closeSessionLine(state, writeDisplay);
+      const summary = questions.map(formatQuestionSummary).filter(Boolean).join(" | ");
+      renderSessionLine(
+        summary ? `Approval required: ${summary}` : "Approval required",
+        state,
+        writeDisplay,
+      );
+      return;
+    }
+    case "item/completed": {
+      const params = asRecord(message.params);
+      const item = asRecord(params?.item);
+      const itemType = asString(item?.type);
+      if (!item || !itemType) {
+        return;
+      }
+      if (itemType === "agentMessage") {
+        if (asString(item.id) === state.activeAgentMessageId) {
+          closeSessionLine(state, writeDisplay);
+          state.activeAgentMessageId = undefined;
+        }
+        return;
+      }
+      if (itemType === "commandExecution") {
+        renderCommandOutput(asString(item.aggregatedOutput) ?? "", state, writeDisplay);
+        const status = asString(item.status);
+        const exitCode = item.exitCode;
+        if (status === "failed") {
+          const suffix = typeof exitCode === "number" ? ` (exit ${exitCode})` : "";
+          renderSessionLine(`Command failed${suffix}`, state, writeDisplay);
+        }
+        return;
+      }
+      if (itemType === "mcpToolCall") {
+        const error = asRecord(item.error);
+        const errorMessage = asString(error?.message);
+        if (errorMessage) {
+          renderSessionLine(`Tool failed: ${errorMessage}`, state, writeDisplay);
+        }
+      }
+      return;
+    }
+    case "error":
+      closeSessionLine(state, writeDisplay);
+      renderSessionLine(`Error: ${JSON.stringify(message.params)}`, state, writeDisplay);
+      return;
+    default:
+      return;
+  }
+}
+
 async function createWorkspaceLogWriter(workspace: PreparedWorkspace): Promise<WorkspaceLogWriter> {
   const logDir = join(workspace.path, ".agent");
   await mkdir(logDir, { recursive: true });
+  const displayLogPath = join(logDir, "codex.session.log");
   const eventLogPath = join(logDir, "events.log");
   const stderrLogPath = join(logDir, "codex.stderr.log");
   const stdoutLogPath = join(logDir, "codex.stdout.jsonl");
@@ -189,9 +455,13 @@ async function createWorkspaceLogWriter(workspace: PreparedWorkspace): Promise<W
   };
 
   return {
+    displayLogPath,
     eventLogPath,
     stderrLogPath,
     stdoutLogPath,
+    writeDisplay(text) {
+      void appendFile(displayLogPath, text);
+    },
     writeEvent(event, data) {
       appendLine(
         eventLogPath,
@@ -226,6 +496,7 @@ export class CodexAppServerRunner {
     workspace: PreparedWorkspace;
   }): Promise<IssueRunResult> {
     const logs = await createWorkspaceLogWriter(options.workspace);
+    const displayState = createSessionDisplayState();
     const proc = Bun.spawn({
       cmd: ["bash", "-lc", this.#config.command],
       cwd: options.workspace.path,
@@ -234,7 +505,7 @@ export class CodexAppServerRunner {
       stdout: "pipe",
     });
     const queue = new MessageQueue();
-    const state: PendingTurnState = { inputRequired: false, stderr: [], stdout: [] };
+    const state: PendingTurnState = { display: displayState, inputRequired: false, stderr: [], stdout: [] };
     this.#log.info("session.starting", {
       issueIdentifier: options.issue.identifier,
       workspace: options.workspace.path,
@@ -249,9 +520,18 @@ export class CodexAppServerRunner {
       (line) => {
         state.stdout.push(line);
         logs.writeStdout(line);
-        printDirectOutput(options.issue.identifier, "stdout", line);
         try {
           const message = JSON.parse(line) as JsonRpcMessage;
+          renderCodexSessionMessage({
+            issueIdentifier: options.issue.identifier,
+            issueTitle: options.issue.title,
+            message,
+            state: state.display,
+            writeDisplay: (text) => {
+              logs.writeDisplay(text);
+              process.stdout.write(text);
+            },
+          });
           state.lastEvent = summarizeMessage(message);
           if (message.method && message.method !== "item/agentMessage/delta") {
             const data = {
@@ -265,6 +545,7 @@ export class CodexAppServerRunner {
           }
           queue.push(message);
         } catch (error) {
+          printDirectOutput(options.issue.identifier, "stdout", line);
           queue.push({
             error: { message: `malformed:${(error as Error).message}` },
             method: "malformed",
@@ -403,6 +684,10 @@ export class CodexAppServerRunner {
       };
     } finally {
       clearInterval(heartbeat);
+      closeSessionLine(state.display, (text) => {
+        logs.writeDisplay(text);
+        process.stdout.write(text);
+      });
       logs.writeEvent("session.stopping", {
         issueIdentifier: options.issue.identifier,
         threadId: heartbeatThreadId,
@@ -445,8 +730,11 @@ export class CodexAppServerRunner {
         return JSON.stringify({ id: requestId, result: response });
       }
       case "item/tool/requestUserInput": {
-        state.inputRequired = true;
-        const response: ToolRequestUserInputResponse = { answers: {} };
+        const response = buildAutomaticUserInputResponse(message.params);
+        if (!response) {
+          state.inputRequired = true;
+          return JSON.stringify({ id: requestId, result: { answers: {} } satisfies ToolRequestUserInputResponse });
+        }
         return JSON.stringify({ id: requestId, result: response });
       }
       default:

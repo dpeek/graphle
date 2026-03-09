@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { rangeOf } from "./schema";
-import { app, company, status } from "./schema/app";
-import { core } from "./schema/core";
+import { app, company, status } from "./app";
+import { core } from "./core";
 
 describe("rangeOf typing and namespace resolution", () => {
   it("keeps key-literal typing while normalizing resolved refs to ids", () => {

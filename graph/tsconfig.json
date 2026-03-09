@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/tsconfig",
-  "extends": "@io/dev/tsconfig.base.json",
+  "extends": "@io/lib/tsconfig.base.json",
   "compilerOptions": {
     "types": ["@types/bun"],
     "resolveJsonModule": true,

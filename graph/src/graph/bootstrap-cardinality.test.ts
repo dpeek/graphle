@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { core } from "../schema/core";
+import { core } from "./core";
 import { bootstrap } from "./bootstrap";
 import { edgeId } from "./schema";
 import { createStore } from "./store";

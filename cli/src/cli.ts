@@ -1,13 +1,14 @@
 #! /usr/bin/env bun
 
+import { runAgentCli } from "@io/agent";
 import { configurePackage, createPackage } from "./create.js";
 import { install } from "./install.js";
 import { setExludeFiles } from "./vscode.js";
 
 async function run([cmd, ...args]: string[]) {
   switch (cmd) {
-    // case "agent":
-    //   return runAgentCli(args);
+    case "agent":
+      return runAgentCli(args);
     case "create":
       return createPackage(args[0]);
     case "configure":

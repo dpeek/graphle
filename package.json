@@ -9,6 +9,10 @@
     "lib"
   ],
   "type": "module",
+  "scripts": {
+    "check": "bun run --cwd graph check",
+    "agent": "io agent start WORKFLOW.md"
+  },
   "devDependencies": {
     "@io/dev": "workspace:"
   }

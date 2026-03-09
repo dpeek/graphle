@@ -1,6 +1,6 @@
 import { edgeId, typeId } from "./schema";
 import type { EdgeOutput } from "./schema";
-import { core } from "./schema/core";
+import { core } from "./core";
 import type { Id, Store } from "./store";
 
 /**
@@ -70,7 +70,7 @@ function decodeByRange(store: Store, raw: Id, range: Id | undefined): unknown {
   if (!range) return maybeResolveEntity(store, raw);
 
   // Decode through core scalar codecs when the predicate range is a known core scalar.
-  const scalar = Object.values(core).find(
+  const scalar = (Object.values(core) as Array<(typeof core)[keyof typeof core]>).find(
     (typeDef): typeDef is (typeof core)[keyof typeof core] & { kind: "scalar" } =>
       typeDef.kind === "scalar" && typeId(typeDef) === range,
   );
