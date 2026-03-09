@@ -18,13 +18,13 @@ type NormalizeRange<R extends RangeRef> = R extends string
     ? Extract<K, string>
     : string;
 
-export type EdgeInput<R extends RangeRef = RangeRef> = {
+export type EdgeInput<R extends RangeRef = RangeRef, Extra extends object = {}> = {
   key?: string;
   range: R;
   cardinality: Cardinality;
   onCreate?: PredicateValueHook;
   onUpdate?: PredicateValueHook;
-};
+} & Extra;
 
 export type EdgeOutput<T extends EdgeInput = EdgeInput> = {
   key: string;
@@ -32,7 +32,7 @@ export type EdgeOutput<T extends EdgeInput = EdgeInput> = {
   cardinality: T["cardinality"];
   onCreate?: PredicateValueHook;
   onUpdate?: PredicateValueHook;
-};
+} & Omit<T, "cardinality" | "key" | "onCreate" | "onUpdate" | "range">;
 
 export type ResolvedEdgeOutput<T extends EdgeInput = EdgeInput> = EdgeOutput<T> & {
   id: string;
@@ -113,14 +113,26 @@ function ns<const T extends FieldsInput>(key: string, input: T): FieldsOutput<T>
     for (const [name, value] of Object.entries(tree)) {
       const nextKey = `${path}:${name}`;
       if (hasEdgeShape(value)) {
-        const edge = value as Partial<EdgeOutput> & Partial<ResolvedEdgeOutput>;
+        const edge = value as EdgeInput<RangeRef> &
+          Partial<ResolvedEdgeOutput> &
+          Record<string, unknown>;
+        const {
+          key: edgeKey,
+          range,
+          cardinality,
+          onCreate,
+          onUpdate,
+          id,
+          ...extras
+        } = edge;
         out[name] = {
-          key: edge.key ?? nextKey,
-          range: normalizeRangeRef(edge.range as RangeRef),
-          cardinality: edge.cardinality as Cardinality,
-          ...(edge.onCreate ? { onCreate: edge.onCreate } : {}),
-          ...(edge.onUpdate ? { onUpdate: edge.onUpdate } : {}),
-          ...(edge.id ? { id: edge.id } : {}),
+          ...extras,
+          key: edgeKey ?? nextKey,
+          range: normalizeRangeRef(range),
+          cardinality: cardinality as Cardinality,
+          ...(onCreate ? { onCreate } : {}),
+          ...(onUpdate ? { onUpdate } : {}),
+          ...(id ? { id } : {}),
         } satisfies EdgeOutput;
       } else {
         out[name] = build(nextKey, value as FieldsInput);

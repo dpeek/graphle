@@ -1,29 +1,62 @@
 import ids from "./app.json";
 import { core } from "./core";
-import { defineEnum, defineNamespace, defineType, rangeOf } from "./schema.js";
+import { defineNamespace, defineType, rangeOf } from "./schema.js";
+import { numberTypeModule } from "../type/number/index.js";
+import { statusTypeModule } from "../type/status/index.js";
+import { stringTypeModule } from "../type/string/index.js";
+import { urlTypeModule } from "../type/url/index.js";
 
-export const status = defineEnum({
-  values: { key: "app:status", name: "Status" },
-  options: {
-    active: {
-      name: "Active",
-      description: "Entity is active",
-    },
-    paused: {
-      name: "Paused",
-      description: "Temporarily inactive",
-    },
-  },
-});
+export const status = statusTypeModule.type;
 
 export const company = defineType({
   values: { key: "app:company", name: "Company" },
   fields: {
     ...core.node.fields,
-    status: { range: rangeOf(status), cardinality: "one" },
-    foundedYear: { range: rangeOf(core.number), cardinality: "one?" },
-    tags: { range: rangeOf(core.string), cardinality: "many" },
-    website: { range: rangeOf(core.url), cardinality: "one" },
+    status: statusTypeModule.field({
+      cardinality: "one",
+      meta: {
+        label: "Status",
+        display: {
+          kind: "badge",
+        },
+      },
+      filter: {
+        operators: ["is"] as const,
+        defaultOperator: "is",
+      },
+    }),
+    foundedYear: numberTypeModule.field({
+      cardinality: "one?",
+      meta: {
+        label: "Founded year",
+      },
+      filter: {
+        operators: ["equals", "gt", "lt"] as const,
+        defaultOperator: "equals",
+      },
+    }),
+    tags: stringTypeModule.field({
+      cardinality: "many",
+      meta: {
+        label: "Tags",
+        editor: {
+          kind: "token-list",
+        },
+      },
+      filter: {
+        operators: ["contains", "equals"] as const,
+        defaultOperator: "contains",
+      },
+    }),
+    website: urlTypeModule.field({
+      cardinality: "one",
+      meta: {
+        label: "Website",
+        display: {
+          kind: "external-link",
+        },
+      },
+    }),
   },
 });
 
@@ -39,9 +72,27 @@ export const block = defineType({
   values: { key: "app:block", name: "Outline Node" },
   fields: {
     ...core.node.fields,
-    text: { range: rangeOf(core.string), cardinality: "one" },
+    text: stringTypeModule.field({
+      cardinality: "one",
+      meta: {
+        label: "Text",
+        editor: {
+          kind: "textarea",
+          multiline: true,
+        },
+      },
+      filter: {
+        operators: ["contains", "prefix"] as const,
+        defaultOperator: "contains",
+      },
+    }),
     parent: { range: "app:block", cardinality: "one?" },
-    order: { range: rangeOf(core.number), cardinality: "one" },
+    order: numberTypeModule.field({
+      cardinality: "one",
+      meta: {
+        label: "Order",
+      },
+    }),
     collapsed: { range: rangeOf(core.boolean), cardinality: "one?" },
   },
 });

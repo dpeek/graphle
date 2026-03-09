@@ -7,3 +7,4 @@ export * from "./identity";
 export * from "./runtime";
 export * from "./schema";
 export * from "./store";
+export * from "./type-module";
