@@ -13,11 +13,8 @@ export interface AgentServiceOptions {
   log?: Logger;
   once?: boolean;
   repoRoot?: string;
-  workspaceManagerFactory?: (workflow: Workflow) => WorkspaceManager;
+  workspaceManagerFactory?: (workflow: Workflow, issueIdentifier?: string) => WorkspaceManager;
   workflowPath?: string;
-  workerCount?: number;
-  workerId?: string;
-  workerIndex?: number;
 }
 
 export function pickCandidateIssues(issues: AgentIssue[], limit: number) {
@@ -48,26 +45,18 @@ function scoreState(state: string) {
   return 2;
 }
 
-function deriveWorkerIndex(workerId: string) {
-  const match = /(\d+)$/.exec(workerId);
-  return match ? Math.max(0, Number(match[1]) - 1) : 0;
-}
-
-export function pickAssignedIssue(issues: AgentIssue[], workerCount: number, workerIndex: number) {
-  return pickCandidateIssues(issues, Math.max(1, workerCount))[workerIndex];
-}
-
 export class AgentService {
   readonly #log: Logger;
   readonly #once: boolean;
   readonly #repoRoot: string;
   readonly #workflowPath: string;
-  readonly #workspaceManagerFactory?: (workflow: Workflow) => WorkspaceManager;
-  readonly #workerCount?: number;
-  readonly #workerId: string;
-  readonly #workerIndex: number;
+  readonly #workspaceManagerFactory?: (
+    workflow: Workflow,
+    issueIdentifier?: string,
+  ) => WorkspaceManager;
+  #activeRuns = new Map<string, Promise<IssueRunResult | undefined>>();
   #ready = false;
-  #running = false;
+  #ticking = false;
   #timer?: Timer;
 
   constructor(options: AgentServiceOptions = {}) {
@@ -78,31 +67,18 @@ export class AgentService {
     this.#repoRoot = options.repoRoot ?? process.cwd();
     this.#workflowPath = resolve(this.#repoRoot, options.workflowPath ?? "WORKFLOW.md");
     this.#workspaceManagerFactory = options.workspaceManagerFactory;
-    this.#workerId = options.workerId ?? `worker-${(options.workerIndex ?? 0) + 1}`;
-    this.#workerIndex = options.workerIndex ?? deriveWorkerIndex(this.#workerId);
-    this.#workerCount = options.workerCount;
   }
 
   async start() {
     const workflow = await this.#loadWorkflow();
-    await this.#ensureWorkerReady(workflow);
     if (this.#once) {
-      await this.runOnce(workflow);
+      await this.runOnce(workflow, true);
       return;
     }
-    const initialResults = await this.runOnce(workflow);
-    if (initialResults.length) {
-      return;
-    }
+    await this.runOnce(workflow);
     this.#timer = setInterval(async () => {
-      if (this.#running) {
-        return;
-      }
       try {
-        const results = await this.runOnce();
-        if (results.length) {
-          await this.stop();
-        }
+        await this.runOnce();
       } catch (error) {
         this.#log.error("tick.failed", error instanceof Error ? error : new Error(String(error)));
       }
@@ -113,13 +89,14 @@ export class AgentService {
     if (this.#timer) {
       clearInterval(this.#timer);
     }
+    await Promise.all(this.#activeRuns.values());
   }
 
-  async runOnce(workflow?: Workflow) {
-    if (this.#running) {
+  async runOnce(workflow?: Workflow, waitForCompletion = false) {
+    if (this.#ticking) {
       return [];
     }
-    this.#running = true;
+    this.#ticking = true;
     try {
       const activeWorkflow = workflow ?? (await this.#loadWorkflow());
       await this.#ensureWorkerReady(activeWorkflow);
@@ -130,19 +107,28 @@ export class AgentService {
         activeWorkflow.tracker.terminalStates,
       );
       const issues = await tracker.fetchCandidateIssues();
-      const workerCount = Math.max(
-        1,
-        this.#workerCount ?? activeWorkflow.agent.maxConcurrentAgents,
-      );
-      const assigned = pickAssignedIssue(issues, workerCount, this.#workerIndex);
-      if (!assigned) {
-        this.#log.info("tick.idle");
-        process.stdout.write(`${this.#workerId}: No issues\n`);
+      const maxConcurrentAgents = Math.max(1, activeWorkflow.agent.maxConcurrentAgents);
+      const availableSlots = Math.max(0, maxConcurrentAgents - this.#activeRuns.size);
+      if (availableSlots === 0) {
         return [];
       }
-      return [await this.#runIssue(activeWorkflow, assigned, workerCount)];
+      const scheduledIssues = pickCandidateIssues(issues, issues.length)
+        .filter((issue) => !this.#activeRuns.has(issue.identifier))
+        .slice(0, availableSlots);
+      if (!scheduledIssues.length) {
+        this.#log.info("tick.idle");
+        process.stdout.write("No issues\n");
+        return [];
+      }
+      const runs = scheduledIssues.map((issue, index) =>
+        this.#startIssueRun(activeWorkflow, issue, maxConcurrentAgents, index),
+      );
+      if (!waitForCompletion) {
+        return [];
+      }
+      return (await Promise.all(runs)).filter((result): result is IssueRunResult => Boolean(result));
     } finally {
-      this.#running = false;
+      this.#ticking = false;
     }
   }
 
@@ -154,15 +140,42 @@ export class AgentService {
     return result.value;
   }
 
-  async #runIssue(workflow: Workflow, issue: AgentIssue, workerCount: number) {
-    const workspaceManager = this.#createWorkspaceManager(workflow);
+  #startIssueRun(
+    workflow: Workflow,
+    issue: AgentIssue,
+    maxConcurrentAgents: number,
+    runIndex: number,
+  ) {
+    const run = this.#runIssue(workflow, issue, maxConcurrentAgents, runIndex)
+      .catch((error) => {
+        this.#log.error("issue.failed", {
+          error: error instanceof Error ? error : new Error(String(error)),
+          issueIdentifier: issue.identifier,
+        });
+        return undefined;
+      })
+      .finally(() => {
+        this.#activeRuns.delete(issue.identifier);
+      });
+    this.#activeRuns.set(issue.identifier, run);
+    return run;
+  }
+
+  async #runIssue(
+    workflow: Workflow,
+    issue: AgentIssue,
+    maxConcurrentAgents: number,
+    runIndex: number,
+  ) {
+    const workspaceManager = this.#createWorkspaceManager(workflow, issue.identifier);
+    await workspaceManager.ensureSessionStartState();
     const workspace = await workspaceManager.prepare(issue);
-    const assignmentLine = `${this.#workerId}: ${issue.identifier} -> ${workspace.path} [${workspace.branchName}]\n`;
+    const assignmentLine = `${issue.identifier}: ${workspace.path} [${workspace.branchName}]\n`;
     await this.#appendIssueOutput(workspace.outputPath, assignmentLine);
     const prompt = renderPrompt(workflow.promptTemplate, {
       attempt: 1,
       issue,
-      worker: { count: workerCount, id: this.#workerId, index: this.#workerIndex },
+      worker: { count: maxConcurrentAgents, id: issue.identifier, index: runIndex },
       workspace,
     });
     const runner = new CodexAppServerRunner(workflow.codex, this.#log);
@@ -180,7 +193,7 @@ export class AgentService {
       await workspaceManager.markBlocked(workspace, issue);
       await this.#appendIssueOutput(
         workspace.outputPath,
-        `${this.#workerId}: blocked ${issue.identifier}\n`,
+        `${issue.identifier}: blocked\n`,
       );
       throw error;
     }
@@ -190,7 +203,7 @@ export class AgentService {
       await workspaceManager.markBlocked(workspace, issue);
       await this.#appendIssueOutput(
         workspace.outputPath,
-        `${this.#workerId}: blocked ${issue.identifier}\n`,
+        `${issue.identifier}: blocked\n`,
       );
       this.#log.info("issue.checkout.preserved", {
         branchName: workspace.branchName,
@@ -204,7 +217,7 @@ export class AgentService {
       const completion = await workspaceManager.complete(workspace, issue);
       await this.#appendIssueOutput(
         workspace.outputPath,
-        `${this.#workerId}: committed ${completion.commitSha} and pushed ${workspace.branchName}\n`,
+        `${issue.identifier}: committed ${completion.commitSha} and pushed ${workspace.branchName}\n`,
       );
       this.#log.info("issue.completed", {
         branchName: workspace.branchName,
@@ -223,22 +236,22 @@ export class AgentService {
       await workspaceManager.markBlocked(workspace, issue);
       await this.#appendIssueOutput(
         workspace.outputPath,
-        `${this.#workerId}: blocked ${issue.identifier}\n`,
+        `${issue.identifier}: blocked\n`,
       );
       throw error;
     }
   }
 
-  #createWorkspaceManager(workflow: Workflow) {
+  #createWorkspaceManager(workflow: Workflow, issueIdentifier?: string) {
     return (
-      this.#workspaceManagerFactory?.(workflow) ??
+      this.#workspaceManagerFactory?.(workflow, issueIdentifier) ??
       new WorkspaceManager({
         hooks: workflow.hooks,
         log: this.#log,
         originPath: workflow.workspace.origin ?? this.#repoRoot,
         repoRoot: this.#repoRoot,
         rootDir: workflow.workspace.root,
-        workerId: this.#workerId,
+        workerId: issueIdentifier ?? "supervisor",
       })
     );
   }
@@ -251,7 +264,7 @@ export class AgentService {
     const { path } = await workspaceManager.ensureSessionStartState();
     const workspace = workspaceManager.createIdleWorkspace();
     await workspaceManager.cleanup(workspace);
-    process.stdout.write(`${this.#workerId}: ready at ${path}\n`);
+    process.stdout.write(`ready at ${path}\n`);
     this.#ready = true;
   }
 

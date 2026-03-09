@@ -7,8 +7,7 @@ import { readIssueRuntimeState } from "./workspace.js";
 
 function printHelp() {
   console.log(`Usage:
-  io agent start [workflowPath] [--once] [--worker-id ID] [--worker-count N] [--worker-index N]
-  io agent worker <workerId> [workflowPath] [--once] [--worker-count N] [--worker-index N]
+  io agent start [workflowPath] [--once]
   io agent tail <issue> [workflowPath]
   io agent validate [workflowPath]
   `);
@@ -16,14 +15,11 @@ function printHelp() {
 
 type StartCommandOptions = {
   once: boolean;
-  workerCount?: number;
-  workerId?: string;
-  workerIndex?: number;
   workflowPath?: string;
 };
 
-function parseStartOptions(args: string[], defaultWorkerId?: string): StartCommandOptions {
-  const options: StartCommandOptions = { once: false, workerId: defaultWorkerId };
+function parseStartOptions(args: string[]): StartCommandOptions {
+  const options: StartCommandOptions = { once: false };
   for (let index = 0; index < args.length; index++) {
     const value = args[index];
     if (!value) {
@@ -31,18 +27,6 @@ function parseStartOptions(args: string[], defaultWorkerId?: string): StartComma
     }
     if (value === "--once") {
       options.once = true;
-      continue;
-    }
-    if ((value === "--worker" || value === "--worker-id") && args[index + 1]) {
-      options.workerId = args[++index];
-      continue;
-    }
-    if (value === "--worker-count" && args[index + 1]) {
-      options.workerCount = Number(args[++index]);
-      continue;
-    }
-    if (value === "--worker-index" && args[index + 1]) {
-      options.workerIndex = Number(args[++index]);
       continue;
     }
     if (!value.startsWith("--") && !options.workflowPath) {
@@ -57,16 +41,6 @@ export async function runAgentCli(args: string[]) {
   switch (command) {
     case "start": {
       const options = parseStartOptions(rest);
-      const service = new AgentService(options);
-      await service.start();
-      return;
-    }
-    case "worker": {
-      const [workerId, ...workerArgs] = rest;
-      const options = parseStartOptions(
-        workerId && !workerId.startsWith("--") ? workerArgs : rest,
-        workerId && !workerId.startsWith("--") ? workerId : undefined,
-      );
       const service = new AgentService(options);
       await service.start();
       return;
@@ -105,7 +79,7 @@ export async function runAgentCli(args: string[]) {
       }
       const issueState = await readIssueRuntimeState(result.value.workspace.root, issueIdentifier);
       if (!issueState) {
-        console.error(`No retained worker output for ${issueIdentifier}`);
+        console.error(`No retained issue output for ${issueIdentifier}`);
         process.exitCode = 1;
         return;
       }
