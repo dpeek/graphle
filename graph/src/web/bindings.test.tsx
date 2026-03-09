@@ -4,7 +4,7 @@ import { act, create } from "react-test-renderer";
 
 import { app } from "../graph/app.js";
 import { bootstrap } from "../graph/bootstrap.js";
-import { createTypeClient } from "../graph/client.js";
+import { createTypeClient, fieldGroupPath, type FieldGroupRef } from "../graph/client.js";
 import { core } from "../graph/core.js";
 import { createStore } from "../graph/store.js";
 import {
@@ -33,6 +33,10 @@ function setupGraph() {
     website: new URL("https://acme.com"),
     status: app.status.values.active.id,
     tags: ["enterprise", "saas"],
+    address: {
+      address_line1: "1 Graph Way",
+      locality: "Sydney",
+    },
   });
 
   return { graph, companyId };
@@ -191,6 +195,70 @@ describe("web predicate bindings", () => {
       "Acme 2",
       "https://acme-2.com/",
     ]);
+
+    act(() => {
+      renderer?.unmount();
+    });
+  });
+
+  it("keeps nested field-group composition leaf-local in resolver-driven views", () => {
+    const { graph, companyId } = setupGraph();
+    const companyRef = graph.company.ref(companyId);
+    const addressRef: FieldGroupRef<typeof app.company.fields.address, typeof app & typeof core> =
+      companyRef.fields.address;
+    const renders = { section: 0, line1: 0, postalCode: 0 };
+
+    expect(fieldGroupPath(addressRef)).toEqual(["address"]);
+
+    function AddressSection({
+      group,
+    }: {
+      group: FieldGroupRef<typeof app.company.fields.address, typeof app & typeof core>;
+    }) {
+      renders.section += 1;
+      return (
+        <Fragment>
+          <Profiler
+            id="address-line1"
+            onRender={() => {
+              renders.line1 += 1;
+            }}
+          >
+            <PredicateFieldView predicate={group.address_line1} />
+          </Profiler>
+          <Profiler
+            id="address-postal-code"
+            onRender={() => {
+              renders.postalCode += 1;
+            }}
+          >
+            <PredicateFieldView predicate={group.postal_code} />
+          </Profiler>
+        </Fragment>
+      );
+    }
+
+    let renderer: ReturnType<typeof create> | undefined;
+    act(() => {
+      renderer = create(<AddressSection group={addressRef} />);
+    });
+
+    expect(renders).toEqual({ section: 1, line1: 1, postalCode: 1 });
+
+    act(() => {
+      companyRef.fields.address.locality.set("Melbourne");
+    });
+
+    expect(renders).toEqual({ section: 1, line1: 1, postalCode: 1 });
+
+    act(() => {
+      companyRef.fields.address.postal_code.set("3000");
+    });
+
+    expect(renders).toEqual({ section: 1, line1: 1, postalCode: 2 });
+    expect(renderer?.root.findAllByType("span").map((node) => node.children.join(""))).toContain(
+      "3000",
+    );
 
     act(() => {
       renderer?.unmount();

@@ -18,6 +18,11 @@ export function createExampleRuntime() {
     createdAt: new Date(),
     website: new URL("https://acme.com"),
     tags: ["enterprise", "saas"],
+    address: {
+      address_line1: "200 George St",
+      locality: "Sydney",
+      postal_code: "2000",
+    },
   });
 
   const estii = graph.company.create({

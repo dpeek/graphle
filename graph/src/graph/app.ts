@@ -1,6 +1,7 @@
 import ids from "./app.json";
 import { core } from "./core";
 import { defineNamespace, defineType, rangeOf } from "./schema.js";
+import { addressFields } from "../type/address.js";
 import { booleanTypeModule } from "../type/boolean.js";
 import { numberTypeModule } from "../type/number.js";
 import { statusTypeModule } from "../type/status.js";
@@ -13,6 +14,9 @@ export const company = defineType({
   values: { key: "app:company", name: "Company" },
   fields: {
     ...core.node.fields,
+    address: {
+      ...addressFields,
+    },
     status: statusTypeModule.field({
       cardinality: "one",
       meta: {

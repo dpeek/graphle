@@ -266,6 +266,13 @@ Example goal:
 
 The nested group should be a traversal convenience, not an eagerly materialized nested snapshot object.
 
+Current decision:
+
+- a nested traversal node is a stable field-group ref keyed by the schema field tree
+- the group carries traversal metadata such as field-tree identity and path
+- the group does not expose its own subscription API
+- each leaf under the group remains a `PredicateRef`
+
 ## Concrete Milestone 4 Proof Surfaces
 
 The next ref-heavy backlog items already have concrete schema targets in the repo:
@@ -316,7 +323,6 @@ This phase should not over-specify the exact algorithm, but it should insist tha
 ## Open Questions
 
 - Should `EntityRef` creation be cached globally per runtime or memoized lazily per consumer path?
-- What is the best representation of nested field groups?
 - How should `many` fields expose order-sensitive vs order-insensitive operations?
 - How should field refs expose errors or invalid states if later validation becomes asynchronous?
 - Should there also be a coarser entity-level subscription API for inspectors and devtools?

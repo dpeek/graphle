@@ -1,17 +1,71 @@
-import { core, defineType, rangeOf } from "@io/graph";
+import { defineType } from "../graph/schema.js";
 import { country } from "./country";
+import { stringTypeModule } from "./string";
+
+export const addressFields = {
+  recipient: stringTypeModule.field({
+    cardinality: "one?",
+    meta: {
+      label: "Recipient",
+    },
+  }),
+  organization: stringTypeModule.field({
+    cardinality: "one?",
+    meta: {
+      label: "Organization",
+    },
+  }),
+  address_line1: stringTypeModule.field({
+    cardinality: "one?",
+    meta: {
+      label: "Address line 1",
+    },
+  }),
+  address_line2: stringTypeModule.field({
+    cardinality: "one?",
+    meta: {
+      label: "Address line 2",
+    },
+  }),
+  locality: stringTypeModule.field({
+    cardinality: "one?",
+    meta: {
+      label: "Locality",
+    },
+  }),
+  dependent_locality: stringTypeModule.field({
+    cardinality: "one?",
+    meta: {
+      label: "Dependent locality",
+    },
+  }),
+  administrative_area: stringTypeModule.field({
+    cardinality: "one?",
+    meta: {
+      label: "Administrative area",
+    },
+  }),
+  postal_code: stringTypeModule.field({
+    cardinality: "one?",
+    meta: {
+      label: "Postal code",
+    },
+  }),
+};
 
 export const address = defineType({
   values: { key: "core:address", name: "Address" },
   fields: {
-    recipient: { range: rangeOf(core.string), cardinality: "one?" },
-    organization: { range: rangeOf(core.string), cardinality: "one?" },
-    address_line1: { range: rangeOf(core.string), cardinality: "one" },
-    address_line2: { range: rangeOf(core.string), cardinality: "one?" },
-    locality: { range: rangeOf(core.string), cardinality: "one?" },
-    dependent_locality: { range: rangeOf(core.string), cardinality: "one?" },
-    administrative_area: { range: rangeOf(core.string), cardinality: "one?" },
-    postal_code: { range: rangeOf(core.string), cardinality: "one?" },
-    country: { range: rangeOf(country), cardinality: "one" },
+    ...addressFields,
+    address_line1: stringTypeModule.field({
+      cardinality: "one",
+      meta: {
+        label: "Address line 1",
+      },
+    }),
+    country: {
+      range: country.values.key,
+      cardinality: "one",
+    },
   },
 });

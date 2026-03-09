@@ -1,5 +1,14 @@
 import { core } from "./core";
-import { edgeId, fieldsMeta, isEnumType, isFieldsOutput, isScalarType, typeId } from "./schema";
+import {
+  edgeId,
+  fieldTreeId,
+  fieldTreeKey,
+  fieldsMeta,
+  isEnumType,
+  isFieldsOutput,
+  isScalarType,
+  typeId,
+} from "./schema";
 import type {
   AnyTypeOutput,
   Cardinality,
@@ -65,6 +74,54 @@ type TreeCreate<T, Defs extends Record<string, AnyTypeOutput>> = T extends EdgeO
 
 type CoreDefs = typeof core;
 type AllDefs<NS extends Record<string, AnyTypeOutput>> = NS & CoreDefs;
+type FieldGroupInfo<T extends FieldsTree> = {
+  subjectId: string;
+  fieldTree: T;
+  path: readonly string[];
+};
+
+export const fieldGroupMeta: unique symbol = Symbol("fieldGroupMeta");
+
+type FieldGroupLike = {
+  [fieldGroupMeta]: FieldGroupInfo<FieldsTree>;
+};
+
+export type FieldGroupRef<
+  T extends FieldsTree,
+  Defs extends Record<string, AnyTypeOutput> = CoreDefs,
+> = {
+  [fieldGroupMeta]: FieldGroupInfo<T>;
+} & {
+  [K in Exclude<keyof T, typeof fieldsMeta>]: RefTree<T[K], Defs>;
+};
+
+export function isFieldGroupRef(value: unknown): value is FieldGroupLike {
+  if (!value || typeof value !== "object") return false;
+  return fieldGroupMeta in (value as Record<PropertyKey, unknown>);
+}
+
+export function fieldGroupFieldTree<
+  T extends FieldsTree,
+  Defs extends Record<string, AnyTypeOutput> = CoreDefs,
+>(group: FieldGroupRef<T, Defs>): T {
+  return group[fieldGroupMeta].fieldTree;
+}
+
+export function fieldGroupKey(group: FieldGroupLike): string {
+  return fieldTreeKey(group[fieldGroupMeta].fieldTree);
+}
+
+export function fieldGroupId(group: FieldGroupLike): string {
+  return fieldTreeId(group[fieldGroupMeta].fieldTree);
+}
+
+export function fieldGroupPath(group: FieldGroupLike): readonly string[] {
+  return group[fieldGroupMeta].path;
+}
+
+export function fieldGroupSubjectId(group: FieldGroupLike): string {
+  return group[fieldGroupMeta].subjectId;
+}
 
 export type EntityOfType<
   T extends TypeOutput,
@@ -94,7 +151,7 @@ type PredicateSetValueOf<
 type RefTree<T, Defs extends Record<string, AnyTypeOutput>> = T extends EdgeOutput
   ? PredicateRef<T, Defs>
   : T extends FieldsTree
-    ? { [K in Exclude<keyof T, typeof fieldsMeta>]: RefTree<T[K], Defs> }
+    ? FieldGroupRef<T, Defs>
     : never;
 
 export type PredicateRef<
@@ -530,8 +587,18 @@ function buildFieldRefs<T extends FieldsOutput, Defs extends Record<string, AnyT
   scalarByKey: Map<string, ScalarTypeOutput<any>>,
   typeByKey: Map<string, AnyTypeOutput>,
   enumValuesByRange: Map<string, Set<string>>,
-): RefTree<T, Defs> {
+): FieldGroupRef<T, Defs> {
   const out: Record<string, unknown> = {};
+  Object.defineProperty(out, fieldGroupMeta, {
+    value: {
+      subjectId,
+      fieldTree: fields,
+      path: Object.freeze([...path]),
+    },
+    enumerable: false,
+    configurable: false,
+    writable: false,
+  });
 
   for (const [name, value] of Object.entries(fields)) {
     if (isEdgeOutput(value)) {
@@ -560,7 +627,7 @@ function buildFieldRefs<T extends FieldsOutput, Defs extends Record<string, AnyT
     }
   }
 
-  return out as RefTree<T, Defs>;
+  return out as FieldGroupRef<T, Defs>;
 }
 
 function createEntityRef<T extends TypeOutput, Defs extends Record<string, AnyTypeOutput>>(

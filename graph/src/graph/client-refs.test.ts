@@ -1,9 +1,20 @@
 import { describe, expect, it } from "bun:test";
 import { app } from "./app";
 import { bootstrap } from "./bootstrap";
-import { createTypeClient, type EntityRef, type PredicateRef } from "./client";
+import {
+  createTypeClient,
+  fieldGroupFieldTree,
+  fieldGroupId,
+  fieldGroupKey,
+  fieldGroupPath,
+  fieldGroupSubjectId,
+  isFieldGroupRef,
+  type EntityRef,
+  type FieldGroupRef,
+  type PredicateRef,
+} from "./client";
 import { core } from "./core";
-import { edgeId } from "./schema";
+import { edgeId, fieldTreeId } from "./schema";
 import { createStore } from "./store";
 
 function setupGraph() {
@@ -17,6 +28,10 @@ function setupGraph() {
     website: new URL("https://acme.com"),
     status: app.status.values.active.id,
     tags: ["enterprise", "saas"],
+    address: {
+      address_line1: "1 Graph Way",
+      locality: "Sydney",
+    },
   });
 
   return { store, graph, companyId };
@@ -35,6 +50,26 @@ describe("typed refs", () => {
     expect(companyRefA.fields.website).toBe(companyRefB.fields.website);
   });
 
+  it("preserves nested field-group traversal shape as stable non-subscribing refs", () => {
+    const { graph, companyId } = setupGraph();
+
+    const companyRefA = graph.company.ref(companyId);
+    const companyRefB = graph.company.ref(companyId);
+    const addressRef: FieldGroupRef<typeof app.company.fields.address, typeof app & typeof core> =
+      companyRefA.fields.address;
+
+    expect(addressRef).toBe(companyRefB.fields.address);
+    expect(companyRefA.fields.address.locality).toBe(companyRefB.fields.address.locality);
+    expect(isFieldGroupRef(addressRef)).toBe(true);
+    expect(fieldGroupFieldTree(addressRef)).toBe(app.company.fields.address);
+    expect(fieldGroupKey(addressRef)).toBe("app:company:address");
+    expect(fieldGroupId(addressRef)).toBe(fieldTreeId(app.company.fields.address));
+    expect(fieldGroupPath(addressRef)).toEqual(["address"]);
+    expect(fieldGroupSubjectId(addressRef)).toBe(companyId);
+    expect("get" in (addressRef as Record<string, unknown>)).toBe(false);
+    expect("subscribe" in (addressRef as Record<string, unknown>)).toBe(false);
+  });
+
   it("preserves decoded value and cardinality typing through predicate refs", () => {
     const { graph, companyId } = setupGraph();
 
@@ -42,17 +77,27 @@ describe("typed refs", () => {
       graph.company.ref(companyId);
     const nameRef: PredicateRef<typeof app.company.fields.name, typeof app & typeof core> =
       companyRef.fields.name;
+    const addressRef: FieldGroupRef<typeof app.company.fields.address, typeof app & typeof core> =
+      companyRef.fields.address;
+    const localityRef: PredicateRef<
+      typeof app.company.fields.address.locality,
+      typeof app & typeof core
+    > = addressRef.locality;
     const name: string = nameRef.get();
     const foundedYear: number | undefined = companyRef.fields.foundedYear.get();
     const tags: string[] = companyRef.fields.tags.get();
     const website: URL = companyRef.fields.website.get();
     const status: string = companyRef.fields.status.get();
+    const locality: string | undefined = localityRef.get();
+    const postalCode: string | undefined = addressRef.postal_code.get();
 
     expect(name).toBe("Acme");
     expect(foundedYear).toBeUndefined();
     expect(tags).toEqual(["enterprise", "saas"]);
     expect(website.toString()).toBe("https://acme.com/");
     expect(status).toBe(app.status.values.active.id);
+    expect(locality).toBe("Sydney");
+    expect(postalCode).toBeUndefined();
   });
 
   it("addresses entity-reference leaves as typed predicate refs", () => {
@@ -163,5 +208,35 @@ describe("typed refs", () => {
     unsubscribe();
     companyRef.update({ name: "Acme 3" });
     expect(notifications).toBe(1);
+  });
+
+  it("keeps nested leaf refs predicate-local inside field groups", () => {
+    const { graph, companyId } = setupGraph();
+    const companyRef = graph.company.ref(companyId);
+    let localityNotifications = 0;
+    let postalCodeNotifications = 0;
+
+    companyRef.fields.address.locality.subscribe(() => {
+      localityNotifications += 1;
+    });
+    companyRef.fields.address.postal_code.subscribe(() => {
+      postalCodeNotifications += 1;
+    });
+
+    companyRef.update({
+      address: {
+        locality: "Melbourne",
+      },
+    });
+
+    expect(localityNotifications).toBe(1);
+    expect(postalCodeNotifications).toBe(0);
+
+    companyRef.fields.address.postal_code.set("3000");
+
+    expect(localityNotifications).toBe(1);
+    expect(postalCodeNotifications).toBe(1);
+    expect(companyRef.fields.address.locality.get()).toBe("Melbourne");
+    expect(companyRef.fields.address.postal_code.get()).toBe("3000");
   });
 });

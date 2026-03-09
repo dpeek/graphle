@@ -1,4 +1,4 @@
-import { defineEnum } from "@io/graph";
+import { defineEnum } from "../graph/schema.js";
 
 export const country = defineEnum({
   values: { key: "core:country", name: "Country" },
