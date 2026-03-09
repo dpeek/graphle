@@ -36,11 +36,10 @@ Issue:
 - Labels: {{ issue.labels }}
 - Attempt: {{ attempt }}
 
-Worker:
+Run:
 
-- Worker ID: {{ worker.id }}
-- Worker Index: {{ worker.index }}
-- Worker Count: {{ worker.count }}
+- Issue Run ID: {{ worker.id }}
+- Concurrent Limit: {{ worker.count }}
 - Checkout: {{ workspace.path }}
 - Branch: {{ workspace.branchName }}
 - Push Remote: `origin` -> {{ workspace.originPath }}

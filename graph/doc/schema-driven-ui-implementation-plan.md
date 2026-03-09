@@ -10,6 +10,7 @@ Primary references:
 - `doc/typed-refs.md`
 - `doc/type-modules.md`
 - `doc/web-bindings.md`
+- `doc/schema-driven-ui-backlog.md`
 
 This plan is intentionally practical. It focuses on milestone order, proof points, risks, and delivery boundaries rather than restating the full architecture.
 
@@ -194,6 +195,12 @@ Validate the React integration model with minimal but real UI.
 - a field edit mutates through that same predicate ref
 - changing one field rerenders only the affected field component
 
+### Current backlog split
+
+- `OPE-47` should prove the generic renderer path for `company.name`, `company.foundedYear`, `company.website`, and `company.status`.
+- `OPE-48` should compose those generic pieces into one narrow company proof surface.
+- See `doc/schema-driven-ui-backlog.md` for proof-surface and out-of-scope detail.
+
 ## Milestone 4: Nested Fields And Relationship Semantics
 
 ### Goal
@@ -232,6 +239,14 @@ Handle the first non-trivial schema structures.
 - nested leaf fields can be rendered and edited through predicate refs
 - many-valued fields support a first coherent editing model
 - entity-reference fields have an explicit, typed UI strategy
+
+### Current backlog split
+
+- `OPE-49`: nested traversal and leaf ref identity
+- `OPE-50`: `many` collection semantics, starting with `company.tags`
+- `OPE-51`: relationship policies, starting with `person.worksAt`
+- `OPE-52`: combined Milestone 4 proof, potentially using a small two-entity flow
+- See `doc/schema-driven-ui-backlog.md` for the concrete proof surfaces and staging rules.
 
 ## Milestone 5: Filter And Query Capabilities
 

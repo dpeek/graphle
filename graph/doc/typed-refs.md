@@ -266,6 +266,26 @@ Example goal:
 
 The nested group should be a traversal convenience, not an eagerly materialized nested snapshot object.
 
+## Concrete Milestone 4 Proof Surfaces
+
+The next ref-heavy backlog items already have concrete schema targets in the repo:
+
+- `company.tags` for the first `many string` semantics
+- `person.worksAt` for the first entity-reference field semantics
+- `address` in `graph/src/type/address.ts` for an address-like nested group once it is wired into the app schema
+
+Those surfaces should drive the next ref decisions rather than abstract examples with no path to a real UI proof.
+
+## Staging Rules For Remaining Ref Work
+
+To keep the backlog slices coherent:
+
+- `OPE-49` should define nested traversal and leaf ref identity, not the full nested editor UX
+- `OPE-50` should define collection operations and change semantics for `many` fields
+- `OPE-51` should define explicit reference-field policies for entity relationships
+
+That separation prevents one issue from quietly re-solving the others and keeps the architecture easier to evaluate.
+
 ## Entity References vs Embedded Values
 
 This phase must preserve the distinction between:
@@ -274,6 +294,12 @@ This phase must preserve the distinction between:
 - a predicate whose value is a structured embedded value
 
 The current graph model is fundamentally reference-oriented. Any embedded editing experience must be an explicit higher-level policy, not an accidental consequence of nested typing.
+
+For the current backlog this means:
+
+- `person.worksAt` should behave like a typed relationship field
+- an address-like nested editor, if introduced, must be explicit about whether it is a structured local group or a reference to another entity
+- the first relationship UI should not reuse an embedded-value editor by accident just because both can look visually nested
 
 ## Equality And Change Detection
 

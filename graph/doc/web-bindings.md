@@ -321,6 +321,38 @@ Suggested scope:
 
 This is enough to validate the shape of the architecture without prematurely optimizing every edge case.
 
+## Concrete Phase 3 Proof Surface
+
+The remaining Phase 3 backlog should use the existing schema surface in `graph/src/graph/app.ts`.
+
+Preferred field set:
+
+- `company.name`
+- `company.foundedYear`
+- `company.website`
+- `company.status`
+
+Why this set:
+
+- it exercises text, optional number, URL, and enum behavior
+- it avoids nested, collection, and relationship concerns while the base resolver path is still being proven
+- it maps directly to the current `OPE-47` and `OPE-48` issue split
+
+`company.tags` and `person.worksAt` should remain out of the Phase 3 common path. They belong to Milestone 4 once the generic scalar and enum path is working.
+
+## Phase 3 Backlog Split
+
+The current backlog should be interpreted as:
+
+- `OPE-47`: generic renderer and editor capabilities for the initial field kinds
+- `OPE-48`: one small company proof surface composed from those generic capabilities
+
+That split matters because the team should avoid:
+
+- hiding resolver gaps inside a company-specific demo component
+- back-solving `many` or relationship editing inside the first generic renderer pass
+- turning the proof of concept into a general form-builder project
+
 ## Open Questions
 
 - How much resolver logic should be purely metadata-driven vs custom per type family?
