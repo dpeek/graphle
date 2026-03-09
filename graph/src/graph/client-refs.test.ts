@@ -72,6 +72,78 @@ describe("typed refs", () => {
     expect(employers).toEqual([companyId]);
   });
 
+  it("supports cardinality-aware predicate mutation helpers", () => {
+    const { graph, companyId } = setupGraph();
+    const companyRef = graph.company.ref(companyId);
+
+    companyRef.fields.name.set("Acme 2");
+    expect(companyRef.fields.name.get()).toBe("Acme 2");
+
+    companyRef.fields.foundedYear.set(1999);
+    expect(companyRef.fields.foundedYear.get()).toBe(1999);
+    companyRef.fields.foundedYear.clear();
+    expect(companyRef.fields.foundedYear.get()).toBeUndefined();
+
+    companyRef.fields.tags.add("ai");
+    expect(companyRef.fields.tags.get()).toEqual(["enterprise", "saas", "ai"]);
+
+    companyRef.fields.tags.remove("saas");
+    expect(companyRef.fields.tags.get()).toEqual(["enterprise", "ai"]);
+
+    companyRef.fields.tags.replace(["platform", "b2b"]);
+    expect(companyRef.fields.tags.get()).toEqual(["platform", "b2b"]);
+
+    companyRef.fields.tags.clear();
+    expect(companyRef.fields.tags.get()).toEqual([]);
+  });
+
+  it("runs lifecycle-managed updates when mutating through predicate refs", async () => {
+    const { graph, companyId } = setupGraph();
+    const companyRef = graph.company.ref(companyId);
+    const before = companyRef.fields.updatedAt.get()!;
+    let updatedAtNotifications = 0;
+
+    const unsubscribe = companyRef.fields.updatedAt.subscribe(() => {
+      updatedAtNotifications += 1;
+    });
+
+    await Bun.sleep(5);
+    companyRef.fields.name.set("Acme 2");
+
+    expect(companyRef.fields.updatedAt.get()!.getTime()).toBeGreaterThan(before.getTime());
+    expect(updatedAtNotifications).toBe(1);
+
+    unsubscribe();
+  });
+
+  it("flushes predicate notifications after the outer batch commits", () => {
+    const { graph, companyId } = setupGraph();
+    const companyRef = graph.company.ref(companyId);
+    let nameNotifications = 0;
+    let websiteNotifications = 0;
+
+    companyRef.fields.name.subscribe(() => {
+      nameNotifications += 1;
+    });
+    companyRef.fields.website.subscribe(() => {
+      websiteNotifications += 1;
+    });
+
+    companyRef.fields.name.batch(() => {
+      companyRef.fields.name.set("Acme 2");
+      companyRef.fields.website.set(new URL("https://acme-2.com"));
+      companyRef.fields.name.set("Acme 3");
+
+      expect(nameNotifications).toBe(0);
+      expect(websiteNotifications).toBe(0);
+    });
+
+    expect(nameNotifications).toBe(1);
+    expect(websiteNotifications).toBe(1);
+    expect(companyRef.fields.name.get()).toBe("Acme 3");
+    expect(companyRef.fields.website.get().toString()).toBe("https://acme-2.com/");
+  });
+
   it("subscribes through predicate refs without whole-entity notifications", () => {
     const { graph, companyId } = setupGraph();
     const companyRef = graph.company.ref(companyId);

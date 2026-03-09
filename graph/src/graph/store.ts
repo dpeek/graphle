@@ -31,7 +31,7 @@ export interface Store {
   facts(s?: Id, p?: Id, o?: Id): Edge[]
   /** Shorthand: get the single current object for a subject/predicate pair */
   get(s: Id, p: Id): Id | undefined
-  /** Group related writes so logical slot notifications flush once after the batch completes */
+  /** Group related writes so logical slot notifications flush once after the outermost batch completes */
   batch<T>(fn: () => T): T
   /** Subscribe to one logical predicate slot keyed by `(subject id, predicate id)` */
   subscribePredicateSlot(s: Id, p: Id, listener: PredicateSlotListener): () => void

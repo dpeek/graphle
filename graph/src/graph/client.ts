@@ -78,6 +78,14 @@ export type PredicateValueOf<
   T extends EdgeOutput,
   Defs extends Record<string, AnyTypeOutput> = CoreDefs,
 > = Cardinalized<T["range"], T["cardinality"], Defs>;
+type PredicateItemOf<
+  T extends EdgeOutput,
+  Defs extends Record<string, AnyTypeOutput> = CoreDefs,
+> = PredicateValueOf<T, Defs> extends (infer Item)[] ? Item : never;
+type PredicateSetValueOf<
+  T extends EdgeOutput,
+  Defs extends Record<string, AnyTypeOutput> = CoreDefs,
+> = Exclude<PredicateValueOf<T, Defs>, undefined>;
 
 type RefTree<T, Defs extends Record<string, AnyTypeOutput>> = T extends EdgeOutput
   ? PredicateRef<T, Defs>
@@ -94,7 +102,22 @@ export type PredicateRef<
   field: T;
   get(): PredicateValueOf<T, Defs>;
   subscribe(listener: PredicateSlotListener): () => void;
-};
+  batch<TResult>(fn: () => TResult): TResult;
+} & (T["cardinality"] extends "many"
+  ? {
+      replace(values: PredicateValueOf<T, Defs>): void;
+      add(value: PredicateItemOf<T, Defs>): void;
+      remove(value: PredicateItemOf<T, Defs>): void;
+      clear(): void;
+    }
+  : T["cardinality"] extends "one?"
+    ? {
+        set(value: PredicateSetValueOf<T, Defs>): void;
+        clear(): void;
+      }
+    : {
+        set(value: PredicateValueOf<T, Defs>): void;
+      });
 
 export type EntityRef<
   T extends TypeOutput,
@@ -105,6 +128,7 @@ export type EntityRef<
   fields: RefTree<T["fields"], Defs>;
   get(): EntityOfType<T, Defs>;
   update(patch: Partial<CreateInputOfType<T, Defs>>): EntityOfType<T, Defs>;
+  batch<TResult>(fn: () => TResult): TResult;
   delete(): void;
 };
 
@@ -118,6 +142,8 @@ type PredicateValue = unknown[] | unknown | undefined;
 type ReadPredicateValueOptions = {
   strictRequired?: boolean;
 };
+const clearFieldValue = Symbol("clearFieldValue");
+type ClearFieldValue = typeof clearFieldValue;
 
 function isEdgeOutput(value: unknown): value is EdgeOutput {
   const candidate = value as Partial<EdgeOutput>;
@@ -156,6 +182,17 @@ function getNestedValue(obj: Record<string, unknown>, path: string[], field: str
   return (current as Record<string, unknown>)[field];
 }
 
+function hasNestedValue(obj: Record<string, unknown>, path: string[], field: string): boolean {
+  let current: unknown = obj;
+  for (const part of path) {
+    if (!current || typeof current !== "object") return false;
+    if (!(part in (current as Record<string, unknown>))) return false;
+    current = (current as Record<string, unknown>)[part];
+  }
+  if (!current || typeof current !== "object") return false;
+  return field in (current as Record<string, unknown>);
+}
+
 function setNestedValue(
   obj: Record<string, unknown>,
   path: string[],
@@ -191,7 +228,7 @@ function collectChangedPredicateKeys(
 ): Set<string> {
   const changed = new Set<string>();
   for (const entry of entries) {
-    if (getNestedValue(input, entry.path, entry.field) === undefined) continue;
+    if (!hasNestedValue(input, entry.path, entry.field)) continue;
     changed.add(entry.predicate.key);
   }
   return changed;
@@ -281,7 +318,8 @@ function applyLifecycleHooks(
   for (const entry of entries) {
     const hook = event === "create" ? entry.predicate.onCreate : entry.predicate.onUpdate;
     if (!hook) continue;
-    const incoming = getNestedValue(input, entry.path, entry.field);
+    const incomingValue = getNestedValue(input, entry.path, entry.field);
+    const incoming = incomingValue === clearFieldValue ? undefined : incomingValue;
     const previous =
       event === "update"
         ? readPredicateValue(store, nodeId, entry.predicate, scalarByKey, typeByKey)
@@ -325,6 +363,10 @@ function assertMany(
 ): void {
   for (const value of values)
     assertOne(store, id, predicate, value, scalarByKey, typeByKey, enumValuesByRange);
+}
+
+function retractPredicateFacts(store: Store, id: string, predicate: EdgeOutput): void {
+  for (const edge of store.facts(id, edgeId(predicate))) store.retract(edge.id);
 }
 
 function createEntity<T extends TypeOutput>(
@@ -392,10 +434,12 @@ function createPredicateRef<T extends EdgeOutput, Defs extends Record<string, An
   store: Store,
   subjectId: string,
   field: T,
+  applyMutation: (value: unknown | ClearFieldValue) => void,
   scalarByKey: Map<string, ScalarTypeOutput<any>>,
   typeByKey: Map<string, AnyTypeOutput>,
+  enumValuesByRange: Map<string, Set<string>>,
 ): PredicateRef<T, Defs> {
-  return {
+  const base = {
     subjectId,
     predicateId: edgeId(field),
     field,
@@ -407,24 +451,107 @@ function createPredicateRef<T extends EdgeOutput, Defs extends Record<string, An
     subscribe(listener: PredicateSlotListener) {
       return store.subscribePredicateSlot(subjectId, edgeId(field), listener);
     },
+    batch<TResult>(fn: () => TResult) {
+      return store.batch(fn);
+    },
   };
+
+  if (field.cardinality === "many") {
+    return {
+      ...base,
+      replace(values: PredicateValueOf<T, Defs>) {
+        applyMutation(values);
+      },
+      add(value: PredicateItemOf<T, Defs>) {
+        const currentValues = base.get() as unknown as PredicateItemOf<T, Defs>[];
+        applyMutation([...currentValues, value]);
+      },
+      remove(value: PredicateItemOf<T, Defs>) {
+        const encoded = encodeForRange(
+          value,
+          field.range,
+          scalarByKey,
+          typeByKey,
+          enumValuesByRange,
+        );
+        let removed = false;
+        const nextValues = store
+          .facts(subjectId, edgeId(field))
+          .flatMap((edge) => {
+            if (!removed && edge.o === encoded) {
+              removed = true;
+              return [];
+            }
+            return [decodeForRange(edge.o, field.range, scalarByKey, typeByKey)];
+          });
+        if (!removed) return;
+        applyMutation(nextValues);
+      },
+      clear() {
+        if ((base.get() as unknown as PredicateItemOf<T, Defs>[]).length === 0) return;
+        applyMutation([]);
+      },
+    } as unknown as PredicateRef<T, Defs>;
+  }
+
+  if (field.cardinality === "one?") {
+    return {
+      ...base,
+      set(value: PredicateSetValueOf<T, Defs>) {
+        applyMutation(value);
+      },
+      clear() {
+        if (base.get() === undefined) return;
+        applyMutation(clearFieldValue);
+      },
+    } as unknown as PredicateRef<T, Defs>;
+  }
+
+  return {
+    ...base,
+    set(value: PredicateValueOf<T, Defs>) {
+      applyMutation(value);
+    },
+  } as unknown as PredicateRef<T, Defs>;
 }
 
 function buildFieldRefs<T extends FieldsOutput, Defs extends Record<string, AnyTypeOutput>>(
   store: Store,
   subjectId: string,
   fields: T,
+  path: string[],
+  applyMutation: (path: string[], fieldName: string, value: unknown | ClearFieldValue) => void,
   scalarByKey: Map<string, ScalarTypeOutput<any>>,
   typeByKey: Map<string, AnyTypeOutput>,
+  enumValuesByRange: Map<string, Set<string>>,
 ): RefTree<T, Defs> {
   const out: Record<string, unknown> = {};
 
   for (const [name, value] of Object.entries(fields)) {
     if (isEdgeOutput(value)) {
-      out[name] = createPredicateRef(store, subjectId, value, scalarByKey, typeByKey);
+      out[name] = createPredicateRef(
+        store,
+        subjectId,
+        value,
+        (nextValue) => applyMutation(path, name, nextValue),
+        scalarByKey,
+        typeByKey,
+        enumValuesByRange,
+      );
       continue;
     }
-    if (isTree(value)) out[name] = buildFieldRefs(store, subjectId, value, scalarByKey, typeByKey);
+    if (isTree(value)) {
+      out[name] = buildFieldRefs(
+        store,
+        subjectId,
+        value,
+        [...path, name],
+        applyMutation,
+        scalarByKey,
+        typeByKey,
+        enumValuesByRange,
+      );
+    }
   }
 
   return out as RefTree<T, Defs>;
@@ -438,13 +565,25 @@ function createEntityRef<T extends TypeOutput, Defs extends Record<string, AnyTy
   typeByKey: Map<string, AnyTypeOutput>,
   enumValuesByRange: Map<string, Set<string>>,
 ): EntityRef<T, Defs> {
+  const applyMutation = (path: string[], fieldName: string, value: unknown | ClearFieldValue) => {
+    const patch: Record<string, unknown> = {};
+    setNestedValue(patch, path, fieldName, value);
+    updateEntity(store, id, typeDef, patch, scalarByKey, typeByKey, enumValuesByRange);
+  };
+
   return {
     id,
     type: typeDef,
-    fields: buildFieldRefs(store, id, typeDef.fields, scalarByKey, typeByKey) as RefTree<
-      T["fields"],
-      Defs
-    >,
+    fields: buildFieldRefs(
+      store,
+      id,
+      typeDef.fields,
+      [],
+      applyMutation,
+      scalarByKey,
+      typeByKey,
+      enumValuesByRange,
+    ) as RefTree<T["fields"], Defs>,
     get() {
       return projectEntity(store, id, typeDef, scalarByKey, typeByKey) as EntityOfType<T, Defs>;
     },
@@ -453,11 +592,14 @@ function createEntityRef<T extends TypeOutput, Defs extends Record<string, AnyTy
         store,
         id,
         typeDef,
-        patch as Partial<CreateInputOfType<T, Record<string, AnyTypeOutput>>>,
+        patch as Record<string, unknown>,
         scalarByKey,
         typeByKey,
         enumValuesByRange,
       ) as EntityOfType<T, Defs>;
+    },
+    batch<TResult>(fn: () => TResult) {
+      return store.batch(fn);
     },
     delete() {
       deleteEntity(store, id);
@@ -469,19 +611,20 @@ function updateEntity<T extends TypeOutput>(
   store: Store,
   id: string,
   typeDef: T,
-  patch: Partial<CreateInputOfType<T, Record<string, AnyTypeOutput>>>,
+  patch: Record<string, unknown>,
   scalarByKey: Map<string, ScalarTypeOutput<any>>,
   typeByKey: Map<string, AnyTypeOutput>,
   enumValuesByRange: Map<string, Set<string>>,
 ): EntityOfType<T, Record<string, AnyTypeOutput>> {
   return store.batch(() => {
     const entries = flattenPredicates(typeDef.fields);
-    const input = cloneInput(patch as Record<string, unknown>);
+    const input = cloneInput(patch);
     applyLifecycleHooks("update", input, entries, store, id, scalarByKey, typeByKey);
     for (const entry of entries) {
+      if (!hasNestedValue(input, entry.path, entry.field)) continue;
       const nextValue = getNestedValue(input, entry.path, entry.field);
-      if (nextValue === undefined) continue;
-      for (const edge of store.facts(id, edgeId(entry.predicate))) store.retract(edge.id);
+      retractPredicateFacts(store, id, entry.predicate);
+      if (nextValue === clearFieldValue) continue;
       if (entry.predicate.cardinality === "many") {
         if (!Array.isArray(nextValue))
           throw new Error(`Field "${[...entry.path, entry.field].join(".")}" must be an array`);
