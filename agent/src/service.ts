@@ -97,6 +97,7 @@ export class AgentService {
       const selected = pickCandidateIssues(issues, workflow.agent.maxConcurrentAgents);
       if (!selected.length) {
         this.#log.info("tick.idle");
+        process.stdout.write("No issues\n");
         return [];
       }
       const results: IssueRunResult[] = [];
