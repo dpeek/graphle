@@ -23,9 +23,29 @@ function setupGraph() {
     website: new URL("https://acme.com"),
     status: app.status.values.active.id,
     tags: ["enterprise", "saas"],
+    address: {
+      address_line1: "1 Graph Way",
+      locality: "Sydney",
+      postal_code: "2000",
+    },
   });
 
-  return { company: graph.company.ref(companyId) };
+  const estiiId = graph.company.create({
+    name: "Estii",
+    website: new URL("https://estii.com"),
+    status: app.status.values.paused.id,
+  });
+
+  const personId = graph.person.create({
+    name: "Alice",
+    worksAt: [companyId],
+  });
+
+  return {
+    company: graph.company.ref(companyId),
+    estiiId,
+    person: graph.person.ref(personId),
+  };
 }
 
 function findByProofProp(
@@ -53,12 +73,12 @@ function waitForInstrumentation() {
 }
 
 describe("company proof surface", () => {
-  it("renders the generated editor and mutates company fields through predicate refs", async () => {
-    const { company } = setupGraph();
+  it("renders the combined proof and mutates nested, many, and relationship fields through predicate refs", async () => {
+    const { company, estiiId, person } = setupGraph();
 
     let renderer: ReturnType<typeof create> | undefined;
     await act(async () => {
-      renderer = create(<CompanyProofSurface company={company} />);
+      renderer = create(<CompanyProofSurface company={company} person={person} />);
     });
 
     const nameRow = findByProofProp(renderer!, "data-proof-field", "name");
@@ -66,30 +86,52 @@ describe("company proof surface", () => {
     const websiteRow = findByProofProp(renderer!, "data-proof-field", "website");
     const foundedYearRow = findByProofProp(renderer!, "data-proof-field", "foundedYear");
     const tagsRow = findByProofProp(renderer!, "data-proof-field", "tags");
+    const addressLine1Row = findByProofProp(renderer!, "data-proof-field", "address.address_line1");
+    const localityRow = findByProofProp(renderer!, "data-proof-field", "address.locality");
+    const postalCodeRow = findByProofProp(renderer!, "data-proof-field", "address.postal_code");
+    const worksAtRow = findByProofProp(renderer!, "data-proof-field", "worksAt");
 
-    const nameInput = renderer!.root.find(
+    const nameInput = nameRow.find(
       (node) => node.type === "input" && node.props["data-web-field-kind"] === "text",
     );
-    const statusSelect = renderer!.root.find(
+    const statusSelect = statusRow.find(
       (node) => node.type === "select" && node.props["data-web-field-kind"] === "select",
     );
-    const websiteInput = renderer!.root.find(
+    const websiteInput = websiteRow.find(
       (node) => node.type === "input" && node.props["data-web-field-kind"] === "url",
     );
-    const foundedYearInput = renderer!.root.find(
+    const foundedYearInput = foundedYearRow.find(
       (node) => node.type === "input" && node.props["data-web-field-kind"] === "number",
     );
-    const tagsInput = renderer!.root.find(
+    const tagsInput = tagsRow.find(
       (node) => node.type === "input" && node.props["data-web-field-kind"] === "token-list-input",
     );
-    const addTagButton = renderer!.root.find(
+    const addTagButton = tagsRow.find(
       (node) => node.type === "button" && node.props["data-web-field-action"] === "add-token",
     );
-    const removeTagButton = renderer!.root.find(
+    const removeTagButton = tagsRow.find(
       (node) =>
         node.type === "button" &&
         node.props["data-web-field-action"] === "remove-token" &&
         node.props["data-web-token-value"] === "saas",
+    );
+    const addressLine1Input = addressLine1Row.find(
+      (node) => node.type === "input" && node.props["data-web-field-kind"] === "text",
+    );
+    const localityInput = localityRow.find(
+      (node) => node.type === "input" && node.props["data-web-field-kind"] === "text",
+    );
+    const postalCodeInput = postalCodeRow.find(
+      (node) => node.type === "input" && node.props["data-web-field-kind"] === "text",
+    );
+    const worksAtToggle = worksAtRow
+      .find((node) => node.type === "label" && node.props["data-web-reference-option-id"] === estiiId)
+      .findByType("input");
+    const removeCurrentEmployer = worksAtRow.find(
+      (node) =>
+        node.type === "button" &&
+        node.props["data-web-field-action"] === "remove-reference" &&
+        node.props["data-web-reference-remove-id"] === company.id,
     );
 
     await act(async () => {
@@ -101,6 +143,12 @@ describe("company proof surface", () => {
       websiteInput.props.onChange({ target: { value: "https://labs.acme.com" } });
       foundedYearRow.props.onChangeCapture();
       foundedYearInput.props.onChange({ target: { value: "1999" } });
+      addressLine1Row.props.onChangeCapture();
+      addressLine1Input.props.onChange({ target: { value: "99 Schema Rd" } });
+      localityRow.props.onChangeCapture();
+      localityInput.props.onChange({ target: { value: "Melbourne" } });
+      postalCodeRow.props.onChangeCapture();
+      postalCodeInput.props.onChange({ target: { value: "3000" } });
       tagsInput.props.onChange({ target: { value: "ai" } });
     });
 
@@ -117,6 +165,15 @@ describe("company proof surface", () => {
         },
       });
       removeTagButton.props.onClick();
+      worksAtRow.props.onChangeCapture();
+      worksAtToggle.props.onChange({ target: { checked: true } });
+      worksAtRow.props.onClickCapture({
+        target: {
+          getAttribute: (name: string) =>
+            name === "data-proof-mutation" ? "entity-reference" : null,
+        },
+      });
+      removeCurrentEmployer.props.onClick();
       await waitForInstrumentation();
     });
 
@@ -125,6 +182,10 @@ describe("company proof surface", () => {
     expect(company.fields.website.get().toString()).toBe("https://labs.acme.com/");
     expect(company.fields.foundedYear.get()).toBe(1999);
     expect(company.fields.tags.get()).toEqual(["enterprise", "ai"]);
+    expect(company.fields.address.address_line1.get()).toBe("99 Schema Rd");
+    expect(company.fields.address.locality.get()).toBe("Melbourne");
+    expect(company.fields.address.postal_code.get()).toBe("3000");
+    expect(person.fields.worksAt.get()).toEqual([estiiId]);
     expect(statusSelect.props.value).toBe(app.status.values.paused.id);
 
     act(() => {
@@ -132,12 +193,12 @@ describe("company proof surface", () => {
     });
   });
 
-  it("records predicate-local rerender instrumentation for the edited field only", async () => {
-    const { company } = setupGraph();
+  it("records predicate-local rerender instrumentation for nested leaves and relationship edits", async () => {
+    const { company, estiiId, person } = setupGraph();
 
     let renderer: ReturnType<typeof create> | undefined;
     await act(async () => {
-      renderer = create(<CompanyProofSurface company={company} />);
+      renderer = create(<CompanyProofSurface company={company} person={person} />);
     });
 
     const initialCounts = readProofCounts(renderer!);
@@ -148,39 +209,40 @@ describe("company proof surface", () => {
       website: 1,
       foundedYear: 1,
       tags: 1,
+      "address.address_line1": 1,
+      "address.locality": 1,
+      "address.postal_code": 1,
+      worksAt: 1,
     });
 
-    const tagsRow = findByProofProp(renderer!, "data-proof-field", "tags");
-    const tagsInput = renderer!.root.find(
-      (node) => node.type === "input" && node.props["data-web-field-kind"] === "token-list-input",
+    const localityRow = findByProofProp(renderer!, "data-proof-field", "address.locality");
+    const localityInput = localityRow.find(
+      (node) => node.type === "input" && node.props["data-web-field-kind"] === "text",
     );
-    const addTagButton = renderer!.root.find(
-      (node) => node.type === "button" && node.props["data-web-field-action"] === "add-token",
-    );
+    const worksAtRow = findByProofProp(renderer!, "data-proof-field", "worksAt");
+    const worksAtToggle = worksAtRow
+      .find((node) => node.type === "label" && node.props["data-web-reference-option-id"] === estiiId)
+      .findByType("input");
 
     await act(async () => {
-      tagsInput.props.onChange({ target: { value: "ai" } });
-    });
-
-    const draftCounts = readProofCounts(renderer!);
-
-    await act(async () => {
-      tagsRow.props.onClickCapture({
-        target: {
-          getAttribute: (name: string) => (name === "data-proof-mutation" ? "collection" : null),
-        },
-      });
-      addTagButton.props.onClick();
+      localityRow.props.onChangeCapture();
+      localityInput.props.onChange({ target: { value: "Melbourne" } });
       await waitForInstrumentation();
     });
 
-    const nextCounts = readProofCounts(renderer!);
-    expect(nextCounts.surface).toBe(draftCounts.surface);
-    expect(nextCounts.name).toBe(draftCounts.name);
-    expect(nextCounts.status).toBe(draftCounts.status);
-    expect(nextCounts.website).toBe(draftCounts.website);
-    expect(nextCounts.foundedYear).toBe(draftCounts.foundedYear);
-    expect(nextCounts.tags ?? 0).toBeGreaterThan(draftCounts.tags ?? 0);
+    const localityCounts = readProofCounts(renderer!);
+    expect(localityCounts.surface).toBe(initialCounts.surface);
+    expect(localityCounts.name).toBe(initialCounts.name);
+    expect(localityCounts.status).toBe(initialCounts.status);
+    expect(localityCounts.website).toBe(initialCounts.website);
+    expect(localityCounts.foundedYear).toBe(initialCounts.foundedYear);
+    expect(localityCounts.tags).toBe(initialCounts.tags);
+    expect(localityCounts["address.address_line1"]).toBe(initialCounts["address.address_line1"]);
+    expect(localityCounts["address.locality"] ?? 0).toBeGreaterThan(
+      initialCounts["address.locality"] ?? 0,
+    );
+    expect(localityCounts["address.postal_code"]).toBe(initialCounts["address.postal_code"]);
+    expect(localityCounts.worksAt).toBe(initialCounts.worksAt);
 
     const lastCheck = renderer!.root.find(
       (node) => typeof node.props["data-proof-last-check"] === "string",
@@ -190,7 +252,28 @@ describe("company proof surface", () => {
     );
 
     expect(lastCheck.props["data-proof-last-check"]).toBe("holds");
-    expect(changed.props["data-proof-changed"]).toBe("tags");
+    expect(changed.props["data-proof-changed"]).toBe("address.locality");
+
+    await act(async () => {
+      worksAtRow.props.onChangeCapture();
+      worksAtToggle.props.onChange({ target: { checked: true } });
+      await waitForInstrumentation();
+    });
+
+    const relationshipCounts = readProofCounts(renderer!);
+    expect(relationshipCounts.surface).toBe(localityCounts.surface);
+    expect(relationshipCounts.name).toBe(localityCounts.name);
+    expect(relationshipCounts.status).toBe(localityCounts.status);
+    expect(relationshipCounts.website).toBe(localityCounts.website);
+    expect(relationshipCounts.foundedYear).toBe(localityCounts.foundedYear);
+    expect(relationshipCounts.tags).toBe(localityCounts.tags);
+    expect(relationshipCounts["address.address_line1"]).toBe(localityCounts["address.address_line1"]);
+    expect(relationshipCounts["address.locality"]).toBe(localityCounts["address.locality"]);
+    expect(relationshipCounts["address.postal_code"]).toBe(localityCounts["address.postal_code"]);
+    expect(relationshipCounts.worksAt ?? 0).toBeGreaterThan(localityCounts.worksAt ?? 0);
+    expect(person.fields.worksAt.get()).toEqual([company.id, estiiId]);
+    expect(lastCheck.props["data-proof-last-check"]).toBe("holds");
+    expect(changed.props["data-proof-changed"]).toBe("worksAt");
 
     act(() => {
       renderer?.unmount();

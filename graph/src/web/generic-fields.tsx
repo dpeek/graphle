@@ -374,7 +374,13 @@ function EntityReferenceChecklistEditor({ predicate }: AnyFieldProps) {
         {selected.map(({ entity, id }) => (
           <li data-web-reference-selected-id={id} key={id}>
             <EntityReferenceSummary entity={entity} />
-            <button onClick={() => removePredicateItem(predicate, id)} type="button">
+            <button
+              data-proof-mutation="entity-reference"
+              data-web-field-action="remove-reference"
+              data-web-reference-remove-id={id}
+              onClick={() => removePredicateItem(predicate, id)}
+              type="button"
+            >
               Remove
             </button>
           </li>

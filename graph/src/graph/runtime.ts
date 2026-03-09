@@ -33,7 +33,7 @@ export function createExampleRuntime() {
 
   const alice = graph.person.create({
     name: "Alice",
-    worksAt: [acme, estii],
+    worksAt: [acme],
   });
 
   graph.company.node(acme).update({
