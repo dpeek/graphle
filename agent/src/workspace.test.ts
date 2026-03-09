@@ -246,6 +246,40 @@ test("WorkspaceManager merges done branches into main and cleans up worktree art
   }
 });
 
+test("WorkspaceManager recreates a missing worktree before merging a done branch", async () => {
+  const root = await mkdtemp(resolve(tmpdir(), "agent-workspace-"));
+  const runtimeRoot = resolve(root, "runtime");
+  try {
+    const { repoRoot } = await createSourceRepo(root);
+    const manager = new WorkspaceManager({
+      hooks,
+      repoRoot,
+      rootDir: runtimeRoot,
+      workerId: "worker-1",
+    });
+    const activeIssue = issue("OPE-43", "Add Worker Checkout");
+    const workspace = await manager.prepare(activeIssue);
+
+    await writeFile(join(workspace.path, "README.md"), "merged after recreate\n");
+    await manager.complete(workspace, activeIssue);
+    await rm(workspace.path, { force: true, recursive: true });
+
+    await manager.reconcileTerminalIssues(
+      {
+        fetchIssueStatesByIds: async () => new Map([[activeIssue.id, "Done"]]),
+      },
+      ["Done"],
+    );
+
+    expect(await readFile(resolve(repoRoot, "README.md"), "utf8")).toBe("merged after recreate\n");
+    expect(existsSync(workspace.path)).toBe(false);
+    expect(await run(["git", "branch", "--list", "ope-43"], repoRoot)).toBe("");
+    expect(await readIssueRuntimeState(runtimeRoot, "OPE-43")).toBeUndefined();
+  } finally {
+    await rm(root, { force: true, recursive: true });
+  }
+});
+
 test("WorkspaceManager rebases a done branch onto the latest main before merging", async () => {
   const root = await mkdtemp(resolve(tmpdir(), "agent-workspace-"));
   const runtimeRoot = resolve(root, "runtime");

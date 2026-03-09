@@ -73,11 +73,10 @@ Git flow:
 3. implement the change
 4. run `bun check`
 5. commit with first line `{{ issue.identifier }} {{ issue.title }}`
-6. push the current branch to `origin`
+6. move the issue to `In Review`
 
 Output:
 
 - summary of what changed
 - validation result
 - commit SHA
-- pushed branch ref on `origin`, or the blocker that prevented push

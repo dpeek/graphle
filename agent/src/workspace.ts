@@ -507,6 +507,53 @@ export class CheckoutManager {
     return result.exitCode === 0;
   }
 
+  async #remoteBranchExists(cwd: string, branchName: string) {
+    const result = await this.#runCommand(
+      ["git", "show-ref", "--verify", "--quiet", `refs/remotes/origin/${branchName}`],
+      cwd,
+      this.#hooks.timeoutMs,
+    );
+    return result.exitCode === 0;
+  }
+
+  async #ensureIssueWorktree(issue: IssueRuntimeState) {
+    if (existsSync(issue.worktreePath)) {
+      return;
+    }
+    this.#log.info("issue.worktree.recreate", {
+      branchName: issue.branchName,
+      issueIdentifier: issue.issueIdentifier,
+      worktreePath: issue.worktreePath,
+    });
+    await mkdir(resolve(this.#rootDir, "worktrees"), { recursive: true });
+    await this.#runOrThrow(["git", "worktree", "prune"], issue.controlPath);
+    if (await this.#localBranchExists(issue.controlPath, issue.branchName)) {
+      await this.#runOrThrow(
+        ["git", "worktree", "add", issue.worktreePath, issue.branchName],
+        issue.controlPath,
+      );
+      return;
+    }
+    await this.#runOrThrow(["git", "fetch", "--prune", "origin"], issue.controlPath);
+    if (await this.#remoteBranchExists(issue.controlPath, issue.branchName)) {
+      await this.#runOrThrow(
+        [
+          "git",
+          "worktree",
+          "add",
+          "--checkout",
+          "-B",
+          issue.branchName,
+          issue.worktreePath,
+          `origin/${issue.branchName}`,
+        ],
+        issue.controlPath,
+      );
+      return;
+    }
+    throw new Error(`issue_branch_missing_for_finalize:${issue.issueIdentifier}:${issue.branchName}`);
+  }
+
   async #refreshControlRepoMain(controlPath: string) {
     const checkoutMain = await this.#runCommand(
       ["git", "checkout", "main"],
@@ -526,6 +573,7 @@ export class CheckoutManager {
     } else {
       await this.#refreshControlRepoMain(issue.controlPath);
     }
+    await this.#ensureIssueWorktree(issue);
     await this.#runOrThrow(["git", "rebase", "main"], issue.worktreePath);
   }
 
