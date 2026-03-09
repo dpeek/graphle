@@ -1,10 +1,11 @@
 import ids from "./app.json";
 import { core } from "./core";
 import { defineNamespace, defineType, rangeOf } from "./schema.js";
-import { numberTypeModule } from "../type/number/index.js";
-import { statusTypeModule } from "../type/status/index.js";
-import { stringTypeModule } from "../type/string/index.js";
-import { urlTypeModule } from "../type/url/index.js";
+import { booleanTypeModule } from "../type/boolean.js";
+import { numberTypeModule } from "../type/number.js";
+import { statusTypeModule } from "../type/status.js";
+import { stringTypeModule } from "../type/string.js";
+import { urlTypeModule } from "../type/url.js";
 
 export const status = statusTypeModule.type;
 
@@ -93,7 +94,16 @@ export const block = defineType({
         label: "Order",
       },
     }),
-    collapsed: { range: rangeOf(core.boolean), cardinality: "one?" },
+    collapsed: booleanTypeModule.field({
+      cardinality: "one?",
+      meta: {
+        label: "Collapsed",
+      },
+      filter: {
+        operators: ["is"] as const,
+        defaultOperator: "is",
+      },
+    }),
   },
 });
 

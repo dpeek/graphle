@@ -1,5 +1,6 @@
-import { statusTypeModule } from "../type/status/index.js";
-import { stringTypeModule } from "../type/string/index.js";
+import { booleanTypeModule } from "../type/boolean.js";
+import { statusTypeModule } from "../type/status.js";
+import { stringTypeModule } from "../type/string.js";
 import { defineScalar } from "./schema.js";
 import { defineScalarModule } from "./type-module.js";
 
@@ -43,6 +44,25 @@ void statusTypeModule.field({
     operators: ["is"] as const,
     // @ts-expect-error the chosen default operator must belong to the narrowed operator set
     defaultOperator: "oneOf",
+  },
+});
+
+void booleanTypeModule.field({
+  cardinality: "one?",
+  meta: {
+    editor: {
+      kind: "switch",
+    },
+  },
+});
+
+void booleanTypeModule.field({
+  cardinality: "one?",
+  meta: {
+    editor: {
+      // @ts-expect-error boolean fields cannot switch to text editing semantics
+      kind: "text",
+    },
   },
 });
 

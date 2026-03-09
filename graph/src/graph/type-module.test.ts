@@ -1,7 +1,8 @@
 import { describe, expect, it } from "bun:test";
 import { app } from "./app";
 import { core } from "./core";
-import { stringTypeModule } from "../type/string/index.js";
+import { booleanTypeModule } from "../type/boolean.js";
+import { stringTypeModule } from "../type/string.js";
 
 describe("type-module authoring contract", () => {
   it("composes scalar defaults with field-level overrides", () => {
@@ -27,6 +28,14 @@ describe("type-module authoring contract", () => {
     expect(app.company.fields.website.meta.display.kind).toBe("external-link");
   });
 
+  it("attaches boolean defaults through the migrated scalar module", () => {
+    expect(app.block.fields.collapsed.range as string).toBe(core.boolean.values.id);
+    expect(app.block.fields.collapsed.meta.display.kind).toBe("boolean");
+    expect(app.block.fields.collapsed.meta.editor.kind).toBe("checkbox");
+    expect(app.block.fields.collapsed.filter.defaultOperator).toBe("is");
+    expect(Object.keys(app.block.fields.collapsed.filter.operators)).toEqual(["is"]);
+  });
+
   it("falls back to the first allowed operator when a narrowed field omits a default", () => {
     const narrowed = stringTypeModule.field({
       cardinality: "one",
@@ -37,5 +46,17 @@ describe("type-module authoring contract", () => {
 
     expect(narrowed.filter.defaultOperator).toBe("equals");
     expect(Object.keys(narrowed.filter.operators)).toEqual(["equals"]);
+  });
+
+  it("keeps boolean filter defaults typed when field operators are narrowed", () => {
+    const narrowed = booleanTypeModule.field({
+      cardinality: "one?",
+      filter: {
+        operators: ["isNot"] as const,
+      },
+    });
+
+    expect(narrowed.filter.defaultOperator).toBe("isNot");
+    expect(Object.keys(narrowed.filter.operators)).toEqual(["isNot"]);
   });
 });

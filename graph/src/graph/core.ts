@@ -1,8 +1,9 @@
 import coreIdMap from "./core.json";
 import { defineEnum, defineNamespace, defineScalar, defineType, rangeOf } from "./schema.js";
-import { numberTypeModule } from "../type/number/index.js";
-import { stringTypeModule } from "../type/string/index.js";
-import { urlTypeModule } from "../type/url/index.js";
+import { booleanTypeModule } from "../type/boolean.js";
+import { numberTypeModule } from "../type/number.js";
+import { stringTypeModule } from "../type/string.js";
+import { urlTypeModule } from "../type/url.js";
 
 const string = stringTypeModule.type;
 
@@ -14,11 +15,7 @@ const date = defineScalar({
   decode: (string) => new Date(string),
 });
 
-const boolean = defineScalar({
-  values: { key: "core:boolean", name: "Boolean" },
-  encode: (value: boolean) => String(value),
-  decode: (string) => string === "true",
-});
+const boolean = booleanTypeModule.type;
 
 const url = urlTypeModule.type;
 
