@@ -78,6 +78,10 @@ export type PredicateValueOf<
   T extends EdgeOutput,
   Defs extends Record<string, AnyTypeOutput> = CoreDefs,
 > = Cardinalized<T["range"], T["cardinality"], Defs>;
+export type PredicateRangeTypeOf<
+  T extends EdgeOutput,
+  Defs extends Record<string, AnyTypeOutput> = CoreDefs,
+> = TypeByKey<Defs, T["range"]> | undefined;
 type PredicateItemOf<
   T extends EdgeOutput,
   Defs extends Record<string, AnyTypeOutput> = CoreDefs,
@@ -100,6 +104,7 @@ export type PredicateRef<
   subjectId: string;
   predicateId: string;
   field: T;
+  rangeType: PredicateRangeTypeOf<T, Defs>;
   get(): PredicateValueOf<T, Defs>;
   subscribe(listener: PredicateSlotListener): () => void;
   batch<TResult>(fn: () => TResult): TResult;
@@ -443,6 +448,7 @@ function createPredicateRef<T extends EdgeOutput, Defs extends Record<string, An
     subjectId,
     predicateId: edgeId(field),
     field,
+    rangeType: typeByKey.get(field.range) as TypeByKey<Defs, T["range"]> | undefined,
     get() {
       return readPredicateValue(store, subjectId, field, scalarByKey, typeByKey, {
         strictRequired: true,

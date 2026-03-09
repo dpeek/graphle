@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { Fragment } from "react";
+import { Fragment, Profiler } from "react";
 import { act, create } from "react-test-renderer";
 
 import { app } from "../graph/app.js";
@@ -191,6 +191,138 @@ describe("web predicate bindings", () => {
       "Acme 2",
       "https://acme-2.com/",
     ]);
+
+    act(() => {
+      renderer?.unmount();
+    });
+  });
+
+  it("renders the company proof surface through the default generic resolver", () => {
+    const { graph, companyId } = setupGraph();
+    const companyRef = graph.company.ref(companyId);
+
+    let renderer: ReturnType<typeof create> | undefined;
+    act(() => {
+      renderer = create(
+        <Fragment>
+          <PredicateFieldView predicate={companyRef.fields.name} />
+          <PredicateFieldView predicate={companyRef.fields.foundedYear} />
+          <PredicateFieldView predicate={companyRef.fields.website} />
+          <PredicateFieldView predicate={companyRef.fields.status} />
+        </Fragment>,
+      );
+    });
+
+    const spans = renderer?.root.findAllByType("span") ?? [];
+    const links = renderer?.root.findAllByType("a") ?? [];
+
+    expect(spans.map((node) => [node.props["data-web-field-kind"], node.children.join("")])).toEqual([
+      ["text", "Acme"],
+      ["number", ""],
+      ["badge", "Active"],
+    ]);
+    expect(
+      links.map((node) => ({
+        "data-web-field-kind": node.props["data-web-field-kind"],
+        href: node.props.href,
+        rel: node.props.rel,
+        target: node.props.target,
+      })),
+    ).toEqual([
+      {
+        "data-web-field-kind": "external-link",
+        href: "https://acme.com/",
+        rel: "noreferrer",
+        target: "_blank",
+      },
+    ]);
+    expect(links[0]?.children).toEqual(["https://acme.com/"]);
+
+    act(() => {
+      renderer?.unmount();
+    });
+  });
+
+  it("renders generic editors and mutates proof-surface fields through predicate refs", () => {
+    const { graph, companyId } = setupGraph();
+    const companyRef = graph.company.ref(companyId);
+
+    let renderer: ReturnType<typeof create> | undefined;
+    act(() => {
+      renderer = create(
+        <Fragment>
+          <PredicateFieldEditor predicate={companyRef.fields.name} />
+          <PredicateFieldEditor predicate={companyRef.fields.foundedYear} />
+          <PredicateFieldEditor predicate={companyRef.fields.website} />
+          <PredicateFieldEditor predicate={companyRef.fields.status} />
+        </Fragment>,
+      );
+    });
+
+    const inputs = renderer?.root.findAllByType("input") ?? [];
+    const select = renderer?.root.findByType("select");
+
+    act(() => {
+      inputs[0]?.props.onChange({ target: { value: "Acme Labs" } });
+      inputs[1]?.props.onChange({ target: { value: "1999" } });
+      inputs[2]?.props.onChange({ target: { value: "https://labs.acme.com" } });
+      select?.props.onChange({ target: { value: app.status.values.paused.id } });
+    });
+
+    expect(companyRef.fields.name.get()).toBe("Acme Labs");
+    expect(companyRef.fields.foundedYear.get()).toBe(1999);
+    expect(companyRef.fields.website.get().toString()).toBe("https://labs.acme.com/");
+    expect(companyRef.fields.status.get()).toBe(app.status.values.paused.id);
+    expect(select?.props.value).toBe(app.status.values.paused.id);
+
+    act(() => {
+      renderer?.unmount();
+    });
+  });
+
+  it("keeps generic field rerenders scoped to each predicate slot", () => {
+    const { graph, companyId } = setupGraph();
+    const companyRef = graph.company.ref(companyId);
+    const renders = { container: 0, name: 0, website: 0 };
+
+    function onRender(id: string) {
+      if (id === "name") renders.name += 1;
+      if (id === "website") renders.website += 1;
+    }
+
+    function CompanyFields() {
+      renders.container += 1;
+      return (
+        <Fragment>
+          <Profiler id="name" onRender={onRender}>
+            <PredicateFieldView predicate={companyRef.fields.name} />
+          </Profiler>
+          <Profiler id="website" onRender={onRender}>
+            <PredicateFieldView predicate={companyRef.fields.website} />
+          </Profiler>
+        </Fragment>
+      );
+    }
+
+    let renderer: ReturnType<typeof create> | undefined;
+    act(() => {
+      renderer = create(<CompanyFields />);
+    });
+
+    expect(renders).toEqual({ container: 1, name: 1, website: 1 });
+
+    act(() => {
+      companyRef.fields.name.set("Acme 2");
+    });
+
+    expect(renders).toEqual({ container: 1, name: 2, website: 1 });
+
+    act(() => {
+      companyRef.fields.website.set(new URL("https://acme-2.com"));
+    });
+
+    expect(renders).toEqual({ container: 1, name: 2, website: 2 });
+    expect(renderer?.root.findAllByType("a")[0]?.children).toEqual(["https://acme-2.com/"]);
 
     act(() => {
       renderer?.unmount();
