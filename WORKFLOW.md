@@ -73,7 +73,8 @@ Git flow:
 3. implement the change
 4. run `bun check`
 5. commit with first line `{{ issue.identifier }} {{ issue.title }}`
-6. move the issue to `In Review`
+6. do not push to origin
+7. move the issue to `In Review`
 
 Output:
 
