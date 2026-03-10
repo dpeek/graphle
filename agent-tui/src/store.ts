@@ -26,6 +26,7 @@ type AgentTuiInternalColumnState = {
   phase: AgentSessionPhase | "pending";
   session: AgentSessionRef;
   status?: AgentTuiStatusSummary;
+  transcriptEntries: AgentTuiTranscriptEntry[];
 };
 
 export interface AgentTuiEventRecord {
@@ -43,6 +44,52 @@ export interface AgentTuiStatusSummary {
   timestamp: string;
 }
 
+interface AgentTuiTranscriptEntryBase {
+  count: number;
+  sequenceEnd: number;
+  sequenceStart: number;
+  timestamp: string;
+}
+
+export interface AgentTuiLifecycleEntry extends AgentTuiTranscriptEntryBase {
+  kind: "lifecycle";
+  phase: AgentSessionPhase;
+  text: string;
+}
+
+export interface AgentTuiStatusEntry extends AgentTuiTranscriptEntryBase {
+  code: AgentStatusCode;
+  format: AgentStatusFormat;
+  itemId?: string;
+  kind: "status";
+  text: string;
+}
+
+export interface AgentTuiAgentMessageEntry extends AgentTuiTranscriptEntryBase {
+  itemId?: string;
+  kind: "agent-message";
+  text: string;
+}
+
+export interface AgentTuiCommandOutputEntry extends AgentTuiTranscriptEntryBase {
+  kind: "command-output";
+  lines: string[];
+}
+
+export interface AgentTuiRawEntry extends AgentTuiTranscriptEntryBase {
+  encoding: AgentRawLineEvent["encoding"];
+  kind: "raw";
+  lines: string[];
+  stream: AgentRawLineEvent["stream"];
+}
+
+export type AgentTuiTranscriptEntry =
+  | AgentTuiAgentMessageEntry
+  | AgentTuiCommandOutputEntry
+  | AgentTuiLifecycleEntry
+  | AgentTuiRawEntry
+  | AgentTuiStatusEntry;
+
 export interface AgentTuiColumnSnapshot {
   body: string;
   childSessionIds: string[];
@@ -54,6 +101,7 @@ export interface AgentTuiColumnSnapshot {
   phase: AgentSessionPhase | "pending";
   session: AgentSessionRef;
   status?: AgentTuiStatusSummary;
+  transcriptEntries: AgentTuiTranscriptEntry[];
 }
 
 export type AgentTuiSessionSnapshot = AgentTuiColumnSnapshot;
@@ -104,6 +152,7 @@ function createSessionState(
     lastSequence: sequence,
     phase: "pending",
     session,
+    transcriptEntries: [],
   };
 }
 
@@ -128,6 +177,42 @@ function appendTranscript(
     return;
   }
   state.body = trimTranscript(`${state.body}${text}`, maxTranscriptChars);
+}
+
+function estimateTranscriptEntryChars(entry: AgentTuiTranscriptEntry) {
+  switch (entry.kind) {
+    case "lifecycle":
+    case "status":
+    case "agent-message":
+      return entry.text.length + 1;
+    case "command-output":
+      return entry.lines.reduce((total, line) => total + line.length + 1, 12);
+    case "raw":
+      return entry.lines.reduce((total, line) => total + line.length + 1, 20);
+  }
+}
+
+function trimTranscriptEntries(
+  state: AgentTuiInternalColumnState,
+  maxTranscriptChars: number,
+) {
+  let totalChars = state.transcriptEntries.reduce(
+    (total, entry) => total + estimateTranscriptEntryChars(entry),
+    0,
+  );
+  while (totalChars > maxTranscriptChars && state.transcriptEntries.length) {
+    const removed = state.transcriptEntries.shift();
+    totalChars -= removed ? estimateTranscriptEntryChars(removed) : 0;
+  }
+}
+
+function pushTranscriptEntry(
+  state: AgentTuiInternalColumnState,
+  entry: AgentTuiTranscriptEntry,
+  maxTranscriptChars: number,
+) {
+  state.transcriptEntries.push(entry);
+  trimTranscriptEntries(state, maxTranscriptChars);
 }
 
 function closeOpenLine(state: AgentTuiInternalColumnState, maxTranscriptChars: number) {
@@ -173,6 +258,159 @@ function formatRawLineEvent(event: AgentRawLineEvent) {
   return `${prefix}: ${event.line}\n`;
 }
 
+function appendLifecycleEntry(
+  state: AgentTuiInternalColumnState,
+  event: Extract<AgentSessionEvent, { type: "session" }>,
+  maxTranscriptChars: number,
+) {
+  pushTranscriptEntry(
+    state,
+    {
+      count: 1,
+      kind: "lifecycle",
+      phase: event.phase,
+      sequenceEnd: event.sequence,
+      sequenceStart: event.sequence,
+      text: formatLifecycleText(event.phase, event.data, state.session).trimEnd(),
+      timestamp: event.timestamp,
+    },
+    maxTranscriptChars,
+  );
+}
+
+function appendAgentMessageEntry(
+  state: AgentTuiInternalColumnState,
+  event: Extract<AgentSessionEvent, { type: "status" }>,
+  maxTranscriptChars: number,
+) {
+  const text = event.text ?? "";
+  if (!text) {
+    return;
+  }
+  const lastEntry = state.transcriptEntries.at(-1);
+  if (lastEntry?.kind === "agent-message" && lastEntry.itemId === event.itemId) {
+    lastEntry.count += 1;
+    lastEntry.sequenceEnd = event.sequence;
+    lastEntry.text += text;
+    lastEntry.timestamp = event.timestamp;
+    trimTranscriptEntries(state, maxTranscriptChars);
+    return;
+  }
+  pushTranscriptEntry(
+    state,
+    {
+      count: 1,
+      itemId: event.itemId,
+      kind: "agent-message",
+      sequenceEnd: event.sequence,
+      sequenceStart: event.sequence,
+      text,
+      timestamp: event.timestamp,
+    },
+    maxTranscriptChars,
+  );
+}
+
+function appendCommandOutputEntry(
+  state: AgentTuiInternalColumnState,
+  event: Extract<AgentSessionEvent, { type: "status" }>,
+  maxTranscriptChars: number,
+) {
+  const text = event.text?.replace(/^\|\s?/, "") ?? "";
+  if (!text) {
+    return;
+  }
+  const lastEntry = state.transcriptEntries.at(-1);
+  if (lastEntry?.kind === "command-output") {
+    lastEntry.count += 1;
+    lastEntry.lines.push(text);
+    lastEntry.sequenceEnd = event.sequence;
+    lastEntry.timestamp = event.timestamp;
+    trimTranscriptEntries(state, maxTranscriptChars);
+    return;
+  }
+  pushTranscriptEntry(
+    state,
+    {
+      count: 1,
+      kind: "command-output",
+      lines: [text],
+      sequenceEnd: event.sequence,
+      sequenceStart: event.sequence,
+      timestamp: event.timestamp,
+    },
+    maxTranscriptChars,
+  );
+}
+
+function appendStatusEntry(
+  state: AgentTuiInternalColumnState,
+  event: Extract<AgentSessionEvent, { type: "status" }>,
+  maxTranscriptChars: number,
+) {
+  const text = event.text?.trim();
+  if (!text && event.format === "close") {
+    return;
+  }
+  if (event.format === "chunk") {
+    appendAgentMessageEntry(state, event, maxTranscriptChars);
+    return;
+  }
+  if (event.code === "command-output") {
+    appendCommandOutputEntry(state, event, maxTranscriptChars);
+    return;
+  }
+  pushTranscriptEntry(
+    state,
+    {
+      code: event.code,
+      count: 1,
+      format: event.format,
+      itemId: event.itemId,
+      kind: "status",
+      sequenceEnd: event.sequence,
+      sequenceStart: event.sequence,
+      text: text ?? event.code,
+      timestamp: event.timestamp,
+    },
+    maxTranscriptChars,
+  );
+}
+
+function appendRawEntry(
+  state: AgentTuiInternalColumnState,
+  event: Extract<AgentSessionEvent, { type: "raw-line" }>,
+  maxTranscriptChars: number,
+) {
+  const lastEntry = state.transcriptEntries.at(-1);
+  if (
+    lastEntry?.kind === "raw" &&
+    lastEntry.encoding === event.encoding &&
+    lastEntry.stream === event.stream
+  ) {
+    lastEntry.count += 1;
+    lastEntry.lines.push(event.line);
+    lastEntry.sequenceEnd = event.sequence;
+    lastEntry.timestamp = event.timestamp;
+    trimTranscriptEntries(state, maxTranscriptChars);
+    return;
+  }
+  pushTranscriptEntry(
+    state,
+    {
+      count: 1,
+      encoding: event.encoding,
+      kind: "raw",
+      lines: [event.line],
+      sequenceEnd: event.sequence,
+      sequenceStart: event.sequence,
+      stream: event.stream,
+      timestamp: event.timestamp,
+    },
+    maxTranscriptChars,
+  );
+}
+
 function summarizeEvent(event: AgentSessionEvent) {
   switch (event.type) {
     case "session":
@@ -205,6 +443,20 @@ function pushEventHistory(
   });
   if (state.eventHistory.length > maxEventHistory) {
     state.eventHistory.splice(0, state.eventHistory.length - maxEventHistory);
+  }
+}
+
+function shouldUpdateStatusSummary(event: Extract<AgentSessionEvent, { type: "status" }>) {
+  if (event.format === "close") {
+    return false;
+  }
+  switch (event.code) {
+    case "agent-message-delta":
+    case "agent-message-completed":
+    case "command-output":
+      return false;
+    default:
+      return true;
   }
 }
 
@@ -265,6 +517,7 @@ function buildColumnSnapshots(
       phase: state.phase,
       session: state.session,
       status: state.status,
+      transcriptEntries: [...state.transcriptEntries],
     });
     for (const child of childStates) {
       visit(child, depth + 1);
@@ -329,19 +582,22 @@ export function createAgentTuiStore(options: AgentTuiStoreOptions = {}): AgentTu
           formatLifecycleText(event.phase, event.data, state.session),
           maxTranscriptChars,
         );
+        appendLifecycleEntry(state, event, maxTranscriptChars);
         pushEventHistory(state, event, maxEventHistory);
         notify();
         return;
       }
 
       if (event.type === "status") {
-        state.status = {
-          code: event.code,
-          format: event.format,
-          itemId: event.itemId,
-          text: event.text,
-          timestamp: event.timestamp,
-        };
+        if (shouldUpdateStatusSummary(event)) {
+          state.status = {
+            code: event.code,
+            format: event.format,
+            itemId: event.itemId,
+            text: event.text,
+            timestamp: event.timestamp,
+          };
+        }
         renderAgentStatusEvent({
           event,
           state: state.displayState,
@@ -349,6 +605,7 @@ export function createAgentTuiStore(options: AgentTuiStoreOptions = {}): AgentTu
             appendTranscript(state, text, maxTranscriptChars);
           },
         });
+        appendStatusEntry(state, event, maxTranscriptChars);
         pushEventHistory(state, event, maxEventHistory);
         notify();
         return;
@@ -356,6 +613,7 @@ export function createAgentTuiStore(options: AgentTuiStoreOptions = {}): AgentTu
 
       closeOpenLine(state, maxTranscriptChars);
       appendTranscript(state, formatRawLineEvent(event), maxTranscriptChars);
+      appendRawEntry(state, event, maxTranscriptChars);
       pushEventHistory(state, event, maxEventHistory);
       notify();
     },

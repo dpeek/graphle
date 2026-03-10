@@ -67,6 +67,7 @@ function createSnapshotColumn(
     lastSequence: 0,
     phase: "pending" as const,
     session: createSupervisorSession(),
+    transcriptEntries: [],
     ...overrides,
   };
 }
@@ -198,14 +199,14 @@ test("renderAgentTuiFrame lays out supervisor and worker columns", () => {
       columns: sessions,
       sessions,
     },
-    { columns: 80, rows: 8 },
+    { columns: 80, rows: 12 },
   );
 
   const [firstLine] = frame.split("\n");
-  expect(firstLine?.startsWith("Supervisor")).toBe(true);
-  expect(firstLine).toContain("|OPE-67 Implement io agent tui");
-  expect(frame).toContain("started");
-  expect(frame).toContain("completed");
+  expect(firstLine?.startsWith("> . Supervisor")).toBe(true);
+  expect(firstLine).toContain("OPE-67 Implement io agent tui");
+  expect(frame).toContain("SUPERVISOR | STARTED");
+  expect(frame).toContain("WORKER | COMPLETED");
   expect(frame).toContain("No issues");
   expect(frame).toContain("stderr: stderr line");
 });

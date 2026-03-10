@@ -1,5 +1,11 @@
-import type { AgentSessionRef } from "./session-events.js";
-import type { AgentTuiColumnSnapshot, AgentTuiSnapshot } from "./store.js";
+import { basename } from "node:path";
+
+import type { AgentSessionRef, AgentStatusCode } from "./session-events.js";
+import type {
+  AgentTuiColumnSnapshot,
+  AgentTuiSnapshot,
+  AgentTuiTranscriptEntry,
+} from "./store.js";
 
 const DEFAULT_FRAME_COLUMNS = 120;
 const DEFAULT_FRAME_ROWS = 32;
@@ -9,9 +15,18 @@ export interface AgentTuiFrameSize {
   rows?: number;
 }
 
+export type AgentTuiViewMode = "raw" | "status";
+
+export interface AgentTuiLayoutOptions {
+  selectedColumnId?: string;
+  viewMode?: AgentTuiViewMode;
+}
+
 export interface AgentTuiColumnComponentModel {
+  badgeLine: string;
   childrenLine: string;
   id: string;
+  isSelected: boolean;
   latestEventLine: string;
   metaLine: string;
   parentLine: string;
@@ -22,6 +37,8 @@ export interface AgentTuiColumnComponentModel {
 
 export interface AgentTuiRootComponentModel {
   columns: AgentTuiColumnComponentModel[];
+  selectedColumnId?: string;
+  viewMode: AgentTuiViewMode;
 }
 
 function normalizeColumnSnapshot(column: AgentTuiColumnSnapshot): AgentTuiColumnSnapshot {
@@ -31,6 +48,7 @@ function normalizeColumnSnapshot(column: AgentTuiColumnSnapshot): AgentTuiColumn
     depth: column.depth ?? 0,
     eventHistory: column.eventHistory ?? [],
     parentSessionId: column.parentSessionId ?? column.session.parentSessionId,
+    transcriptEntries: column.transcriptEntries ?? [],
   };
 }
 
@@ -42,26 +60,42 @@ function formatTitle(session: AgentSessionRef) {
   return `${identifier} ${session.title}`;
 }
 
+function formatWorkspaceLabel(workspacePath: string | undefined) {
+  if (!workspacePath) {
+    return undefined;
+  }
+  const label = basename(workspacePath);
+  return label || workspacePath;
+}
+
 function formatMetaLine(column: AgentTuiColumnSnapshot) {
-  const parts: string[] = [column.phase];
+  const parts: string[] = [];
   if (column.session.kind !== "supervisor") {
-    parts.unshift(column.session.workerId);
+    parts.push(`worker ${column.session.workerId}`);
   }
   if (column.session.branchName) {
-    parts.push(column.session.branchName);
+    parts.push(`branch ${column.session.branchName}`);
   }
-  return parts.join(" | ");
+  const workspaceLabel = formatWorkspaceLabel(column.session.workspacePath);
+  if (workspaceLabel) {
+    parts.push(`path ${workspaceLabel}`);
+  }
+  return parts.join(" | ") || "No session metadata yet";
+}
+
+function formatStatusText(column: AgentTuiColumnSnapshot) {
+  const text = column.status?.text?.trim();
+  if (text) {
+    return text;
+  }
+  if (column.status) {
+    return column.status.code;
+  }
+  return "waiting for runtime events";
 }
 
 function formatStatusLine(column: AgentTuiColumnSnapshot) {
-  const text = column.status?.text?.trim();
-  if (text) {
-    return `Status: ${text}`;
-  }
-  if (column.status) {
-    return `Status: ${column.status.code}`;
-  }
-  return "Status: waiting for runtime events";
+  return `Status: ${formatStatusText(column)}`;
 }
 
 function formatParentLine(
@@ -99,47 +133,257 @@ function formatLatestEventLine(column: AgentTuiColumnSnapshot) {
   return `Latest: ${latest.summary}`;
 }
 
-function formatTranscript(column: AgentTuiColumnSnapshot) {
-  const body = column.body.trimEnd();
-  if (body.length) {
-    return body;
+function formatStatusBadge(code: AgentStatusCode | undefined) {
+  switch (code) {
+    case "approval-required":
+      return "APPROVAL";
+    case "command":
+      return "COMMAND";
+    case "command-failed":
+      return "COMMAND FAIL";
+    case "error":
+      return "ERROR";
+    case "issue-assigned":
+      return "ASSIGNED";
+    case "issue-blocked":
+      return "BLOCKED";
+    case "issue-committed":
+      return "COMMITTED";
+    case "ready":
+      return "READY";
+    case "thread-started":
+      return "THREAD";
+    case "tool":
+      return "TOOL";
+    case "tool-failed":
+      return "TOOL FAIL";
+    case "turn-cancelled":
+      return "TURN CANCELLED";
+    case "turn-completed":
+      return "TURN DONE";
+    case "turn-failed":
+      return "TURN FAIL";
+    case "turn-started":
+      return "TURN";
+    case "waiting-on-user-input":
+      return "WAITING";
+    case "idle":
+      return "IDLE";
+    default:
+      return "QUIET";
   }
-  return "Waiting for session transcript...";
+}
+
+function resolveActivity(
+  column: AgentTuiColumnSnapshot,
+  latestSequence: number,
+): { label: string; marker: string } {
+  if (
+    column.phase === "failed" ||
+    column.status?.code === "command-failed" ||
+    column.status?.code === "tool-failed" ||
+    column.status?.code === "error" ||
+    column.status?.code === "turn-failed"
+  ) {
+    return { label: "FAIL", marker: "!" };
+  }
+  if (
+    column.status?.code === "approval-required" ||
+    column.status?.code === "waiting-on-user-input" ||
+    column.status?.code === "issue-blocked"
+  ) {
+    return { label: "WAIT", marker: "?" };
+  }
+  if (
+    latestSequence > 0 &&
+    column.lastSequence === latestSequence &&
+    column.phase !== "completed" &&
+    column.phase !== "stopped"
+  ) {
+    return { label: "LIVE", marker: "*" };
+  }
+  if (column.phase === "completed" || column.phase === "stopped") {
+    return { label: "DONE", marker: "=" };
+  }
+  return { label: "IDLE", marker: "." };
+}
+
+function formatBadgeLine(
+  column: AgentTuiColumnSnapshot,
+  latestSequence: number,
+  selectedColumnId: string | undefined,
+) {
+  const activity = resolveActivity(column, latestSequence);
+  const parts = [
+    column.session.kind.toUpperCase(),
+    column.phase.toUpperCase(),
+    formatStatusBadge(column.status?.code),
+    activity.label,
+  ];
+  if (selectedColumnId === column.session.id) {
+    parts.push("FOCUS");
+  }
+  return parts.join(" | ");
+}
+
+function formatColumnTitle(
+  column: AgentTuiColumnSnapshot,
+  latestSequence: number,
+  selectedColumnId: string | undefined,
+) {
+  const activity = resolveActivity(column, latestSequence);
+  const prefix = selectedColumnId === column.session.id ? ">" : " ";
+  return `${prefix} ${activity.marker} ${formatTitle(column.session)}`;
+}
+
+function formatLifecycleEntry(entry: Extract<AgentTuiTranscriptEntry, { kind: "lifecycle" }>) {
+  return [`[SESSION ${entry.phase.toUpperCase()}] ${entry.text}`];
+}
+
+function formatStatusEntry(entry: Extract<AgentTuiTranscriptEntry, { kind: "status" }>) {
+  let label = "STATUS";
+  switch (entry.code) {
+    case "approval-required":
+      label = "APPROVAL";
+      break;
+    case "command":
+      label = "COMMAND";
+      break;
+    case "command-failed":
+      label = "COMMAND FAIL";
+      break;
+    case "error":
+      label = "ERROR";
+      break;
+    case "tool":
+      label = "TOOL";
+      break;
+    case "tool-failed":
+      label = "TOOL FAIL";
+      break;
+    case "waiting-on-user-input":
+      label = "WAIT";
+      break;
+    case "thread-started":
+    case "turn-started":
+    case "turn-completed":
+    case "turn-cancelled":
+    case "turn-failed":
+      label = "TURN";
+      break;
+  }
+  return [`[${label}] ${entry.text}`];
+}
+
+function formatAgentMessageEntry(entry: Extract<AgentTuiTranscriptEntry, { kind: "agent-message" }>) {
+  return entry.text.trimEnd().split("\n");
+}
+
+function formatCommandOutputEntry(
+  entry: Extract<AgentTuiTranscriptEntry, { kind: "command-output" }>,
+  viewMode: AgentTuiViewMode,
+) {
+  if (!entry.lines.length) {
+    return [];
+  }
+  if (viewMode === "status") {
+    const preview = entry.lines.at(-1) ?? entry.lines[0] ?? "";
+    return [`[CMD OUT x${entry.count}] ${preview}`];
+  }
+  return [`[CMD OUT x${entry.count}]`, ...entry.lines.map((line) => `| ${line}`)];
+}
+
+function formatRawEntry(
+  entry: Extract<AgentTuiTranscriptEntry, { kind: "raw" }>,
+  viewMode: AgentTuiViewMode,
+) {
+  const label = `RAW ${entry.stream}/${entry.encoding} x${entry.count}`;
+  if (viewMode === "status") {
+    const preview = entry.lines.at(-1) ?? entry.lines[0] ?? "";
+    return preview ? [`[${label}] ${preview}`] : [`[${label}]`];
+  }
+  const prefix = entry.encoding === "jsonl" ? "jsonl" : entry.stream;
+  return [`[${label}]`, ...entry.lines.map((line) => `${prefix}: ${line}`)];
+}
+
+function formatTranscript(
+  column: AgentTuiColumnSnapshot,
+  viewMode: AgentTuiViewMode,
+) {
+  const transcriptEntries = column.transcriptEntries ?? [];
+  if (!transcriptEntries.length) {
+    const body = column.body.trimEnd();
+    return body.length ? body : "Waiting for session transcript...";
+  }
+
+  const lines = transcriptEntries.flatMap((entry) => {
+    switch (entry.kind) {
+      case "lifecycle":
+        return formatLifecycleEntry(entry);
+      case "status":
+        return formatStatusEntry(entry);
+      case "agent-message":
+        return formatAgentMessageEntry(entry);
+      case "command-output":
+        return formatCommandOutputEntry(entry, viewMode);
+      case "raw":
+        return formatRawEntry(entry, viewMode);
+    }
+  });
+
+  const filteredLines = lines.map((line) => line.trimEnd()).filter((line) => line.length > 0);
+  return filteredLines.join("\n") || "Waiting for session transcript...";
 }
 
 export function buildAgentTuiRootComponentModel(
   snapshot: AgentTuiSnapshot,
+  options: AgentTuiLayoutOptions = {},
 ): AgentTuiRootComponentModel {
+  const viewMode = options.viewMode ?? "status";
   const columns = (snapshot.columns ?? snapshot.sessions ?? []).map(normalizeColumnSnapshot);
   if (!columns.length) {
     return {
       columns: [
         {
+          badgeLine: "SYSTEM | IDLE | QUIET | IDLE",
           childrenLine: "Children: none",
           id: "empty",
+          isSelected: true,
           latestEventLine: "Latest: waiting for events",
-          metaLine: "idle",
+          metaLine: "No active sessions",
           parentLine: "Parent: none",
           statusLine: "Status: waiting for runtime events",
-          title: "Agent Sessions",
+          title: "> . Agent Sessions",
           transcript: "Waiting for agent session events...",
         },
       ],
+      selectedColumnId: "empty",
+      viewMode,
     };
   }
 
   const columnsById = new Map(columns.map((column) => [column.session.id, column]));
+  const latestSequence = Math.max(...columns.map((column) => column.lastSequence), 0);
+  const selectedColumnId =
+    options.selectedColumnId && columnsById.has(options.selectedColumnId)
+      ? options.selectedColumnId
+      : columns[0]?.session.id;
+
   return {
     columns: columns.map((column) => ({
+      badgeLine: formatBadgeLine(column, latestSequence, selectedColumnId),
       childrenLine: formatChildrenLine(column, columnsById),
       id: column.session.id,
+      isSelected: column.session.id === selectedColumnId,
       latestEventLine: formatLatestEventLine(column),
       metaLine: formatMetaLine(column),
       parentLine: formatParentLine(column, columnsById),
       statusLine: formatStatusLine(column),
-      title: formatTitle(column.session),
-      transcript: formatTranscript(column),
+      title: formatColumnTitle(column, latestSequence, selectedColumnId),
+      transcript: formatTranscript(column, viewMode),
     })),
+    selectedColumnId,
+    viewMode,
   };
 }
 
@@ -214,6 +458,7 @@ function renderEmptyFrame(columns: number, rows: number) {
 function renderColumn(model: AgentTuiColumnComponentModel, width: number, rows: number) {
   const fixedLines = [
     padCell(model.title, width),
+    padCell(model.badgeLine, width),
     padCell(model.metaLine, width),
     padCell(model.statusLine, width),
     padCell(model.parentLine, width),
@@ -234,10 +479,14 @@ function renderColumn(model: AgentTuiColumnComponentModel, width: number, rows: 
   return fixedLines.concat(paddedBody);
 }
 
-export function renderAgentTuiFrame(snapshot: AgentTuiSnapshot, size: AgentTuiFrameSize = {}) {
+export function renderAgentTuiFrame(
+  snapshot: AgentTuiSnapshot,
+  size: AgentTuiFrameSize = {},
+  options: AgentTuiLayoutOptions = {},
+) {
   const columns = Math.max(1, size.columns ?? DEFAULT_FRAME_COLUMNS);
   const rows = Math.max(1, size.rows ?? DEFAULT_FRAME_ROWS);
-  const layout = buildAgentTuiRootComponentModel(snapshot);
+  const layout = buildAgentTuiRootComponentModel(snapshot, options);
   if (!layout.columns.length) {
     return renderEmptyFrame(columns, rows);
   }

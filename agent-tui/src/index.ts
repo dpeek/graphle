@@ -28,16 +28,24 @@ export type {
 } from "./session-events.js";
 export type {
   AgentTuiColumnComponentModel,
+  AgentTuiLayoutOptions,
   AgentTuiFrameSize,
   AgentTuiRootComponentModel,
+  AgentTuiViewMode,
 } from "./layout.js";
 export type {
+  AgentTuiAgentMessageEntry,
   AgentTuiColumnSnapshot,
+  AgentTuiCommandOutputEntry,
   AgentTuiEventRecord,
+  AgentTuiLifecycleEntry,
+  AgentTuiRawEntry,
   AgentTuiSessionSnapshot,
   AgentTuiSnapshot,
+  AgentTuiStatusEntry,
   AgentTuiStatusSummary,
   AgentTuiStore,
   AgentTuiStoreOptions,
+  AgentTuiTranscriptEntry,
 } from "./store.js";
 export type { AgentTui, AgentTuiOptions, AgentTuiTerminal } from "./tui.js";

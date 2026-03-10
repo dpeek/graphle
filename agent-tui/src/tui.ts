@@ -5,7 +5,10 @@ import {
   type CliRenderer,
 } from "@opentui/core";
 
-import { buildAgentTuiRootComponentModel } from "./layout.js";
+import {
+  buildAgentTuiRootComponentModel,
+  type AgentTuiViewMode,
+} from "./layout.js";
 import type { AgentSessionEventObserver } from "./session-events.js";
 import {
   createAgentTuiStore,
@@ -15,6 +18,8 @@ import {
 } from "./store.js";
 
 const APP_ROOT_ID = "agent-tui-root";
+const APP_COLUMNS_ID = "agent-tui-columns";
+const APP_HEADER_ID = "agent-tui-header";
 
 export type AgentTuiTerminal = NodeJS.WriteStream;
 
@@ -33,25 +38,54 @@ export interface AgentTui {
   stop(): Promise<void>;
 }
 
+type AgentTuiColumnRenderRef = {
+  transcript: TextRenderable;
+};
+
+type AgentTuiColumnScrollState = {
+  scrollY: number;
+  stickToBottom: boolean;
+};
+
 type AgentTuiRenderableView = {
   destroy: () => void;
   render: (snapshot: AgentTuiSnapshot) => void;
 };
 
-function createTranscriptContent(title: string, content: string) {
-  return `${title}\n\n${content}`;
+function clamp(value: number, min: number, max: number) {
+  return Math.min(Math.max(value, min), max);
+}
+
+function isNextColumnKey(key: { name: string; shift: boolean }) {
+  return key.name === "right" || key.name === "l" || (key.name === "tab" && !key.shift);
+}
+
+function isPreviousColumnKey(key: { name: string; shift: boolean }) {
+  return key.name === "left" || key.name === "h" || (key.name === "tab" && key.shift);
+}
+
+function isTopKey(key: { name: string; shift: boolean }) {
+  return key.name === "home" || key.name === "g" || key.name === "G";
+}
+
+function isBottomKey(key: { name: string; shift: boolean }) {
+  return key.name === "end" || key.name === "G" || (key.name === "g" && key.shift);
 }
 
 function createColumnRenderable(
   renderer: CliRenderer,
   model: ReturnType<typeof buildAgentTuiRootComponentModel>["columns"][number],
+  scrollState: AgentTuiColumnScrollState | undefined,
 ) {
   const box = new BoxRenderable(renderer, {
+    backgroundColor: model.isSelected ? "#111827" : "#0f172a",
     border: true,
+    borderColor: model.isSelected ? "#f59e0b" : "#475569",
     borderStyle: "single",
     flexBasis: 0,
     flexDirection: "column",
     flexGrow: 1,
+    focusedBorderColor: "#f59e0b",
     height: "100%",
     id: `column:${model.id}`,
     minWidth: 24,
@@ -61,33 +95,65 @@ function createColumnRenderable(
 
   box.add(
     new TextRenderable(renderer, {
-      content: [model.metaLine, model.statusLine, model.parentLine, model.childrenLine].join("\n"),
+      content: [
+        model.badgeLine,
+        model.metaLine,
+        model.statusLine,
+        model.parentLine,
+        model.childrenLine,
+        model.latestEventLine,
+      ].join("\n"),
       id: `summary:${model.id}`,
       wrapMode: "char",
     }),
   );
+
   box.add(
     new TextRenderable(renderer, {
-      content: `${model.latestEventLine}\n`,
-      id: `latest:${model.id}`,
-      marginTop: 1,
-      wrapMode: "char",
-    }),
-  );
-  box.add(
-    new TextRenderable(renderer, {
-      content: createTranscriptContent("Transcript", model.transcript),
-      flexGrow: 1,
-      id: `transcript:${model.id}`,
+      content: "Transcript",
+      id: `transcript-label:${model.id}`,
       marginTop: 1,
       wrapMode: "char",
     }),
   );
 
-  return box;
+  const transcript = new TextRenderable(renderer, {
+    content: model.transcript,
+    flexGrow: 1,
+    id: `transcript:${model.id}`,
+    marginTop: 1,
+    wrapMode: "char",
+  });
+  let appliedInitialScroll = false;
+  const applyScrollState = () => {
+    if (appliedInitialScroll) {
+      return;
+    }
+    appliedInitialScroll = true;
+    const nextScrollY =
+      scrollState?.stickToBottom === false
+        ? clamp(scrollState.scrollY, 0, transcript.maxScrollY)
+        : transcript.maxScrollY;
+    transcript.scrollY = nextScrollY;
+    renderer.requestRender();
+  };
+  transcript.onSizeChange = applyScrollState;
+  box.add(transcript);
+  queueMicrotask(applyScrollState);
+
+  return {
+    box,
+    transcript,
+  };
 }
 
 function createAgentTuiRenderableView(renderer: CliRenderer): AgentTuiRenderableView {
+  const columnRefs = new Map<string, AgentTuiColumnRenderRef>();
+  const scrollStateByColumnId = new Map<string, AgentTuiColumnScrollState>();
+  let latestSnapshot: AgentTuiSnapshot = { columns: [], sessions: [] };
+  let selectedColumnId: string | undefined;
+  let viewMode: AgentTuiViewMode = "status";
+
   const removeRoot = () => {
     if (!renderer.root.findDescendantById(APP_ROOT_ID)) {
       return;
@@ -95,26 +161,203 @@ function createAgentTuiRenderableView(renderer: CliRenderer): AgentTuiRenderable
     renderer.root.remove(APP_ROOT_ID);
   };
 
+  const saveScrollState = () => {
+    for (const [columnId, ref] of columnRefs) {
+      scrollStateByColumnId.set(columnId, {
+        scrollY: ref.transcript.scrollY,
+        stickToBottom: ref.transcript.scrollY >= ref.transcript.maxScrollY - 1,
+      });
+    }
+    columnRefs.clear();
+  };
+
+  const selectColumn = (nextColumnId: string | undefined) => {
+    if (!nextColumnId || nextColumnId === selectedColumnId) {
+      return;
+    }
+    selectedColumnId = nextColumnId;
+    renderCurrentSnapshot();
+  };
+
+  const moveColumnSelection = (delta: number) => {
+    const columns = latestSnapshot.columns ?? latestSnapshot.sessions ?? [];
+    if (!columns.length) {
+      return;
+    }
+    const currentIndex = columns.findIndex((column) => column.session.id === selectedColumnId);
+    const nextIndex =
+      currentIndex >= 0
+        ? (currentIndex + delta + columns.length) % columns.length
+        : delta > 0
+          ? 0
+          : columns.length - 1;
+    selectColumn(columns[nextIndex]?.session.id);
+  };
+
+  const scrollSelectedTranscript = (delta: number) => {
+    const ref = selectedColumnId ? columnRefs.get(selectedColumnId) : undefined;
+    if (!ref) {
+      return;
+    }
+    ref.transcript.scrollY = clamp(ref.transcript.scrollY + delta, 0, ref.transcript.maxScrollY);
+    renderer.requestRender();
+  };
+
+  const jumpSelectedTranscript = (position: "top" | "bottom") => {
+    const ref = selectedColumnId ? columnRefs.get(selectedColumnId) : undefined;
+    if (!ref) {
+      return;
+    }
+    ref.transcript.scrollY = position === "top" ? 0 : ref.transcript.maxScrollY;
+    renderer.requestRender();
+  };
+
+  const toggleViewMode = (nextViewMode?: AgentTuiViewMode) => {
+    const resolvedViewMode =
+      nextViewMode ?? (viewMode === "status" ? ("raw" as const) : ("status" as const));
+    if (resolvedViewMode === viewMode) {
+      return;
+    }
+    viewMode = resolvedViewMode;
+    renderCurrentSnapshot();
+  };
+
+  const handleKeyPress = (key: { name: string; shift: boolean; preventDefault: () => void }) => {
+    if (isNextColumnKey(key)) {
+      key.preventDefault();
+      moveColumnSelection(1);
+      return;
+    }
+    if (isPreviousColumnKey(key)) {
+      key.preventDefault();
+      moveColumnSelection(-1);
+      return;
+    }
+    if (key.name === "j" || key.name === "down") {
+      key.preventDefault();
+      scrollSelectedTranscript(1);
+      return;
+    }
+    if (key.name === "k" || key.name === "up") {
+      key.preventDefault();
+      scrollSelectedTranscript(-1);
+      return;
+    }
+    if (key.name === "pagedown" || key.name === "space") {
+      key.preventDefault();
+      scrollSelectedTranscript(8);
+      return;
+    }
+    if (key.name === "pageup") {
+      key.preventDefault();
+      scrollSelectedTranscript(-8);
+      return;
+    }
+    if (isTopKey(key) && !isBottomKey(key)) {
+      key.preventDefault();
+      jumpSelectedTranscript("top");
+      return;
+    }
+    if (isBottomKey(key)) {
+      key.preventDefault();
+      jumpSelectedTranscript("bottom");
+      return;
+    }
+    if (key.name === "v") {
+      key.preventDefault();
+      toggleViewMode();
+      return;
+    }
+    if (key.name === "1") {
+      key.preventDefault();
+      toggleViewMode("status");
+      return;
+    }
+    if (key.name === "2") {
+      key.preventDefault();
+      toggleViewMode("raw");
+    }
+  };
+
+  const buildHeaderText = () => {
+    const columns = latestSnapshot.columns ?? latestSnapshot.sessions ?? [];
+    const selectedColumn =
+      columns.find((column) => column.session.id === selectedColumnId) ?? columns[0];
+    const selectedTitle = selectedColumn ? selectedColumn.session.title : "Agent Sessions";
+    return [
+      `View: ${viewMode.toUpperCase()} | Focus: ${selectedTitle}`,
+      "Keys: left/right or h/l move columns | up/down or j/k scroll | 1 status | 2 raw | v toggle",
+    ].join("\n");
+  };
+
+  const renderCurrentSnapshot = () => {
+    saveScrollState();
+    removeRoot();
+
+    const layout = buildAgentTuiRootComponentModel(latestSnapshot, {
+      selectedColumnId,
+      viewMode,
+    });
+    selectedColumnId = layout.selectedColumnId;
+
+    const root = new BoxRenderable(renderer, {
+      backgroundColor: "#020617",
+      flexDirection: "column",
+      height: "100%",
+      id: APP_ROOT_ID,
+      paddingX: 1,
+      paddingY: 1,
+      width: "100%",
+    });
+    root.add(
+      new TextRenderable(renderer, {
+        content: buildHeaderText(),
+        id: APP_HEADER_ID,
+        wrapMode: "char",
+      }),
+    );
+
+    const columnsRow = new BoxRenderable(renderer, {
+      flexDirection: "row",
+      flexGrow: 1,
+      gap: 1,
+      id: APP_COLUMNS_ID,
+      marginTop: 1,
+      width: "100%",
+    });
+    for (const column of layout.columns) {
+      const renderRef = createColumnRenderable(
+        renderer,
+        column,
+        scrollStateByColumnId.get(column.id),
+      );
+      columnRefs.set(column.id, {
+        transcript: renderRef.transcript,
+      });
+      columnsRow.add(renderRef.box);
+    }
+
+    root.add(columnsRow);
+    renderer.root.add(root);
+    renderer.requestRender();
+  };
+
+  renderer.keyInput.on("keypress", handleKeyPress);
+
   return {
     destroy() {
+      renderer.keyInput.off("keypress", handleKeyPress);
+      saveScrollState();
       removeRoot();
       renderer.requestRender();
     },
     render(snapshot) {
-      removeRoot();
-      const layout = buildAgentTuiRootComponentModel(snapshot);
-      const root = new BoxRenderable(renderer, {
-        flexDirection: "row",
-        gap: 1,
-        height: "100%",
-        id: APP_ROOT_ID,
-        width: "100%",
-      });
-      for (const column of layout.columns) {
-        root.add(createColumnRenderable(renderer, column));
+      latestSnapshot = snapshot;
+      const columns = snapshot.columns ?? snapshot.sessions ?? [];
+      if (!columns.find((column) => column.session.id === selectedColumnId)) {
+        selectedColumnId = columns[0]?.session.id;
       }
-      renderer.root.add(root);
-      renderer.requestRender();
+      renderCurrentSnapshot();
     },
   };
 }

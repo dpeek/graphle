@@ -1,6 +1,7 @@
 import { createTestRenderer } from "@opentui/core/testing";
 import { expect, test } from "bun:test";
 
+import { buildAgentTuiRootComponentModel } from "./layout.js";
 import type { AgentSessionRef } from "./session-events.js";
 import { createAgentTuiStore } from "./store.js";
 import { createAgentTui } from "./tui.js";
@@ -104,11 +105,102 @@ test("AgentTuiStore tracks column hierarchy, summaries, and event history", () =
   expect(columns[2]?.status?.text).toBe('Tool: helper.spawn {"mode":"plan"}');
   expect(columns[2]?.eventHistory.at(-1)?.summary).toContain("tool");
   expect(columns[1]?.body).toContain("Session started\n");
+  expect(columns[1]?.transcriptEntries.map((entry) => entry.kind)).toEqual(["lifecycle", "status"]);
+  expect(columns[2]?.transcriptEntries.at(-1)).toMatchObject({
+    kind: "status",
+    text: 'Tool: helper.spawn {"mode":"plan"}',
+  });
 });
 
-test("createAgentTui renders placeholder columns with OpenTUI", async () => {
-  const { captureCharFrame, renderOnce, renderer } = await createTestRenderer({
-    height: 16,
+test("buildAgentTuiRootComponentModel supports status-focused and raw-heavy transcript views", () => {
+  const store = createAgentTuiStore();
+  const supervisor = createSupervisorSession();
+  const worker = createWorkerSession();
+
+  store.observe({
+    phase: "started",
+    sequence: 1,
+    session: supervisor,
+    timestamp: "2026-03-10T02:05:00.000Z",
+    type: "session",
+  });
+  store.observe({
+    phase: "started",
+    sequence: 2,
+    session: worker,
+    timestamp: "2026-03-10T02:05:01.000Z",
+    type: "session",
+  });
+  store.observe({
+    code: "command",
+    format: "line",
+    sequence: 3,
+    session: worker,
+    text: "$ git status --short --branch",
+    timestamp: "2026-03-10T02:05:02.000Z",
+    type: "status",
+  });
+  store.observe({
+    code: "command-output",
+    format: "line",
+    sequence: 4,
+    session: worker,
+    text: "| ## main",
+    timestamp: "2026-03-10T02:05:03.000Z",
+    type: "status",
+  });
+  store.observe({
+    code: "command-output",
+    format: "line",
+    sequence: 5,
+    session: worker,
+    text: "|  M agent/src/runner/codex.ts",
+    timestamp: "2026-03-10T02:05:04.000Z",
+    type: "status",
+  });
+  store.observe({
+    encoding: "jsonl",
+    line: '{"method":"thread/started"}',
+    sequence: 6,
+    session: worker,
+    stream: "stdout",
+    timestamp: "2026-03-10T02:05:05.000Z",
+    type: "raw-line",
+  });
+  store.observe({
+    encoding: "jsonl",
+    line: '{"method":"turn/completed"}',
+    sequence: 7,
+    session: worker,
+    stream: "stdout",
+    timestamp: "2026-03-10T02:05:06.000Z",
+    type: "raw-line",
+  });
+
+  const snapshot = store.getSnapshot();
+  const statusModel = buildAgentTuiRootComponentModel(snapshot, {
+    selectedColumnId: worker.id,
+    viewMode: "status",
+  });
+  const rawModel = buildAgentTuiRootComponentModel(snapshot, {
+    selectedColumnId: worker.id,
+    viewMode: "raw",
+  });
+  const statusTranscript = statusModel.columns.find((column) => column.id === worker.id)?.transcript ?? "";
+  const rawTranscript = rawModel.columns.find((column) => column.id === worker.id)?.transcript ?? "";
+
+  expect(statusTranscript).toContain("[COMMAND] $ git status --short --branch");
+  expect(statusTranscript).toContain("[CMD OUT x2]  M agent/src/runner/codex.ts");
+  expect(statusTranscript).toContain('[RAW stdout/jsonl x2] {"method":"turn/completed"}');
+  expect(rawTranscript).toContain("[CMD OUT x2]");
+  expect(rawTranscript).toContain("| ## main");
+  expect(rawTranscript).toContain('jsonl: {"method":"thread/started"}');
+  expect(rawTranscript).toContain('jsonl: {"method":"turn/completed"}');
+});
+
+test("createAgentTui supports keyboard column navigation, view toggles, and transcript scrolling", async () => {
+  const { captureCharFrame, mockInput, renderOnce, renderer } = await createTestRenderer({
+    height: 18,
     width: 96,
   });
 
@@ -161,17 +253,47 @@ test("createAgentTui renders placeholder columns with OpenTUI", async () => {
       timestamp: "2026-03-10T02:10:04.000Z",
       type: "status",
     });
+    for (let index = 0; index < 12; index++) {
+      tui.observe({
+        code: "command-output",
+        format: "line",
+        sequence: 6 + index,
+        session: worker,
+        text: `| output line ${index}`,
+        timestamp: `2026-03-10T02:10:${String(5 + index).padStart(2, "0")}.000Z`,
+        type: "status",
+      });
+    }
 
     await Promise.resolve();
     await renderOnce();
 
-    const frame = captureCharFrame();
-    expect(frame).toContain("Supervisor");
-    expect(frame).toContain("OPE-68 Run plan");
-    expect(frame).toContain("Helper");
-    expect(frame).toContain("Children:");
-    expect(frame).toContain("Latest:");
+    let frame = captureCharFrame();
+    expect(frame).toContain("View: STATUS");
+    expect(frame).toContain("> . Supervisor");
     expect(frame).toContain("Transcript");
+
+    mockInput.pressArrow("right");
+    await renderOnce();
+    frame = captureCharFrame();
+    expect(frame).toContain("> * OPE-68 Run plan");
+
+    await mockInput.typeText("v");
+    await renderOnce();
+    frame = captureCharFrame();
+    expect(frame).toContain("View: RAW");
+
+    await mockInput.typeText("g");
+    await renderOnce();
+    frame = captureCharFrame();
+    expect(frame).toContain("| output line 0");
+
+    await mockInput.typeText("j");
+    await renderOnce();
+    await mockInput.typeText("j");
+    await renderOnce();
+    frame = captureCharFrame();
+    expect(frame).toContain("| output line 2");
   } finally {
     await tui.stop();
     renderer.destroy();
