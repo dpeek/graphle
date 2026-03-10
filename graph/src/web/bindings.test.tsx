@@ -401,7 +401,10 @@ describe("web predicate bindings", () => {
     const booleanView = renderer?.root.findByProps({ "data-web-field-kind": "boolean" });
     const checkbox = renderer?.root.findByProps({ "data-web-field-kind": "checkbox" });
 
-    expect(booleanView?.children).toEqual(["True"]);
+    expect(booleanView?.props.type).toBe("checkbox");
+    expect(booleanView?.props.checked).toBe(true);
+    expect(booleanView?.props.disabled).toBe(true);
+    expect(booleanView?.props["aria-label"]).toBe("True");
     expect(checkbox?.props.checked).toBe(true);
 
     act(() => {
@@ -409,9 +412,10 @@ describe("web predicate bindings", () => {
     });
 
     expect(blockRef.fields.collapsed.get()).toBe(false);
-    expect(renderer?.root.findByProps({ "data-web-field-kind": "boolean" }).children).toEqual([
+    expect(renderer?.root.findByProps({ "data-web-field-kind": "boolean" }).props.checked).toBe(false);
+    expect(renderer?.root.findByProps({ "data-web-field-kind": "boolean" }).props["aria-label"]).toBe(
       "False",
-    ]);
+    );
     expect(renderer?.root.findByProps({ "data-web-field-kind": "checkbox" }).props.checked).toBe(false);
 
     act(() => {
@@ -601,9 +605,10 @@ describe("web predicate bindings", () => {
     expect(renders.text).toBe(1);
     expect(renders.collapsedView).toBeGreaterThan(1);
     expect(renders.collapsedEditor).toBeGreaterThan(1);
-    expect(renderer?.root.findByProps({ "data-web-field-kind": "boolean" }).children).toEqual([
+    expect(renderer?.root.findByProps({ "data-web-field-kind": "boolean" }).props.checked).toBe(false);
+    expect(renderer?.root.findByProps({ "data-web-field-kind": "boolean" }).props["aria-label"]).toBe(
       "False",
-    ]);
+    );
 
     act(() => {
       renderer?.unmount();
