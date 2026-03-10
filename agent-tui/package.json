@@ -1,5 +1,5 @@
 {
-  "name": "@io/agent",
+  "name": "@io/agent-tui",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -8,17 +8,14 @@
   },
   "scripts": {
     "clean": "rm -rf out",
+    "check": "bun run lint && bun run types && bun test src",
     "format": "oxfmt",
     "lint": "oxlint",
     "types": "tsgo --noEmit",
-    "unit": "bun test"
+    "unit": "bun test src"
   },
   "dependencies": {
-    "@io/agent-tui": "workspace:*",
-    "@io/lib": "workspace:*",
-    "@linear/sdk": "^76.0.0",
-    "yaml": "^2.8.2",
-    "zod": "^4.3.6"
+    "@opentui/core": "^0.1.87"
   },
   "devDependencies": {
     "@types/bun": "^1.3.9",

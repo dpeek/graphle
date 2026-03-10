@@ -118,7 +118,7 @@ async function runAgentService(options: StartCommandOptions, mode: "start" | "tu
   handleExit(stop);
 
   try {
-    tui?.start();
+    await tui?.start();
     await service.start();
   } finally {
     await stop();
@@ -171,7 +171,7 @@ async function runRetainedTui(options: RetainedTuiCommandOptions) {
   };
 
   handleExit(stop);
-  tui.start();
+  await tui.start();
 
   const initialEvents = await reader.readInitialEvents(options.mode);
   if (options.mode === "replay") {

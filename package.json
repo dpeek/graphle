@@ -6,6 +6,7 @@
     "cli",
     "graph",
     "agent",
+    "agent-tui",
     "config",
     "lib"
   ],

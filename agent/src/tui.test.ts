@@ -55,6 +55,22 @@ function createIssueState(runtimePath: string, overrides: Partial<IssueRuntimeSt
   };
 }
 
+function createSnapshotColumn(
+  overrides: Partial<ReturnType<ReturnType<typeof createAgentTuiStore>["getSnapshot"]>["sessions"][number]>,
+) {
+  return {
+    body: "",
+    childSessionIds: [],
+    depth: 0,
+    eventHistory: [],
+    firstSequence: 0,
+    lastSequence: 0,
+    phase: "pending" as const,
+    session: createSupervisorSession(),
+    ...overrides,
+  };
+}
+
 test("AgentTuiStore keeps supervisor first and records status plus raw output", () => {
   const store = createAgentTuiStore();
   const supervisor = createSupervisorSession();
@@ -157,28 +173,30 @@ test("AgentTuiStore keeps supervisor first and records status plus raw output", 
 });
 
 test("renderAgentTuiFrame lays out supervisor and worker columns", () => {
+  const sessions = [
+    createSnapshotColumn({
+      body: "Session started | /Users/dpeek/code/io\nready at /Users/dpeek/code/io\nNo issues\n",
+      firstSequence: 1,
+      lastSequence: 3,
+      phase: "started",
+      session: createSupervisorSession(),
+    }),
+    createSnapshotColumn({
+      body:
+        "Session scheduled | ope-67 | /Users/dpeek/code/io/.io/tree/ope-67\n" +
+        "Session started\n" +
+        'jsonl: {"method":"thread/started"}\n' +
+        "stderr: stderr line\n",
+      firstSequence: 4,
+      lastSequence: 7,
+      phase: "completed",
+      session: createWorkerSession(),
+    }),
+  ];
   const frame = renderAgentTuiFrame(
     {
-      sessions: [
-        {
-          body: "Session started | /Users/dpeek/code/io\nready at /Users/dpeek/code/io\nNo issues\n",
-          firstSequence: 1,
-          lastSequence: 3,
-          phase: "started",
-          session: createSupervisorSession(),
-        },
-        {
-          body:
-            "Session scheduled | ope-67 | /Users/dpeek/code/io/.io/tree/ope-67\n" +
-            "Session started\n" +
-            'jsonl: {"method":"thread/started"}\n' +
-            "stderr: stderr line\n",
-          firstSequence: 4,
-          lastSequence: 7,
-          phase: "completed",
-          session: createWorkerSession(),
-        },
-      ],
+      columns: sessions,
+      sessions,
     },
     { columns: 80, rows: 8 },
   );
