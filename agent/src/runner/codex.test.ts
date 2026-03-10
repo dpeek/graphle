@@ -6,6 +6,7 @@ import {
   normalizeCodexSessionMessage,
 } from "./codex.js";
 import {
+  closeAgentSessionDisplayLine,
   createAgentSessionDisplayState,
   renderAgentStatusEvent,
   type AgentSessionRef,
@@ -192,6 +193,43 @@ test("renders approval prompts and tool failures", () => {
       'Approval required: Approve app tool call?: The linear MCP server wants to run the tool "Save issue", which may modify or delete data. Allow this action?\n' +
       'Tool: linear.save_issue {"id":"OPE-41","state":"In Progress"}\n' +
       "Tool failed: user cancelled MCP tool call\n",
+  );
+});
+
+test("closes streamed agent lines before raw output is appended", () => {
+  const chunks: string[] = [];
+  const session = createSession();
+  const state = createAgentSessionDisplayState();
+
+  renderAgentStatusEvent({
+    event: {
+      code: "agent-message-delta",
+      format: "chunk",
+      itemId: "msg-1",
+      sequence: 1,
+      session,
+      text: "Inspecting runtime state",
+      timestamp: "2026-03-10T00:00:00.000Z",
+      type: "status",
+    },
+    state,
+    writeDisplay: (text) => {
+      chunks.push(text);
+    },
+  });
+
+  closeAgentSessionDisplayLine({
+    state,
+    writeDisplay: (text) => {
+      chunks.push(text);
+    },
+  });
+  chunks.push("[OPE-41 stderr] failed to parse\n");
+
+  expect(chunks.join("")).toBe(
+    "=== worker-1 OPE-41 Add predicate-slot subscriptions to graph runtime ===\n" +
+      "Inspecting runtime state\n" +
+      "[OPE-41 stderr] failed to parse\n",
   );
 });
 

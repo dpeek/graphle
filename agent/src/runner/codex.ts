@@ -14,6 +14,7 @@ import type {
   TurnStartResponse,
 } from "../codex-schema.js";
 import {
+  closeAgentSessionDisplayLine,
   createAgentSessionDisplayState,
   createAgentSessionEventBus,
   renderAgentStatusEvent,
@@ -504,6 +505,14 @@ async function createWorkspaceLogObserver(
       if (event.type !== "raw-line") {
         return;
       }
+
+      closeAgentSessionDisplayLine({
+        state: displayState,
+        writeDisplay: (text) => {
+          enqueueAppend(displayLogPath, text);
+          enqueueAppend(mainOutputPath, text);
+        },
+      });
 
       if (event.stream === "stdout") {
         appendLine(stdoutLogPath, event.line);

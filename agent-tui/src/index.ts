@@ -1,4 +1,5 @@
 export {
+  closeAgentSessionDisplayLine,
   createAgentSessionDisplayState,
   createAgentSessionEventBus,
   createAgentSessionStdoutObserver,

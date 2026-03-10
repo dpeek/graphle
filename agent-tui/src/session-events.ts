@@ -179,6 +179,13 @@ function closeSessionLine(
   state.lineOpen = false;
 }
 
+export function closeAgentSessionDisplayLine(options: {
+  state: AgentSessionDisplayState;
+  writeDisplay: (text: string) => void;
+}) {
+  closeSessionLine(options.state, options.writeDisplay);
+}
+
 export function renderAgentStatusEvent(options: {
   event: AgentStatusEvent;
   state: AgentSessionDisplayState;
@@ -243,6 +250,13 @@ export function createAgentSessionStdoutObserver(): AgentSessionEventObserver {
     if (event.stream === "stdout" && event.encoding !== "text") {
       return;
     }
+
+    closeAgentSessionDisplayLine({
+      state: displayState,
+      writeDisplay: (text) => {
+        process.stdout.write(text);
+      },
+    });
 
     const issueIdentifier = event.session.issue?.identifier ?? event.session.workerId;
     const text = `[${issueIdentifier} ${event.stream}] ${event.line}\n`;
