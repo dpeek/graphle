@@ -1,12 +1,14 @@
-import { createLogger } from "@io/lib";
+import { createLogger, handleExit } from "@io/lib";
 
 import { AgentService } from "./service.js";
 import { loadWorkflowFile } from "./workflow.js";
 import { readIssueRuntimeState } from "./workspace.js";
+import { createAgentTui } from "./tui.js";
 
 function printHelp() {
   console.log(`Usage:
   io agent start [entrypointPath] [--once]
+  io agent tui [entrypointPath] [--once]
   io agent tail <issue> [entrypointPath]
   io agent validate [entrypointPath]
 
@@ -40,13 +42,47 @@ function parseStartOptions(args: string[]): StartCommandOptions {
   return options;
 }
 
+async function runAgentService(options: StartCommandOptions, mode: "start" | "tui") {
+  const tui = mode === "tui" ? createAgentTui() : undefined;
+  const service = new AgentService({
+    ...options,
+    stdoutEvents: mode !== "tui",
+  });
+  if (tui) {
+    service.observeSessionEvents(tui.observe);
+  }
+
+  let stopped = false;
+  const stop = async () => {
+    if (stopped) {
+      return;
+    }
+    stopped = true;
+    tui?.stop();
+    await service.stop();
+  };
+
+  handleExit(stop);
+
+  try {
+    tui?.start();
+    await service.start();
+  } finally {
+    await stop();
+  }
+}
+
 export async function runAgentCli(args: string[]) {
   const [command = "start", ...rest] = args;
   switch (command) {
     case "start": {
       const options = parseStartOptions(rest);
-      const service = new AgentService(options);
-      await service.start();
+      await runAgentService(options, "start");
+      return;
+    }
+    case "tui": {
+      const options = parseStartOptions(rest);
+      await runAgentService(options, "tui");
       return;
     }
     case "validate": {

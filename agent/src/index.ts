@@ -5,6 +5,7 @@ export {
   createAgentSessionStdoutObserver,
   renderAgentStatusEvent,
 } from "./session-events.js";
+export { createAgentTui, createAgentTuiStore, renderAgentTuiFrame } from "./tui.js";
 export { LinearTrackerAdapter, normalizeLinearIssue } from "./tracker/linear.js";
 export type {
   AgentRawLineEvent,
@@ -15,6 +16,13 @@ export type {
   AgentSessionRef,
   AgentStatusEvent,
 } from "./session-events.js";
+export type {
+  AgentTui,
+  AgentTuiSnapshot,
+  AgentTuiStore,
+  AgentTuiTerminal,
+  AgentTuiSessionSnapshot,
+} from "./tui.js";
 export type { AgentIssue, Workflow } from "./types.js";
 export {
   DEFAULT_BACKLOG_BUILTIN_DOC_IDS,
