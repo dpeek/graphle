@@ -21,6 +21,22 @@ This proposal defines what it should look like to move the machine-readable
 config from `io.json` to `io.ts` without collapsing `io.md` back into a giant
 prompt/config hybrid.
 
+## Current Repo Constraints
+
+The proposal needs to fit the repo as it exists today:
+
+- the root workspace currently contains `agent`, `cli`, `graph`, and `lib`
+- there is no dedicated `config` workspace package yet
+- `agent/src/workflow.ts` owns the current runtime `io.json` loading path
+- `cli/src/install.ts` separately reads `io.json` for install-oriented config
+- package exports and typechecking are centered on per-package `src` trees
+
+Those constraints drive two design decisions:
+
+- the config source should remain at the repo root so the user edits one file
+- packages should consume config through a workspace package boundary instead of
+  reaching outside their own source roots with relative imports
+
 ## Goals
 
 - make `io.ts` the single repo-owned structured config source
@@ -137,6 +153,19 @@ It should expose:
 The important design rule is that `@io/lib` owns the config language, while
 `io.ts` only supplies repo-specific values.
 
+The first pass should cover the shapes that already exist in runtime config
+today:
+
+- agent runtime settings
+- codex execution settings
+- hooks and polling settings
+- tracker settings
+- workspace settings
+- install-oriented settings such as `brews`
+
+That keeps the migration grounded in the current repo contract before adding
+new provider or plugin descriptor families.
+
 ## Provider And Plugin Shapes
 
 Provider and plugin configuration should be modular rather than one giant
@@ -238,6 +267,29 @@ The config module should stay synchronous and side-effect-light so it remains:
 - predictable to load
 - safe to import from tooling
 - easy to inspect and eventually project into a UI
+
+## Compatibility Contract During Rollout
+
+The migration should preserve the current repo behavior while establishing
+`io.ts` as the source of truth.
+
+Recommended loader order:
+
+1. if `io.ts` exists, load it through `@io/config` and normalize it through the
+   shared `@io/lib/config` loader
+2. if `io.ts` is absent, continue accepting `io.json` through the same shared
+   loader surface
+3. if both files exist during migration, treat `io.ts` as authoritative and use
+   `io.json` only as compatibility input or generated output
+
+That compatibility layer matters because this repo already uses `io.json` for
+two different concerns:
+
+- `agent` runtime configuration
+- `cli` install configuration
+
+The migration should consolidate those reads behind one loader before removing
+JSON authoring as a first-class source format.
 
 ## Migration Shape
 
