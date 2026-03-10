@@ -5,7 +5,7 @@
     "": {
       "name": "@io/core",
       "devDependencies": {
-        "@io/dev": "workspace:",
+        "@io/cli": "workspace:",
       },
     },
     "agent": {
@@ -312,8 +312,6 @@
     "@io/agent": ["@io/agent@workspace:agent"],
 
     "@io/cli": ["@io/cli@workspace:cli"],
-
-    "@io/dev": ["@io/core@root:", {}],
 
     "@io/graph": ["@io/graph@workspace:graph"],
 
