@@ -83,10 +83,16 @@ export interface AgentTuiRawEntry extends AgentTuiTranscriptEntryBase {
   stream: AgentRawLineEvent["stream"];
 }
 
+export interface AgentTuiMirrorEntry extends AgentTuiTranscriptEntryBase {
+  kind: "mirror";
+  text: string;
+}
+
 export type AgentTuiTranscriptEntry =
   | AgentTuiAgentMessageEntry
   | AgentTuiCommandOutputEntry
   | AgentTuiLifecycleEntry
+  | AgentTuiMirrorEntry
   | AgentTuiRawEntry
   | AgentTuiStatusEntry;
 
@@ -182,6 +188,7 @@ function appendTranscript(
 function estimateTranscriptEntryChars(entry: AgentTuiTranscriptEntry) {
   switch (entry.kind) {
     case "lifecycle":
+    case "mirror":
     case "status":
     case "agent-message":
       return entry.text.length + 1;
@@ -411,6 +418,70 @@ function appendRawEntry(
   );
 }
 
+function formatSessionLabel(session: AgentSessionRef) {
+  return session.issue?.identifier ?? session.workerId ?? session.title;
+}
+
+function shouldMirrorEventToSupervisor(event: AgentSessionEvent) {
+  if (event.session.kind === "supervisor") {
+    return false;
+  }
+  if (event.type === "raw-line") {
+    return false;
+  }
+  if (event.type === "status") {
+    switch (event.code) {
+      case "agent-message-completed":
+      case "agent-message-delta":
+      case "command-output":
+        return false;
+    }
+  }
+  return true;
+}
+
+function formatMirroredEvent(event: AgentSessionEvent) {
+  const prefix = `[${formatSessionLabel(event.session)}]`;
+  if (event.type === "session") {
+    return `${prefix} ${formatLifecycleText(event.phase, event.data, event.session).trimEnd()}`;
+  }
+  if (event.type === "status") {
+    const text = event.text?.trim();
+    if (text) {
+      return `${prefix} ${text}`;
+    }
+    if (event.itemId) {
+      return `${prefix} ${event.code}: ${event.itemId}`;
+    }
+    return `${prefix} ${event.code}`;
+  }
+  return undefined;
+}
+
+function appendSupervisorMirrorEntry(
+  state: AgentTuiInternalColumnState,
+  event: AgentSessionEvent,
+  maxTranscriptChars: number,
+) {
+  const text = formatMirroredEvent(event);
+  if (!text) {
+    return;
+  }
+  appendTranscript(state, `${text}\n`, maxTranscriptChars);
+  pushTranscriptEntry(
+    state,
+    {
+      count: 1,
+      kind: "mirror",
+      sequenceEnd: event.sequence,
+      sequenceStart: event.sequence,
+      text,
+      timestamp: event.timestamp,
+    },
+    maxTranscriptChars,
+  );
+}
+
 function summarizeEvent(event: AgentSessionEvent) {
   switch (event.type) {
     case "session":
@@ -573,6 +644,7 @@ export function createAgentTuiStore(options: AgentTuiStoreOptions = {}): AgentTu
     observe(event) {
       const state = getSessionState(event);
       updatedAt = event.timestamp;
+      const supervisorState = sessions.get("supervisor");
 
       if (event.type === "session") {
         state.phase = event.phase;
@@ -584,6 +656,9 @@ export function createAgentTuiStore(options: AgentTuiStoreOptions = {}): AgentTu
         );
         appendLifecycleEntry(state, event, maxTranscriptChars);
         pushEventHistory(state, event, maxEventHistory);
+        if (supervisorState && shouldMirrorEventToSupervisor(event)) {
+          appendSupervisorMirrorEntry(supervisorState, event, maxTranscriptChars);
+        }
         notify();
         return;
       }
@@ -607,6 +682,9 @@ export function createAgentTuiStore(options: AgentTuiStoreOptions = {}): AgentTu
         });
         appendStatusEntry(state, event, maxTranscriptChars);
         pushEventHistory(state, event, maxEventHistory);
+        if (supervisorState && shouldMirrorEventToSupervisor(event)) {
+          appendSupervisorMirrorEntry(supervisorState, event, maxTranscriptChars);
+        }
         notify();
         return;
       }
@@ -615,7 +693,11 @@ export function createAgentTuiStore(options: AgentTuiStoreOptions = {}): AgentTu
       appendTranscript(state, formatRawLineEvent(event), maxTranscriptChars);
       appendRawEntry(state, event, maxTranscriptChars);
       pushEventHistory(state, event, maxEventHistory);
+      if (supervisorState && shouldMirrorEventToSupervisor(event)) {
+        appendSupervisorMirrorEntry(supervisorState, event, maxTranscriptChars);
+      }
       notify();
+      return;
     },
     subscribe(listener) {
       listeners.add(listener);

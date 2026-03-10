@@ -110,6 +110,22 @@ test("AgentTuiStore tracks column hierarchy, summaries, and event history", () =
     kind: "status",
     text: 'Tool: helper.spawn {"mode":"plan"}',
   });
+  expect(columns[0]?.transcriptEntries.map((entry) => entry.kind)).toEqual([
+    "lifecycle",
+    "mirror",
+    "mirror",
+    "mirror",
+    "mirror",
+  ]);
+  const supervisorTranscript = buildAgentTuiRootComponentModel(snapshot, {
+    selectedColumnId: supervisor.id,
+    viewMode: "status",
+  }).columns.find((column) => column.id === supervisor.id)?.transcript;
+  expect(supervisorTranscript).toContain("[SESSION STARTED] Session started | /Users/dpeek/code/io");
+  expect(supervisorTranscript).toContain("[OPE-68] Session scheduled | ope-68 | /Users/dpeek/code/io/.io/tree/ope-68");
+  expect(supervisorTranscript).toContain("[OPE-68] Session started");
+  expect(supervisorTranscript).toContain("[OPE-68] Session started | /Users/dpeek/code/io/.io/tree/ope-68");
+  expect(supervisorTranscript).toContain('[OPE-68] Tool: helper.spawn {"mode":"plan"}');
 });
 
 test("buildAgentTuiRootComponentModel supports status-focused and raw-heavy transcript views", () => {
@@ -190,8 +206,8 @@ test("buildAgentTuiRootComponentModel supports status-focused and raw-heavy tran
   const rawTranscript = rawModel.columns.find((column) => column.id === worker.id)?.transcript ?? "";
 
   expect(statusTranscript).toContain("[COMMAND] $ git status --short --branch");
-  expect(statusTranscript).toContain("[CMD OUT x2]  M agent/src/runner/codex.ts");
-  expect(statusTranscript).toContain('[RAW stdout/jsonl x2] {"method":"turn/completed"}');
+  expect(statusTranscript).toContain("[CMD OUT x2] M agent/src/runner/codex.ts");
+  expect(statusTranscript).toContain("[RAW stdout/jsonl x2] turn/completed");
   expect(rawTranscript).toContain("[CMD OUT x2]");
   expect(rawTranscript).toContain("| ## main");
   expect(rawTranscript).toContain('jsonl: {"method":"thread/started"}');

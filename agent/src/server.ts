@@ -1,5 +1,6 @@
 import { createLogger, handleExit } from "@io/lib";
 
+import type { AgentSessionEvent, AgentSessionPhase } from "./session-events.js";
 import { AgentService } from "./service.js";
 import { AgentTuiRetainedReader } from "./tui-runtime.js";
 import { loadWorkflowFile } from "./workflow.js";
@@ -33,6 +34,20 @@ type RetainedTuiCommandOptions = {
   mode: "attach" | "replay";
   workflowPath?: string;
 };
+
+const TERMINAL_SESSION_PHASES = new Set<AgentSessionPhase>(["completed", "failed", "stopped"]);
+
+export function isTerminalSessionPhase(phase: AgentSessionPhase) {
+  return TERMINAL_SESSION_PHASES.has(phase);
+}
+
+export function isCompletedRetainedSessionEvent(event: AgentSessionEvent, sessionId: string) {
+  return (
+    event.type === "session" &&
+    event.session.id === sessionId &&
+    isTerminalSessionPhase(event.phase)
+  );
+}
 
 function parseStartOptions(args: string[]): StartCommandOptions {
   const options: StartCommandOptions = { once: false };
@@ -164,6 +179,10 @@ async function runRetainedTui(options: RetainedTuiCommandOptions) {
   let active = true;
   let interval: ReturnType<typeof setInterval> | undefined;
   let reading = false;
+  let resolveExited: (() => void) | undefined;
+  const exited = new Promise<void>((resolve) => {
+    resolveExited = resolve;
+  });
 
   const stop = async () => {
     if (!active) {
@@ -174,7 +193,15 @@ async function runRetainedTui(options: RetainedTuiCommandOptions) {
       clearInterval(interval);
       interval = undefined;
     }
-    tui.stop();
+    await tui.stop();
+    resolveExited?.();
+  };
+
+  const observe = (event: AgentSessionEvent) => {
+    tui.observe(event);
+    if (options.mode === "attach" && isCompletedRetainedSessionEvent(event, reader.workerSession.id)) {
+      void stop();
+    }
   };
 
   handleExit(stop);
@@ -186,47 +213,55 @@ async function runRetainedTui(options: RetainedTuiCommandOptions) {
       if (!active) {
         return;
       }
-      tui.observe(event);
+      observe(event);
       if ((options.delayMs ?? 0) > 0) {
         await sleep(options.delayMs ?? 0);
       }
     }
-    tui.observe(reader.createReplayCompletedEvent());
+    observe(reader.createReplayCompletedEvent());
     interval = setInterval(() => undefined, 60_000);
   } else {
     for (const event of initialEvents) {
-      tui.observe(event);
-    }
-    interval = setInterval(() => {
-      if (!active || reading) {
-        return;
+      observe(event);
+      if (!active) {
+        break;
       }
-      reading = true;
-      void reader
-        .readNextEvents()
-        .then((events) => {
-          for (const event of events) {
-            tui.observe(event);
-          }
-        })
-        .catch((error) => {
-          tui.observe({
-            code: "error",
-            format: "line",
-            sequence: Number.MAX_SAFE_INTEGER,
-            session: reader.supervisorSession,
-            text: error instanceof Error ? error.message : String(error),
-            timestamp: new Date().toISOString(),
-            type: "status",
+    }
+    if (active) {
+      interval = setInterval(() => {
+        if (!active || reading) {
+          return;
+        }
+        reading = true;
+        void reader
+          .readNextEvents()
+          .then((events) => {
+            for (const event of events) {
+              observe(event);
+              if (!active) {
+                break;
+              }
+            }
+          })
+          .catch((error) => {
+            observe({
+              code: "error",
+              format: "line",
+              sequence: Number.MAX_SAFE_INTEGER,
+              session: reader.supervisorSession,
+              text: error instanceof Error ? error.message : String(error),
+              timestamp: new Date().toISOString(),
+              type: "status",
+            });
+          })
+          .finally(() => {
+            reading = false;
           });
-        })
-        .finally(() => {
-          reading = false;
-        });
-    }, 250);
+      }, 250);
+    }
   }
 
-  await waitForever();
+  await (options.mode === "attach" ? exited : waitForever());
 }
 
 export async function runAgentCli(args: string[]) {

@@ -279,6 +279,62 @@ function formatAgentMessageEntry(entry: Extract<AgentTuiTranscriptEntry, { kind:
   return entry.text.trimEnd().split("\n");
 }
 
+function truncateSummary(text: string, maxChars = 120) {
+  const compact = text.replace(/\s+/g, " ").trim();
+  if (compact.length <= maxChars) {
+    return compact;
+  }
+  return `${compact.slice(0, Math.max(0, maxChars - 3))}...`;
+}
+
+function summarizeJsonLine(line: string) {
+  try {
+    const parsed = JSON.parse(line) as {
+      method?: unknown;
+      params?: unknown;
+    };
+    if (!parsed || typeof parsed !== "object") {
+      return undefined;
+    }
+    if (typeof parsed.method !== "string") {
+      return undefined;
+    }
+    if (parsed.method === "item/started") {
+      const params =
+        parsed.params && typeof parsed.params === "object"
+          ? (parsed.params as { item?: { type?: unknown } })
+          : undefined;
+      const itemType = params?.item?.type;
+      return typeof itemType === "string" ? `${parsed.method} ${itemType}` : parsed.method;
+    }
+    if (parsed.method === "item/completed") {
+      const params =
+        parsed.params && typeof parsed.params === "object"
+          ? (parsed.params as {
+              item?: { exitCode?: unknown; status?: unknown; type?: unknown };
+            })
+          : undefined;
+      const itemType = params?.item?.type;
+      const status = params?.item?.status;
+      const exitCode = params?.item?.exitCode;
+      const parts = [parsed.method];
+      if (typeof itemType === "string") {
+        parts.push(itemType);
+      }
+      if (typeof status === "string") {
+        parts.push(status);
+      }
+      if (typeof exitCode === "number") {
+        parts.push(`exit=${exitCode}`);
+      }
+      return parts.join(" ");
+    }
+    return parsed.method;
+  } catch {
+    return undefined;
+  }
+}
+
 function formatCommandOutputEntry(
   entry: Extract<AgentTuiTranscriptEntry, { kind: "command-output" }>,
   viewMode: AgentTuiViewMode,
@@ -288,7 +344,7 @@ function formatCommandOutputEntry(
   }
   if (viewMode === "status") {
     const preview = entry.lines.at(-1) ?? entry.lines[0] ?? "";
-    return [`[CMD OUT x${entry.count}] ${preview}`];
+    return [`[CMD OUT x${entry.count}] ${truncateSummary(preview)}`];
   }
   return [`[CMD OUT x${entry.count}]`, ...entry.lines.map((line) => `| ${line}`)];
 }
@@ -300,10 +356,16 @@ function formatRawEntry(
   const label = `RAW ${entry.stream}/${entry.encoding} x${entry.count}`;
   if (viewMode === "status") {
     const preview = entry.lines.at(-1) ?? entry.lines[0] ?? "";
-    return preview ? [`[${label}] ${preview}`] : [`[${label}]`];
+    const summarized =
+      entry.encoding === "jsonl" ? summarizeJsonLine(preview) ?? truncateSummary(preview) : truncateSummary(preview);
+    return summarized ? [`[${label}] ${summarized}`] : [`[${label}]`];
   }
   const prefix = entry.encoding === "jsonl" ? "jsonl" : entry.stream;
   return [`[${label}]`, ...entry.lines.map((line) => `${prefix}: ${line}`)];
+}
+
+function formatMirrorEntry(entry: Extract<AgentTuiTranscriptEntry, { kind: "mirror" }>) {
+  return [entry.text];
 }
 
 function formatTranscript(
@@ -326,6 +388,8 @@ function formatTranscript(
         return formatAgentMessageEntry(entry);
       case "command-output":
         return formatCommandOutputEntry(entry, viewMode);
+      case "mirror":
+        return formatMirrorEntry(entry);
       case "raw":
         return formatRawEntry(entry, viewMode);
     }

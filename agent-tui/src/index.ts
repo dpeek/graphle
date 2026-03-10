@@ -40,6 +40,7 @@ export type {
   AgentTuiCommandOutputEntry,
   AgentTuiEventRecord,
   AgentTuiLifecycleEntry,
+  AgentTuiMirrorEntry,
   AgentTuiRawEntry,
   AgentTuiSessionSnapshot,
   AgentTuiSnapshot,
