@@ -49,6 +49,11 @@ function collectShapeNodes(tree: SchemaTree): Array<{ id: string; key: string }>
   return out;
 }
 
+function assertCurrentFactOnce(store: Store, subjectId: string, predicateId: string, objectId: string): void {
+  if (store.facts(subjectId, predicateId, objectId).length > 0) return;
+  store.assert(subjectId, predicateId, objectId);
+}
+
 export function bootstrap(store: Store, types: Record<string, AnyTypeOutput> = core): void {
   const entities = Object.values(types).filter(isEntityType);
   const enums = Object.values(types).filter(isEnumType);
@@ -71,41 +76,43 @@ export function bootstrap(store: Store, types: Record<string, AnyTypeOutput> = c
 
   for (const typeDef of Object.values(types)) {
     const subjectId = typeId(typeDef);
-    store.assert(subjectId, keyPredicateId, typeDef.values.key);
-    if (typeDef.values.name) store.assert(subjectId, namePredicateId, typeDef.values.name);
-    store.assert(subjectId, nodeTypePredicateId, schemaTypeId);
+    assertCurrentFactOnce(store, subjectId, keyPredicateId, typeDef.values.key);
+    if (typeDef.values.name) {
+      assertCurrentFactOnce(store, subjectId, namePredicateId, typeDef.values.name);
+    }
+    assertCurrentFactOnce(store, subjectId, nodeTypePredicateId, schemaTypeId);
   }
 
   for (const shape of allShapes) {
-    store.assert(shape.id, keyPredicateId, shape.key);
+    assertCurrentFactOnce(store, shape.id, keyPredicateId, shape.key);
   }
 
   for (const predicateDef of allPredicates) {
     const predicateId = edgeId(predicateDef);
-    store.assert(predicateId, keyPredicateId, predicateDef.key);
-    store.assert(predicateId, namePredicateId, predicateDef.key);
-    store.assert(predicateId, rangePredicateId, predicateDef.range);
+    assertCurrentFactOnce(store, predicateId, keyPredicateId, predicateDef.key);
+    assertCurrentFactOnce(store, predicateId, namePredicateId, predicateDef.key);
+    assertCurrentFactOnce(store, predicateId, rangePredicateId, predicateDef.range);
     const cardinalityValueId = cardinalityValueByLiteral[predicateDef.cardinality];
     if (!cardinalityValueId) {
       throw new Error(
         `Unknown cardinality "${predicateDef.cardinality}" for "${predicateDef.key}"`,
       );
     }
-    store.assert(predicateId, cardinalityPredicateId, cardinalityValueId);
-    store.assert(predicateId, nodeTypePredicateId, predicateTypeId);
+    assertCurrentFactOnce(store, predicateId, cardinalityPredicateId, cardinalityValueId);
+    assertCurrentFactOnce(store, predicateId, nodeTypePredicateId, predicateTypeId);
   }
 
   for (const enumDef of enums) {
     const enumId = typeId(enumDef);
     for (const option of Object.values(enumDef.options)) {
       const optionId = option.id ?? option.key;
-      store.assert(optionId, keyPredicateId, option.key);
-      if (option.name) store.assert(optionId, namePredicateId, option.name);
+      assertCurrentFactOnce(store, optionId, keyPredicateId, option.key);
+      if (option.name) assertCurrentFactOnce(store, optionId, namePredicateId, option.name);
       if (option.description) {
-        store.assert(optionId, descriptionPredicateId, option.description);
+        assertCurrentFactOnce(store, optionId, descriptionPredicateId, option.description);
       }
-      store.assert(optionId, nodeTypePredicateId, schemaTypeId);
-      store.assert(enumId, enumMemberPredicateId, optionId);
+      assertCurrentFactOnce(store, optionId, nodeTypePredicateId, schemaTypeId);
+      assertCurrentFactOnce(store, enumId, enumMemberPredicateId, optionId);
     }
   }
 }

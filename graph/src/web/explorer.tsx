@@ -14,11 +14,14 @@ import {
   createExampleRuntime,
   createTypeClient,
   edgeId,
+  formatValidationPath,
+  GraphValidationError,
   isEntityType,
   isFieldGroupRef,
   type AnyTypeOutput,
   type Cardinality,
   type EntityRef,
+  type GraphMutationValidationResult,
   type NamespaceClient,
   type PredicateRef,
   type Store,
@@ -26,6 +29,7 @@ import {
 } from "#graph";
 
 import { PredicateFieldEditor, formatPredicateValue, usePredicateField } from "./bindings.js";
+import { performValidatedMutation } from "./mutation-validation.js";
 import { defaultWebFieldResolver } from "./resolver.js";
 
 const explorerNamespace = { ...core, ...app };
@@ -39,6 +43,12 @@ type AnyPredicateRef = PredicateRef<any, any>;
 type MutableOptionalPredicateRef = AnyPredicateRef & {
   clear(): void;
   set(value: unknown): void;
+  validateClear(): GraphMutationValidationResult;
+  validateSet(value: unknown): GraphMutationValidationResult;
+};
+type MutationCallbacks = {
+  onMutationError?: (error: unknown) => void;
+  onMutationSuccess?: () => void;
 };
 
 type DefinitionFieldEntry = {
@@ -99,6 +109,12 @@ type PredicateFieldEntry = {
 type FieldStatus = {
   label: string;
   tone: "empty" | "missing" | "present";
+};
+type FieldValidationMessage = {
+  id: string;
+  message: string;
+  pathLabel: string;
+  source: string;
 };
 
 const keyPredicateId = edgeId(core.predicate.fields.key);
@@ -423,6 +439,24 @@ function statusBadgeClass(status: FieldStatus["tone"]): string {
   return "border-emerald-500/30 bg-emerald-500/10 text-emerald-200";
 }
 
+function collectFieldValidationMessages(
+  error: unknown,
+  predicate: AnyPredicateRef,
+): FieldValidationMessage[] {
+  if (!(error instanceof GraphValidationError)) return [];
+  const relevant = error.result.issues.filter(
+    (issue) => issue.nodeId === predicate.subjectId && issue.predicateKey === predicate.field.key,
+  );
+  const issues = relevant.length > 0 ? relevant : error.result.issues;
+
+  return issues.map((issue, index) => ({
+    id: `${issue.nodeId}:${issue.predicateKey}:${issue.code}:${index}`,
+    message: issue.message,
+    pathLabel: formatValidationPath(issue.path),
+    source: issue.source,
+  }));
+}
+
 function checkToneClass(state: "aligned" | "drifted" | "missing"): string {
   if (state === "aligned") return "border-emerald-500/30 bg-emerald-500/10 text-emerald-200";
   if (state === "drifted") return "border-amber-500/30 bg-amber-500/10 text-amber-200";
@@ -565,7 +599,7 @@ function PredicateRow({
   title,
   typeKeyById,
 }: {
-  customEditor?: ReactNode;
+  customEditor?: (callbacks: MutationCallbacks) => ReactNode;
   pathLabel: string;
   predicate: AnyPredicateRef;
   title?: string;
@@ -575,11 +609,25 @@ function PredicateRow({
   const status = describePredicateValue(predicate, binding.value);
   const editorResolution = defaultWebFieldResolver.resolveEditor(predicate);
   const isEditable = customEditor !== undefined || editorResolution.status === "resolved";
+  const [validationMessages, setValidationMessages] = useState<FieldValidationMessage[]>([]);
+
+  useEffect(() => {
+    setValidationMessages([]);
+  }, [binding.value]);
+
+  function handleMutationError(error: unknown): void {
+    setValidationMessages(collectFieldValidationMessages(error, predicate));
+  }
+
+  function handleMutationSuccess(): void {
+    setValidationMessages([]);
+  }
 
   return (
     <div
       className="rounded-2xl border border-slate-800 bg-slate-950/80 p-3"
       data-explorer-field-path={pathLabel}
+      data-explorer-field-validation-state={validationMessages.length > 0 ? "invalid" : "valid"}
       data-explorer-field-state={status.tone}
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -609,14 +657,46 @@ function PredicateRow({
       </div>
 
       <div className="mt-3">
-        {customEditor ?? (
+        {customEditor?.({
+          onMutationError: handleMutationError,
+          onMutationSuccess: handleMutationSuccess,
+        }) ?? (
           isEditable ? (
-            <PredicateFieldEditor predicate={predicate} />
+            <PredicateFieldEditor
+              onMutationError={handleMutationError}
+              onMutationSuccess={handleMutationSuccess}
+              predicate={predicate}
+            />
           ) : (
             <PredicateValuePreview predicate={predicate} typeKeyById={typeKeyById} />
           )
         )}
       </div>
+
+      {validationMessages.length > 0 ? (
+        <div
+          className="mt-3 rounded-2xl border border-rose-500/30 bg-rose-500/10 p-3 text-sm text-rose-100"
+          data-explorer-field-validation={pathLabel}
+        >
+          <div className="mb-2 text-xs font-medium uppercase tracking-[0.16em] text-rose-200">
+            Validation
+          </div>
+          <div className="space-y-2">
+            {validationMessages.map((issue) => (
+              <div
+                className="flex flex-wrap items-start gap-2"
+                data-explorer-field-validation-message={issue.pathLabel || pathLabel}
+                key={issue.id}
+              >
+                <Badge className="border-rose-400/30 bg-rose-400/10 text-rose-100">
+                  {issue.source}
+                </Badge>
+                <span>{issue.message}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
 
       <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-slate-500">
         <code>{predicate.field.key}</code>
@@ -797,9 +877,13 @@ function PredicateListItem({
 }
 
 function PredicateRangeEditor({
+  onMutationError,
+  onMutationSuccess,
   options,
   predicate,
 }: {
+  onMutationError?: (error: unknown) => void;
+  onMutationSuccess?: () => void;
   options: readonly TypeCatalogEntry[];
   predicate: MutableOptionalPredicateRef;
 }) {
@@ -814,10 +898,24 @@ function PredicateRangeEditor({
       onChange={(event) => {
         const nextValue = event.target.value;
         if (nextValue.length === 0) {
-          predicate.clear();
+          performValidatedMutation(
+            { onMutationError, onMutationSuccess },
+            () => predicate.validateClear(),
+            () => {
+              predicate.clear();
+              return true;
+            },
+          );
           return;
         }
-        predicate.set(nextValue);
+        performValidatedMutation(
+          { onMutationError, onMutationSuccess },
+          () => predicate.validateSet(nextValue),
+          () => {
+            predicate.set(nextValue);
+            return true;
+          },
+        );
       }}
       value={selectedId}
     >
@@ -1093,7 +1191,14 @@ function PredicateInspector({
             typeKeyById={typeKeyById}
           />
           <PredicateRow
-            customEditor={<PredicateRangeEditor options={typeEntries} predicate={fields.range} />}
+            customEditor={({ onMutationError, onMutationSuccess }) => (
+              <PredicateRangeEditor
+                onMutationError={onMutationError}
+                onMutationSuccess={onMutationSuccess}
+                options={typeEntries}
+                predicate={fields.range}
+              />
+            )}
             pathLabel="metadata.range"
             predicate={fields.range}
             title="Range"
@@ -1189,7 +1294,7 @@ export function Explorer({ runtime }: { runtime?: ExplorerRuntime }) {
 
   const [section, setSection] = useState<ExplorerSection>("entities");
   const [selectedEntityTypeId, setSelectedEntityTypeId] = useState(() => typeId(app.company));
-  const [selectedEntityId, setSelectedEntityId] = useState(() => graphRuntime.ids.acme);
+  const [selectedEntityId, setSelectedEntityId] = useState(() => entityEntries[0]?.ids[0] ?? "");
   const [selectedTypeId, setSelectedTypeId] = useState(() => typeId(app.company));
   const [selectedPredicateId, setSelectedPredicateId] = useState(() => edgeId(app.company.fields.name));
   const [entityQuery, setEntityQuery] = useState("");
@@ -1438,5 +1543,15 @@ export function Explorer({ runtime }: { runtime?: ExplorerRuntime }) {
     </main>
   );
 }
+export function ExplorerSurface({
+  graph,
+  store,
+  sync,
+}: Pick<ExplorerRuntime, "graph" | "store" | "sync">) {
+  const fallbackRuntimeRef = useRef<ExplorerRuntime | null>(null);
+  if (!fallbackRuntimeRef.current) {
+    fallbackRuntimeRef.current = createExampleRuntime();
+  }
 
-export const ExplorerSurface = Explorer;
+  return <Explorer runtime={{ ...fallbackRuntimeRef.current, graph, store, sync }} />;
+}

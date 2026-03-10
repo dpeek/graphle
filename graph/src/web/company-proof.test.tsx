@@ -66,10 +66,21 @@ function readProofCounts(renderer: ReturnType<typeof create>) {
   ) as Record<string, number>;
 }
 
-function waitForInstrumentation() {
-  return new Promise((resolve) => {
-    setTimeout(resolve, 0);
-  });
+async function waitForInstrumentation(
+  renderer: ReturnType<typeof create>,
+  timeoutMs = 100,
+): Promise<void> {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < timeoutMs) {
+    await new Promise((resolve) => {
+      setTimeout(resolve, 5);
+    });
+    const lastCheck = renderer.root.find(
+      (node) => typeof node.props["data-proof-last-check"] === "string",
+    );
+    if (lastCheck.props["data-proof-last-check"] !== "pending") return;
+  }
+  throw new Error("Timed out waiting for proof instrumentation to settle.");
 }
 
 describe("company proof surface", () => {
@@ -174,7 +185,7 @@ describe("company proof surface", () => {
         },
       });
       removeCurrentEmployer.props.onClick();
-      await waitForInstrumentation();
+      await waitForInstrumentation(renderer!);
     });
 
     expect(company.fields.name.get()).toBe("Acme Labs");
@@ -227,7 +238,7 @@ describe("company proof surface", () => {
     await act(async () => {
       localityRow.props.onChangeCapture();
       localityInput.props.onChange({ target: { value: "Melbourne" } });
-      await waitForInstrumentation();
+      await waitForInstrumentation(renderer!);
     });
 
     const localityCounts = readProofCounts(renderer!);
@@ -257,7 +268,7 @@ describe("company proof surface", () => {
     await act(async () => {
       worksAtRow.props.onChangeCapture();
       worksAtToggle.props.onChange({ target: { checked: true } });
-      await waitForInstrumentation();
+      await waitForInstrumentation(renderer!);
     });
 
     const relationshipCounts = readProofCounts(renderer!);

@@ -33,6 +33,13 @@ const node = defineType({
     }),
     name: stringTypeModule.field({
       cardinality: "one",
+      validate: ({ value }) =>
+        typeof value === "string" && value.trim().length > 0
+          ? undefined
+          : {
+              code: "string.blank",
+              message: "Name must not be blank.",
+            },
       meta: {
         label: "Name",
       },

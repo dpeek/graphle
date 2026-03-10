@@ -13,6 +13,8 @@ export type PredicateFieldProps<
   Defs extends Record<string, AnyTypeOutput>,
 > = {
   predicate: PredicateRef<T, Defs>;
+  onMutationError?: (error: unknown) => void;
+  onMutationSuccess?: () => void;
 };
 
 export type PredicateFieldViewCapability<
@@ -169,12 +171,24 @@ export function PredicateFieldView<
 export function PredicateFieldEditor<
   T extends EdgeOutput,
   Defs extends Record<string, AnyTypeOutput>,
->({ fallback, predicate, resolver = defaultWebFieldResolver }: PredicateFieldEditorProps<T, Defs>) {
+>({
+  fallback,
+  onMutationError,
+  onMutationSuccess,
+  predicate,
+  resolver = defaultWebFieldResolver,
+}: PredicateFieldEditorProps<T, Defs>) {
   const resolution = resolver.resolveEditor(predicate);
   if (resolution.status === "unsupported") {
     const Fallback = fallback ?? UnsupportedField;
     return <Fallback kind={resolution.kind} reason={resolution.reason} />;
   }
   const Component = resolution.capability.Component;
-  return <Component predicate={predicate} />;
+  return (
+    <Component
+      onMutationError={onMutationError}
+      onMutationSuccess={onMutationSuccess}
+      predicate={predicate}
+    />
+  );
 }

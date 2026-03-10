@@ -4,7 +4,12 @@ import { act, create } from "react-test-renderer";
 
 import { app } from "../graph/app.js";
 import { bootstrap } from "../graph/bootstrap.js";
-import { createTypeClient, fieldGroupPath, type FieldGroupRef } from "../graph/client.js";
+import {
+  GraphValidationError,
+  createTypeClient,
+  fieldGroupPath,
+  type FieldGroupRef,
+} from "../graph/client.js";
 import { core } from "../graph/core.js";
 import { createStore } from "../graph/store.js";
 import {
@@ -136,6 +141,107 @@ describe("web predicate bindings", () => {
 
     expect(nameRef.get()).toBe("Acme!");
     expect(renderer?.root.findByType("button").children).toEqual(["Acme!"]);
+
+    act(() => {
+      renderer?.unmount();
+    });
+  });
+
+  it("preflights generic editor mutations before calling typed predicate mutators", () => {
+    const { graph, companyId } = setupGraph();
+    const nameRef = graph.company.ref(companyId).fields.name;
+    const instrumented = nameRef as typeof nameRef & {
+      set(nextValue: string): void;
+      validateSet(nextValue: string): ReturnType<typeof nameRef.validateSet>;
+    };
+    const originalSet = instrumented.set.bind(instrumented);
+    const originalValidateSet = instrumented.validateSet.bind(instrumented);
+    let setCalls = 0;
+    let validateCalls = 0;
+    let reportedError: unknown;
+
+    instrumented.set = (nextValue: string) => {
+      setCalls += 1;
+      originalSet(nextValue);
+    };
+    instrumented.validateSet = (nextValue: string) => {
+      validateCalls += 1;
+      return originalValidateSet(nextValue);
+    };
+
+    let renderer: ReturnType<typeof create> | undefined;
+    act(() => {
+      renderer = create(
+        <PredicateFieldEditor
+          onMutationError={(error) => {
+            reportedError = error;
+          }}
+          predicate={instrumented}
+        />,
+      );
+    });
+
+    const input = renderer?.root.findByProps({ "data-web-field-kind": "text" });
+
+    act(() => {
+      input?.props.onChange({ target: { value: "   " } });
+    });
+
+    expect(validateCalls).toBe(1);
+    expect(setCalls).toBe(0);
+    expect(nameRef.get()).toBe("Acme");
+    expect(reportedError).toBeInstanceOf(GraphValidationError);
+    expect((reportedError as GraphValidationError<Record<string, unknown>>).result).toMatchObject({
+      ok: false,
+      phase: "local",
+      event: "update",
+    });
+
+    act(() => {
+      renderer?.unmount();
+    });
+  });
+
+  it("surfaces shared validation errors when required generic editors are cleared", () => {
+    const { graph, companyId } = setupGraph();
+    const websiteRef = graph.company.ref(companyId).fields.website;
+    const initialWebsite = websiteRef.get().toString();
+    let reportedError: unknown;
+
+    let renderer: ReturnType<typeof create> | undefined;
+    act(() => {
+      renderer = create(
+        <PredicateFieldEditor
+          onMutationError={(error) => {
+            reportedError = error;
+          }}
+          predicate={websiteRef}
+        />,
+      );
+    });
+
+    const input = renderer?.root.findByProps({ "data-web-field-kind": "url" });
+
+    act(() => {
+      input?.props.onChange({ target: { value: "" } });
+    });
+
+    expect(websiteRef.get().toString()).toBe(initialWebsite);
+    expect(renderer?.root.findByProps({ "data-web-field-kind": "url" }).props["aria-invalid"]).toBe(
+      true,
+    );
+    expect(reportedError).toBeInstanceOf(GraphValidationError);
+    expect((reportedError as GraphValidationError<Record<string, unknown>>).result).toMatchObject({
+      ok: false,
+      phase: "local",
+      event: "update",
+      issues: [
+        expect.objectContaining({
+          code: "field.required",
+          predicateKey: app.company.fields.website.key,
+        }),
+      ],
+    });
 
     act(() => {
       renderer?.unmount();

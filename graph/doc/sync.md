@@ -26,6 +26,61 @@ The high-level entry point is `createSyncedTypeClient(...)`.
 
 It creates a local store plus the existing typed client, then exposes a
 pre-bound `sync.sync()` method for the configured total-sync source.
+That fresh local store is bootstrapped with the local schema first, so typed
+reads and optimistic local edits can use the same validation boundary before
+the first authoritative sync arrives.
+That bootstrapped snapshot is also preserved at the total-sync apply boundary,
+so authoritative payloads may contain data only and still validate/apply
+against the same compiled schema contract.
+
+That typed `graph` client still runs local create/update/delete and predicate
+field edits through the same local validation precheck used by unsynced graph
+clients. The sync layer does not introduce a second optimistic-mutation API.
+
+Incoming total snapshots are now validated in two steps before the local store
+is replaced:
+
+1. validate the total-sync envelope itself (`mode`, `scope`, `cursor`,
+   `completeness`, `freshness`, and `snapshot` shape)
+2. validate the candidate graph facts against the same graph rules used by
+   local mutation
+
+Invalid authoritative payloads fail the sync attempt and leave the previous
+ready state intact.
+
+Accepted total snapshots are still authoritative replaces in v1. There is no
+pending local-op merge queue yet; the durable boundary is validation-before-
+replace.
+
+That authoritative pass now also rejects data-bearing nodes that have lost all
+current `core:node:type` edges, so sync cannot silently install untyped ghost
+entities into the local store.
+
+The shared apply boundary now lives in the total-sync session itself.
+
+- `createSyncedTypeClient(...)` wires
+  `createAuthoritativeTotalSyncValidator(namespace)` automatically.
+- Lower-level integrations can opt into the same behavior with
+  `createTotalSyncController(store, { pull, preserveSnapshot, validate: createAuthoritativeTotalSyncValidator(namespace) })`
+  or
+  `createTotalSyncSession(store, { preserveSnapshot, validate: createAuthoritativeTotalSyncValidator(namespace) })`.
+- Callers that need a structured `GraphValidationResult` instead of an
+  exception can call
+  `validateAuthoritativeTotalSyncPayload(payload, namespace, { preserveSnapshot })`.
+  Failed results carry the affected `changedPredicateKeys`; graph-fact failures
+  point at predicate slots, while malformed envelope failures surface runtime
+  issues at payload paths like `cursor` or `snapshot.retracted[0]`.
+  When envelope shape validation succeeds, `result.value` is the materialized
+  payload that graph validation actually checked, including any preserved
+  schema baseline.
+- `apply(...)` and `pull(...)` both run the same validation hook before store
+  replacement, so authoritative reconciliation is not split across wrappers.
+- Successful `apply(...)` and `pull(...)` calls return the materialized payload
+  that was actually validated and installed, including any preserved schema
+  baseline layered in at the apply boundary.
+- `preserveSnapshot` should usually be the store snapshot captured immediately
+  after local schema bootstrap. That keeps compiled schema facts durable across
+  authoritative replace without merging pending local data writes.
 
 For lower-level integration, `createTotalSyncSession(store)` still exposes:
 

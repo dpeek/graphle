@@ -4,6 +4,30 @@
 
 This evolves into a TypeScript-native data platform where application state, relationships, schema, and workflow metadata all live in one identity-stable graph model that runs in browser and server, syncs incrementally, and powers both app logic and UI generation. Developers get strongly typed APIs, local-first responsiveness, and a clear server authority model for security-sensitive logic, while teams gain a unified system for data modeling, querying, permissions, and tooling (Explorer/devtools) without stitching together ORM + cache + ad hoc sync + form frameworks.
 
+## Companion docs
+
+The concrete lifecycle and boundary contracts described here are currently
+documented in:
+
+- `graph/doc/validation.md`
+- `graph/doc/sync.md`
+
+## Validation boundary
+
+The first durable validation model is now one shared lifecycle rather than a
+set of per-caller checks.
+
+- Reusable value semantics live with scalar and enum definitions.
+- Predicate-specific invariants live with field definitions.
+- Store-dependent graph invariants stay centralized in the runtime validation
+  pass.
+- Local typed create/update/delete and predicate-field mutations preflight on a
+  cloned store before they touch the real store.
+- Authoritative total-sync payloads validate at the apply boundary before local
+  replacement.
+- Callers, explorer surfaces, and future sync flows consume the same
+  structured validation result surface.
+
 ## B) Differentiators / opportunity analysis
 
 ### Why this approach is different
@@ -214,7 +238,8 @@ Design goal: standardize the smallest set of durable primitives and keep higher-
 - **Schema/form generation**:
   - auto-generate forms from field metadata and constraints.
   - app can override per field/type with custom components.
-  - validation runs in three phases: client-precheck, server-authoritative, post-commit normalization.
+  - shipped v1 validation runs in two synchronous phases: local mutation precheck and authoritative reconcile at the sync/apply boundary.
+  - future async or server-only normalization can layer on top without changing the issue/error surface used by callers and explorer tooling.
 - **Granular subscriptions**:
   - key on `(nodeId, predicateId)` and query dependency sets.
   - React updates only affected leaf components.

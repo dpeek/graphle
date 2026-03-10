@@ -1,4 +1,5 @@
 import { core } from "./core";
+import { createGraphId } from "./id";
 import {
   edgeId,
   fieldTreeId,
@@ -17,8 +18,11 @@ import type {
   FieldsOutput,
   ScalarTypeOutput,
   TypeOutput,
+  ValidationEvent,
+  ValidationIssueInput,
+  ValidationPhase,
 } from "./schema";
-import type { PredicateSlotListener, Store } from "./store";
+import { createStore, type PredicateSlotListener, type Store } from "./store";
 
 type TypeByKey<Defs extends Record<string, AnyTypeOutput>, K extends string> = Extract<
   Defs[keyof Defs],
@@ -124,6 +128,58 @@ export function fieldGroupSubjectId(group: FieldGroupLike): string {
   return group[fieldGroupMeta].subjectId;
 }
 
+export type GraphValidationSource = "runtime" | "field" | "type";
+export type GraphValidationIssue = {
+  code: string;
+  message: string;
+  source: GraphValidationSource;
+  path: readonly string[];
+  predicateKey: string;
+  nodeId: string;
+};
+export type GraphValidationResult<T = unknown> =
+  | {
+      ok: true;
+      phase: ValidationPhase;
+      event: ValidationEvent;
+      value: T;
+      changedPredicateKeys: readonly string[];
+    }
+  | {
+      ok: false;
+      phase: ValidationPhase;
+      event: ValidationEvent;
+      value: T;
+      changedPredicateKeys: readonly string[];
+      issues: readonly GraphValidationIssue[];
+    };
+export type GraphMutationValidationResult = GraphValidationResult<Record<string, unknown>>;
+export type GraphDeleteValidationResult = GraphValidationResult<string>;
+
+export class GraphValidationError<T = unknown> extends Error {
+  readonly result: Extract<GraphValidationResult<T>, { ok: false }>;
+
+  constructor(result: Extract<GraphValidationResult<T>, { ok: false }>) {
+    const publicResult = exposeValidationResult(result) as Extract<
+      GraphValidationResult<T>,
+      { ok: false }
+    >;
+    const firstIssue = publicResult.issues[0];
+    const fieldPath = firstIssue ? formatValidationPath(firstIssue.path) : "";
+    super(
+      firstIssue
+        ? `Validation failed for "${fieldPath || firstIssue.predicateKey}": ${firstIssue.message}`
+        : "Validation failed.",
+    );
+    this.name = "GraphValidationError";
+    this.result = publicResult;
+  }
+}
+
+export function formatValidationPath(path: readonly string[]): string {
+  return path.join(".");
+}
+
 export type EntityOfType<
   T extends TypeOutput,
   Defs extends Record<string, AnyTypeOutput> = CoreDefs,
@@ -185,17 +241,24 @@ export type PredicateRef<
 } & (T["cardinality"] extends "many"
   ? {
       collection: PredicateCollectionSemantics;
+      validateReplace(values: PredicateValueOf<T, Defs>): GraphMutationValidationResult;
       replace(values: PredicateValueOf<T, Defs>): void;
+      validateAdd(value: PredicateItemOf<T, Defs>): GraphMutationValidationResult;
       add(value: PredicateItemOf<T, Defs>): void;
+      validateRemove(value: PredicateItemOf<T, Defs>): GraphMutationValidationResult;
       remove(value: PredicateItemOf<T, Defs>): void;
+      validateClear(): GraphMutationValidationResult;
       clear(): void;
     }
   : T["cardinality"] extends "one?"
     ? {
+        validateSet(value: PredicateSetValueOf<T, Defs>): GraphMutationValidationResult;
         set(value: PredicateSetValueOf<T, Defs>): void;
+        validateClear(): GraphMutationValidationResult;
         clear(): void;
       }
     : {
+        validateSet(value: PredicateValueOf<T, Defs>): GraphMutationValidationResult;
         set(value: PredicateValueOf<T, Defs>): void;
       });
 
@@ -207,7 +270,9 @@ export type EntityRef<
   type: T;
   fields: RefTree<T["fields"], Defs>;
   get(): EntityOfType<T, Defs>;
+  validateUpdate(patch: Partial<CreateInputOfType<T, Defs>>): GraphMutationValidationResult;
   update(patch: Partial<CreateInputOfType<T, Defs>>): EntityOfType<T, Defs>;
+  validateDelete(): GraphDeleteValidationResult;
   batch<TResult>(fn: () => TResult): TResult;
   delete(): void;
 };
@@ -336,6 +401,8 @@ type EncodedPredicateValue = {
   encoded: string;
   decoded: unknown;
 };
+const validationNowByStore = new WeakMap<Store, { version: number; now: Date }>();
+const validationCreateNodeIdByStore = new WeakMap<Store, { version: number; nodeId: string }>();
 
 function isEdgeOutput(value: unknown): value is EdgeOutput {
   const candidate = value as Partial<EdgeOutput>;
@@ -349,6 +416,51 @@ function isTree(value: unknown): value is FieldsOutput {
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   if (!value || typeof value !== "object") return false;
   return Object.getPrototypeOf(value) === Object.prototype;
+}
+
+function cloneDate(value: Date): Date {
+  return new Date(value.getTime());
+}
+
+function getStableValidationNow(store: Store): Date {
+  const version = store.version();
+  const cached = validationNowByStore.get(store);
+  if (cached?.version === version) return cloneDate(cached.now);
+
+  const now = new Date();
+  validationNowByStore.set(store, { version, now });
+  return cloneDate(now);
+}
+
+function collectUsedIds(store: Store): Set<string> {
+  const snapshot = store.snapshot();
+  const usedIds = new Set<string>(snapshot.retracted);
+
+  for (const edge of snapshot.edges) {
+    usedIds.add(edge.id);
+    usedIds.add(edge.s);
+    usedIds.add(edge.p);
+    usedIds.add(edge.o);
+  }
+
+  return usedIds;
+}
+
+function createUnusedNodeId(store: Store): string {
+  const usedIds = collectUsedIds(store);
+  let nodeId = createGraphId();
+  while (usedIds.has(nodeId)) nodeId = createGraphId();
+  return nodeId;
+}
+
+function getStableCreateNodeId(store: Store): string {
+  const version = store.version();
+  const cached = validationCreateNodeIdByStore.get(store);
+  if (cached?.version === version) return cached.nodeId;
+
+  const nodeId = createUnusedNodeId(store);
+  validationCreateNodeIdByStore.set(store, { version, nodeId });
+  return nodeId;
 }
 
 function sameLogicalValue(left: unknown, right: unknown): boolean {
@@ -442,6 +554,17 @@ function setNestedValue(
   current[field] = value;
 }
 
+function deleteNestedValue(obj: Record<string, unknown>, path: string[], field: string): void {
+  let current: Record<string, unknown> | undefined = obj;
+  for (const part of path) {
+    const next = current?.[part];
+    if (!next || typeof next !== "object") return;
+    current = next as Record<string, unknown>;
+  }
+  if (!current) return;
+  delete current[field];
+}
+
 function cloneInput<T>(input: T): T {
   function cloneValue(value: unknown): unknown {
     if (Array.isArray(value)) return value.map((item) => cloneValue(item));
@@ -455,6 +578,52 @@ function cloneInput<T>(input: T): T {
   }
 
   return cloneValue(input) as T;
+}
+
+function clonePublicValidationValue<T>(value: T): T {
+  function cloneValue(candidate: unknown): unknown {
+    if (candidate === clearFieldValue) return undefined;
+    if (Array.isArray(candidate)) return candidate.map((item) => cloneValue(item));
+    if (candidate instanceof Date) return new Date(candidate.getTime());
+    if (candidate instanceof URL) return new URL(candidate.toString());
+    if (!candidate || typeof candidate !== "object") return candidate;
+    if (Object.getPrototypeOf(candidate) !== Object.prototype) return candidate;
+    const out: Record<string, unknown> = {};
+    for (const [key, nested] of Object.entries(candidate)) out[key] = cloneValue(nested);
+    return out;
+  }
+
+  return cloneValue(value) as T;
+}
+
+function cloneValidationIssue(issue: GraphValidationIssue): GraphValidationIssue {
+  return {
+    ...issue,
+    path: Object.freeze([...issue.path]),
+  };
+}
+
+function exposeValidationResult<T>(result: GraphValidationResult<T>): GraphValidationResult<T> {
+  if (result.ok) {
+    return {
+      ...result,
+      value: clonePublicValidationValue(result.value),
+      changedPredicateKeys: [...result.changedPredicateKeys],
+    };
+  }
+
+  return {
+    ...result,
+    value: clonePublicValidationValue(result.value),
+    changedPredicateKeys: [...result.changedPredicateKeys],
+    issues: result.issues.map((issue) => cloneValidationIssue(issue)),
+  };
+}
+
+function exposeMutationValidationResult(
+  result: GraphMutationValidationResult,
+): GraphMutationValidationResult {
+  return exposeValidationResult(result) as GraphMutationValidationResult;
 }
 
 function collectChangedPredicateKeys(
@@ -477,7 +646,13 @@ function encodeForRange(
   enumValuesByRange: Map<string, Set<string>>,
 ): string {
   const scalarType = scalarByKey.get(range);
-  if (scalarType) return scalarType.encode(value);
+  if (scalarType) {
+    const encoded = scalarType.encode(value);
+    if (typeof encoded !== "string") {
+      throw new Error(`Expected scalar encoder for range "${range}" to return a string.`);
+    }
+    return encoded;
+  }
 
   const rangeType = typeByKey.get(range);
   const enumValues = enumValuesByRange.get(range);
@@ -632,6 +807,653 @@ function removeManyValue(
   return current.filter((_, currentIndex) => currentIndex !== index);
 }
 
+function collectionItemPassesValidation(
+  store: Store,
+  nodeId: string,
+  predicate: EdgeOutput,
+  value: unknown,
+  now: Date,
+  scalarByKey: Map<string, ScalarTypeOutput<any>>,
+  typeByKey: Map<string, AnyTypeOutput>,
+  enumValuesByRange: Map<string, Set<string>>,
+): boolean {
+  try {
+    const encoded = encodeForRange(value, predicate.range, scalarByKey, typeByKey, enumValuesByRange);
+    const decoded = decodeForRange(encoded, predicate.range, scalarByKey, typeByKey);
+    const issues: GraphValidationIssue[] = [];
+    const entry: FlatPredicateEntry = {
+      path: [],
+      field: predicate.key,
+      predicate,
+    };
+    const changedPredicateKeys = new Set<string>([predicate.key]);
+
+    validateScalarValue(
+      issues,
+      entry,
+      nodeId,
+      decoded,
+      undefined,
+      "local",
+      "update",
+      now,
+      changedPredicateKeys,
+      scalarByKey,
+    );
+    validateEntityReferenceValue(issues, entry, nodeId, decoded, store, typeByKey);
+
+    return issues.length === 0;
+  } catch {
+    return false;
+  }
+}
+
+function planManyRemoveMutation(
+  store: Store,
+  subjectId: string,
+  predicate: EdgeOutput,
+  currentValues: unknown[],
+  value: unknown,
+  scalarByKey: Map<string, ScalarTypeOutput<any>>,
+  typeByKey: Map<string, AnyTypeOutput>,
+  enumValuesByRange: Map<string, Set<string>>,
+): {
+  nextValues: unknown[];
+  validationValues: unknown[];
+} {
+  const now = getStableValidationNow(store);
+  const isValidTarget = collectionItemPassesValidation(
+    store,
+    subjectId,
+    predicate,
+    value,
+    now,
+    scalarByKey,
+    typeByKey,
+    enumValuesByRange,
+  );
+
+  if (!isValidTarget) {
+    return {
+      nextValues: currentValues,
+      validationValues: [...currentValues, value],
+    };
+  }
+
+  const nextValues = removeManyValue(
+    currentValues,
+    predicate,
+    value,
+    scalarByKey,
+    typeByKey,
+    enumValuesByRange,
+  );
+
+  return {
+    nextValues,
+    validationValues: nextValues,
+  };
+}
+
+function normalizeValidationIssueInputs(
+  issues: ValidationIssueInput | ValidationIssueInput[] | void,
+): ValidationIssueInput[] {
+  if (!issues) return [];
+  return Array.isArray(issues) ? issues : [issues];
+}
+
+function createValidationIssue(
+  source: GraphValidationSource,
+  entry: FlatPredicateEntry,
+  nodeId: string,
+  issue: ValidationIssueInput,
+): GraphValidationIssue {
+  return {
+    ...issue,
+    source,
+    path: Object.freeze([...entry.path, entry.field]),
+    predicateKey: entry.predicate.key,
+    nodeId,
+  };
+}
+
+function appendValidationIssues(
+  issues: GraphValidationIssue[],
+  source: GraphValidationSource,
+  entry: FlatPredicateEntry,
+  nodeId: string,
+  input: ValidationIssueInput | ValidationIssueInput[] | void,
+): void {
+  for (const issue of normalizeValidationIssueInputs(input)) {
+    issues.push(createValidationIssue(source, entry, nodeId, issue));
+  }
+}
+
+function appendRuntimeValidationIssue(
+  issues: GraphValidationIssue[],
+  entry: FlatPredicateEntry,
+  nodeId: string,
+  code: string,
+  message: string,
+): void {
+  issues.push(createValidationIssue("runtime", entry, nodeId, { code, message }));
+}
+
+function asErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function enumValueIdsForRange(
+  range: string,
+  typeByKey: Map<string, AnyTypeOutput>,
+  enumValuesByRange: Map<string, Set<string>>,
+): Set<string> | undefined {
+  const knownIds = enumValuesByRange.get(range);
+  if (knownIds) return knownIds;
+
+  const rangeType = typeByKey.get(range);
+  if (!rangeType || !isEnumType(rangeType)) return undefined;
+
+  return new Set(Object.values(rangeType.options).map((option) => option.id ?? option.key));
+}
+
+function validateScalarValue(
+  issues: GraphValidationIssue[],
+  entry: FlatPredicateEntry,
+  nodeId: string,
+  value: unknown,
+  previous: unknown,
+  phase: ValidationPhase,
+  event: ValidationEvent,
+  now: Date,
+  changedPredicateKeys: ReadonlySet<string>,
+  scalarByKey: Map<string, ScalarTypeOutput<any>>,
+): void {
+  const scalarType = scalarByKey.get(entry.predicate.range);
+  if (!scalarType?.validate) return;
+  appendValidationIssues(
+    issues,
+    "type",
+    entry,
+    nodeId,
+    scalarType.validate({
+      event,
+      phase,
+      nodeId,
+      now,
+      path: Object.freeze([...entry.path, entry.field]),
+      predicateKey: entry.predicate.key,
+      range: entry.predicate.range,
+      value,
+      previous,
+      changedPredicateKeys,
+    }),
+  );
+}
+
+function validateEnumValue(
+  issues: GraphValidationIssue[],
+  entry: FlatPredicateEntry,
+  nodeId: string,
+  value: unknown,
+  typeByKey: Map<string, AnyTypeOutput>,
+  enumValuesByRange: Map<string, Set<string>>,
+): boolean {
+  const rangeType = typeByKey.get(entry.predicate.range);
+  const enumValueIds = enumValueIdsForRange(entry.predicate.range, typeByKey, enumValuesByRange);
+  if ((!rangeType || !isEnumType(rangeType)) && !enumValueIds) return true;
+
+  const fieldPath = formatValidationPath([...entry.path, entry.field]);
+  const enumName = rangeType?.values.name ?? rangeType?.values.key ?? entry.predicate.range;
+  const expectsMany = entry.predicate.cardinality === "many";
+  const values =
+    expectsMany && Array.isArray(value) ? value : [value];
+
+  if (values.some((item) => typeof item !== "string")) {
+    appendValidationIssues(issues, "type", entry, nodeId, {
+      code: "enum.valueType",
+      message: expectsMany
+        ? `Field "${fieldPath}" must use enum value id strings.`
+        : `Field "${fieldPath}" must use an enum value id string.`,
+    });
+    return false;
+  }
+
+  if (!values.every((item) => enumValueIds?.has(item))) {
+    appendValidationIssues(issues, "type", entry, nodeId, {
+      code: "enum.member",
+      message: expectsMany
+        ? `Field "${fieldPath}" must reference declared "${enumName}" values.`
+        : `Field "${fieldPath}" must reference a declared "${enumName}" value.`,
+    });
+    return false;
+  }
+
+  return true;
+}
+
+function appendInvalidValueIssue(
+  issues: GraphValidationIssue[],
+  entry: FlatPredicateEntry,
+  nodeId: string,
+  value: unknown,
+  error: unknown,
+  scalarByKey: Map<string, ScalarTypeOutput<any>>,
+  typeByKey: Map<string, AnyTypeOutput>,
+  enumValuesByRange: Map<string, Set<string>>,
+): void {
+  if (!validateEnumValue(issues, entry, nodeId, value, typeByKey, enumValuesByRange)) return;
+
+  const fieldPath = formatValidationPath([...entry.path, entry.field]);
+  const issue = {
+    code: "value.invalid",
+    message: `Field "${fieldPath}" is invalid: ${asErrorMessage(error)}`,
+  } satisfies ValidationIssueInput;
+
+  appendValidationIssues(
+    issues,
+    scalarByKey.has(entry.predicate.range) ? "type" : "runtime",
+    entry,
+    nodeId,
+    issue,
+  );
+}
+
+function validateFieldValue(
+  issues: GraphValidationIssue[],
+  entry: FlatPredicateEntry,
+  nodeId: string,
+  value: unknown,
+  previous: unknown,
+  phase: ValidationPhase,
+  event: ValidationEvent,
+  now: Date,
+  changedPredicateKeys: ReadonlySet<string>,
+): void {
+  if (!entry.predicate.validate) return;
+  appendValidationIssues(
+    issues,
+    "field",
+    entry,
+    nodeId,
+    entry.predicate.validate({
+      event,
+      phase,
+      nodeId,
+      now,
+      path: Object.freeze([...entry.path, entry.field]),
+      field: entry.field,
+      predicateKey: entry.predicate.key,
+      range: entry.predicate.range,
+      cardinality: entry.predicate.cardinality,
+      value,
+      previous,
+      changedPredicateKeys,
+    }),
+  );
+}
+
+function validateEntityReferenceValue(
+  issues: GraphValidationIssue[],
+  entry: FlatPredicateEntry,
+  nodeId: string,
+  value: unknown,
+  store: Store,
+  typeByKey: Map<string, AnyTypeOutput>,
+): void {
+  const rangeType = typeByKey.get(entry.predicate.range);
+  if (!rangeType || !isEntityType(rangeType)) return;
+
+  const fieldPath = formatValidationPath([...entry.path, entry.field]);
+  if (typeof value !== "string") {
+    appendRuntimeValidationIssue(
+      issues,
+      entry,
+      nodeId,
+      "reference.invalid",
+      `Field "${fieldPath}" must reference an entity id.`,
+    );
+    return;
+  }
+
+  const nodeTypePredicateId = edgeId(core.node.fields.type as EdgeOutput);
+  const targetTypeIds = new Set(
+    store.facts(value, nodeTypePredicateId).map((edge) => edge.o),
+  );
+
+  if (targetTypeIds.size === 0) {
+    appendRuntimeValidationIssue(
+      issues,
+      entry,
+      nodeId,
+      "reference.missing",
+      `Field "${fieldPath}" must reference an existing "${rangeType.values.name ?? rangeType.values.key}" entity.`,
+    );
+    return;
+  }
+
+  if (!targetTypeIds.has(typeId(rangeType))) {
+    appendRuntimeValidationIssue(
+      issues,
+      entry,
+      nodeId,
+      "reference.type",
+      `Field "${fieldPath}" must reference "${rangeType.values.name ?? rangeType.values.key}" entities.`,
+    );
+  }
+}
+
+function isManagedNodeTypeEntry(entry: FlatPredicateEntry): boolean {
+  return entry.path.length === 0 && entry.predicate.key === (core.node.fields.type as EdgeOutput).key;
+}
+
+function createNodeTypeValidationEntry(): FlatPredicateEntry {
+  return {
+    path: [],
+    field: "type",
+    predicate: core.node.fields.type as EdgeOutput,
+  };
+}
+
+function formatTypeDisplayName(typeDef: Pick<TypeOutput, "values">): string {
+  return typeDef.values.name ?? typeDef.values.key;
+}
+
+function appendManagedFieldMutationIssue<T extends TypeOutput>(
+  issues: GraphValidationIssue[],
+  entry: FlatPredicateEntry,
+  nodeId: string,
+  typeDef: T,
+): void {
+  const fieldPath = formatValidationPath([...entry.path, entry.field]);
+  appendRuntimeValidationIssue(
+    issues,
+    entry,
+    nodeId,
+    "field.managed",
+    `Field "${fieldPath}" is managed by the typed "${formatTypeDisplayName(typeDef)}" handle.`,
+  );
+}
+
+function validateNodeTypeState(
+  store: Store,
+  nodeId: string,
+  hasCurrentTypeFact: boolean,
+  typeByKey: Map<string, AnyTypeOutput>,
+): readonly GraphValidationIssue[] {
+  const issues: GraphValidationIssue[] = [];
+  const keyPredicateId = edgeId(core.predicate.fields.key as EdgeOutput);
+  const nodeTypePredicateId = edgeId(core.node.fields.type as EdgeOutput);
+  const typeEntry = createNodeTypeValidationEntry();
+
+  if (!hasCurrentTypeFact) {
+    const hasStructuredFacts = store
+      .facts(nodeId)
+      .some((edge) => edge.p !== keyPredicateId);
+    if (hasStructuredFacts) {
+      appendRuntimeValidationIssue(
+        issues,
+        typeEntry,
+        nodeId,
+        "type.required",
+        'Field "type" is required for nodes with stored data.',
+      );
+    }
+    return issues;
+  }
+
+  for (const typeValue of uniqueEncodedPredicateValues(
+    store
+      .facts(nodeId, nodeTypePredicateId)
+      .map((edge) => ({ encoded: edge.o, decoded: edge.o })),
+  )) {
+    validateEntityReferenceValue(issues, typeEntry, nodeId, typeValue.decoded, store, typeByKey);
+  }
+
+  return issues;
+}
+
+function validateTypedHandleTarget<T extends TypeOutput>(
+  store: Store,
+  nodeId: string,
+  typeDef: T,
+  typeByKey: Map<string, AnyTypeOutput>,
+): readonly GraphValidationIssue[] {
+  const issues: GraphValidationIssue[] = [];
+  const typeEntry = createNodeTypeValidationEntry();
+  const nodeFacts = store.facts(nodeId);
+
+  if (nodeFacts.length === 0) {
+    appendRuntimeValidationIssue(
+      issues,
+      typeEntry,
+      nodeId,
+      "node.missing",
+      `Typed "${formatTypeDisplayName(typeDef)}" handles require an existing node.`,
+    );
+    return issues;
+  }
+
+  const nodeTypePredicateId = edgeId(core.node.fields.type as EdgeOutput);
+  const currentTypeIds = new Set(
+    nodeFacts.filter((edge) => edge.p === nodeTypePredicateId).map((edge) => edge.o),
+  );
+
+  if (currentTypeIds.has(typeId(typeDef))) return issues;
+
+  if (currentTypeIds.size === 0) {
+    appendRuntimeValidationIssue(
+      issues,
+      typeEntry,
+      nodeId,
+      "type.required",
+      `Node "${nodeId}" is missing the managed "${formatTypeDisplayName(typeDef)}" type.`,
+    );
+    return issues;
+  }
+
+  const currentTypes = [...currentTypeIds].map((currentTypeId) => {
+    const currentType = typeByKey.get(currentTypeId);
+    return currentType ? formatTypeDisplayName(currentType) : currentTypeId;
+  });
+  const quotedCurrentTypes =
+    currentTypes.length === 1
+      ? `"${currentTypes[0]}"`
+      : currentTypes.map((currentType) => `"${currentType}"`).join(", ");
+
+  appendRuntimeValidationIssue(
+    issues,
+    typeEntry,
+    nodeId,
+    "type.mismatch",
+    `Typed "${formatTypeDisplayName(typeDef)}" handles cannot target nodes with current type ${quotedCurrentTypes}.`,
+  );
+
+  return issues;
+}
+
+function normalizeMutationValue(
+  store: Store,
+  nodeId: string,
+  entry: FlatPredicateEntry,
+  nextValue: unknown,
+  previous: unknown,
+  phase: ValidationPhase,
+  event: Extract<ValidationEvent, "create" | "update">,
+  now: Date,
+  changedPredicateKeys: ReadonlySet<string>,
+  scalarByKey: Map<string, ScalarTypeOutput<any>>,
+  typeByKey: Map<string, AnyTypeOutput>,
+  enumValuesByRange: Map<string, Set<string>>,
+  issues: GraphValidationIssue[],
+): unknown | ClearFieldValue | undefined {
+  const fieldPath = formatValidationPath([...entry.path, entry.field]);
+
+  if (nextValue === clearFieldValue) {
+    if (entry.predicate.cardinality === "one") {
+      appendRuntimeValidationIssue(
+        issues,
+        entry,
+        nodeId,
+        "field.required",
+        `Field "${fieldPath}" is required.`,
+      );
+      return undefined;
+    }
+    validateFieldValue(
+      issues,
+      entry,
+      nodeId,
+      undefined,
+      previous,
+      phase,
+      event,
+      now,
+      changedPredicateKeys,
+    );
+    return clearFieldValue;
+  }
+
+  if (nextValue === undefined) {
+    if (entry.predicate.cardinality === "one") {
+      appendRuntimeValidationIssue(
+        issues,
+        entry,
+        nodeId,
+        "field.required",
+        `Field "${fieldPath}" is required.`,
+      );
+      return undefined;
+    }
+    validateFieldValue(
+      issues,
+      entry,
+      nodeId,
+      undefined,
+      previous,
+      phase,
+      event,
+      now,
+      changedPredicateKeys,
+    );
+    return event === "update" ? clearFieldValue : undefined;
+  }
+
+  if (entry.predicate.cardinality === "many") {
+    if (!Array.isArray(nextValue)) {
+      appendRuntimeValidationIssue(
+        issues,
+        entry,
+        nodeId,
+        "field.array",
+        `Field "${fieldPath}" must be an array.`,
+      );
+      return nextValue;
+    }
+
+    try {
+      const current =
+        event === "update"
+          ? readLogicalManyValues(store, nodeId, entry.predicate, scalarByKey, typeByKey)
+          : [];
+      const requested = normalizeRequestedManyValues(
+        entry.predicate,
+        nextValue,
+        scalarByKey,
+        typeByKey,
+        enumValuesByRange,
+      );
+      const planned = planManyValues(current, requested, entry.predicate).map((value) => value.decoded);
+
+      for (const value of planned) {
+        validateScalarValue(
+          issues,
+          entry,
+          nodeId,
+          value,
+          previous,
+          phase,
+          event,
+          now,
+          changedPredicateKeys,
+          scalarByKey,
+        );
+      }
+      validateFieldValue(
+        issues,
+        entry,
+        nodeId,
+        planned,
+        previous,
+        phase,
+        event,
+        now,
+        changedPredicateKeys,
+      );
+      return planned;
+    } catch (error) {
+      appendInvalidValueIssue(
+        issues,
+        entry,
+        nodeId,
+        nextValue,
+        error,
+        scalarByKey,
+        typeByKey,
+        enumValuesByRange,
+      );
+      return nextValue;
+    }
+  }
+
+  try {
+    const encoded = encodeForRange(
+      nextValue,
+      entry.predicate.range,
+      scalarByKey,
+      typeByKey,
+      enumValuesByRange,
+    );
+    const normalized = decodeForRange(encoded, entry.predicate.range, scalarByKey, typeByKey);
+    validateScalarValue(
+      issues,
+      entry,
+      nodeId,
+      normalized,
+      previous,
+      phase,
+      event,
+      now,
+      changedPredicateKeys,
+      scalarByKey,
+    );
+    validateFieldValue(
+      issues,
+      entry,
+      nodeId,
+      normalized,
+      previous,
+      phase,
+      event,
+      now,
+      changedPredicateKeys,
+    );
+    return normalized;
+  } catch (error) {
+    appendInvalidValueIssue(
+      issues,
+      entry,
+      nodeId,
+      nextValue,
+      error,
+      scalarByKey,
+      typeByKey,
+      enumValuesByRange,
+    );
+    return nextValue;
+  }
+}
+
 function collectLogicalChangedPredicateKeys(
   input: Record<string, unknown>,
   entries: FlatPredicateEntry[],
@@ -660,17 +1482,23 @@ function collectLogicalChangedPredicateKeys(
         continue;
       }
 
-      const current = readLogicalManyValues(store, id, entry.predicate, scalarByKey, typeByKey);
-      const requested = normalizeRequestedManyValues(
-        entry.predicate,
-        nextValue,
-        scalarByKey,
-        typeByKey,
-        enumValuesByRange,
-      );
-      const planned = planManyValues(current, requested, entry.predicate).map((value) => value.decoded);
+      try {
+        const current = readLogicalManyValues(store, id, entry.predicate, scalarByKey, typeByKey);
+        const requested = normalizeRequestedManyValues(
+          entry.predicate,
+          nextValue,
+          scalarByKey,
+          typeByKey,
+          enumValuesByRange,
+        );
+        const planned = planManyValues(current, requested, entry.predicate).map(
+          (value) => value.decoded,
+        );
 
-      if (!sameLogicalValue(previous, planned)) changed.add(entry.predicate.key);
+        if (!sameLogicalValue(previous, planned)) changed.add(entry.predicate.key);
+      } catch {
+        changed.add(entry.predicate.key);
+      }
       continue;
     }
 
@@ -709,11 +1537,11 @@ function applyLifecycleHooks(
   entries: FlatPredicateEntry[],
   store: Store,
   nodeId: string,
+  now: Date,
   scalarByKey: Map<string, ScalarTypeOutput<any>>,
   typeByKey: Map<string, AnyTypeOutput>,
   enumValuesByRange: Map<string, Set<string>>,
 ): Set<string> {
-  const now = new Date();
   const changedPredicateKeys =
     event === "update"
       ? collectLogicalChangedPredicateKeys(
@@ -748,6 +1576,452 @@ function applyLifecycleHooks(
     changedPredicateKeys.add(entry.predicate.key);
   }
   return changedPredicateKeys;
+}
+
+function collectIssuePredicateKeys(issues: readonly GraphValidationIssue[]): Set<string> {
+  const changedPredicateKeys = new Set<string>();
+  for (const issue of issues) changedPredicateKeys.add(issue.predicateKey);
+  return changedPredicateKeys;
+}
+
+function mergeChangedPredicateKeys(
+  changedPredicateKeys: ReadonlySet<string>,
+  issues: readonly GraphValidationIssue[],
+): Set<string> {
+  const merged = new Set(changedPredicateKeys);
+  for (const key of collectIssuePredicateKeys(issues)) merged.add(key);
+  return merged;
+}
+
+function entryChangedPredicateKeys(predicateKey: string): ReadonlySet<string> {
+  return new Set([predicateKey]);
+}
+
+function invalidResult<T>(
+  phase: ValidationPhase,
+  event: ValidationEvent,
+  value: T,
+  changedPredicateKeys: ReadonlySet<string>,
+  issues: readonly GraphValidationIssue[],
+): Extract<GraphValidationResult<T>, { ok: false }> {
+  return {
+    ok: false,
+    phase,
+    event,
+    value,
+    changedPredicateKeys: [...changedPredicateKeys],
+    issues,
+  };
+}
+
+function validResult<T>(
+  phase: ValidationPhase,
+  event: ValidationEvent,
+  value: T,
+  changedPredicateKeys: ReadonlySet<string>,
+): Extract<GraphValidationResult<T>, { ok: true }> {
+  return {
+    ok: true,
+    phase,
+    event,
+    value,
+    changedPredicateKeys: [...changedPredicateKeys],
+  };
+}
+
+function assertValidResult<T>(
+  result: GraphValidationResult<T>,
+): asserts result is Extract<GraphValidationResult<T>, { ok: true }> {
+  if (!result.ok) throw new GraphValidationError(result);
+}
+
+function validateSimulatedLocalMutation(
+  validationStore: Store,
+  namespace: Record<string, AnyTypeOutput>,
+  now: Date,
+  prepared: GraphMutationValidationResult,
+): GraphMutationValidationResult {
+  if (!prepared.ok) return prepared;
+
+  const validation = validateGraphStore(validationStore, namespace, {
+    now,
+    phase: "local",
+    event: prepared.event,
+  });
+  if (validation.ok) return prepared;
+
+  return invalidResult(
+    "local",
+    prepared.event,
+    prepared.value,
+    mergeChangedPredicateKeys(new Set(prepared.changedPredicateKeys), validation.issues),
+    validation.issues,
+  );
+}
+
+function prepareMutationInput<T extends TypeOutput>(
+  store: Store,
+  typeDef: T,
+  inputValue: Record<string, unknown>,
+  event: Extract<ValidationEvent, "create" | "update">,
+  nodeId: string,
+  now: Date,
+  scalarByKey: Map<string, ScalarTypeOutput<any>>,
+  typeByKey: Map<string, AnyTypeOutput>,
+  enumValuesByRange: Map<string, Set<string>>,
+): GraphValidationResult<Record<string, unknown>> {
+  const entries = flattenPredicates(typeDef.fields);
+  const input = cloneInput(inputValue);
+  const changedPredicateKeys = applyLifecycleHooks(
+    event,
+    input,
+    entries,
+    store,
+    nodeId,
+    now,
+    scalarByKey,
+    typeByKey,
+    enumValuesByRange,
+  );
+  const issues: GraphValidationIssue[] = [];
+
+  for (const entry of entries) {
+    const hasExplicitValue = hasNestedValue(input, entry.path, entry.field);
+    if (event === "update" && !hasExplicitValue) continue;
+    const nextValue = getNestedValue(input, entry.path, entry.field);
+
+    if (
+      event === "create" &&
+      !hasExplicitValue &&
+      isManagedNodeTypeEntry(entry)
+    ) {
+      continue;
+    }
+
+    const previous =
+      event === "update"
+        ? readPredicateValue(store, nodeId, entry.predicate, scalarByKey, typeByKey)
+        : undefined;
+
+    if (isManagedNodeTypeEntry(entry)) {
+      appendManagedFieldMutationIssue(issues, entry, nodeId, typeDef);
+      deleteNestedValue(input, entry.path, entry.field);
+      continue;
+    }
+
+    const normalized = normalizeMutationValue(
+      store,
+      nodeId,
+      entry,
+      nextValue,
+      previous,
+      "local",
+      event,
+      now,
+      changedPredicateKeys,
+      scalarByKey,
+      typeByKey,
+      enumValuesByRange,
+      issues,
+    );
+
+    if (normalized === undefined && nextValue === undefined) continue;
+    setNestedValue(input, entry.path, entry.field, normalized);
+  }
+
+  return issues.length > 0
+    ? invalidResult(
+        "local",
+        event,
+        input,
+        mergeChangedPredicateKeys(changedPredicateKeys, issues),
+        issues,
+      )
+    : validResult("local", event, input, changedPredicateKeys);
+}
+
+function cloneStoreForValidation(store: Store): Store {
+  const validationStore = createStore();
+  validationStore.replace(store.snapshot());
+  return validationStore;
+}
+
+function validateCreateEntity<T extends TypeOutput>(
+  store: Store,
+  typeDef: T,
+  data: CreateInputOfType<T, Record<string, AnyTypeOutput>>,
+  scalarByKey: Map<string, ScalarTypeOutput<any>>,
+  typeByKey: Map<string, AnyTypeOutput>,
+  enumValuesByRange: Map<string, Set<string>>,
+  namespace: Record<string, AnyTypeOutput>,
+): GraphMutationValidationResult {
+  const now = getStableValidationNow(store);
+  const validationNodeId = getStableCreateNodeId(store);
+  const validationStore = cloneStoreForValidation(store);
+  const prepared = prepareMutationInput(
+    validationStore,
+    typeDef,
+    data as Record<string, unknown>,
+    "create",
+    validationNodeId,
+    now,
+    scalarByKey,
+    typeByKey,
+    enumValuesByRange,
+  );
+  if (!prepared.ok) return prepared;
+
+  commitCreateEntity(
+    validationStore,
+    validationNodeId,
+    typeDef,
+    prepared.value,
+    scalarByKey,
+    typeByKey,
+    enumValuesByRange,
+  );
+
+  return validateSimulatedLocalMutation(validationStore, namespace, now, prepared);
+}
+
+function commitCreateEntity<T extends TypeOutput>(
+  store: Store,
+  id: string,
+  typeDef: T,
+  input: Record<string, unknown>,
+  scalarByKey: Map<string, ScalarTypeOutput<any>>,
+  typeByKey: Map<string, AnyTypeOutput>,
+  enumValuesByRange: Map<string, Set<string>>,
+): string {
+  return store.batch(() => {
+    const entries = flattenPredicates(typeDef.fields);
+    const nodeTypePredicate = core.node.fields.type as EdgeOutput;
+    const nodeTypePredicateId = edgeId(nodeTypePredicate);
+    store.assert(id, nodeTypePredicateId, typeId(typeDef));
+
+    for (const entry of entries) {
+      const value = getNestedValue(input, entry.path, entry.field);
+      if (value === undefined) {
+        if (entry.path.length === 0 && entry.predicate.key === nodeTypePredicate.key) continue;
+        continue;
+      }
+      if (value === clearFieldValue) continue;
+      if (entry.predicate.cardinality === "many") {
+        assertMany(
+          store,
+          id,
+          entry.predicate,
+          value as unknown[],
+          scalarByKey,
+          typeByKey,
+          enumValuesByRange,
+        );
+        continue;
+      }
+      assertOne(store, id, entry.predicate, value, scalarByKey, typeByKey, enumValuesByRange);
+    }
+    return id;
+  });
+}
+
+function commitUpdateEntity<T extends TypeOutput>(
+  store: Store,
+  id: string,
+  typeDef: T,
+  input: Record<string, unknown>,
+  scalarByKey: Map<string, ScalarTypeOutput<any>>,
+  typeByKey: Map<string, AnyTypeOutput>,
+  enumValuesByRange: Map<string, Set<string>>,
+): EntityOfType<T, Record<string, AnyTypeOutput>> {
+  return store.batch(() => {
+    const entries = flattenPredicates(typeDef.fields);
+    for (const entry of entries) {
+      if (!hasNestedValue(input, entry.path, entry.field)) continue;
+      const nextValue = getNestedValue(input, entry.path, entry.field);
+      const previous = readPredicateValue(store, id, entry.predicate, scalarByKey, typeByKey);
+
+      if (nextValue === clearFieldValue) {
+        if (previous === undefined) continue;
+        retractPredicateFacts(store, id, entry.predicate);
+        continue;
+      }
+
+      if (entry.predicate.cardinality === "many") {
+        if (sameLogicalValue(previous, nextValue)) continue;
+        retractPredicateFacts(store, id, entry.predicate);
+        assertMany(
+          store,
+          id,
+          entry.predicate,
+          nextValue as unknown[],
+          scalarByKey,
+          typeByKey,
+          enumValuesByRange,
+        );
+        continue;
+      }
+
+      if (sameLogicalValue(previous, nextValue)) continue;
+      retractPredicateFacts(store, id, entry.predicate);
+      assertOne(store, id, entry.predicate, nextValue, scalarByKey, typeByKey, enumValuesByRange);
+    }
+    return projectEntity(store, id, typeDef, scalarByKey, typeByKey);
+  });
+}
+
+function validateEntityState<T extends TypeOutput>(
+  store: Store,
+  id: string,
+  typeDef: T,
+  now: Date,
+  phase: ValidationPhase,
+  event: ValidationEvent,
+  scalarByKey: Map<string, ScalarTypeOutput<any>>,
+  typeByKey: Map<string, AnyTypeOutput>,
+  enumValuesByRange: Map<string, Set<string>>,
+): readonly GraphValidationIssue[] {
+  const issues: GraphValidationIssue[] = [];
+  const entries = flattenPredicates(typeDef.fields);
+  const changedPredicateKeys =
+    phase === "authoritative"
+      ? new Set(entries.map((entry) => entry.predicate.key))
+      : undefined;
+
+  for (const entry of entries) {
+    if (isManagedNodeTypeEntry(entry)) continue;
+    const entryValidationKeys =
+      changedPredicateKeys ?? entryChangedPredicateKeys(entry.predicate.key);
+    const facts = store.facts(id, edgeId(entry.predicate));
+    const fieldPath = formatValidationPath([...entry.path, entry.field]);
+    const logicalFacts = uniqueEncodedPredicateValues(
+      facts.map((fact) => ({ encoded: fact.o, decoded: fact.o })),
+    );
+
+    if (entry.predicate.cardinality === "one" && facts.length === 0) {
+      appendRuntimeValidationIssue(
+        issues,
+        entry,
+        id,
+        "field.required",
+        `Field "${fieldPath}" is required.`,
+      );
+      continue;
+    }
+
+    if (
+      (entry.predicate.cardinality === "one" || entry.predicate.cardinality === "one?") &&
+      facts.length > 1
+    ) {
+      appendRuntimeValidationIssue(
+        issues,
+        entry,
+        id,
+        "field.cardinality",
+        `Field "${fieldPath}" exceeds ${entry.predicate.cardinality} cardinality.`,
+      );
+    }
+
+    const decodedValues: Array<{ encoded: string; decoded: unknown }> = [];
+    let hasDecodeError = false;
+    for (const fact of facts) {
+      try {
+        const decoded = decodeForRange(fact.o, entry.predicate.range, scalarByKey, typeByKey);
+        if (
+          !validateEnumValue(
+            issues,
+            entry,
+            id,
+            decoded,
+            typeByKey,
+            enumValuesByRange,
+          )
+        ) {
+          hasDecodeError = true;
+          continue;
+        }
+        decodedValues.push({ encoded: fact.o, decoded });
+        validateScalarValue(
+          issues,
+          entry,
+          id,
+          decoded,
+          undefined,
+          phase,
+          event,
+          now,
+          entryValidationKeys,
+          scalarByKey,
+        );
+        validateEntityReferenceValue(issues, entry, id, decoded, store, typeByKey);
+      } catch (error) {
+        hasDecodeError = true;
+        appendInvalidValueIssue(
+          issues,
+          entry,
+          id,
+          fact.o,
+          error,
+          scalarByKey,
+          typeByKey,
+          enumValuesByRange,
+        );
+      }
+    }
+
+    if (hasDecodeError) continue;
+
+    const logicalDecodedValues = uniqueEncodedPredicateValues(decodedValues);
+
+    if (entry.predicate.cardinality === "many") {
+      const logicalValues =
+        getPredicateCollectionKind(entry.predicate) === "unordered"
+          ? logicalDecodedValues.map((value) => value.decoded)
+          : decodedValues.map((value) => value.decoded);
+      validateFieldValue(
+        issues,
+        entry,
+        id,
+        logicalValues,
+        undefined,
+        phase,
+        event,
+        now,
+        entryValidationKeys,
+      );
+      continue;
+    }
+
+    if (logicalFacts.length === 0) {
+      validateFieldValue(
+        issues,
+        entry,
+        id,
+        undefined,
+        undefined,
+        phase,
+        event,
+        now,
+        entryValidationKeys,
+      );
+      continue;
+    }
+
+    if (logicalDecodedValues.length === 1) {
+      validateFieldValue(
+        issues,
+        entry,
+        id,
+        logicalDecodedValues[0]?.decoded,
+        undefined,
+        phase,
+        event,
+        now,
+        entryValidationKeys,
+      );
+    }
+  }
+
+  return issues;
 }
 
 function assertOne(
@@ -787,65 +2061,44 @@ function createEntity<T extends TypeOutput>(
   scalarByKey: Map<string, ScalarTypeOutput<any>>,
   typeByKey: Map<string, AnyTypeOutput>,
   enumValuesByRange: Map<string, Set<string>>,
+  namespace: Record<string, AnyTypeOutput>,
 ): string {
-  return store.batch(() => {
-    const entries = flattenPredicates(typeDef.fields);
-    const nodeTypePredicate = core.node.fields.type as EdgeOutput;
-    const nodeTypePredicateId = edgeId(nodeTypePredicate);
-    const id = store.newNode();
-    const input = cloneInput(data as Record<string, unknown>);
-    applyLifecycleHooks(
-      "create",
-      input,
-      entries,
-      store,
+  const now = getStableValidationNow(store);
+  const id = getStableCreateNodeId(store);
+  const validationStore = cloneStoreForValidation(store);
+  const prepared = prepareMutationInput(
+    validationStore,
+    typeDef,
+    data as Record<string, unknown>,
+    "create",
+    id,
+    now,
+    scalarByKey,
+    typeByKey,
+    enumValuesByRange,
+  );
+  if (prepared.ok) {
+    commitCreateEntity(
+      validationStore,
       id,
+      typeDef,
+      prepared.value,
       scalarByKey,
       typeByKey,
       enumValuesByRange,
     );
-    store.assert(id, nodeTypePredicateId, typeId(typeDef));
-
-    for (const entry of entries) {
-      const value = getNestedValue(input, entry.path, entry.field);
-      if (value === undefined) {
-        if (entry.path.length === 0 && entry.predicate.key === nodeTypePredicate.key) {
-          continue;
-        }
-        if (entry.predicate.cardinality === "one") {
-          throw new Error(`Missing required field "${[...entry.path, entry.field].join(".")}"`);
-        }
-        continue;
-      }
-      if (entry.predicate.cardinality === "many") {
-        if (!Array.isArray(value))
-          throw new Error(`Field "${[...entry.path, entry.field].join(".")}" must be an array`);
-        const normalized = planManyValues(
-          [],
-          normalizeRequestedManyValues(
-            entry.predicate,
-            value,
-            scalarByKey,
-            typeByKey,
-            enumValuesByRange,
-          ),
-          entry.predicate,
-        ).map((candidate) => candidate.decoded);
-        assertMany(
-          store,
-          id,
-          entry.predicate,
-          normalized,
-          scalarByKey,
-          typeByKey,
-          enumValuesByRange,
-        );
-        continue;
-      }
-      assertOne(store, id, entry.predicate, value, scalarByKey, typeByKey, enumValuesByRange);
-    }
-    return id;
-  })
+  }
+  const validation = validateSimulatedLocalMutation(validationStore, namespace, now, prepared);
+  assertValidResult(validation);
+  return commitCreateEntity(
+    store,
+    id,
+    typeDef,
+    validation.value,
+    scalarByKey,
+    typeByKey,
+    enumValuesByRange,
+  );
 }
 
 function projectEntity<T extends TypeOutput>(
@@ -868,6 +2121,7 @@ function createPredicateRef<T extends EdgeOutput, Defs extends Record<string, An
   subjectId: string,
   field: T,
   applyMutation: (value: unknown | ClearFieldValue) => void,
+  validateMutation: (value: unknown | ClearFieldValue) => GraphMutationValidationResult,
   scalarByKey: Map<string, ScalarTypeOutput<any>>,
   typeByKey: Map<string, AnyTypeOutput>,
   enumValuesByRange: Map<string, Set<string>>,
@@ -923,25 +2177,54 @@ function createPredicateRef<T extends EdgeOutput, Defs extends Record<string, An
     return {
       ...base,
       collection,
+      validateReplace(values: PredicateValueOf<T, Defs>) {
+        return exposeMutationValidationResult(validateMutation(values));
+      },
       replace(values: PredicateValueOf<T, Defs>) {
         applyMutation(values);
+      },
+      validateAdd(value: PredicateItemOf<T, Defs>) {
+        const currentValues = base.get() as unknown as PredicateItemOf<T, Defs>[];
+        return exposeMutationValidationResult(validateMutation([...currentValues, value]));
       },
       add(value: PredicateItemOf<T, Defs>) {
         const currentValues = base.get() as unknown as PredicateItemOf<T, Defs>[];
         applyMutation([...currentValues, value]);
       },
-      remove(value: PredicateItemOf<T, Defs>) {
+      validateRemove(value: PredicateItemOf<T, Defs>) {
         const currentValues = base.get() as unknown as PredicateItemOf<T, Defs>[];
-        const nextValues = removeManyValue(
-          currentValues,
+        const planned = planManyRemoveMutation(
+          store,
+          subjectId,
           field,
+          currentValues,
           value,
           scalarByKey,
           typeByKey,
           enumValuesByRange,
         );
-        if (sameLogicalValue(currentValues, nextValues)) return;
-        applyMutation(nextValues);
+        return exposeMutationValidationResult(validateMutation(planned.validationValues));
+      },
+      remove(value: PredicateItemOf<T, Defs>) {
+        const currentValues = base.get() as unknown as PredicateItemOf<T, Defs>[];
+        const planned = planManyRemoveMutation(
+          store,
+          subjectId,
+          field,
+          currentValues,
+          value,
+          scalarByKey,
+          typeByKey,
+          enumValuesByRange,
+        );
+        if (!sameLogicalValue(planned.validationValues, planned.nextValues)) {
+          assertValidResult(validateMutation(planned.validationValues));
+        }
+        if (sameLogicalValue(currentValues, planned.nextValues)) return;
+        applyMutation(planned.nextValues);
+      },
+      validateClear() {
+        return exposeMutationValidationResult(validateMutation([]));
       },
       clear() {
         if ((base.get() as unknown as PredicateItemOf<T, Defs>[]).length === 0) return;
@@ -953,8 +2236,14 @@ function createPredicateRef<T extends EdgeOutput, Defs extends Record<string, An
   if (field.cardinality === "one?") {
     return {
       ...base,
+      validateSet(value: PredicateSetValueOf<T, Defs>) {
+        return exposeMutationValidationResult(validateMutation(value));
+      },
       set(value: PredicateSetValueOf<T, Defs>) {
         applyMutation(value);
+      },
+      validateClear() {
+        return exposeMutationValidationResult(validateMutation(clearFieldValue));
       },
       clear() {
         if (base.get() === undefined) return;
@@ -965,6 +2254,9 @@ function createPredicateRef<T extends EdgeOutput, Defs extends Record<string, An
 
   return {
     ...base,
+    validateSet(value: PredicateValueOf<T, Defs>) {
+      return exposeMutationValidationResult(validateMutation(value));
+    },
     set(value: PredicateValueOf<T, Defs>) {
       applyMutation(value);
     },
@@ -977,6 +2269,11 @@ function buildFieldRefs<T extends FieldsOutput, Defs extends Record<string, AnyT
   fields: T,
   path: string[],
   applyMutation: (path: string[], fieldName: string, value: unknown | ClearFieldValue) => void,
+  validateMutation: (
+    path: string[],
+    fieldName: string,
+    value: unknown | ClearFieldValue,
+  ) => GraphMutationValidationResult,
   scalarByKey: Map<string, ScalarTypeOutput<any>>,
   typeByKey: Map<string, AnyTypeOutput>,
   enumValuesByRange: Map<string, Set<string>>,
@@ -1001,6 +2298,7 @@ function buildFieldRefs<T extends FieldsOutput, Defs extends Record<string, AnyT
         subjectId,
         value,
         (nextValue) => applyMutation(path, name, nextValue),
+        (nextValue) => validateMutation(path, name, nextValue),
         scalarByKey,
         typeByKey,
         enumValuesByRange,
@@ -1015,6 +2313,7 @@ function buildFieldRefs<T extends FieldsOutput, Defs extends Record<string, AnyT
         value,
         [...path, name],
         applyMutation,
+        validateMutation,
         scalarByKey,
         typeByKey,
         enumValuesByRange,
@@ -1030,6 +2329,7 @@ function createEntityRef<T extends TypeOutput, Defs extends Record<string, AnyTy
   store: Store,
   id: string,
   typeDef: T,
+  namespace: Defs,
   scalarByKey: Map<string, ScalarTypeOutput<any>>,
   typeByKey: Map<string, AnyTypeOutput>,
   enumValuesByRange: Map<string, Set<string>>,
@@ -1038,7 +2338,25 @@ function createEntityRef<T extends TypeOutput, Defs extends Record<string, AnyTy
   const applyMutation = (path: string[], fieldName: string, value: unknown | ClearFieldValue) => {
     const patch: Record<string, unknown> = {};
     setNestedValue(patch, path, fieldName, value);
-    updateEntity(store, id, typeDef, patch, scalarByKey, typeByKey, enumValuesByRange);
+    updateEntity(store, id, typeDef, patch, scalarByKey, typeByKey, enumValuesByRange, namespace);
+  };
+  const validateMutation = (
+    path: string[],
+    fieldName: string,
+    value: unknown | ClearFieldValue,
+  ) => {
+    const patch: Record<string, unknown> = {};
+    setNestedValue(patch, path, fieldName, value);
+    return validateUpdateEntity(
+      store,
+      id,
+      typeDef,
+      patch,
+      scalarByKey,
+      typeByKey,
+      enumValuesByRange,
+      namespace,
+    );
   };
 
   return {
@@ -1050,6 +2368,7 @@ function createEntityRef<T extends TypeOutput, Defs extends Record<string, AnyTy
       typeDef.fields,
       [],
       applyMutation,
+      validateMutation,
       scalarByKey,
       typeByKey,
       enumValuesByRange,
@@ -1057,6 +2376,20 @@ function createEntityRef<T extends TypeOutput, Defs extends Record<string, AnyTy
     ) as RefTree<T["fields"], Defs>,
     get() {
       return projectEntity(store, id, typeDef, scalarByKey, typeByKey) as EntityOfType<T, Defs>;
+    },
+    validateUpdate(patch: Partial<CreateInputOfType<T, Defs>>) {
+      return exposeMutationValidationResult(
+        validateUpdateEntity(
+          store,
+          id,
+          typeDef,
+          patch as Record<string, unknown>,
+          scalarByKey,
+          typeByKey,
+          enumValuesByRange,
+          namespace,
+        ),
+      );
     },
     update(patch: Partial<CreateInputOfType<T, Defs>>) {
       return updateEntity(
@@ -1067,13 +2400,19 @@ function createEntityRef<T extends TypeOutput, Defs extends Record<string, AnyTy
         scalarByKey,
         typeByKey,
         enumValuesByRange,
+        namespace,
       ) as EntityOfType<T, Defs>;
+    },
+    validateDelete() {
+      return exposeValidationResult(
+        prepareDeleteEntity(store, id, typeDef, typeByKey, namespace),
+      ) as GraphDeleteValidationResult;
     },
     batch<TResult>(fn: () => TResult) {
       return store.batch(fn);
     },
     delete() {
-      deleteEntity(store, id);
+      deleteEntity(store, id, typeDef, typeByKey, namespace);
     },
   };
 }
@@ -1086,77 +2425,147 @@ function updateEntity<T extends TypeOutput>(
   scalarByKey: Map<string, ScalarTypeOutput<any>>,
   typeByKey: Map<string, AnyTypeOutput>,
   enumValuesByRange: Map<string, Set<string>>,
+  namespace: Record<string, AnyTypeOutput>,
 ): EntityOfType<T, Record<string, AnyTypeOutput>> {
-  return store.batch(() => {
-    const entries = flattenPredicates(typeDef.fields);
-    const input = cloneInput(patch);
-    applyLifecycleHooks(
-      "update",
-      input,
-      entries,
-      store,
-      id,
-      scalarByKey,
-      typeByKey,
-      enumValuesByRange,
-    );
-    for (const entry of entries) {
-      if (!hasNestedValue(input, entry.path, entry.field)) continue;
-      const nextValue = getNestedValue(input, entry.path, entry.field);
-      const previous = readPredicateValue(store, id, entry.predicate, scalarByKey, typeByKey);
-
-      if (nextValue === clearFieldValue) {
-        if (previous === undefined) continue;
-        retractPredicateFacts(store, id, entry.predicate);
-        continue;
-      }
-
-      if (entry.predicate.cardinality === "many") {
-        if (!Array.isArray(nextValue))
-          throw new Error(`Field "${[...entry.path, entry.field].join(".")}" must be an array`);
-        const current = readLogicalManyValues(store, id, entry.predicate, scalarByKey, typeByKey);
-        const requested = normalizeRequestedManyValues(
-          entry.predicate,
-          nextValue,
-          scalarByKey,
-          typeByKey,
-          enumValuesByRange,
-        );
-        const planned = planManyValues(current, requested, entry.predicate).map(
-          (value) => value.decoded,
-        );
-
-        if (sameLogicalValue(previous, planned)) continue;
-        retractPredicateFacts(store, id, entry.predicate);
-        assertMany(
-          store,
-          id,
-          entry.predicate,
-          planned,
-          scalarByKey,
-          typeByKey,
-          enumValuesByRange,
-        );
-      } else {
-        if (sameLogicalValue(previous, nextValue)) continue;
-        retractPredicateFacts(store, id, entry.predicate);
-        assertOne(store, id, entry.predicate, nextValue, scalarByKey, typeByKey, enumValuesByRange);
-      }
-    }
-    return projectEntity(store, id, typeDef, scalarByKey, typeByKey);
-  })
+  const prepared = validateUpdateEntity(
+    store,
+    id,
+    typeDef,
+    patch,
+    scalarByKey,
+    typeByKey,
+    enumValuesByRange,
+    namespace,
+  );
+  assertValidResult(prepared);
+  return commitUpdateEntity(
+    store,
+    id,
+    typeDef,
+    prepared.value,
+    scalarByKey,
+    typeByKey,
+    enumValuesByRange,
+  );
 }
 
-function deleteEntity(store: Store, id: string): void {
+function validateUpdateEntity<T extends TypeOutput>(
+  store: Store,
+  id: string,
+  typeDef: T,
+  patch: Record<string, unknown>,
+  scalarByKey: Map<string, ScalarTypeOutput<any>>,
+  typeByKey: Map<string, AnyTypeOutput>,
+  enumValuesByRange: Map<string, Set<string>>,
+  namespace: Record<string, AnyTypeOutput>,
+): GraphMutationValidationResult {
+  const requestedChangedPredicateKeys = collectChangedPredicateKeys(
+    patch,
+    flattenPredicates(typeDef.fields),
+  );
+  const handleIssues = validateTypedHandleTarget(store, id, typeDef, typeByKey);
+  if (handleIssues.length > 0) {
+    return invalidResult(
+      "local",
+      "update",
+      cloneInput(patch),
+      mergeChangedPredicateKeys(requestedChangedPredicateKeys, handleIssues),
+      handleIssues,
+    );
+  }
+
+  const now = getStableValidationNow(store);
+  const validationStore = cloneStoreForValidation(store);
+  const prepared = prepareMutationInput(
+    validationStore,
+    typeDef,
+    patch,
+    "update",
+    id,
+    now,
+    scalarByKey,
+    typeByKey,
+    enumValuesByRange,
+  );
+  if (!prepared.ok) return prepared;
+
+  commitUpdateEntity(
+    validationStore,
+    id,
+    typeDef,
+    prepared.value,
+    scalarByKey,
+    typeByKey,
+    enumValuesByRange,
+  );
+
+  return validateSimulatedLocalMutation(validationStore, namespace, now, prepared);
+}
+
+function prepareDeleteEntity<
+  T extends TypeOutput,
+  Defs extends Record<string, AnyTypeOutput>,
+>(
+  store: Store,
+  id: string,
+  typeDef: T,
+  typeByKey: Map<string, AnyTypeOutput>,
+  namespace: Defs,
+): GraphDeleteValidationResult {
+  const handleIssues = validateTypedHandleTarget(store, id, typeDef, typeByKey);
+  if (handleIssues.length > 0) {
+    return invalidResult(
+      "local",
+      "delete",
+      id,
+      collectIssuePredicateKeys(handleIssues),
+      handleIssues,
+    );
+  }
+
+  const now = getStableValidationNow(store);
+  const validationStore = cloneStoreForValidation(store);
+  for (const edge of validationStore.facts(id)) validationStore.retract(edge.id);
+
+  const validation = validateGraphStore(validationStore, namespace, {
+    now,
+    phase: "local",
+    event: "delete",
+  });
+  return validation.ok
+    ? validResult("local", "delete", id, new Set<string>())
+    : invalidResult(
+        "local",
+        "delete",
+        id,
+        collectIssuePredicateKeys(validation.issues),
+        validation.issues,
+      );
+}
+
+function deleteEntity<T extends TypeOutput, Defs extends Record<string, AnyTypeOutput>>(
+  store: Store,
+  id: string,
+  typeDef: T,
+  typeByKey: Map<string, AnyTypeOutput>,
+  namespace: Defs,
+): void {
+  assertValidResult(prepareDeleteEntity(store, id, typeDef, typeByKey, namespace));
   store.batch(() => {
     for (const edge of store.facts(id)) store.retract(edge.id);
-  })
+  });
 }
 
 type TypeHandle<T extends TypeOutput, Defs extends Record<string, AnyTypeOutput>> = {
+  validateCreate(input: CreateInputOfType<T, Defs>): GraphMutationValidationResult;
   create(input: CreateInputOfType<T, Defs>): string;
   get(id: string): EntityOfType<T, Defs>;
+  validateUpdate(
+    id: string,
+    patch: Partial<CreateInputOfType<T, Defs>>,
+  ): GraphMutationValidationResult;
   update(id: string, patch: Partial<CreateInputOfType<T, Defs>>): EntityOfType<T, Defs>;
+  validateDelete(id: string): GraphDeleteValidationResult;
   delete(id: string): void;
   list(): EntityOfType<T, Defs>[];
   query<const Query extends TypeQuerySpec<T, Defs>>(query: Query): Promise<TypeQueryResponse<T, Query, Defs>>;
@@ -1223,6 +2632,69 @@ function collectEnumValueIds(
   return out;
 }
 
+export function validateGraphStore<const T extends Record<string, AnyTypeOutput>>(
+  store: Store,
+  namespace: T,
+  options: {
+    now?: Date;
+    phase?: ValidationPhase;
+    event?: ValidationEvent;
+  } = {},
+): GraphValidationResult<void> {
+  const now = options.now ? cloneDate(options.now) : new Date();
+  const phase = options.phase ?? "authoritative";
+  const event = options.event ?? "reconcile";
+  const scalarByKey = collectScalarCodecs(namespace);
+  const typeByKey = collectTypeIndex(namespace);
+  const enumValuesByRange = collectEnumValueIds(namespace, typeByKey);
+  const nodeTypePredicate = core.node.fields.type as EdgeOutput;
+  const nodeTypePredicateId = edgeId(nodeTypePredicate);
+  const combined = [...Object.values(core), ...Object.values(namespace)];
+  const issues: GraphValidationIssue[] = [];
+  const subjects = new Map<string, boolean>();
+
+  for (const edge of store.facts()) {
+    const existing = subjects.get(edge.s) ?? false;
+    subjects.set(edge.s, existing || edge.p === nodeTypePredicateId);
+  }
+
+  for (const [nodeId, hasCurrentTypeFact] of subjects) {
+    issues.push(...validateNodeTypeState(store, nodeId, hasCurrentTypeFact, typeByKey));
+  }
+
+  for (const typeDef of combined) {
+    if (!isEntityType(typeDef)) continue;
+    const seenIds = new Set<string>();
+    for (const edge of store.facts(undefined, nodeTypePredicateId, typeId(typeDef))) {
+      if (seenIds.has(edge.s)) continue;
+      seenIds.add(edge.s);
+      issues.push(
+        ...validateEntityState(
+          store,
+          edge.s,
+          typeDef,
+          now,
+          phase,
+          event,
+          scalarByKey,
+          typeByKey,
+          enumValuesByRange,
+        ),
+      );
+    }
+  }
+
+  return issues.length > 0
+    ? invalidResult(
+        phase,
+        event,
+        undefined,
+        collectIssuePredicateKeys(issues),
+        issues,
+      )
+    : validResult(phase, event, undefined, new Set<string>());
+}
+
 export function createTypeClient<const T extends Record<string, AnyTypeOutput>>(
   store: Store,
   namespace: T,
@@ -1241,6 +2713,7 @@ export function createTypeClient<const T extends Record<string, AnyTypeOutput>>(
       store,
       id,
       typeDef,
+      namespace as AllDefs<T>,
       scalarByKey,
       typeByKey,
       enumValuesByRange,
@@ -1364,7 +2837,20 @@ export function createTypeClient<const T extends Record<string, AnyTypeOutput>>(
         const typeDef = namespace[key as keyof T];
         if (!typeDef || typeDef.kind !== "entity") return undefined;
 
-        const handle = {
+        const handle: TypeHandle<any, any> = {
+          validateCreate(input: unknown) {
+            return exposeMutationValidationResult(
+              validateCreateEntity(
+                store,
+                typeDef as any,
+                input as any,
+                scalarByKey,
+                typeByKey,
+                enumValuesByRange,
+                namespace,
+              ),
+            );
+          },
           create(input: unknown) {
             return createEntity(
               store,
@@ -1373,10 +2859,25 @@ export function createTypeClient<const T extends Record<string, AnyTypeOutput>>(
               scalarByKey,
               typeByKey,
               enumValuesByRange,
+              namespace,
             );
           },
           get(id: string) {
             return projectEntity(store, id, typeDef as any, scalarByKey, typeByKey);
+          },
+          validateUpdate(id: string, patch: unknown) {
+            return exposeMutationValidationResult(
+              validateUpdateEntity(
+                store,
+                id,
+                typeDef as any,
+                patch as any,
+                scalarByKey,
+                typeByKey,
+                enumValuesByRange,
+                namespace,
+              ),
+            );
           },
           update(id: string, patch: unknown) {
             return updateEntity(
@@ -1387,10 +2888,16 @@ export function createTypeClient<const T extends Record<string, AnyTypeOutput>>(
               scalarByKey,
               typeByKey,
               enumValuesByRange,
+              namespace,
             );
           },
+          validateDelete(id: string) {
+            return exposeValidationResult(
+              prepareDeleteEntity(store, id, typeDef as any, typeByKey, namespace),
+            ) as GraphDeleteValidationResult;
+          },
           delete(id: string) {
-            deleteEntity(store, id);
+            deleteEntity(store, id, typeDef as any, typeByKey, namespace);
           },
           list() {
             return listEntityRefs(typeDef as any).map((entityRef) => entityRef.get());

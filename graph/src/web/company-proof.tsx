@@ -60,6 +60,13 @@ function createRenderProbeStore(trackIds: readonly string[]): RenderProbeStore {
   let token = 0;
   let snapshot: RenderProbeSnapshot = { counts, lastCheck };
   let settleTimer: ReturnType<typeof setTimeout> | undefined;
+  let pendingCheck:
+    | {
+        baseline: Record<string, number>;
+        deadline: number;
+        fieldId: string;
+      }
+    | undefined;
 
   function emit() {
     for (const listener of listeners) listener();
@@ -70,23 +77,37 @@ function createRenderProbeStore(trackIds: readonly string[]): RenderProbeStore {
     emit();
   }
 
+  function scheduleSettle(currentToken: number) {
+    settleTimer = setTimeout(() => {
+      if (currentToken !== token || !pendingCheck) return;
+      const { baseline, deadline, fieldId } = pendingCheck;
+      const changedIds = trackIds.filter((id) => (counts[id] ?? 0) > (baseline[id] ?? 0));
+      if (changedIds.length === 0 && Date.now() < deadline) {
+        scheduleSettle(currentToken);
+        return;
+      }
+      lastCheck = {
+        fieldId,
+        changedIds,
+        holds:
+          changedIds.length > 0 &&
+          changedIds.every((id) => id === `field:${fieldId}`),
+      };
+      pendingCheck = undefined;
+      publish();
+    }, 0);
+  }
+
   return {
     beginCheck(fieldId) {
-      const baseline = { ...counts };
       const currentToken = ++token;
+      pendingCheck = {
+        baseline: { ...counts },
+        deadline: Date.now() + 50,
+        fieldId,
+      };
       if (settleTimer) clearTimeout(settleTimer);
-      settleTimer = setTimeout(() => {
-        if (currentToken !== token) return;
-        const changedIds = trackIds.filter((id) => (counts[id] ?? 0) > (baseline[id] ?? 0));
-        lastCheck = {
-          fieldId,
-          changedIds,
-          holds:
-            changedIds.length > 0 &&
-            changedIds.every((id) => id === `field:${fieldId}`),
-        };
-        publish();
-      }, 0);
+      scheduleSettle(currentToken);
     },
     getSnapshot() {
       return snapshot;
@@ -96,6 +117,10 @@ function createRenderProbeStore(trackIds: readonly string[]): RenderProbeStore {
         ...counts,
         [id]: (counts[id] ?? 0) + 1,
       };
+      if (pendingCheck) {
+        if (settleTimer) clearTimeout(settleTimer);
+        scheduleSettle(token);
+      }
       publish();
     },
     subscribe(listener) {

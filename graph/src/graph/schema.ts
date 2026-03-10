@@ -3,6 +3,12 @@ export type Cardinality = "one" | "one?" | "many";
 type TypeLike = { values: { key: string } };
 export type RangeRef = string | TypeLike;
 export type PredicateLifecycleEvent = "create" | "update";
+export type ValidationIssueInput = {
+  code: string;
+  message: string;
+};
+export type ValidationPhase = "local" | "authoritative";
+export type ValidationEvent = PredicateLifecycleEvent | "delete" | "reconcile";
 export type PredicateHookContext = {
   event: PredicateLifecycleEvent;
   nodeId: string;
@@ -12,6 +18,38 @@ export type PredicateHookContext = {
   changedPredicateKeys: ReadonlySet<string>;
 };
 export type PredicateValueHook = (context: PredicateHookContext) => unknown;
+export type PredicateValidationContext = {
+  event: ValidationEvent;
+  phase: ValidationPhase;
+  nodeId: string;
+  now: Date;
+  path: readonly string[];
+  field: string;
+  predicateKey: string;
+  range: string;
+  cardinality: Cardinality;
+  value: unknown;
+  previous: unknown;
+  changedPredicateKeys: ReadonlySet<string>;
+};
+export type PredicateValidator = (
+  context: PredicateValidationContext,
+) => ValidationIssueInput | ValidationIssueInput[] | void;
+export type ScalarValidationContext<T> = {
+  event: ValidationEvent;
+  phase: ValidationPhase;
+  nodeId: string;
+  now: Date;
+  path: readonly string[];
+  predicateKey: string;
+  range: string;
+  value: T;
+  previous: unknown;
+  changedPredicateKeys: ReadonlySet<string>;
+};
+export type ScalarValueValidator<T> = (
+  context: ScalarValidationContext<T>,
+) => ValidationIssueInput | ValidationIssueInput[] | void;
 type NormalizeRange<R extends RangeRef> = R extends string
   ? R
   : R extends { values: { key: infer K } }
@@ -24,6 +62,7 @@ export type EdgeInput<R extends RangeRef = RangeRef, Extra extends object = {}> 
   cardinality: Cardinality;
   onCreate?: PredicateValueHook;
   onUpdate?: PredicateValueHook;
+  validate?: PredicateValidator;
 } & Extra;
 
 export type EdgeOutput<T extends EdgeInput = EdgeInput> = {
@@ -32,6 +71,7 @@ export type EdgeOutput<T extends EdgeInput = EdgeInput> = {
   cardinality: T["cardinality"];
   onCreate?: PredicateValueHook;
   onUpdate?: PredicateValueHook;
+  validate?: PredicateValidator;
 } & Omit<T, "cardinality" | "key" | "onCreate" | "onUpdate" | "range">;
 
 export type ResolvedEdgeOutput<T extends EdgeInput = EdgeInput> = EdgeOutput<T> & {
@@ -116,7 +156,16 @@ function ns<const T extends FieldsInput>(key: string, input: T): FieldsOutput<T>
         const edge = value as EdgeInput<RangeRef> &
           Partial<ResolvedEdgeOutput> &
           Record<string, unknown>;
-        const { key: edgeKey, range, cardinality, onCreate, onUpdate, id, ...extras } = edge;
+        const {
+          key: edgeKey,
+          range,
+          cardinality,
+          onCreate,
+          onUpdate,
+          validate,
+          id,
+          ...extras
+        } = edge;
         out[name] = {
           ...extras,
           key: edgeKey ?? nextKey,
@@ -124,6 +173,7 @@ function ns<const T extends FieldsInput>(key: string, input: T): FieldsOutput<T>
           cardinality: cardinality as Cardinality,
           ...(onCreate ? { onCreate } : {}),
           ...(onUpdate ? { onUpdate } : {}),
+          ...(validate ? { validate } : {}),
           ...(id ? { id } : {}),
         } satisfies EdgeOutput;
       } else {
@@ -186,6 +236,7 @@ export type ScalarTypeInput<T, K extends string = string> = {
   values: TypeValues<K>;
   encode: (value: T) => string;
   decode: (raw: string) => T;
+  validate?: ScalarValueValidator<T>;
 };
 
 export type ScalarTypeOutput<T, K extends string = string> = {
@@ -193,6 +244,7 @@ export type ScalarTypeOutput<T, K extends string = string> = {
   values: TypeValues<K>;
   encode: (value: T) => string;
   decode: (raw: string) => T;
+  validate?: ScalarValueValidator<T>;
 };
 
 export type ResolvedScalarTypeOutput<T, K extends string = string> = {
@@ -200,6 +252,7 @@ export type ResolvedScalarTypeOutput<T, K extends string = string> = {
   values: ResolvedTypeValues<K>;
   encode: (value: T) => string;
   decode: (raw: string) => T;
+  validate?: ScalarValueValidator<T>;
 };
 
 export type EnumTypeInput<

@@ -80,6 +80,7 @@ function moveNode(nodeId: string, parentId: string | undefined, index: number): 
   const target = nodes.find((node) => node.id === nodeId);
   if (!target) throw new Error(`Node "${nodeId}" not found`);
   const resolvedParentId = toStoredParentId(parentId);
+  const graphParentId = toApiParentId(resolvedParentId);
 
   const oldParentId = target.parentId;
   const currentSiblings = nodes
@@ -88,14 +89,14 @@ function moveNode(nodeId: string, parentId: string | undefined, index: number): 
   const nextIndex = Math.max(0, Math.min(index, currentSiblings.length));
   currentSiblings.splice(nextIndex, 0, target);
 
-  graph.block.node(nodeId).update({ parent: resolvedParentId, order: nextIndex });
+  graph.block.node(nodeId).update({ parent: graphParentId, order: nextIndex });
   currentSiblings.forEach((node, siblingIndex) => {
     if (node.id === nodeId) {
-      graph.block.node(node.id).update({ parent: resolvedParentId, order: siblingIndex });
+      graph.block.node(node.id).update({ parent: graphParentId, order: siblingIndex });
       return;
     }
     if (node.parentId === resolvedParentId && node.order === siblingIndex) return;
-    graph.block.node(node.id).update({ parent: resolvedParentId, order: siblingIndex });
+    graph.block.node(node.id).update({ parent: graphParentId, order: siblingIndex });
   });
 
   if (oldParentId !== resolvedParentId) reindexParent(oldParentId);
@@ -135,7 +136,7 @@ function outdentWithSubsequentSiblings(nodeId: string): void {
   const parentIndex = parentSiblings.findIndex((node) => node.id === parent.id);
   const outdentIndex = Math.max(0, parentIndex + 1);
 
-  moveNode(target.id, grandParentId, outdentIndex);
+  moveNode(target.id, toApiParentId(grandParentId), outdentIndex);
 
   const currentChildren = snapshotNodes()
     .filter((node) => node.parentId === target.id)
@@ -188,7 +189,6 @@ function ensureSeedOutline(): void {
     name: "Untitled",
     text: "Untitled",
     order: 0,
-    parent: INVISIBLE_ROOT_ID,
   });
 }
 
@@ -310,10 +310,10 @@ export function Outliner() {
       const id = graph.block.create({
         name: "Untitled",
         text: "",
-        parent: toStoredParentId(activeNode.parentId),
+        parent: activeNode.parentId,
         order: index + 1,
       });
-      moveNode(id, toStoredParentId(activeNode.parentId), index + 1);
+      moveNode(id, activeNode.parentId, index + 1);
       return { id };
     });
     if (created?.id) {
@@ -348,7 +348,7 @@ export function Outliner() {
     const { siblings, index } = siblingContext(activeNode);
     const nextIndex = index + delta;
     if (nextIndex < 0 || nextIndex >= siblings.length) return;
-    mutate(() => moveNode(activeNode.id, toStoredParentId(activeNode.parentId), nextIndex));
+    mutate(() => moveNode(activeNode.id, activeNode.parentId, nextIndex));
   }
 
   function indent(): void {
@@ -389,7 +389,10 @@ export function Outliner() {
           const nextParent = directChildren.some((child) => child.id === node.id)
             ? target.parentId
             : node.parentId;
-          graph.block.node(node.id).update({ parent: nextParent, order: mergedIndex });
+          graph.block.node(node.id).update({
+            parent: toApiParentId(nextParent),
+            order: mergedIndex,
+          });
         });
         graph.block.delete(target.id);
       } else {

@@ -4,6 +4,7 @@ import {
   type TypeModuleFilter,
   type TypeModuleMeta,
 } from "../graph/type-module.js";
+import { expectDateInput } from "./input.js";
 
 function parseDate(raw: string): Date {
   const value = new Date(raw);
@@ -14,7 +15,7 @@ function parseDate(raw: string): Date {
 }
 
 function formatDate(value: Date): string {
-  return value.toISOString();
+  return expectDateInput(value).toISOString();
 }
 
 export const dateType = defineScalar({

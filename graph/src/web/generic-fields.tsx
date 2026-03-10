@@ -1,7 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 
+import { GraphValidationError, type GraphMutationValidationResult } from "../graph/client.js";
 import type { PredicateRef } from "../graph/client.js";
 import { isEnumType } from "../graph/schema.js";
+import {
+  performValidatedMutation,
+  type MutationCallbacks,
+  type MutationValidation,
+} from "./mutation-validation.js";
 import {
   formatPredicateEditorValue,
   formatPredicateValue,
@@ -25,9 +31,10 @@ import type {
 type AnyPredicate = PredicateRef<any, any>;
 type AnyFieldProps = PredicateFieldProps<any, any>;
 
-function setPredicateValue(predicate: AnyPredicate, value: unknown): void {
-  if (typeof (predicate as { set?: unknown }).set !== "function") return;
+function setPredicateValue(predicate: AnyPredicate, value: unknown): boolean {
+  if (typeof (predicate as { set?: unknown }).set !== "function") return false;
   (predicate as { set(nextValue: unknown): void }).set(value);
+  return true;
 }
 
 function clearPredicateValue(predicate: AnyPredicate): boolean {
@@ -47,6 +54,52 @@ function removePredicateItem(predicate: AnyPredicate, value: unknown): boolean {
   (predicate as { remove(nextValue: unknown): void }).remove(value);
   return true;
 }
+
+function validatePredicateValue(predicate: AnyPredicate, value: unknown): MutationValidation {
+  if (typeof (predicate as { validateSet?: unknown }).validateSet !== "function") return false;
+  return (predicate as { validateSet(nextValue: unknown): GraphMutationValidationResult }).validateSet(
+    value,
+  );
+}
+
+function validatePredicateClear(predicate: AnyPredicate): MutationValidation {
+  if (typeof (predicate as { validateClear?: unknown }).validateClear !== "function") return false;
+  return (predicate as { validateClear(): GraphMutationValidationResult }).validateClear();
+}
+
+function validatePredicateAdd(predicate: AnyPredicate, value: unknown): MutationValidation {
+  if (typeof (predicate as { validateAdd?: unknown }).validateAdd !== "function") return false;
+  return (predicate as { validateAdd(nextValue: unknown): GraphMutationValidationResult }).validateAdd(
+    value,
+  );
+}
+
+function validatePredicateRemove(predicate: AnyPredicate, value: unknown): MutationValidation {
+  if (typeof (predicate as { validateRemove?: unknown }).validateRemove !== "function") return false;
+  return (predicate as {
+    validateRemove(nextValue: unknown): GraphMutationValidationResult;
+  }).validateRemove(value);
+}
+
+function clearOrRejectRequiredValue(
+  predicate: AnyPredicate,
+  callbacks: MutationCallbacks,
+): boolean {
+  if (predicate.field.cardinality === "one?") {
+    return performValidatedMutation(
+      callbacks,
+      () => validatePredicateClear(predicate),
+      () => clearPredicateValue(predicate),
+    );
+  }
+
+  const validation = validatePredicateValue(predicate, undefined);
+  if (validation !== false && !validation.ok) {
+    callbacks.onMutationError?.(new GraphValidationError(validation));
+  }
+  return false;
+}
+
 function normalizeTextValue(value: unknown): string {
   if (typeof value === "string") return value;
   if (value === undefined) return "";
@@ -186,7 +239,7 @@ function EntityReferenceListView({ predicate }: AnyFieldProps) {
   );
 }
 
-function TextFieldEditor({ predicate }: AnyFieldProps) {
+function TextFieldEditor({ onMutationError, onMutationSuccess, predicate }: AnyFieldProps) {
   const { value } = usePredicateField(predicate);
   const editorKind = getPredicateEditorKind(predicate.field);
   const placeholder = getPredicateEditorPlaceholder(predicate.field);
@@ -206,14 +259,23 @@ function TextFieldEditor({ predicate }: AnyFieldProps) {
   function applyDraft(nextValue: string): void {
     setDraft(nextValue);
 
-    if (nextValue === "" && parser && clearPredicateValue(predicate)) {
-      setIsInvalid(false);
+    if (nextValue === "" && parser) {
+      const cleared = clearOrRejectRequiredValue(predicate, {
+        onMutationError,
+        onMutationSuccess,
+      });
+      setIsInvalid(!cleared);
       return;
     }
 
     try {
-      setPredicateValue(predicate, parser ? parser(nextValue) : nextValue);
-      setIsInvalid(false);
+      const parsedValue = parser ? parser(nextValue) : nextValue;
+      const committed = performValidatedMutation(
+        { onMutationError, onMutationSuccess },
+        () => validatePredicateValue(predicate, parsedValue),
+        () => setPredicateValue(predicate, parsedValue),
+      );
+      setIsInvalid(!committed);
     } catch {
       setIsInvalid(true);
     }
@@ -245,7 +307,7 @@ function TextFieldEditor({ predicate }: AnyFieldProps) {
   );
 }
 
-function NumberFieldEditor({ predicate }: AnyFieldProps) {
+function NumberFieldEditor({ onMutationError, onMutationSuccess, predicate }: AnyFieldProps) {
   const { value } = usePredicateField(predicate);
   const committedValue = normalizeNumberValue(value);
   const [draft, setDraft] = useState(committedValue);
@@ -266,19 +328,21 @@ function NumberFieldEditor({ predicate }: AnyFieldProps) {
         setDraft(nextValue);
 
         if (nextValue === "") {
-          const cleared = clearPredicateValue(predicate);
+          const cleared = clearOrRejectRequiredValue(predicate, {
+            onMutationError,
+            onMutationSuccess,
+          });
           setIsInvalid(!cleared);
           return;
         }
 
         const parsed = Number(nextValue);
-        if (!Number.isFinite(parsed)) {
-          setIsInvalid(true);
-          return;
-        }
-
-        setIsInvalid(false);
-        setPredicateValue(predicate, parsed);
+        const committed = performValidatedMutation(
+          { onMutationError, onMutationSuccess },
+          () => validatePredicateValue(predicate, parsed),
+          () => setPredicateValue(predicate, parsed),
+        );
+        setIsInvalid(!committed);
       }}
       type="number"
       value={draft}
@@ -286,7 +350,7 @@ function NumberFieldEditor({ predicate }: AnyFieldProps) {
   );
 }
 
-function UrlFieldEditor({ predicate }: AnyFieldProps) {
+function UrlFieldEditor({ onMutationError, onMutationSuccess, predicate }: AnyFieldProps) {
   const { value } = usePredicateField(predicate);
   const placeholder = getPredicateEditorPlaceholder(predicate.field);
   const committedValue = normalizeUrlValue(value);
@@ -307,15 +371,22 @@ function UrlFieldEditor({ predicate }: AnyFieldProps) {
         setDraft(nextValue);
 
         if (nextValue === "") {
-          const cleared = clearPredicateValue(predicate);
+          const cleared = clearOrRejectRequiredValue(predicate, {
+            onMutationError,
+            onMutationSuccess,
+          });
           setIsInvalid(!cleared);
           return;
         }
 
         try {
           const nextUrl = new URL(nextValue);
-          setIsInvalid(false);
-          setPredicateValue(predicate, nextUrl);
+          const committed = performValidatedMutation(
+            { onMutationError, onMutationSuccess },
+            () => validatePredicateValue(predicate, nextUrl),
+            () => setPredicateValue(predicate, nextUrl),
+          );
+          setIsInvalid(!committed);
         } catch {
           setIsInvalid(true);
         }
@@ -327,7 +398,7 @@ function UrlFieldEditor({ predicate }: AnyFieldProps) {
   );
 }
 
-function DateFieldEditor({ predicate }: AnyFieldProps) {
+function DateFieldEditor({ onMutationError, onMutationSuccess, predicate }: AnyFieldProps) {
   const { value } = usePredicateField(predicate);
   const placeholder = getPredicateEditorPlaceholder(predicate.field);
   const committedValue = normalizeDateValue(value);
@@ -348,7 +419,10 @@ function DateFieldEditor({ predicate }: AnyFieldProps) {
         setDraft(nextValue);
 
         if (nextValue === "") {
-          const cleared = clearPredicateValue(predicate);
+          const cleared = clearOrRejectRequiredValue(predicate, {
+            onMutationError,
+            onMutationSuccess,
+          });
           setIsInvalid(!cleared);
           return;
         }
@@ -359,8 +433,12 @@ function DateFieldEditor({ predicate }: AnyFieldProps) {
           return;
         }
 
-        setIsInvalid(false);
-        setPredicateValue(predicate, parsed);
+        const committed = performValidatedMutation(
+          { onMutationError, onMutationSuccess },
+          () => validatePredicateValue(predicate, parsed),
+          () => setPredicateValue(predicate, parsed),
+        );
+        setIsInvalid(!committed);
       }}
       placeholder={placeholder}
       type="text"
@@ -369,7 +447,7 @@ function DateFieldEditor({ predicate }: AnyFieldProps) {
   );
 }
 
-function CheckboxFieldEditor({ predicate }: AnyFieldProps) {
+function CheckboxFieldEditor({ onMutationError, onMutationSuccess, predicate }: AnyFieldProps) {
   const { value } = usePredicateField(predicate);
 
   if (Array.isArray(value)) {
@@ -380,13 +458,19 @@ function CheckboxFieldEditor({ predicate }: AnyFieldProps) {
     <input
       checked={value === true}
       data-web-field-kind="checkbox"
-      onChange={(event) => setPredicateValue(predicate, event.target.checked)}
+      onChange={(event) => {
+        performValidatedMutation(
+          { onMutationError, onMutationSuccess },
+          () => validatePredicateValue(predicate, event.target.checked),
+          () => setPredicateValue(predicate, event.target.checked),
+        );
+      }}
       type="checkbox"
     />
   );
 }
 
-function SelectFieldEditor({ predicate }: AnyFieldProps) {
+function SelectFieldEditor({ onMutationError, onMutationSuccess, predicate }: AnyFieldProps) {
   const { value } = usePredicateField(predicate);
   const options = getPredicateEnumOptions(predicate);
   const valueId = typeof value === "string" ? value : "";
@@ -403,10 +487,17 @@ function SelectFieldEditor({ predicate }: AnyFieldProps) {
       onChange={(event) => {
         const nextValue = event.target.value;
         if (nextValue === "") {
-          clearPredicateValue(predicate);
+          clearOrRejectRequiredValue(predicate, {
+            onMutationError,
+            onMutationSuccess,
+          });
           return;
         }
-        setPredicateValue(predicate, nextValue);
+        performValidatedMutation(
+          { onMutationError, onMutationSuccess },
+          () => validatePredicateValue(predicate, nextValue),
+          () => setPredicateValue(predicate, nextValue),
+        );
       }}
       value={valueId}
     >
@@ -420,7 +511,7 @@ function SelectFieldEditor({ predicate }: AnyFieldProps) {
   );
 }
 
-function TokenListFieldEditor({ predicate }: AnyFieldProps) {
+function TokenListFieldEditor({ onMutationError, onMutationSuccess, predicate }: AnyFieldProps) {
   const { collectionKind, value } = usePredicateField(predicate);
   const placeholder = getPredicateEditorPlaceholder(predicate.field);
   const [draft, setDraft] = useState("");
@@ -435,7 +526,12 @@ function TokenListFieldEditor({ predicate }: AnyFieldProps) {
   function commitDraft(): void {
     const nextToken = draftRef.current.trim();
     if (!nextToken) return;
-    addPredicateItem(predicate, nextToken);
+    const committed = performValidatedMutation(
+      { onMutationError, onMutationSuccess },
+      () => validatePredicateAdd(predicate, nextToken),
+      () => addPredicateItem(predicate, nextToken),
+    );
+    if (!committed) return;
     draftRef.current = "";
     setDraft("");
   }
@@ -450,7 +546,11 @@ function TokenListFieldEditor({ predicate }: AnyFieldProps) {
             data-web-token-value={token}
             key={token}
             onClick={() => {
-              removePredicateItem(predicate, token);
+              performValidatedMutation(
+                { onMutationError, onMutationSuccess },
+                () => validatePredicateRemove(predicate, token),
+                () => removePredicateItem(predicate, token),
+              );
             }}
             type="button"
           >
@@ -489,7 +589,11 @@ function TokenListFieldEditor({ predicate }: AnyFieldProps) {
   );
 }
 
-function EntityReferenceChecklistEditor({ predicate }: AnyFieldProps) {
+function EntityReferenceChecklistEditor({
+  onMutationError,
+  onMutationSuccess,
+  predicate,
+}: AnyFieldProps) {
   const { value } = usePredicateField(predicate);
   const options = getPredicateEntityReferenceOptions(predicate);
   const selected = getPredicateEntityReferenceSelection(predicate, value);
@@ -513,7 +617,13 @@ function EntityReferenceChecklistEditor({ predicate }: AnyFieldProps) {
               data-proof-mutation="entity-reference"
               data-web-field-action="remove-reference"
               data-web-reference-remove-id={id}
-              onClick={() => removePredicateItem(predicate, id)}
+              onClick={() => {
+                performValidatedMutation(
+                  { onMutationError, onMutationSuccess },
+                  () => validatePredicateRemove(predicate, id),
+                  () => removePredicateItem(predicate, id),
+                );
+              }}
               type="button"
             >
               Remove
@@ -530,10 +640,20 @@ function EntityReferenceChecklistEditor({ predicate }: AnyFieldProps) {
                 checked={checked}
                 onChange={(event) => {
                   if (event.target.checked) {
-                    if (!checked) addPredicateItem(predicate, id);
+                    if (!checked) {
+                      performValidatedMutation(
+                        { onMutationError, onMutationSuccess },
+                        () => validatePredicateAdd(predicate, id),
+                        () => addPredicateItem(predicate, id),
+                      );
+                    }
                     return;
                   }
-                  removePredicateItem(predicate, id);
+                  performValidatedMutation(
+                    { onMutationError, onMutationSuccess },
+                    () => validatePredicateRemove(predicate, id),
+                    () => removePredicateItem(predicate, id),
+                  );
                 }}
                 type="checkbox"
               />

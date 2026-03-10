@@ -31,24 +31,33 @@ That means:
 - reduce compatibility seams
 - make the authoring model clear enough that new work naturally uses it
 
-### 2. Add validations and richer built-in types
+### 2. Harden the validation lifecycle and built-in types
 
-We need a durable validation model rather than ad hoc checks.
+The first durable validation model is now landed.
 
-This should cover:
+That contract is:
 
-- where validation lives in type modules and field definitions
-- when validation runs
-- how validation interacts with local mutation, server-authoritative checks, and
-  future sync
-- what built-in scalar or field helpers should exist by default
+- reusable value semantics live with scalar and enum definitions
+- predicate-specific rules live with field definitions
+- runtime graph invariants stay centralized in the client/store validation path
+- local create/update/delete plus typed predicate mutations all preflight before
+  touching the real store
+- authoritative total-sync payloads validate at the apply boundary before local
+  replacement
+- callers, explorer surfaces, and future sync flows all consume the same
+  structured validation result shape
 
-This needs careful design because validation will eventually sit between:
+Read:
 
-- user edits
-- typed queries
-- optimistic local state
-- sync reconciliation
+- `graph/doc/validation.md`
+- `graph/doc/sync.md`
+- `graph/src/graph/client.ts`
+- `graph/src/graph/sync.ts`
+
+Follow-on work in this area should build on that shared lifecycle rather than
+adding new ad hoc checks. The main remaining work is richer built-in scalar and
+field helpers plus future async/server-only validation layers on top of the
+same result surface.
 
 ### 3. Define the simple user-facing graph API
 
@@ -114,6 +123,7 @@ Architecture and roadmap docs:
 
 - `graph/doc/big-picture.md`
 - `graph/doc/overview.md`
+- `graph/doc/validation.md`
 - `graph/doc/sync.md`
 - `graph/doc/typed-refs.md`
 - `graph/doc/type-modules.md`

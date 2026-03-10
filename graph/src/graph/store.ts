@@ -44,6 +44,8 @@ export interface Store {
   snapshot(): StoreSnapshot
   /** Replace the current store state with a synced snapshot */
   replace(snapshot: StoreSnapshot): void
+  /** Monotonic version for the current fact state */
+  version(): number
 }
 
 export function createStore(): Store {
@@ -53,6 +55,7 @@ export function createStore(): Store {
   const predicateSlotListeners = new Map<string, Set<PredicateSlotListener>>()
   const pendingPredicateSlots = new Map<string, { s: Id; p: Id; before: Scalar[] }>()
   let batchDepth = 0
+  let version = 0
 
   function nextId(): Id {
     // Keep node and edge ids globally unique for reification safety.
@@ -99,17 +102,24 @@ export function createStore(): Store {
   }
 
   function assert(s: Id, p: Id, o: Scalar): Edge {
+    usedIds.add(s)
+    usedIds.add(p)
+    usedIds.add(o)
     beginPredicateSlotMutation(s, p)
     const edge: Edge = { id: nextId(), s, p, o }
     edges.set(edge.id, edge)
+    version += 1
     flushPredicateSlotNotifications()
     return edge
   }
 
   function retract(edgeId: Id): void {
+    usedIds.add(edgeId)
     const edge = edges.get(edgeId)
     if (edge) beginPredicateSlotMutation(edge.s, edge.p)
+    const alreadyRetracted = retracted.has(edgeId)
     retracted.add(edgeId)
+    if (!alreadyRetracted) version += 1
     flushPredicateSlotNotifications()
   }
 
@@ -194,6 +204,7 @@ export function createStore(): Store {
     }
 
     loadSnapshot(snapshot)
+    version += 1
     flushPredicateSlotNotifications()
   }
 
@@ -208,5 +219,6 @@ export function createStore(): Store {
     subscribePredicateSlot,
     snapshot,
     replace,
+    version: () => version,
   }
 }

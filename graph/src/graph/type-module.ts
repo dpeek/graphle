@@ -320,6 +320,7 @@ function createTypeModule<
       meta,
       onCreate,
       onUpdate,
+      validate,
     }: TypeModuleFieldConfig<Meta, Filter, Type, Card, Allowed>) {
       return {
         ...(key ? { key } : {}),
@@ -327,6 +328,7 @@ function createTypeModule<
         cardinality,
         ...(onCreate ? { onCreate } : {}),
         ...(onUpdate ? { onUpdate } : {}),
+        ...(validate ? { validate } : {}),
         meta: composeMeta(moduleMeta, meta),
         filter: composeFilter(moduleFilter, filter),
       } as unknown as TypeModuleFieldInput<

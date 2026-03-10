@@ -13,19 +13,22 @@ It stores triples (`s`, `p`, `o`) in an append-only store, while schema authors 
 
 ## Store Model
 
-Source: `src/store.ts`
+Source: `graph/src/graph/store.ts`
 
 - A triple is `{ s, p, o }` plus an edge id.
 - `assert(...)` appends; `retract(...)` marks edges retracted.
 - `facts(...)` returns current non-retracted edges.
-- Node ids and edge ids come from the same generator (`src/id.ts`, NanoID-based), so edges can be reified as subjects.
+- Node ids and edge ids come from the same generator
+  (`graph/src/graph/id.ts`, NanoID-based), so edges can be reified as
+  subjects.
 
 ## Schema Authoring API
 
 Sources:
 
-- `src/schema.ts`
-- `src/type-module.ts`
+- `graph/src/graph/schema.ts`
+- `graph/src/graph/type-module.ts`
+- `graph/doc/validation.md`
 
 - `defineScalar(...)` defines scalar codecs.
 - `defineType(...)` defines entity types and field trees.
@@ -48,7 +51,7 @@ Sources:
 
 ## Core Schema
 
-Source: `src/schema/core.ts`
+Source: `graph/src/graph/core.ts`
 
 Core currently defines:
 
@@ -65,9 +68,9 @@ Notable semantics:
 
 Sources:
 
-- `src/schema/core.json`
-- `src/schema/app.json`
-- CLI: `src/ids-cli.ts`
+- `graph/src/graph/core.json`
+- `graph/src/graph/app.json`
+- CLI: `graph/src/graph/ids-cli.ts`
 
 Each namespace keeps its own `key -> id` map next to the schema file.
 
@@ -81,7 +84,7 @@ Alias history is intentionally not stored; rename is a direct map-key move.
 
 ## Bootstrap
 
-Source: `src/bootstrap.ts`
+Source: `graph/src/graph/bootstrap.ts`
 
 Bootstrap asserts schema graph metadata into the store:
 
@@ -91,13 +94,35 @@ Bootstrap asserts schema graph metadata into the store:
 
 ## Typed Client
 
-Source: `src/client.ts`
+Sources:
+
+- `graph/src/graph/client.ts`
+- `graph/doc/validation.md`
 
 `createTypeClient(store, appNamespace)` exposes typed CRUD handles per entity type:
 
 - `create`, `get`, `update`, `delete`, `list`, `node(id)`
 - `query({ select, where? })`
 - Scalar encode/decode comes from scalar definitions.
+- Validation ownership is split by intent:
+  - scalar and enum definitions own reusable value semantics
+  - field definitions own predicate-specific rules
+  - runtime graph invariants stay centralized in `validateGraphStore(...)`
+- Validation runs after lifecycle normalization, simulates the post-apply graph
+  on a cloned store, and only then writes to the real store.
+- Local preflight callers can inspect `GraphValidationResult` through
+  entity-handle `validateCreate` / `validateUpdate` / `validateDelete` helpers
+  plus predicate-ref `validateSet` / `validateClear` / `validateAdd` /
+  `validateRemove` / `validateReplace`; commit helpers still throw
+  `GraphValidationError` with the same structured issues.
+- Generic field editors consume that same predicate-ref `validate*` surface
+  before they call the mutating helpers, so explorer inline errors come from
+  one shared validation result shape instead of exception-only control flow.
+- Typed update/delete handles now reject missing nodes and wrong-type nodes at
+  the same local validation boundary, so a `company` handle cannot mutate a
+  `person` node or silently delete a missing id.
+- Delete prechecks validate the simulated post-delete graph before facts are
+  retracted, so dangling references never enter local state.
 - Client typing remains key-based (from schema keys) even though runtime queries by resolved IDs.
 - Predicate fields can define lifecycle callbacks:
   - `onCreate(ctx)` can synthesize/set a value before create assertions.
@@ -145,17 +170,27 @@ const company = await graph.company.query({
 
 Sources:
 
-- `src/sync.ts`
-- `src/store.ts`
-- `doc/sync.md`
+- `graph/src/graph/sync.ts`
+- `graph/src/graph/store.ts`
+- `graph/doc/sync.md`
 
 The first shipped sync contract is a total graph snapshot applied into the local
 store.
 
 - `createSyncedTypeClient(namespace, { pull })` exposes a typed client plus a
   pre-bound `sync.sync()` entry point
-- `createTotalSyncSession(store)` remains the lower-level store integration
-  surface
+- `createTotalSyncSession(store, { preserveSnapshot, validate })` remains the
+  lower-level store integration surface; `createTotalSyncController(...)` and
+  `createSyncedTypeClient(...)` both build on that same session-level apply
+  boundary
+- lower-level total-sync integrations can reuse the same authoritative
+  validation boundary with
+  `createAuthoritativeTotalSyncValidator(namespace)` or inspect
+  `validateAuthoritativeTotalSyncPayload(payload, namespace, { preserveSnapshot })`
+  directly
+- incoming snapshots are validated before they replace local state
+- `sync.sync()`, `apply(...)`, and `pull(...)` return the materialized payload
+  that actually passed validation and replaced local state
 - sync payloads carry explicit `mode`, `scope`, `cursor`, `completeness`, and
   `freshness` metadata
 - typed queries still read local store state; v1 completeness is tracked in sync
@@ -167,15 +202,15 @@ store.
 
 Sources:
 
-- `src/runtime.ts` example graph sync bootstrap and sample data.
-- `web/server.ts` explorer API/UI for browsing schema + nodes.
+- `graph/src/graph/runtime.ts` example graph sync bootstrap and sample data.
+- `graph/src/server.ts` explorer API/UI for browsing schema + nodes.
 
 Explorer intentionally surfaces human-readable keys where helpful (`key` when available, fallback to id), but all internal querying uses resolved IDs.
 
 ### Explorer Dev Access
 
 - Start (and keep running) with `bun run dev`.
-- `dev` uses `portless graph bun run --watch ./web/server.ts`.
+- `dev` uses `portless graph bun run --hot-reload --watch ./src/server.ts`.
 - Explorer is available at `https://graph.localhost`.
 - Agent workflows should call `https://graph.localhost` (and its `/api/*` routes) instead of launching a separate local server process.
 
@@ -184,4 +219,5 @@ Explorer intentionally surfaces human-readable keys where helpful (`key` when av
 - Prefer `rangeOf(typeRef)` over passing type objects directly as `range` in `defineType(...)` input.
   - Direct object refs can still degrade TypeScript inference in some paths.
   - `rangeOf(...)` gives object-ref ergonomics with stable type inference.
-- Built-in scalar and enum families in `src/type/*.ts` should expose a type module so new field work starts from `.field(...)`.
+- Built-in scalar and enum families in `graph/src/type/*.ts` should expose a
+  type module so new field work starts from `.field(...)`.
