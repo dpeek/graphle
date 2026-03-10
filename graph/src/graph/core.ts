@@ -1,6 +1,9 @@
 import coreIdMap from "./core.json";
-import { defineEnum, defineNamespace, defineScalar, defineType, rangeOf } from "./schema.js";
+import { defineEnum, defineNamespace, defineType } from "./schema.js";
+import { defineReferenceField } from "./type-module.js";
 import { booleanTypeModule } from "../type/boolean.js";
+import { dateTypeModule } from "../type/date.js";
+import { defineDefaultEnumTypeModule } from "../type/enum-module.js";
 import { numberTypeModule } from "../type/number.js";
 import { stringTypeModule } from "../type/string.js";
 import { urlTypeModule } from "../type/url.js";
@@ -9,11 +12,7 @@ const string = stringTypeModule.type;
 
 const number = numberTypeModule.type;
 
-const date = defineScalar({
-  values: { key: "core:date", name: "Date" },
-  encode: (value: Date) => value.toISOString(),
-  decode: (string) => new Date(string),
-});
+const date = dateTypeModule.type;
 
 const boolean = booleanTypeModule.type;
 
@@ -22,7 +21,10 @@ const url = urlTypeModule.type;
 const node = defineType({
   values: { key: "core:node", name: "Node" },
   fields: {
-    type: { range: "core:type", cardinality: "many" },
+    type: defineReferenceField({
+      range: "core:type",
+      cardinality: "many",
+    }),
     name: stringTypeModule.field({
       cardinality: "one",
       meta: {
@@ -49,13 +51,11 @@ const node = defineType({
         defaultOperator: "contains",
       },
     }),
-    createdAt: {
-      range: date.values.key,
+    createdAt: dateTypeModule.field({
       cardinality: "one?",
       onCreate: ({ incoming, now }) => incoming ?? now,
-    },
-    updatedAt: {
-      range: date.values.key,
+    }),
+    updatedAt: dateTypeModule.field({
       cardinality: "one?",
       onCreate: ({ now }) => now,
       onUpdate: ({ now, changedPredicateKeys }) =>
@@ -64,7 +64,7 @@ const node = defineType({
         )
           ? now
           : undefined,
-    },
+    }),
   },
 });
 
@@ -93,6 +93,8 @@ const cardinality = defineEnum({
   },
 });
 
+const cardinalityTypeModule = defineDefaultEnumTypeModule(cardinality);
+
 const predicate = defineType({
   values: { key: "core:predicate", name: "Predicate" },
   fields: {
@@ -107,8 +109,20 @@ const predicate = defineType({
         defaultOperator: "equals",
       },
     }),
-    range: { range: type.values.key, cardinality: "one?" },
-    cardinality: { range: rangeOf(cardinality), cardinality: "one" },
+    range: defineReferenceField({
+      range: type.values.key,
+      cardinality: "one?",
+    }),
+    cardinality: cardinalityTypeModule.field({
+      cardinality: "one",
+      meta: {
+        label: "Cardinality",
+      },
+      filter: {
+        operators: ["is"] as const,
+        defaultOperator: "is",
+      },
+    }),
   },
 });
 
@@ -116,7 +130,10 @@ const _enum = defineType({
   values: { key: "core:enum", name: "Enum" },
   fields: {
     ...node.fields,
-    member: { range: type.values.key, cardinality: "many" },
+    member: defineReferenceField({
+      range: type.values.key,
+      cardinality: "many",
+    }),
   },
 });
 

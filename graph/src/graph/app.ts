@@ -1,7 +1,8 @@
 import ids from "./app.json";
 import { core } from "./core";
-import { defineNamespace, defineType, rangeOf } from "./schema.js";
-import { existingEntityReferenceFieldMeta } from "./web-policy.js";
+import { defineNamespace, defineType } from "./schema.js";
+import { defineReferenceField } from "./type-module.js";
+import { existingEntityReferenceField } from "./web-policy.js";
 import { addressFields } from "../type/address.js";
 import { booleanTypeModule } from "../type/boolean.js";
 import { numberTypeModule } from "../type/number.js";
@@ -73,13 +74,10 @@ export const person = defineType({
   values: { key: "app:person", name: "Person" },
   fields: {
     ...core.node.fields,
-    worksAt: {
-      range: rangeOf(company),
+    worksAt: existingEntityReferenceField(company, {
       cardinality: "many",
-      meta: existingEntityReferenceFieldMeta({
-        label: "Works at",
-      }),
-    },
+      label: "Works at",
+    }),
   },
 });
 
@@ -101,7 +99,10 @@ export const block = defineType({
         defaultOperator: "contains",
       },
     }),
-    parent: { range: "app:block", cardinality: "one?" },
+    parent: defineReferenceField({
+      range: "app:block",
+      cardinality: "one?",
+    }),
     order: numberTypeModule.field({
       cardinality: "one",
       meta: {

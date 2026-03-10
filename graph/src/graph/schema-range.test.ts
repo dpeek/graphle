@@ -1,7 +1,8 @@
 import { describe, expect, it } from "bun:test";
-import { rangeOf } from "./schema";
+import { rangeOf, typeId } from "./schema";
 import { app, company, status } from "./app";
 import { core } from "./core";
+import { country } from "../type/country.js";
 
 describe("rangeOf typing and namespace resolution", () => {
   it("keeps key-literal typing while normalizing resolved refs to ids", () => {
@@ -34,5 +35,11 @@ describe("rangeOf typing and namespace resolution", () => {
     expect(app.status.values.active.id).toBeTruthy();
     expect(app.status.values.paused.id).toBeTruthy();
     expect(app.status.values.active.id).not.toBe(app.status.values.paused.id);
+  });
+
+  it("does not confuse enum option aliases named id with resolved type ids", () => {
+    expect(typeId(country)).toBe("core:country");
+    expect(rangeOf(country)).toBe("core:country");
+    expect(country.values.id.key).toBe("core:country.id");
   });
 });

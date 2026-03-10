@@ -1,4 +1,5 @@
-import { defineEnum } from "@io/graph";
+import { defineEnum } from "../graph/schema.js";
+import { defineDefaultEnumTypeModule } from "./enum-module.js";
 
 export const language = defineEnum({
   values: { key: "core:language", name: "Language" },
@@ -198,3 +199,5 @@ export const language = defineEnum({
     zu: { code: "zu", name: "Zulu" },
   },
 });
+
+export const languageTypeModule = defineDefaultEnumTypeModule(language);

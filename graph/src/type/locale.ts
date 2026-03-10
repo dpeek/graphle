@@ -1,5 +1,6 @@
-import { defineEnum } from "@io/graph";
+import { defineEnum } from "../graph/schema.js";
 import { country } from "./country";
+import { defineDefaultEnumTypeModule } from "./enum-module.js";
 import { language } from "./language";
 
 export const locale = defineEnum({
@@ -36,3 +37,5 @@ export const locale = defineEnum({
     },
   },
 });
+
+export const localeTypeModule = defineDefaultEnumTypeModule(locale);

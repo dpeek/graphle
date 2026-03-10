@@ -1,4 +1,5 @@
 import { defineEnum } from "../graph/schema.js";
+import { defineDefaultEnumTypeModule } from "./enum-module.js";
 
 export const country = defineEnum({
   values: { key: "core:country", name: "Country" },
@@ -989,3 +990,5 @@ export const country = defineEnum({
     },
   },
 });
+
+export const countryTypeModule = defineDefaultEnumTypeModule(country);

@@ -41,7 +41,9 @@ function NumberFilterOperandEditor({ operator, onChange, value }: AnyOperandProp
     <input
       aria-invalid={isInvalid || undefined}
       data-web-filter-operand-kind="number"
-      inputMode={operator.operand.kind === "number" ? operator.operand.inputMode ?? "numeric" : "numeric"}
+      inputMode={
+        operator.operand.kind === "number" ? (operator.operand.inputMode ?? "numeric") : "numeric"
+      }
       onChange={(event) => {
         const nextValue = event.target.value;
         setDraft(nextValue);
@@ -66,6 +68,49 @@ function NumberFilterOperandEditor({ operator, onChange, value }: AnyOperandProp
       }}
       placeholder={operator.operand.placeholder}
       type="number"
+      value={draft}
+    />
+  );
+}
+
+function DateFilterOperandEditor({ operator, onChange, value }: AnyOperandProps) {
+  const committedValue = value instanceof Date ? operator.format(value) : "";
+  const [draft, setDraft] = useState(committedValue);
+  const [isInvalid, setIsInvalid] = useState(false);
+
+  useEffect(() => {
+    setDraft(committedValue);
+    setIsInvalid(false);
+  }, [committedValue]);
+
+  return (
+    <input
+      aria-invalid={isInvalid || undefined}
+      data-web-filter-operand-kind="date"
+      onChange={(event) => {
+        const nextValue = event.target.value;
+        setDraft(nextValue);
+
+        if (nextValue === "") {
+          setIsInvalid(false);
+          onChange(undefined);
+          return;
+        }
+
+        try {
+          const parsed = operator.parse(nextValue);
+          if (!(parsed instanceof Date) || Number.isNaN(parsed.getTime())) {
+            setIsInvalid(true);
+            return;
+          }
+          setIsInvalid(false);
+          onChange(parsed);
+        } catch {
+          setIsInvalid(true);
+        }
+      }}
+      placeholder={operator.operand.placeholder}
+      type="text"
       value={draft}
     />
   );
@@ -187,6 +232,7 @@ function BooleanFilterOperandEditor({ operator, onChange, value }: AnyOperandPro
 
 export const genericWebFilterOperandEditorCapabilities = [
   { kind: "string", Component: TextFilterOperandEditor },
+  { kind: "date", Component: DateFilterOperandEditor },
   { kind: "number", Component: NumberFilterOperandEditor },
   { kind: "url", Component: UrlFilterOperandEditor },
   { kind: "enum", Component: EnumFilterOperandEditor },

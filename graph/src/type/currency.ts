@@ -1,4 +1,5 @@
-import { defineEnum } from "@io/graph";
+import { defineEnum } from "../graph/schema.js";
+import { defineDefaultEnumTypeModule } from "./enum-module.js";
 
 export const currency = defineEnum({
   values: { key: "core:currency", name: "Country" },
@@ -1067,3 +1068,5 @@ export const currency = defineEnum({
     },
   },
 });
+
+export const currencyTypeModule = defineDefaultEnumTypeModule(currency);

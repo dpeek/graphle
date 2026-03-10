@@ -60,6 +60,12 @@ function normalizeUrlValue(value: unknown): string {
   return String(value);
 }
 
+function normalizeDateValue(value: unknown): string {
+  if (value instanceof Date) return value.toISOString();
+  if (value === undefined) return "";
+  return String(value);
+}
+
 function BooleanFieldView({ predicate }: AnyFieldProps) {
   const { value } = usePredicateField(predicate);
 
@@ -89,6 +95,20 @@ function NumberFieldView({ predicate }: AnyFieldProps) {
   return <span data-web-field-kind="number">{formatPredicateValue(predicate, value)}</span>;
 }
 
+function DateFieldView({ predicate }: AnyFieldProps) {
+  const { value } = usePredicateField(predicate);
+  if (!(value instanceof Date)) {
+    return <span data-web-field-kind="date">{formatPredicateValue(predicate, value)}</span>;
+  }
+
+  const formatted = formatPredicateValue(predicate, value);
+  return (
+    <time data-web-field-kind="date" dateTime={value.toISOString()}>
+      {formatted}
+    </time>
+  );
+}
+
 function LinkFieldView({ predicate }: AnyFieldProps) {
   const { value } = usePredicateField(predicate);
   if (!(value instanceof URL)) {
@@ -106,17 +126,14 @@ function LinkFieldView({ predicate }: AnyFieldProps) {
 function ExternalLinkFieldView({ predicate }: AnyFieldProps) {
   const { value } = usePredicateField(predicate);
   if (!(value instanceof URL)) {
-    return <span data-web-field-kind="external-link">{formatPredicateValue(predicate, value)}</span>;
+    return (
+      <span data-web-field-kind="external-link">{formatPredicateValue(predicate, value)}</span>
+    );
   }
 
   const href = value.toString();
   return (
-    <a
-      data-web-field-kind="external-link"
-      href={href}
-      rel="noreferrer"
-      target="_blank"
-    >
+    <a data-web-field-kind="external-link" href={href} rel="noreferrer" target="_blank">
       {formatPredicateValue(predicate, value)}
     </a>
   );
@@ -274,6 +291,48 @@ function UrlFieldEditor({ predicate }: AnyFieldProps) {
   );
 }
 
+function DateFieldEditor({ predicate }: AnyFieldProps) {
+  const { value } = usePredicateField(predicate);
+  const placeholder = getPredicateEditorPlaceholder(predicate.field);
+  const committedValue = normalizeDateValue(value);
+  const [draft, setDraft] = useState(committedValue);
+  const [isInvalid, setIsInvalid] = useState(false);
+
+  useEffect(() => {
+    setDraft(committedValue);
+    setIsInvalid(false);
+  }, [committedValue]);
+
+  return (
+    <input
+      aria-invalid={isInvalid || undefined}
+      data-web-field-kind="date"
+      onChange={(event) => {
+        const nextValue = event.target.value;
+        setDraft(nextValue);
+
+        if (nextValue === "") {
+          const cleared = clearPredicateValue(predicate);
+          setIsInvalid(!cleared);
+          return;
+        }
+
+        const parsed = new Date(nextValue);
+        if (Number.isNaN(parsed.getTime())) {
+          setIsInvalid(true);
+          return;
+        }
+
+        setIsInvalid(false);
+        setPredicateValue(predicate, parsed);
+      }}
+      placeholder={placeholder}
+      type="text"
+      value={draft}
+    />
+  );
+}
+
 function CheckboxFieldEditor({ predicate }: AnyFieldProps) {
   const { value } = usePredicateField(predicate);
 
@@ -401,7 +460,11 @@ function EntityReferenceChecklistEditor({ predicate }: AnyFieldProps) {
   const selectedIds = new Set(selected.map((option) => option.id));
 
   if (predicate.field.cardinality !== "many") {
-    return <span data-web-field-status="unsupported">unsupported-editor-kind:entity-reference-checklist</span>;
+    return (
+      <span data-web-field-status="unsupported">
+        unsupported-editor-kind:entity-reference-checklist
+      </span>
+    );
   }
 
   return (
@@ -449,6 +512,7 @@ function EntityReferenceChecklistEditor({ predicate }: AnyFieldProps) {
 export const genericWebFieldViewCapabilities = [
   { kind: "boolean", Component: BooleanFieldView },
   { kind: "text", Component: TextFieldView },
+  { kind: "date", Component: DateFieldView },
   { kind: "number", Component: NumberFieldView },
   { kind: "link", Component: LinkFieldView },
   { kind: "external-link", Component: ExternalLinkFieldView },
@@ -460,6 +524,7 @@ export const genericWebFieldEditorCapabilities = [
   { kind: "checkbox", Component: CheckboxFieldEditor },
   { kind: "text", Component: TextFieldEditor },
   { kind: "textarea", Component: TextFieldEditor },
+  { kind: "date", Component: DateFieldEditor },
   { kind: "number", Component: NumberFieldEditor },
   { kind: "url", Component: UrlFieldEditor },
   { kind: "select", Component: SelectFieldEditor },

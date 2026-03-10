@@ -1,5 +1,5 @@
 import { defineType } from "../graph/schema.js";
-import { country } from "./country";
+import { countryTypeModule } from "./country";
 import { stringTypeModule } from "./string";
 
 export const addressFields = {
@@ -63,9 +63,11 @@ export const address = defineType({
         label: "Address line 1",
       },
     }),
-    country: {
-      range: country.values.key,
+    country: countryTypeModule.field({
       cardinality: "one",
-    },
+      meta: {
+        label: "Country",
+      },
+    }),
   },
 });

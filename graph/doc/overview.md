@@ -22,10 +22,15 @@ Source: `src/store.ts`
 
 ## Schema Authoring API
 
-Source: `src/schema.ts`
+Sources:
+
+- `src/schema.ts`
+- `src/type-module.ts`
 
 - `defineScalar(...)` defines scalar codecs.
 - `defineType(...)` defines entity types and field trees.
+- `scalarOrEnumTypeModule.field(...)` authors scalar and enum predicates from typed modules.
+- `defineReferenceField(...)` authors entity/reference predicates without dropping back to raw edge objects.
 - `rangeOf(...)` normalizes a range ref to a key string while preserving TypeScript inference.
   - Supports `rangeOf("core:number")`
   - Supports `rangeOf(core.number)` and `rangeOf(company)`
@@ -39,6 +44,7 @@ Source: `src/schema.ts`
   - `edgeId(...)`
   - `fieldTreeId(...)`
 - Field `range` is overwritten to resolved ID when possible.
+- Prefer `*.field(...)` or `defineReferenceField(...)` over inline `{ range, cardinality }` objects.
 
 ## Core Schema
 
@@ -122,3 +128,4 @@ Explorer intentionally surfaces human-readable keys where helpful (`key` when av
 - Prefer `rangeOf(typeRef)` over passing type objects directly as `range` in `defineType(...)` input.
   - Direct object refs can still degrade TypeScript inference in some paths.
   - `rangeOf(...)` gives object-ref ergonomics with stable type inference.
+- Built-in scalar and enum families in `src/type/*.ts` should expose a type module so new field work starts from `.field(...)`.

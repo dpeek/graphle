@@ -1,13 +1,29 @@
 import { booleanTypeModule } from "../type/boolean.js";
 import { statusTypeModule } from "../type/status.js";
 import { stringTypeModule } from "../type/string.js";
-import { defineScalar } from "./schema.js";
-import { defineScalarModule } from "./type-module.js";
+import { defineScalar, defineType } from "./schema.js";
+import { defineReferenceField, defineScalarModule } from "./type-module.js";
+import { existingEntityReferenceField } from "./web-policy.js";
 
 const probeStringType = defineScalar({
   values: { key: "probe:string", name: "Probe String" },
   encode: (value: string) => value,
   decode: (raw) => raw,
+});
+
+const probeEntityType = defineType({
+  values: { key: "probe:entity", name: "Probe Entity" },
+  fields: {},
+});
+
+void defineReferenceField({
+  range: probeEntityType,
+  cardinality: "many",
+});
+
+void existingEntityReferenceField(probeEntityType, {
+  cardinality: "many",
+  label: "Related entities",
 });
 
 void stringTypeModule.field({

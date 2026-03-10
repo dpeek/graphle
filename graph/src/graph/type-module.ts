@@ -1,31 +1,18 @@
-import type { Cardinality, EdgeInput, EnumTypeOutput, ScalarTypeOutput } from "./schema";
+import type { Cardinality, EdgeInput, EnumTypeOutput, RangeRef, ScalarTypeOutput } from "./schema";
 
 type EnumOptionLike = { key: string; id?: string };
 type EnumTypeLike = { options: Record<string, EnumOptionLike> };
-type EnumOptionIdentity<Option extends EnumOptionLike> = Option extends { id: infer Id extends string }
+type EnumOptionIdentity<Option extends EnumOptionLike> = Option extends {
+  id: infer Id extends string;
+}
   ? Id
   : Option["key"];
-type MetaDecoded<Meta extends TypeModuleMeta<any, any, any>> = Meta extends TypeModuleMeta<
-  infer Decoded,
-  any,
-  any
->
-  ? Decoded
-  : never;
-type MetaDisplayKinds<Meta extends TypeModuleMeta<any, any, any>> = Meta extends TypeModuleMeta<
-  any,
-  infer DisplayKinds,
-  any
->
-  ? DisplayKinds
-  : readonly string[];
-type MetaEditorKinds<Meta extends TypeModuleMeta<any, any, any>> = Meta extends TypeModuleMeta<
-  any,
-  any,
-  infer EditorKinds
->
-  ? EditorKinds
-  : readonly string[];
+type MetaDecoded<Meta extends TypeModuleMeta<any, any, any>> =
+  Meta extends TypeModuleMeta<infer Decoded, any, any> ? Decoded : never;
+type MetaDisplayKinds<Meta extends TypeModuleMeta<any, any, any>> =
+  Meta extends TypeModuleMeta<any, infer DisplayKinds, any> ? DisplayKinds : readonly string[];
+type MetaEditorKinds<Meta extends TypeModuleMeta<any, any, any>> =
+  Meta extends TypeModuleMeta<any, any, infer EditorKinds> ? EditorKinds : readonly string[];
 type FilterKey<Filter extends { operators: Record<string, unknown> }> = Extract<
   keyof Filter["operators"],
   string
@@ -50,7 +37,9 @@ type NormalizedFilter<Filter extends { operators: Record<string, unknown> }> = {
 type FieldFilterOperators<
   Filter extends { operators: Record<string, unknown> },
   Allowed extends readonly FilterKey<Filter>[] | undefined,
-> = Allowed extends readonly FilterKey<Filter>[] ? Pick<Filter["operators"], Allowed[number]> : Filter["operators"];
+> = Allowed extends readonly FilterKey<Filter>[]
+  ? Pick<Filter["operators"], Allowed[number]>
+  : Filter["operators"];
 
 export type TypeModuleMeta<
   Decoded,
@@ -106,6 +95,10 @@ export type TypeFilterOperand<Operand> =
       placeholder?: string;
     }
   | {
+      kind: "date";
+      placeholder?: string;
+    }
+  | {
       kind: "number";
       placeholder?: string;
       inputMode?: "decimal" | "numeric";
@@ -142,12 +135,8 @@ export type TypeModuleFilter<
   operators: Operators;
 };
 
-export type ScalarModuleValue<Type extends ScalarTypeOutput<any, any>> = Type extends ScalarTypeOutput<
-  infer Decoded,
-  any
->
-  ? Decoded
-  : never;
+export type ScalarModuleValue<Type extends ScalarTypeOutput<any, any>> =
+  Type extends ScalarTypeOutput<infer Decoded, any> ? Decoded : never;
 export type EnumModuleValue<Type extends EnumTypeLike> = EnumOptionIdentity<
   Type["options"][keyof Type["options"]]
 >;
@@ -175,7 +164,9 @@ export type FieldFilterOverride<
   Allowed extends readonly FilterKey<Filter>[] | undefined = undefined,
 > = {
   operators?: Allowed;
-  defaultOperator?: Allowed extends readonly FilterKey<Filter>[] ? Allowed[number] : FilterKey<Filter>;
+  defaultOperator?: Allowed extends readonly FilterKey<Filter>[]
+    ? Allowed[number]
+    : FilterKey<Filter>;
 };
 
 export type TypeModuleFieldInput<
@@ -189,11 +180,19 @@ export type TypeModuleFieldInput<
   {
     meta: NormalizedMeta<Meta>;
     filter: {
-      defaultOperator: Allowed extends readonly FilterKey<Filter>[] ? Allowed[number] : FilterKey<Filter>;
+      defaultOperator: Allowed extends readonly FilterKey<Filter>[]
+        ? Allowed[number]
+        : FilterKey<Filter>;
       operators: FieldFilterOperators<Filter, Allowed>;
     };
   }
 > & { cardinality: Card };
+
+export type ReferenceFieldInput<
+  Range extends RangeRef = RangeRef,
+  Extra extends object = {},
+  Card extends Cardinality = Cardinality,
+> = EdgeInput<Range, Extra> & { cardinality: Card };
 
 type TypeModuleShape<
   Type extends ScalarTypeOutput<any, any> | EnumTypeOutput<any, any>,
@@ -249,14 +248,15 @@ function composeFilter<
   defaults: NormalizedFilter<Filter>,
   override?: FieldFilterOverride<NormalizedFilter<Filter>, Allowed>,
 ): {
-  defaultOperator: Allowed extends readonly FilterKey<Filter>[] ? Allowed[number] : FilterKey<Filter>;
+  defaultOperator: Allowed extends readonly FilterKey<Filter>[]
+    ? Allowed[number]
+    : FilterKey<Filter>;
   operators: FieldFilterOperators<Filter, Allowed>;
 } {
   if (!override?.operators?.length) {
     return {
-      defaultOperator: (override?.defaultOperator ?? defaults.defaultOperator) as Allowed extends readonly FilterKey<
-        Filter
-      >[]
+      defaultOperator: (override?.defaultOperator ??
+        defaults.defaultOperator) as Allowed extends readonly FilterKey<Filter>[]
         ? Allowed[number]
         : FilterKey<Filter>,
       operators: defaults.operators as FieldFilterOperators<Filter, Allowed>,
@@ -277,7 +277,9 @@ function composeFilter<
   }
 
   return {
-    defaultOperator: defaultOperator as Allowed extends readonly FilterKey<Filter>[] ? Allowed[number] : FilterKey<Filter>,
+    defaultOperator: defaultOperator as Allowed extends readonly FilterKey<Filter>[]
+      ? Allowed[number]
+      : FilterKey<Filter>,
     operators,
   };
 }
@@ -286,11 +288,7 @@ function createTypeModule<
   Type extends ScalarTypeOutput<any, any> | EnumTypeOutput<any, any>,
   Meta extends TypeModuleMeta<any, any, any>,
   Filter extends TypeModuleFilter<any, any>,
->(input: {
-  type: Type;
-  meta: Meta;
-  filter: Filter;
-}): TypeModuleShape<Type, Meta, Filter> {
+>(input: { type: Type; meta: Meta; filter: Filter }): TypeModuleShape<Type, Meta, Filter> {
   const moduleMeta = input.meta as NormalizedMeta<Meta>;
   const moduleFilter = input.filter as unknown as NormalizedFilter<Filter>;
 
@@ -298,7 +296,10 @@ function createTypeModule<
     type: input.type,
     meta: moduleMeta,
     filter: moduleFilter,
-    field<Card extends Cardinality, Allowed extends readonly FilterKey<NormalizedFilter<Filter>>[] | undefined = undefined>({
+    field<
+      Card extends Cardinality,
+      Allowed extends readonly FilterKey<NormalizedFilter<Filter>>[] | undefined = undefined,
+    >({
       cardinality,
       filter,
       key,
@@ -329,22 +330,22 @@ export function defineScalarModule<
   const Type extends ScalarTypeOutput<any, any>,
   const Meta extends TypeModuleMeta<ScalarModuleValue<Type>, any, any>,
   const Filter extends TypeModuleFilter<ScalarModuleValue<Type>, any>,
->(input: {
-  type: Type;
-  meta: Meta;
-  filter: Filter;
-}): TypeModuleShape<Type, Meta, Filter> {
+>(input: { type: Type; meta: Meta; filter: Filter }): TypeModuleShape<Type, Meta, Filter> {
   return createTypeModule(input);
+}
+
+export function defineReferenceField<
+  const Range extends RangeRef,
+  const Extra extends object = {},
+  const Card extends Cardinality = Cardinality,
+>(input: ReferenceFieldInput<Range, Extra, Card>): ReferenceFieldInput<Range, Extra, Card> {
+  return input;
 }
 
 export function defineEnumModule<
   const Type extends EnumTypeOutput<any, any>,
   const Meta extends TypeModuleMeta<EnumModuleValue<Type>, any, any>,
   const Filter extends TypeModuleFilter<EnumModuleValue<Type>, any>,
->(input: {
-  type: Type;
-  meta: Meta;
-  filter: Filter;
-}): TypeModuleShape<Type, Meta, Filter> {
+>(input: { type: Type; meta: Meta; filter: Filter }): TypeModuleShape<Type, Meta, Filter> {
   return createTypeModule(input);
 }

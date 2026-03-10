@@ -71,8 +71,8 @@ function hasEdgeShape(value: unknown): value is EdgeInput<RangeRef> {
 
 function normalizeRangeRef(range: RangeRef): string {
   if (typeof range === "string") return range;
-  const values = range.values as { key: string; id?: string };
-  return values.id ?? values.key;
+  const values = range.values as { key: string; id?: unknown };
+  return typeof values.id === "string" ? values.id : values.key;
 }
 
 export function rangeOf<const R extends RangeRef>(range: R): NormalizeRange<R> {
@@ -116,15 +116,7 @@ function ns<const T extends FieldsInput>(key: string, input: T): FieldsOutput<T>
         const edge = value as EdgeInput<RangeRef> &
           Partial<ResolvedEdgeOutput> &
           Record<string, unknown>;
-        const {
-          key: edgeKey,
-          range,
-          cardinality,
-          onCreate,
-          onUpdate,
-          id,
-          ...extras
-        } = edge;
+        const { key: edgeKey, range, cardinality, onCreate, onUpdate, id, ...extras } = edge;
         out[name] = {
           ...extras,
           key: edgeKey ?? nextKey,
@@ -283,8 +275,8 @@ export function isEnumType(
 }
 
 export function typeId(typeDef: AnyTypeOutput | ResolvedAnyTypeOutput): string {
-  const values = typeDef.values as { key: string; id?: string };
-  return values.id ?? values.key;
+  const values = typeDef.values as { key: string; id?: unknown };
+  return typeof values.id === "string" ? values.id : values.key;
 }
 
 export function defineType<const Key extends string, const Fields extends FieldsInput>(

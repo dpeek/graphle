@@ -248,6 +248,10 @@ The current graph model is reference-oriented, so a field whose range is another
 
 This distinction should remain explicit in the type-module contracts.
 
+In the current implementation, this means entity relationships should be authored
+through `defineReferenceField(...)` or a helper layered on top of it such as
+`existingEntityReferenceField(...)`, not as raw inline edge objects.
+
 Examples of behaviors that may later vary by policy:
 
 - picker for existing related entity

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { app } from "./app";
 import { core } from "./core";
+import { address } from "../type/address.js";
 import { booleanTypeModule } from "../type/boolean.js";
 import { stringTypeModule } from "../type/string.js";
 
@@ -35,6 +36,34 @@ describe("type-module authoring contract", () => {
     expect(app.block.fields.collapsed.meta.editor.kind).toBe("checkbox");
     expect(app.block.fields.collapsed.filter.defaultOperator).toBe("is");
     expect(Object.keys(app.block.fields.collapsed.filter.operators)).toEqual(["is"]);
+  });
+
+  it("attaches date and enum defaults to the remaining built-in fields", () => {
+    expect(core.node.fields.createdAt.range as string).toBe(core.date.values.id);
+    expect(core.node.fields.createdAt.meta.display.kind).toBe("date");
+    expect(core.node.fields.createdAt.meta.editor.kind).toBe("date");
+    expect(core.node.fields.createdAt.filter.defaultOperator).toBe("on");
+    expect(Object.keys(core.node.fields.createdAt.filter.operators)).toEqual([
+      "on",
+      "before",
+      "after",
+    ]);
+
+    expect(core.predicate.fields.cardinality.range as string).toBe(core.cardinality.values.id);
+    expect(core.predicate.fields.cardinality.meta.editor.kind).toBe("select");
+    expect(core.predicate.fields.cardinality.filter.defaultOperator).toBe("is");
+    expect(Object.keys(core.predicate.fields.cardinality.filter.operators)).toEqual(["is"]);
+  });
+
+  it("uses the reference-field helpers for entity relationships", () => {
+    expect(app.person.fields.worksAt.range as string).toBe(app.company.values.id);
+    expect(app.person.fields.worksAt.meta.reference.selection).toBe("existing-only");
+    expect(app.block.fields.parent.range as string).toBe(app.block.values.id);
+
+    expect(address.fields.country.range as string).toBe("core:country");
+    expect(address.fields.country.meta.display.kind).toBe("text");
+    expect(address.fields.country.meta.editor.kind).toBe("select");
+    expect(address.fields.country.filter.defaultOperator).toBe("is");
   });
 
   it("falls back to the first allowed operator when a narrowed field omits a default", () => {
