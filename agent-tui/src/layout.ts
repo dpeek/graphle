@@ -275,8 +275,17 @@ function formatStatusEntry(entry: Extract<AgentTuiTranscriptEntry, { kind: "stat
   return [`[${label}] ${entry.text}`];
 }
 
-function formatAgentMessageEntry(entry: Extract<AgentTuiTranscriptEntry, { kind: "agent-message" }>) {
-  return entry.text.trimEnd().split("\n");
+function formatAgentMessageEntry(
+  entry: Extract<AgentTuiTranscriptEntry, { kind: "agent-message" }>,
+  viewMode: AgentTuiViewMode,
+) {
+  if (viewMode === "raw") {
+    return entry.text.trimEnd().split("\n");
+  }
+  return entry.segments
+    .flatMap((segment) => segment.trimEnd().split("\n"))
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
 }
 
 function truncateSummary(text: string, maxChars = 120) {
@@ -385,7 +394,7 @@ function formatTranscript(
       case "status":
         return formatStatusEntry(entry);
       case "agent-message":
-        return formatAgentMessageEntry(entry);
+        return formatAgentMessageEntry(entry, viewMode);
       case "command-output":
         return formatCommandOutputEntry(entry, viewMode);
       case "mirror":

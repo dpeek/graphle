@@ -1,124 +1,125 @@
-# Graph Store — Current Overview
+# IO Project Overview
 
-This package is an ID-first graph runtime with key-first schema authoring.
+## What IO Is
 
-It stores triples (`s`, `p`, `o`) in an append-only store, while schema authors write readable keys like `core:node` and `app:company`.
+IO is a dogfood repo for three closely related efforts:
 
-## Core Principles
+- an agent execution and orchestration runtime
+- a typed `io.ts` plus `io.md` context and configuration model
+- a graph-native runtime and schema-driven UI stack
 
-- Runtime storage and linking use stable opaque IDs.
-- Schema authoring uses readable canonical keys.
-- Keys are resolved to IDs at namespace compile time.
-- Schema itself is represented as graph data (types + predicates are nodes too).
+The repo is intentionally mixed-purpose. It is both:
 
-## Store Model
+- the product surface for agent and operator workflows
+- the proving ground for the graph and schema-driven UI architecture that IO is
+  moving toward
 
-Source: `graph/src/store.ts`
+## Current Streams
 
-- A triple is `{ s, p, o }` plus an edge id.
-- `assert(...)` appends; `retract(...)` marks edges retracted.
-- `facts(...)` returns current non-retracted edges.
-- Node ids and edge ids come from the same generator (`src/id.ts`, NanoID-based), so edges can be reified as subjects.
+### 1. Agent runtime and orchestration
 
-## Schema Authoring API
+This is the code that schedules issue work, runs Codex, retains runtime output,
+and drives operator-facing commands such as `io agent start`, `io agent tail`,
+and `io agent tui`.
 
-Source: `graph/src/schema.ts`
+Start here:
 
-- `defineScalar(...)` defines scalar codecs.
-- `defineType(...)` defines entity types and field trees.
-- `rangeOf(...)` normalizes a range ref to a key string while preserving TypeScript inference.
-  - Supports `rangeOf("core:number")`
-  - Supports `rangeOf(core.number)` and `rangeOf(company)`
-- `defineNamespace(idMap, namespace)` resolves keys to IDs and returns a resolved namespace.
+- `agent/src/server.ts`
+- `agent/src/service.ts`
+- `agent/src/workspace.ts`
+- `agent/src/runner/codex.ts`
+- `agent/src/session-events.ts`
+- `agent/src/tui.ts`
+- `agent/src/tui-runtime.ts`
 
-### Key vs ID Rules
+### 2. IO config and context model
 
-- Keep `values.key` and field `key` as canonical, readable identifiers.
-- After `defineNamespace(...)`, runtime IDs are present and used via:
-  - `typeId(...)`
-  - `edgeId(...)`
-  - `fieldTreeId(...)`
-- Field `range` is overwritten to resolved ID when possible.
+This is the repo-entrypoint layer that decides how IO loads structured config,
+which docs become context, and how issue routing selects agents and profiles.
 
-## Core Schema
+Start here:
 
-Source: `graph/src/schema/core.ts`
+- `io.ts`
+- `io.md`
+- `lib/src/config.ts`
+- `config/src/index.ts`
+- `agent/src/workflow.ts`
+- `agent/src/issue-routing.ts`
+- `agent/src/builtins.ts`
+- `agent/doc/context.md`
+- `agent/doc/context-defaults.md`
 
-Core currently defines:
+### 3. Graph runtime and schema-driven UI
 
-- Scalars: `core:string`, `core:number`, `core:date`, `core:boolean`, `core:url`
-- Entity types: `core:node`, `core:type`, `core:predicate`
+This is the experimental application/runtime direction for IO: typed graph
+storage, type modules, typed refs, schema-driven web rendering, and typed query
+and filter capabilities.
 
-Notable semantics:
+Start here:
 
-- `core:node:type` range is `core:type`
-- Predicate nodes are typed as `core:predicate`
-- Schema type/scalar definition nodes are typed as `core:type`
+- `graph/doc/big-picture.md`
+- `graph/doc/overview.md`
+- `graph/doc/schema-driven-ui-implementation-plan.md`
+- `graph/doc/schema-driven-ui-backlog.md`
+- `graph/doc/typed-refs.md`
+- `graph/doc/type-modules.md`
+- `graph/doc/web-bindings.md`
+- `graph/src/graph/app.ts`
+- `graph/src/graph/client.ts`
+- `graph/src/web/bindings.ts`
+- `graph/src/web/resolver.tsx`
+- `graph/src/web/company-proof.tsx`
+- `graph/src/web/filter.tsx`
+- `graph/src/web/relationship-proof.tsx`
 
-## Namespace ID Maps
+## What Has Landed
 
-Sources:
+The completed IO work is no longer just planning material.
 
-- `graph/src/schema/core.json`
-- `graph/src/schema/app.json`
-- CLI: `src/ids-cli.ts`
+Important shipped pieces:
 
-Each namespace keeps its own `key -> id` map next to the schema file.
+- `io.ts` is now the main structured config entrypoint, with shared loading in
+  `lib/src/config.ts`
+- `io.md` plus built-ins plus repo docs now form the context bundle for agent
+  runs
+- issue routing, doc references, and context profiles exist in the runtime
+- the agent TUI ships with live, attach, and replay modes
+- retained runtime output and normalized session events power both TUI and
+  plain-text operator workflows
+- the graph stack has landed typed refs, type modules, generic web field
+  rendering, nested and relationship proofs, and the first query/filter proof
 
-Current CLI workflow:
+That means agents should treat the repo as an active product surface, not just a
+spec sandbox.
 
-- `bun run ids check <schema-file.ts>`
-- `bun run ids sync <schema-file.ts> [--prune-orphans]`
-- `bun run ids rename <schema-file.ts> <oldKey> <newKey>`
+## How To Use These Topic Docs
 
-Alias history is intentionally not stored; rename is a direct map-key move.
+Use the docs in `llm/topic/` as repo-level entry points.
 
-## Bootstrap
+Suggested order:
 
-Source: `src/bootstrap.ts`
+1. read this file for the broad project map
+2. read the topic doc closest to the current stream
+3. read any linked implementation docs
+4. only then move into the affected code
 
-Bootstrap asserts schema graph metadata into the store:
+Current topic docs:
 
-- Type/scalar defs: key, name, and `node:type = core:type`
-- Field tree nodes: key
-- Predicate defs: key, name, range, cardinality, and `node:type = core:predicate`
+- `llm/topic/overview.md`
+- `llm/topic/agent.md`
+- `llm/topic/graph.md`
+- `llm/topic/agent-opentui.md`
+- `llm/topic/io-ts-config.md`
 
-## Typed Client
+## Long-Term Goal
 
-Source: `./graph/src/client.ts`
+Long term, IO should become one coherent system where:
 
-`createTypeClient(store, appNamespace)` exposes typed CRUD handles per entity type:
+- repo config, context selection, and issue routing are explicit and typed
+- operator workflows can observe and manage multi-agent work safely
+- application state, schema, UI generation, and query/filter behavior can all be
+  driven from the same graph-native model
 
-- `create`, `get`, `update`, `delete`, `list`, `node(id)`
-- Scalar encode/decode comes from scalar definitions.
-- Client typing remains key-based (from schema keys) even though runtime queries by resolved IDs.
-- Predicate fields can define lifecycle callbacks:
-  - `onCreate(ctx)` can synthesize/set a value before create assertions.
-  - `onUpdate(ctx)` can synthesize/set a value before update assertions.
-  - Callback context includes `event`, `nodeId`, `now`, `incoming`, `previous`, and `changedPredicateKeys`.
-  - Returning `undefined` means "do not override input for this field".
-  - `core:node` now provides timestamp defaults:
-    - `createdAt` sets to `now` on create only if not provided.
-    - `updatedAt` sets to `now` on create and on updates that touch non-timestamp fields.
-
-## Runtime + Explorer
-
-Sources:
-
-- `./graph/src/runtime.ts` example graph bootstrapping and sample data.
-- `./graph/src/web/server.ts` explorer API/UI for browsing schema + nodes.
-
-Explorer intentionally surfaces human-readable keys where helpful (`key` when available, fallback to id), but all internal querying uses resolved IDs.
-
-### Explorer Dev Access
-
-- Start (and keep running) with `bun run dev`.
-- `dev` uses `portless graph bun run --watch ./web/server.ts`.
-- Explorer is available at `https://graph.localhost`.
-- Agent workflows should call `https://graph.localhost` (and its `/api/*` routes) instead of launching a separate local server process.
-
-## Known Constraints
-
-- Prefer `rangeOf(typeRef)` over passing type objects directly as `range` in `defineType(...)` input.
-  - Direct object refs can still degrade TypeScript inference in some paths.
-  - `rangeOf(...)` gives object-ref ergonomics with stable type inference.
+The unifying idea is not "more tooling." It is one explicit platform where
+humans and agents can discover context quickly, make safe changes, and work from
+the same durable project model.

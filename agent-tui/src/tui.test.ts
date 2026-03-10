@@ -175,21 +175,41 @@ test("buildAgentTuiRootComponentModel supports status-focused and raw-heavy tran
     type: "status",
   });
   store.observe({
-    encoding: "jsonl",
-    line: '{"method":"thread/started"}',
+    code: "agent-message-delta",
+    format: "chunk",
+    itemId: "msg-1",
     sequence: 6,
     session: worker,
-    stream: "stdout",
+    text: "Inspecting ",
     timestamp: "2026-03-10T02:05:05.000Z",
+    type: "status",
+  });
+  store.observe({
+    code: "agent-message-delta",
+    format: "chunk",
+    itemId: "msg-1",
+    sequence: 7,
+    session: worker,
+    text: "runtime state",
+    timestamp: "2026-03-10T02:05:06.000Z",
+    type: "status",
+  });
+  store.observe({
+    encoding: "jsonl",
+    line: '{"method":"thread/started"}',
+    sequence: 8,
+    session: worker,
+    stream: "stdout",
+    timestamp: "2026-03-10T02:05:07.000Z",
     type: "raw-line",
   });
   store.observe({
     encoding: "jsonl",
     line: '{"method":"turn/completed"}',
-    sequence: 7,
+    sequence: 9,
     session: worker,
     stream: "stdout",
-    timestamp: "2026-03-10T02:05:06.000Z",
+    timestamp: "2026-03-10T02:05:08.000Z",
     type: "raw-line",
   });
 
@@ -207,8 +227,11 @@ test("buildAgentTuiRootComponentModel supports status-focused and raw-heavy tran
 
   expect(statusTranscript).toContain("[COMMAND] $ git status --short --branch");
   expect(statusTranscript).toContain("[CMD OUT x2] M agent/src/runner/codex.ts");
+  expect(statusTranscript).toContain("Inspecting");
+  expect(statusTranscript).toContain("runtime state");
   expect(statusTranscript).toContain("[RAW stdout/jsonl x2] turn/completed");
   expect(rawTranscript).toContain("[CMD OUT x2]");
+  expect(rawTranscript).toContain("Inspecting runtime state");
   expect(rawTranscript).toContain("| ## main");
   expect(rawTranscript).toContain('jsonl: {"method":"thread/started"}');
   expect(rawTranscript).toContain('jsonl: {"method":"turn/completed"}');

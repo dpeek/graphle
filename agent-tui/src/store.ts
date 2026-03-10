@@ -68,6 +68,7 @@ export interface AgentTuiStatusEntry extends AgentTuiTranscriptEntryBase {
 export interface AgentTuiAgentMessageEntry extends AgentTuiTranscriptEntryBase {
   itemId?: string;
   kind: "agent-message";
+  segments: string[];
   text: string;
 }
 
@@ -190,8 +191,9 @@ function estimateTranscriptEntryChars(entry: AgentTuiTranscriptEntry) {
     case "lifecycle":
     case "mirror":
     case "status":
-    case "agent-message":
       return entry.text.length + 1;
+    case "agent-message":
+      return entry.segments.reduce((total, segment) => total + segment.length + 1, 0);
     case "command-output":
       return entry.lines.reduce((total, line) => total + line.length + 1, 12);
     case "raw":
@@ -298,6 +300,7 @@ function appendAgentMessageEntry(
   if (lastEntry?.kind === "agent-message" && lastEntry.itemId === event.itemId) {
     lastEntry.count += 1;
     lastEntry.sequenceEnd = event.sequence;
+    lastEntry.segments.push(text);
     lastEntry.text += text;
     lastEntry.timestamp = event.timestamp;
     trimTranscriptEntries(state, maxTranscriptChars);
@@ -309,6 +312,7 @@ function appendAgentMessageEntry(
       count: 1,
       itemId: event.itemId,
       kind: "agent-message",
+      segments: [text],
       sequenceEnd: event.sequence,
       sequenceStart: event.sequence,
       text,
