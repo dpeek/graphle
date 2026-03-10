@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 
+import { DEFAULT_EXECUTE_BUILTIN_DOC_IDS } from "./builtins.js";
 import { loadWorkflowFile, parseWorkflow, renderPrompt } from "./workflow.js";
 
 async function mkdtempInRepo(prefix: string) {
@@ -158,6 +159,61 @@ test("loadWorkflowFile resolves builtin override paths from io.json", async () =
 
     expect(result.value.context.overrides).toEqual({
       "builtin:io.core.validation": resolve(root, "io", "context", "validation.md"),
+    });
+  } finally {
+    await rm(root, { force: true, recursive: true });
+  }
+});
+
+test("loadWorkflowFile resolves registered docs and merges default context profiles", async () => {
+  const root = await mkdtemp(resolve(tmpdir(), "workflow-"));
+  process.env.LINEAR_API_KEY = "linear-token";
+
+  await mkdir(resolve(root, "io", "context"), { recursive: true });
+  await writeFile(
+    resolve(root, "io.json"),
+    JSON.stringify(
+      {
+        context: {
+          docs: {
+            "project.architecture": "./io/context/architecture.md",
+          },
+          profiles: {
+            backlog: {
+              include: ["builtin:io.agent.backlog.default", "project.architecture"],
+            },
+          },
+        },
+        tracker: {
+          apiKey: "$LINEAR_API_KEY",
+          kind: "linear",
+        },
+        workspace: {
+          root: "./workspace",
+        },
+      },
+      null,
+      2,
+    ),
+  );
+  await writeFile(resolve(root, "io.md"), "IO {{ issue.identifier }}\n");
+  await writeFile(resolve(root, "io", "context", "architecture.md"), "ARCHITECTURE\n");
+
+  try {
+    const result = await loadWorkflowFile(undefined, root);
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+
+    expect(result.value.context.docs).toEqual({
+      "project.architecture": resolve(root, "io", "context", "architecture.md"),
+    });
+    expect(result.value.context.profiles.backlog).toEqual({
+      include: ["builtin:io.agent.backlog.default", "project.architecture"],
+    });
+    expect(result.value.context.profiles.execute).toEqual({
+      include: [...DEFAULT_EXECUTE_BUILTIN_DOC_IDS],
     });
   } finally {
     await rm(root, { force: true, recursive: true });

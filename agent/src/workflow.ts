@@ -25,6 +25,10 @@ import type {
   WorkflowEntrypoint,
 } from "./types.js";
 
+import {
+  DEFAULT_BACKLOG_BUILTIN_DOC_IDS,
+  DEFAULT_EXECUTE_BUILTIN_DOC_IDS,
+} from "./builtins.js";
 import { toId } from "./util.js";
 
 const log = createLogger({ pkg: "agent" });
@@ -123,13 +127,19 @@ const issueRoutingRuleSchema = z.object({
   profile: z.string().min(1),
 });
 
+const contextProfileSchema = z.object({
+  include: z.array(z.string().min(1)).default([]),
+});
+
 const ioExtensionsSchema = z
   .object({
     context: z
       .object({
+        docs: z.record(z.string().min(1), z.string().min(1)).default({}),
         overrides: z.record(z.string().min(1), z.string().min(1)).default({}),
+        profiles: z.record(z.string().min(1), contextProfileSchema).default({}),
       })
-      .default({ overrides: {} }),
+      .default({ docs: {}, overrides: {}, profiles: {} }),
     issues: z
       .object({
         defaultAgent: agentRoleSchema.default("execute"),
@@ -299,14 +309,39 @@ function normalizeIssueRouting(config: IoIssueRoutingConfig): IssueRoutingConfig
 }
 
 function normalizeIoExtensions(config: IoExtensions, baseDir: string) {
+  const defaultProfiles = {
+    backlog: {
+      include: [...DEFAULT_BACKLOG_BUILTIN_DOC_IDS],
+    },
+    execute: {
+      include: [...DEFAULT_EXECUTE_BUILTIN_DOC_IDS],
+    },
+  };
   return {
     context: {
+      docs: Object.fromEntries(
+        Object.entries(config.context.docs).map(([id, path]) => [
+          id.trim(),
+          expandPathValue(path, baseDir),
+        ]),
+      ),
       overrides: Object.fromEntries(
         Object.entries(config.context.overrides).map(([id, path]) => [
           id,
           expandPathValue(path, baseDir),
         ]),
       ),
+      profiles: {
+        ...defaultProfiles,
+        ...Object.fromEntries(
+          Object.entries(config.context.profiles).map(([name, profile]) => [
+            name.trim(),
+            {
+              include: profile.include.map((reference) => reference.trim()).filter(Boolean),
+            },
+          ]),
+        ),
+      },
     },
     issues: normalizeIssueRouting(config.issues),
   } satisfies Pick<WorkflowConfigFields, "context" | "issues">;
@@ -378,7 +413,16 @@ function normalizeWorkflowFrontMatter(
       turnTimeoutMs: frontMatter.codex.turn_timeout_ms,
     },
     context: {
+      docs: {},
       overrides: {},
+      profiles: {
+        backlog: {
+          include: [...DEFAULT_BACKLOG_BUILTIN_DOC_IDS],
+        },
+        execute: {
+          include: [...DEFAULT_EXECUTE_BUILTIN_DOC_IDS],
+        },
+      },
     },
     hooks: {
       afterCreate: frontMatter.hooks.after_create,

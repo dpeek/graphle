@@ -90,11 +90,17 @@ export interface IssueRoutingSelection {
   profile: string;
 }
 
+export interface WorkflowContextProfile {
+  include: string[];
+}
+
 export interface Workflow {
   agent: AgentConfig;
   codex: CodexConfig;
   context: {
+    docs: Record<string, string>;
     overrides: Record<string, string>;
+    profiles: Record<string, WorkflowContextProfile>;
   };
   entrypoint: WorkflowEntrypoint;
   hooks: HookConfig;
@@ -173,5 +179,6 @@ export interface IssueRunResult {
   success: boolean;
   threadId?: string;
   turnId?: string;
+  warnings?: string[];
   workspace: PreparedWorkspace;
 }

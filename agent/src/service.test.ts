@@ -1,5 +1,5 @@
 import { expect, mock, test } from "bun:test";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 
@@ -1458,6 +1458,149 @@ test("AgentService uses builtin override files from io.json", async () => {
     expect(capturedPrompt).not.toContain(
       "run the repo's required validation before declaring the work done",
     );
+  } finally {
+    globalThis.fetch = originalFetch;
+    await rm(root, { force: true, recursive: true });
+  }
+});
+
+test("AgentService writes unresolved issue doc warnings to the run summary", async () => {
+  const root = await mkdtemp(resolve(tmpdir(), "agent-service-"));
+  const ioPromptPath = resolve(root, "io.md");
+  const outputPath = resolve(root, "workspace", "workers", "OPE-61", "output.log");
+  const workspacePath = resolve(root, "workspace", "workers", "OPE-61", "repo");
+  let capturedPrompt = "";
+
+  await mkdir(resolve(root, "io", "context"), { recursive: true });
+  await mkdir(resolve(root, "workspace", "workers", "OPE-61"), { recursive: true });
+  await writeFile(
+    resolve(root, "io.json"),
+    JSON.stringify(
+      {
+        agent: { maxConcurrentAgents: 1 },
+        tracker: {
+          apiKey: "$LINEAR_API_KEY",
+          kind: "linear",
+          projectSlug: "$LINEAR_PROJECT_SLUG",
+        },
+        workspace: {
+          root: resolve(root, "workspace"),
+        },
+      },
+      null,
+      2,
+    ),
+  );
+  await writeFile(ioPromptPath, "LOCAL EXECUTE {{ issue.identifier }}\n");
+  await writeFile(resolve(root, "io", "context", "linked.md"), "LINKED ISSUE DOC\n");
+  process.env.LINEAR_API_KEY = "linear-token";
+  process.env.LINEAR_PROJECT_SLUG = "project-slug";
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = mock(
+    async () =>
+      new Response(
+        JSON.stringify({
+          data: {
+            issues: {
+              nodes: [
+                {
+                  createdAt: "2024-01-01T00:00:00.000Z",
+                  description: `Investigate warning handling
+
+<!-- io
+docs:
+  - ./io/context/linked.md
+  - ./io/context/missing.md
+-->`,
+                  id: "1",
+                  identifier: "OPE-61",
+                  labels: { nodes: [] },
+                  priority: 0,
+                  state: { name: "Todo" },
+                  title: "Issue docs warning",
+                  updatedAt: "2024-01-01T00:00:00.000Z",
+                },
+              ],
+              pageInfo: {
+                endCursor: null,
+                hasNextPage: false,
+              },
+            },
+          },
+        }),
+        { status: 200 },
+      ),
+  ) as unknown as typeof fetch;
+
+  try {
+    const service = new AgentService({
+      once: true,
+      repoRoot: root,
+      trackerFactory: (workflow) =>
+        Object.assign(new LinearTrackerAdapter(workflow.tracker), {
+          setIssueState: async () => undefined,
+        }),
+      runnerFactory: () => ({
+        run: async ({ issue, prompt, workspace }) => {
+          capturedPrompt = prompt;
+          return {
+            issue,
+            prompt,
+            stderr: [],
+            stdout: [],
+            success: true,
+            workspace,
+          };
+        },
+      }),
+      workspaceManagerFactory: (_workflow, issueIdentifier) =>
+        ({
+          cleanup: async () => undefined,
+          complete: async () => ({ commitSha: "a".repeat(40) }),
+          createIdleWorkspace: () => ({
+            branchName: "main",
+            controlPath: root,
+            createdNow: true,
+            originPath: root,
+            outputPath,
+            path: resolve(root, "workspace", "workers", issueIdentifier ?? "supervisor", "repo"),
+            sourceRepoPath: root,
+            workerId: issueIdentifier ?? "supervisor",
+          }),
+          ensureCheckout: async () => ({
+            createdNow: true,
+            path: workspacePath,
+          }),
+          ensureSessionStartState: async () => ({
+            createdNow: true,
+            path: resolve(root, "workspace", "workers"),
+          }),
+          listOccupiedStreams: async () => new Map(),
+          markBlocked: async () => undefined,
+          markInterrupted: async () => undefined,
+          prepare: async () => ({
+            branchName: "io/ope-61",
+            controlPath: root,
+            createdNow: true,
+            originPath: root,
+            outputPath,
+            path: workspacePath,
+            sourceRepoPath: root,
+            workerId: "OPE-61",
+          }),
+          reconcileTerminalIssues: async () => undefined,
+          runAfterRunHook: async () => undefined,
+          runBeforeRunHook: async () => undefined,
+        }) as unknown as never,
+    });
+
+    await service.start();
+
+    expect(capturedPrompt).toContain("LINKED ISSUE DOC");
+
+    const output = await readFile(outputPath, "utf8");
+    expect(output).toContain("warning: Unresolved issue doc reference: ./io/context/missing.md");
   } finally {
     globalThis.fetch = originalFetch;
     await rm(root, { force: true, recursive: true });

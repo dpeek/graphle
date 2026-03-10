@@ -1,20 +1,15 @@
 import { createLogger, type Logger } from "@io/lib";
-import { appendFile, readFile } from "node:fs/promises";
-import { basename, resolve } from "node:path";
+import { appendFile } from "node:fs/promises";
+import { resolve } from "node:path";
 
 import type {
   AgentIssue,
-  IssueRoutingSelection,
   IssueRunResult,
   PreparedWorkspace,
   Workflow,
 } from "./types.js";
 
-import {
-  DEFAULT_BACKLOG_BUILTIN_DOC_IDS,
-  DEFAULT_EXECUTE_BUILTIN_DOC_IDS,
-  resolveBuiltinDoc,
-} from "./builtins.js";
+import { resolveIssueContext } from "./context.js";
 import {
   createAgentSessionEventBus,
   createAgentSessionStdoutObserver,
@@ -27,8 +22,6 @@ import { CodexAppServerRunner } from "./runner/codex.js";
 import { LinearTrackerAdapter } from "./tracker/linear.js";
 import { loadWorkflowFile, renderPrompt, toWorkspaceKey } from "./workflow.js";
 import { WorkspaceManager } from "./workspace.js";
-
-const WORKFLOW_FILE = "WORKFLOW.md";
 
 type IssueRunner = {
   run: (options: {
@@ -321,11 +314,22 @@ export class AgentService {
     let beforeRunCompleted = false;
     let result: IssueRunResult;
     try {
-      const selection = resolveIssueRouting(workflow.issues, issue);
-      const prompt = renderPrompt(await this.#loadPromptTemplate(workflow, selection), {
+      const resolvedContext = await resolveIssueContext({
+        baseSelection: resolveIssueRouting(workflow.issues, issue),
+        issue,
+        repoRoot: this.#repoRoot,
+        workflow,
+      });
+      if (resolvedContext.warnings.length) {
+        await this.#appendIssueOutput(
+          workspace.outputPath,
+          resolvedContext.warnings.map((warning) => `warning: ${warning}\n`).join(""),
+        );
+      }
+      const prompt = renderPrompt(resolvedContext.promptTemplate, {
         attempt: 1,
         issue,
-        selection,
+        selection: resolvedContext.selection,
         worker: { count: maxConcurrentAgents, id: issue.identifier, index: runIndex },
         workspace,
       });
@@ -338,6 +342,9 @@ export class AgentService {
       await workspaceManager.runBeforeRunHook(workspace.path);
       beforeRunCompleted = true;
       result = await runner.run({ issue, prompt, session, workspace });
+      if (resolvedContext.warnings.length) {
+        result.warnings = [...resolvedContext.warnings];
+      }
     } catch (error) {
       if (beforeRunCompleted) {
         await workspaceManager.runAfterRunHook(workspace.path);
@@ -522,46 +529,5 @@ export class AgentService {
       return;
     }
     await appendFile(path, text);
-  }
-
-  async #loadPromptTemplate(workflow: Workflow, selection: IssueRoutingSelection) {
-    if (
-      workflow.entrypoint.kind !== "io" ||
-      basename(workflow.entrypoint.promptPath) === WORKFLOW_FILE
-    ) {
-      return workflow.promptTemplate;
-    }
-
-    const builtinIds =
-      selection.agent === "backlog"
-        ? DEFAULT_BACKLOG_BUILTIN_DOC_IDS
-        : DEFAULT_EXECUTE_BUILTIN_DOC_IDS;
-    const sections = await Promise.all(
-      builtinIds.map(async (id) => {
-        const overridePath = workflow.context.overrides[id];
-        if (overridePath) {
-          const content = (await readFile(overridePath, "utf8")).trim();
-          if (!content) {
-            throw new Error(`workflow_doc_empty:${overridePath}`);
-          }
-          return { content, id };
-        }
-        const builtinDoc = resolveBuiltinDoc(id);
-        if (!builtinDoc) {
-          throw new Error(`workflow_doc_missing:${id}`);
-        }
-        return builtinDoc;
-      }),
-    );
-
-    const projectPrompt = workflow.promptTemplate.trim();
-    if (!projectPrompt) {
-      throw new Error(`workflow_prompt_empty:${workflow.entrypoint.promptPath}`);
-    }
-
-    return [
-      ...sections.map((section) => `<!-- ${section.id} -->\n${section.content.trim()}`),
-      `<!-- ${workflow.entrypoint.promptPath} -->\n${projectPrompt}`,
-    ].join("\n\n");
   }
 }

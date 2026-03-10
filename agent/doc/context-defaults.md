@@ -56,6 +56,16 @@ docs:
 This block is optional and is meant for exceptions. Repo defaults and routing
 rules remain the primary mechanism.
 
+Issue-level precedence stays narrow:
+
+1. start with repo `defaultAgent` and `defaultProfile`
+2. apply the first matching `issues.routing` rule
+3. apply issue-body `agent` or `profile` overrides only for the fields present
+4. if an issue overrides `agent` without specifying `profile`, default the
+   final profile to that agent name
+5. append issue-body docs after profile-selected docs and surface unresolved
+   refs as warnings in the run summary
+
 ### Profile behavior
 
 Profiles should describe built-ins and named project docs. The resolver should
