@@ -212,6 +212,108 @@ export type EntityRef<
   delete(): void;
 };
 
+type QueryCardinality<C extends Cardinality, Value> = C extends "many"
+  ? Value[]
+  : C extends "one?"
+    ? Value | undefined
+    : Value;
+
+type FieldQuerySelection<T extends FieldsTree, Defs extends Record<string, AnyTypeOutput>> = {
+  [K in Exclude<keyof T, typeof fieldsMeta>]?: QuerySelectionNode<T[K], Defs>;
+};
+
+type QueryEdgeSelection<T extends EdgeOutput, Defs extends Record<string, AnyTypeOutput>> = [
+  PredicateRangeEntityTypeOf<T, Defs>,
+] extends [never]
+  ? true
+  : true | { select: TypeQuerySelection<PredicateRangeEntityTypeOf<T, Defs>, Defs> };
+
+type QuerySelectionNode<Node, Defs extends Record<string, AnyTypeOutput>> = Node extends EdgeOutput
+  ? QueryEdgeSelection<Node, Defs>
+  : Node extends FieldsTree
+    ? FieldQuerySelection<Node, Defs>
+    : never;
+
+type QueryResultNode<Node, Selection, Defs extends Record<string, AnyTypeOutput>> = Node extends EdgeOutput
+  ? QueryEdgeResult<Node, Selection, Defs>
+  : Node extends FieldsTree
+    ? QueryFieldResult<Node, Extract<Selection, FieldQuerySelection<Node, Defs>>, Defs>
+    : never;
+
+type QueryFieldResult<
+  T extends FieldsTree,
+  Selection extends FieldQuerySelection<T, Defs>,
+  Defs extends Record<string, AnyTypeOutput>,
+> = {
+  [K in keyof Selection & Exclude<keyof T, typeof fieldsMeta>]: QueryResultNode<
+    T[K],
+    NonNullable<Selection[K]>,
+    Defs
+  >;
+};
+
+type QueryEdgeResult<
+  T extends EdgeOutput,
+  Selection,
+  Defs extends Record<string, AnyTypeOutput>,
+> = [PredicateRangeEntityTypeOf<T, Defs>] extends [never]
+  ? PredicateValueOf<T, Defs>
+  : Selection extends true
+    ? PredicateValueOf<T, Defs>
+    : Selection extends {
+          select: infer Nested extends TypeQuerySelection<PredicateRangeEntityTypeOf<T, Defs>, Defs>;
+        }
+      ? QueryCardinality<
+          T["cardinality"],
+          QueryFieldResult<PredicateRangeEntityTypeOf<T, Defs>["fields"], Nested, Defs> &
+            (Nested extends { id: true } ? { id: string } : {})
+        >
+      : never;
+
+export type TypeQuerySelection<
+  T extends TypeOutput,
+  Defs extends Record<string, AnyTypeOutput> = CoreDefs,
+> = {
+  id?: true;
+} & FieldQuerySelection<T["fields"], Defs>;
+
+export type TypeQueryWhere =
+  | {
+      id: string;
+      ids?: never;
+    }
+  | {
+      id?: never;
+      ids: readonly string[];
+    };
+
+export type TypeQuerySpec<
+  T extends TypeOutput,
+  Defs extends Record<string, AnyTypeOutput> = CoreDefs,
+  Selection extends TypeQuerySelection<T, Defs> = TypeQuerySelection<T, Defs>,
+> = {
+  select: Selection;
+  where?: TypeQueryWhere;
+};
+
+export type TypeQueryResult<
+  T extends TypeOutput,
+  Selection,
+  Defs extends Record<string, AnyTypeOutput> = CoreDefs,
+> = Selection extends TypeQuerySelection<T, Defs>
+  ? QueryFieldResult<T["fields"], Selection, Defs> & (Selection extends { id: true } ? { id: string } : {})
+  : never;
+
+export type TypeQueryResponse<
+  T extends TypeOutput,
+  Query,
+  Defs extends Record<string, AnyTypeOutput> = CoreDefs,
+> = Query extends TypeQuerySpec<T, Defs, infer Selection>
+  ? Query["where"] extends { id: string }
+    ? TypeQueryResult<T, Selection, Defs> | undefined
+    : TypeQueryResult<T, Selection, Defs>[]
+  : never;
+
 type EntityLookup<Defs extends Record<string, AnyTypeOutput>> = {
   resolve<T extends TypeOutput>(typeDef: T, id: string): EntityRef<T, Defs>;
   list<T extends TypeOutput>(typeDef: T): EntityRef<T, Defs>[];
@@ -1057,6 +1159,7 @@ type TypeHandle<T extends TypeOutput, Defs extends Record<string, AnyTypeOutput>
   update(id: string, patch: Partial<CreateInputOfType<T, Defs>>): EntityOfType<T, Defs>;
   delete(id: string): void;
   list(): EntityOfType<T, Defs>[];
+  query<const Query extends TypeQuerySpec<T, Defs>>(query: Query): Promise<TypeQueryResponse<T, Query, Defs>>;
   ref(id: string): EntityRef<T, Defs>;
   node(id: string): EntityRef<T, Defs>;
 };
@@ -1158,6 +1261,101 @@ export function createTypeClient<const T extends Record<string, AnyTypeOutput>>(
       return listEntityRefs(typeDef);
     },
   };
+  const hasEntity = <U extends TypeOutput>(typeDef: U, id: string): boolean =>
+    store.facts(id, nodeTypePredicateId, typeId(typeDef)).length > 0;
+  const assertEntity = <U extends TypeOutput>(typeDef: U, id: string): void => {
+    if (hasEntity(typeDef, id)) return;
+    throw new Error(`Missing entity "${id}" for type "${typeDef.values.key}"`);
+  };
+  const projectQueryFields = <
+    U extends FieldsOutput,
+    Selection extends FieldQuerySelection<U, AllDefs<T>>,
+  >(
+    subjectId: string,
+    fields: U,
+    selection: Selection,
+  ): QueryFieldResult<U, Selection, AllDefs<T>> => {
+    const out: Record<string, unknown> = {};
+
+    for (const [fieldName, selected] of Object.entries(selection)) {
+      if (fieldName === "id" || selected === undefined) continue;
+      const field = fields[fieldName as keyof U];
+      if (!field) throw new Error(`Unknown selected field "${fieldName}"`);
+
+      if (isEdgeOutput(field)) {
+        const edge = field as unknown as EdgeOutput;
+        if (selected !== true) {
+          const rangeType = typeByKey.get(edge.range);
+          if (
+            !rangeType ||
+            !isEntityType(rangeType) ||
+            !selected ||
+            typeof selected !== "object" ||
+            !("select" in selected)
+          ) {
+            throw new Error(`Predicate "${edge.key}" does not support nested selection`);
+          }
+
+          const nested = readPredicateValue(store, subjectId, edge, scalarByKey, typeByKey, {
+            strictRequired: true,
+          });
+          const nestedSelection = selected.select as TypeQuerySelection<typeof rangeType, AllDefs<T>>;
+
+          if (edge.cardinality === "many") {
+            out[fieldName] = (nested as string[]).map((entityId) => {
+              assertEntity(rangeType, entityId);
+              return projectSelectedEntity(rangeType, entityId, nestedSelection);
+            });
+            continue;
+          }
+
+          if (nested === undefined) {
+            out[fieldName] = undefined;
+            continue;
+          }
+
+          const entityId = nested as string;
+          assertEntity(rangeType, entityId);
+          out[fieldName] = projectSelectedEntity(rangeType, entityId, nestedSelection);
+          continue;
+        }
+
+        out[fieldName] = readPredicateValue(store, subjectId, edge, scalarByKey, typeByKey, {
+          strictRequired: true,
+        });
+        continue;
+      }
+
+      if (!isTree(field)) throw new Error(`Unknown selected field "${fieldName}"`);
+      const fieldTree = field as unknown as FieldsOutput;
+      if (!selected || typeof selected !== "object" || Array.isArray(selected)) {
+        throw new Error(`Field group "${fieldTreeKey(fieldTree)}" requires a nested selection object`);
+      }
+      out[fieldName] = projectQueryFields(
+        subjectId,
+        fieldTree,
+        selected as FieldQuerySelection<typeof fieldTree, AllDefs<T>>,
+      );
+    }
+
+    return out as QueryFieldResult<U, Selection, AllDefs<T>>;
+  };
+  const projectSelectedEntity = <
+    U extends TypeOutput,
+    Selection extends TypeQuerySelection<U, AllDefs<T>>,
+  >(
+    typeDef: U,
+    id: string,
+    selection: Selection,
+  ): TypeQueryResult<U, Selection, AllDefs<T>> => {
+    const out = projectQueryFields(id, typeDef.fields, selection);
+    if (selection.id) {
+      const withId: Record<string, unknown> = { ...out };
+      withId.id = id;
+      return withId as TypeQueryResult<U, Selection, AllDefs<T>>;
+    }
+    return out as TypeQueryResult<U, Selection, AllDefs<T>>;
+  };
   return new Proxy(
     {},
     {
@@ -1166,7 +1364,7 @@ export function createTypeClient<const T extends Record<string, AnyTypeOutput>>(
         const typeDef = namespace[key as keyof T];
         if (!typeDef || typeDef.kind !== "entity") return undefined;
 
-        const handle: TypeHandle<any, any> = {
+        const handle = {
           create(input: unknown) {
             return createEntity(
               store,
@@ -1197,13 +1395,37 @@ export function createTypeClient<const T extends Record<string, AnyTypeOutput>>(
           list() {
             return listEntityRefs(typeDef as any).map((entityRef) => entityRef.get());
           },
+          async query(query: unknown) {
+            const spec = query as TypeQuerySpec<any, AllDefs<T>>;
+            if (!spec || typeof spec !== "object" || !spec.select || typeof spec.select !== "object") {
+              throw new Error("Query spec must include a selection object");
+            }
+            if (spec.where?.id !== undefined && spec.where.ids !== undefined) {
+              throw new Error('Query "where" cannot include both "id" and "ids"');
+            }
+
+            if (spec.where?.id !== undefined) {
+              if (!hasEntity(typeDef as any, spec.where.id)) return undefined;
+              return projectSelectedEntity(typeDef as any, spec.where.id, spec.select as any);
+            }
+
+            const ids =
+              spec.where?.ids?.map((id) => String(id)) ??
+              listEntityRefs(typeDef as any).map((entityRef) => entityRef.id);
+
+            return ids.flatMap((id) =>
+              hasEntity(typeDef as any, id)
+                ? [projectSelectedEntity(typeDef as any, id, spec.select as any)]
+                : [],
+            );
+          },
           ref(id: string) {
             return getEntityRef(typeDef as any, id);
           },
           node(id: string) {
             return getEntityRef(typeDef as any, id);
           },
-        };
+        } as TypeHandle<any, any>;
         return handle;
       },
     },

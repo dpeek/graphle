@@ -96,6 +96,7 @@ Source: `src/client.ts`
 `createTypeClient(store, appNamespace)` exposes typed CRUD handles per entity type:
 
 - `create`, `get`, `update`, `delete`, `list`, `node(id)`
+- `query({ select, where? })`
 - Scalar encode/decode comes from scalar definitions.
 - Client typing remains key-based (from schema keys) even though runtime queries by resolved IDs.
 - Predicate fields can define lifecycle callbacks:
@@ -106,6 +107,39 @@ Source: `src/client.ts`
   - `core:node` now provides timestamp defaults:
     - `createdAt` sets to `now` on create only if not provided.
     - `updatedAt` sets to `now` on create and on updates that touch non-timestamp fields.
+
+### Typed Query Shape
+
+The first user-facing query API is intentionally small:
+
+```ts
+const company = await graph.company.query({
+  where: { id: companyId },
+  select: {
+    id: true,
+    name: true,
+    address: {
+      locality: true,
+    },
+  },
+});
+```
+
+- `select` controls the exact result shape. Unselected fields do not appear in the result type.
+- Scalar and enum predicates use `true` and return decoded values.
+- Entity reference predicates support either:
+  - `true` to return raw referenced ids
+  - `{ select: ... }` to project the nested entity shape
+- `where: { id }` returns one result or `undefined`.
+- `where: { ids }` returns an array in the requested id order, omitting missing ids.
+- Omitting `where` returns all local entities of that type.
+
+### Missing Data And Errors
+
+- Query completeness is not embedded in each query result in v1. Typed queries read the local store, and sync completeness/freshness live in `sync.getState()`.
+- Optional predicates resolve to `undefined` when selected and absent.
+- Required selected predicates reject if the local store is missing the required fact for an entity.
+- Nested entity selections reject if the reference points at an entity that is not present locally.
 
 ## Sync
 
