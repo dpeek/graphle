@@ -1,61 +1,76 @@
-# IO Config In TypeScript
+# IO TypeScript Config Model
 
 Status: Proposed
 
-## Purpose
+## Why This Exists
 
-This document defines a TypeScript-first replacement for the current `io.json`
-runtime configuration model.
+`io` currently treats `io.json` as the structured configuration entrypoint.
+That works for runtime validation, but it leaves the system with three gaps:
 
-The goal is to move from:
+- config is not a typed source module that the rest of the repo can import
+- plugin and provider config shapes are not modeled as reusable interfaces
+- the future graph/UI story would need a second schema for the same fields
 
-- a JSON file that is validated at runtime
+The current implementation reflects that split:
 
-to:
+- `agent/src/workflow.ts` parses `io.json` directly
+- `cli/src/install.ts` parses `io.json` directly
+- `lib` exports shared runtime utilities, but not a shared config definition surface
 
-- a repo-local `io.ts` module that exports one typed config object
-- shared config types and helpers from `@io/lib`
-- package-visible TypeScript access to the same config object across the stack
+This proposal defines what it should look like to move the machine-readable
+config from `io.json` to `io.ts` without collapsing `io.md` back into a giant
+prompt/config hybrid.
 
-This should make configuration:
+## Goals
 
-- easier to author
-- stricter at compile time
-- easier to share across packages
-- easier to evolve toward graph-defined schemas and UI editing
+- make `io.ts` the single repo-owned structured config source
+- let the rest of the application stack consume one typed exported object
+- keep config authoring strict and ergonomic in TypeScript
+- define provider and plugin config shapes modularly
+- reuse those same config shapes for future graph-backed editing
+- keep `io.md` as the natural-language instruction/context entrypoint
 
-## Current State
+## Non-Goals
 
-Today the agent runtime treats `io.json` as the structured entrypoint when it
-contains runtime keys. `agent/src/workflow.ts`:
+- implementing the migration in this issue
+- replacing `io.md`
+- moving all config storage into the graph on day one
+- allowing arbitrary async or side-effect-heavy config modules
 
-- detects runtime config keys in `io.json`
-- parses JSON at runtime
-- validates the result with Zod
-- normalizes the config into the `Workflow` shape
+## Proposed File Model
 
-This works, but it keeps the config surface in a format that:
+- `./io.ts`
+  - user-authored structured config source
+- `./io.md`
+  - repo-local instruction/context document
+- `@io/lib/config`
+  - shared config helpers, types, descriptors, and loader utilities
+- `@io/config`
+  - thin workspace package that re-exports the repo root `io.ts`
 
-- cannot express imports, reuse, or computed defaults cleanly
-- does not give package consumers a typed module to import
-- duplicates type intent between JSON input and runtime normalization
-- makes plugin/provider-specific config extensions awkward
+The important part is that the user-owned source stays `./io.ts`, but the rest
+of the repo imports it through a normal workspace package boundary instead of
+reaching up into the repo root with relative imports.
 
-The repo already has two building blocks that make a TypeScript model plausible:
+That packaging layer matters because the current package configs all typecheck
+`src` only, and several of them set `rootDir` to `src`. Importing `../io.ts`
+directly from each package would force broader per-package `tsconfig` changes
+and would make emit/layout behavior harder to reason about.
 
-- `@io/lib` is a shared workspace package that already exports common runtime
-  helpers and types
-- the graph package already describes typed shapes through schema definitions,
-  which can later be used to define config structure in a more modular way
+## Authoring Contract
 
-## Desired End State
-
-Each repo should define its configuration in a root-level `io.ts` file:
+The repo should export a single default config object from `io.ts`.
 
 ```ts
-import { defineIOConfig } from "@io/lib/config";
+import {
+  defineIoConfig,
+  definePluginConfig,
+  defineProviderConfig,
+  env,
+  linearTracker,
+} from "@io/lib/config";
 
-export default defineIOConfig({
+export default defineIoConfig({
   agent: {
     maxConcurrentAgents: 1,
     maxRetryBackoffMs: 300_000,
@@ -64,262 +79,215 @@ export default defineIOConfig({
   codex: {
     approvalPolicy: "never",
     command: "codex app-server",
-    readTimeoutMs: 5_000,
-    stallTimeoutMs: 300_000,
     threadSandbox: "workspace-write",
-    turnTimeoutMs: 3_600_000,
   },
-  tracker: {
-    kind: "linear",
-    apiKey: "$LINEAR_API_KEY",
-    projectSlug: "$LINEAR_PROJECT_SLUG",
-    activeStates: ["Todo"],
-    terminalStates: ["Closed", "Cancelled", "Canceled", "Duplicate", "Done"],
+  context: {
+    entrypoint: "./io.md",
   },
-  workspace: {
-    root: "$AGENT_WORKSPACE_ROOT",
+  install: {
+    brews: ["ripgrep", "bat"],
+  },
+  plugins: {
+    github: definePluginConfig({
+      enabled: true,
+    }),
   },
   providers: {
-    linear: {
-      defaultTeam: "OpenSurf",
-    },
+    linear: defineProviderConfig({
+      apiKey: env.secret("LINEAR_API_KEY"),
+      projectSlug: env.string("LINEAR_PROJECT_SLUG"),
+    }),
+  },
+  tracker: linearTracker({
+    activeStates: ["Todo"],
+    apiKey: env.secret("LINEAR_API_KEY"),
+    projectSlug: env.string("LINEAR_PROJECT_SLUG"),
+  }),
+  workspace: {
+    root: env.path("AGENT_WORKSPACE_ROOT"),
   },
 });
 ```
 
-The runtime should then load that module directly instead of parsing JSON.
+Key properties of this contract:
 
-## Core Contract
+- the config is authored in TypeScript, not JSON
+- the config is validated through the helper surface, not ad hoc object shapes
+- the final exported value remains serializable/config-like
+- environment-backed values are explicit instead of being hidden string
+  conventions
 
-The model should be centered on a single exported object:
+## Shared Config Surface In `@io/lib`
 
-- file: `./io.ts`
-- default export: one typed config object
-- authoring helper: `defineIOConfig(...)`
+`@io/lib/config` should become the single place that defines the config model.
 
-`defineIOConfig(...)` should:
+It should expose:
 
-- preserve literal types from the repo config
-- validate the top-level shape at compile time
-- remain a no-op or near-no-op at runtime
+- `defineIoConfig(...)`
+  - validates top-level structure and preserves exact inference
+- `defineProviderConfig(...)`
+  - standard way for provider modules to declare their config shape
+- `definePluginConfig(...)`
+  - standard way for plugin modules to declare their config shape
+- `env`
+  - typed helpers such as `env.string(...)`, `env.secret(...)`, and `env.path(...)`
+- `loadIoConfig(...)`
+  - shared runtime loader used by `agent`, `cli`, and other packages
 
-The resulting type should be consumable from any package that can resolve the
-repo entrypoint.
+The important design rule is that `@io/lib` owns the config language, while
+`io.ts` only supplies repo-specific values.
 
-## Why `io.ts` Instead Of JSON
+## Provider And Plugin Shapes
 
-TypeScript unlocks four things JSON cannot provide cleanly:
+Provider and plugin configuration should be modular rather than one giant
+top-level interface.
 
-1. a real importable module boundary
-2. exact inference for literals, unions, and nested provider config
-3. composition through constants and helper functions
-4. extension points for plugins without inventing a JSON-only schema language
+Each module should own a descriptor that includes:
 
-This is especially important if the same config should be used by:
+- its stable kind/key
+- its TypeScript config shape
+- field metadata
+- runtime validation rules
+- defaults where appropriate
 
-- the agent runtime
-- CLI commands
-- graph-backed tooling
-- future UI editing and config inspection flows
-
-## Proposed Runtime Shape
-
-`@io/lib` should own the shared config types and authoring helpers.
-
-Suggested surface:
+Conceptually, each descriptor looks like this:
 
 ```ts
-export interface IOConfig {
-  agent?: AgentConfig;
-  codex?: CodexConfig;
-  hooks?: HookConfig;
-  polling?: PollingConfig;
-  tracker?: TrackerConfig;
-  workspace?: WorkspaceConfig;
-  providers?: ProviderConfigMap;
-  plugins?: PluginConfigMap;
-}
-
-export declare function defineIOConfig<const T extends IOConfig>(config: T): T;
+type ConfigDescriptor<T> = {
+  fields: ConfigFieldMap<T>;
+  parse(value: unknown): T;
+  kind: string;
+};
 ```
 
-This keeps repo config authoring strongly typed while still allowing the runtime
-to normalize defaults later.
+That gives the system one place to answer all of these questions:
 
-The runtime loader in `agent/src/workflow.ts` should evolve from:
+- what keys are valid?
+- what type does each field have?
+- which values are required, optional, enum-like, secret, or path-like?
+- how should the runtime validate the final object?
+- how should a UI render an editor for the same object?
 
-- read `io.json`
-- `JSON.parse(...)`
-- validate with `ioConfigSchema`
+## Graph-Driven Metadata
 
-to:
+The graph should become the schema layer for config, not necessarily the first
+storage layer.
 
-- resolve `io.ts`
-- import its default export
-- validate the loaded value defensively at runtime
-- normalize it into the existing `Workflow` shape
+The same provider/plugin descriptors should be able to project into graph-shaped
+metadata:
 
-Compile-time typing should improve authoring. Runtime validation should still
-exist to protect CLI usage, JS callers, and malformed module exports.
+- section keys
+- field keys
+- scalar kinds
+- required/optional flags
+- enum choices
+- labels and descriptions
+- secret/value-source markers
 
-## Package Resolution Model
+That creates one shared model for:
 
-The repo needs a stable way for workspace packages to resolve the root config
+- TypeScript inference in `io.ts`
+- runtime validation in loaders
+- graph-backed inspection
+- future structured config editing UI
+
+The first phase should keep `io.ts` as the source of truth and treat any graph
+projection as derived metadata. Editing through the graph can come later once
+the descriptor model is stable.
+
+## TypeScript Wiring
+
+The current package layout means the repo needs an explicit access path for the
+root `io.ts`.
+
+Recommended approach:
+
+1. keep the user-authored file at `./io.ts`
+2. add a thin `config` workspace package published internally as `@io/config`
+3. make `@io/config` re-export the repo root `io.ts`
+4. have other packages import `@io/config` instead of `../io.ts`
+
+This avoids widening every package `include`/`rootDir` just to reach the repo
+root, while still making the config available everywhere as a normal typed
 module.
 
-### Requirements
+`@io/config` is also the right place to isolate any loader/build quirks that are
+specific to the repo-owned config source.
 
-- package code should be able to import the config without copying paths
-- TypeScript should understand the repo-local `io.ts` file
-- runtime resolution should match TypeScript resolution closely
+## Runtime Contract
 
-### Recommended approach
+The runtime should stop parsing `io.json` independently in multiple places.
 
-Use a reserved module id for the repo config, backed by TypeScript path mapping.
+Instead:
 
-Example:
+- `agent`
+- `cli`
+- future packages that need config
 
-```json
-{
-  "compilerOptions": {
-    "paths": {
-      "@io/config": ["../io.ts"]
-    }
-  }
-}
-```
+should all call the same shared loader from `@io/lib/config`.
 
-Each package tsconfig that extends the shared base should resolve `@io/config`
-to the repo root `io.ts`.
+That loader should:
 
-That gives consumers a stable import:
+- import `@io/config`
+- validate the default export against the shared config model
+- resolve environment-backed values consistently
+- return one normalized typed object
 
-```ts
-import config from "@io/config";
-```
+The config module should stay synchronous and side-effect-light so it remains:
 
-This is preferable to many relative imports because it:
+- predictable to load
+- safe to import from tooling
+- easy to inspect and eventually project into a UI
 
-- avoids package-specific path math
-- makes the config entrypoint explicit
-- keeps room for future tooling that can special-case the module id
+## Migration Shape
 
-## Provider And Plugin Configuration
-
-Provider and plugin config should not be modeled as one untyped catch-all
-object.
-
-Instead, each provider or plugin should contribute its own config shape through
-shared TypeScript interfaces.
-
-Suggested direction:
-
-```ts
-interface ProviderConfigMap {
-  linear?: LinearProviderConfig;
-}
-
-interface PluginConfigMap {
-  graph?: GraphPluginConfig;
-}
-```
-
-This gives three useful properties:
-
-- unused integrations stay absent rather than loosely optional everywhere
-- configured integrations become strictly typed at author time
-- new integrations can extend the config surface without rewriting the core file
-
-The `defineIOConfig(...)` helper should preserve those nested literal types so
-the rest of the app sees the user-authored config shape, not just a widened base
-interface.
-
-## Relationship To The Graph
-
-The graph runtime already models typed shapes through `defineType(...)`,
-`defineScalar(...)`, and resolved field metadata. That should become the
-long-term source of truth for editable config schemas.
-
-Near-term:
-
-- TypeScript interfaces define the config authoring contract
-- runtime code imports the resulting `io.ts` object directly
-
-Later:
-
-- providers and plugins can publish graph-described config schemas
-- the config UI can render forms from those schemas
-- the same schema metadata can drive validation, docs, and structured editing
-
-That path keeps the first implementation small while preserving the more
-ambitious graph-native configuration model described in the issue.
-
-## Compatibility And Migration
-
-This should be an additive migration, not a flag day.
+This should ship as a phased migration, not a flag day rewrite.
 
 ### Phase 1
 
-- add `@io/lib` config types and `defineIOConfig(...)`
-- support `io.ts` as a new preferred config entrypoint
-- preserve `io.json` loading as a compatibility path
+- add the `@io/lib/config` helper surface
+- add `@io/config`
+- allow authoring `io.ts`
+- keep `io.json` as the compatibility path
 
 ### Phase 2
 
-- add `@io/config` path resolution for workspace packages
-- let runtime and package code import the same repo config module
+- move `agent` and `cli` to the shared TypeScript config loader
+- keep `io.json` as a fallback or compatibility import path during migration
+- update docs that still describe JSON as the primary structured config boundary
 
 ### Phase 3
 
-- move provider and plugin config into modular typed interfaces
-- stop treating unknown nested objects as opaque blobs
+- move provider/plugin definitions onto modular descriptors
+- derive graph field metadata from those descriptors
+- expose config inspection/editing through the graph/UI layer
 
 ### Phase 4
 
-- describe provider/plugin config schemas in graph terms
-- use that schema metadata for UI editing and inspection
+- deprecate direct `io.json` authoring once `io.ts` is stable
+- keep any needed machine-readable export as generated output rather than source
 
-During migration, precedence should be explicit:
+## Effect On Existing IO Docs
 
-1. `io.ts`
-2. `io.json`
-3. legacy `WORKFLOW.md` fallback behavior where still supported
+This proposal does not change the role of `io.md`.
 
-The runtime should fail clearly when both `io.ts` and `io.json` exist but do not
-agree on which one is authoritative.
+It does imply follow-up updates to docs that currently describe `io.json` as the
+long-term config entrypoint, especially:
 
-## Implementation Plan
+- `agent/doc/context.md`
+- `agent/doc/context-defaults.md`
 
-The smallest complete implementation should be:
+Those docs should be updated as part of the implementation work, not in this
+planning issue.
 
-1. add shared `IOConfig` types and `defineIOConfig(...)` to `@io/lib`
-2. teach `agent/src/workflow.ts` to load `io.ts` as the preferred config
-   entrypoint while keeping `io.json` as a compatibility fallback
-3. add tsconfig path wiring for a stable `@io/config` import in each package
-4. migrate repo-local config consumption to import the typed module instead of
-   reparsing JSON
-5. follow up with provider/plugin-specific typing, then graph-backed schema
-   publication once the TypeScript entrypoint is stable
+## Recommended Implementation Plan
 
-## Non-Goals For The First Change
-
-The first implementation should not try to solve everything at once.
-
-Out of scope for the initial rollout:
-
-- replacing every runtime normalization step with compile-time typing
-- building the config editing UI
-- making the graph schema the only authoring source immediately
-- removing `io.json` compatibility before `io.ts` is proven in real repos
-
-## Recommended Outcome
-
-Treat `io.ts` as the canonical authoring surface, `@io/lib` as the source of the
-shared typed contract, and the graph as the next layer that will eventually make
-those config shapes inspectable and editable.
-
-That sequence keeps the migration grounded:
-
-- first make config importable and typed
-- then make it modular across providers and plugins
-- then make it graph-described for tooling and UI
+1. Add `@io/lib/config` with `defineIoConfig`, env helpers, and shared
+   loader/normalization logic.
+2. Introduce a thin `@io/config` workspace package that re-exports the repo root
+   `io.ts`, so the rest of the repo can import typed config without widening
+   every package `rootDir`.
+3. Migrate `agent` and `cli` from direct `io.json` parsing to the shared config
+   loader, keeping a compatibility path during rollout.
+4. Move provider/plugin config onto reusable descriptors and project those
+   descriptors into graph metadata for future structured editing.
