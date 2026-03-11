@@ -11,6 +11,7 @@ import { createExampleRuntime } from "./runtime";
 import { edgeId, typeId } from "./schema";
 import { createStore } from "./store";
 import {
+  GraphSyncWriteError,
   type GraphWriteTransaction,
   createAuthoritativeGraphWriteSession,
   createAuthoritativeTotalSyncValidator,
@@ -156,6 +157,259 @@ describe("total sync", () => {
       completeness: "incomplete",
       freshness: "stale",
     });
+  });
+
+  it("queues pending write transactions for create, update, delete, and predicate edits after local commit", () => {
+    const server = createServerGraph();
+    const companyId = server.graph.company.create({
+      name: "Acme Corp",
+      status: app.status.values.active.id,
+      website: new URL("https://acme.com"),
+      tags: ["enterprise"],
+    });
+
+    const createClient = createSyncedTypeClient(app, {
+      pull: () => createTotalSyncPayload(server.store, { cursor: "server:create" }),
+    });
+    const createdId = createClient.graph.company.create({
+      name: "Queued Create",
+      status: app.status.values.active.id,
+      website: new URL("https://queued.example"),
+    });
+    const createPending = createClient.sync.getPendingTransactions();
+    expect(createPending).toHaveLength(1);
+    expect(createPending[0]).toMatchObject({
+      id: "local:1",
+    });
+    expect(createPending[0]?.ops).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          op: "assert",
+          edge: expect.objectContaining({
+            s: createdId,
+            p: edgeId(core.node.fields.type),
+            o: app.company.values.id,
+          }),
+        }),
+        expect.objectContaining({
+          op: "assert",
+          edge: expect.objectContaining({
+            s: createdId,
+            p: edgeId(app.company.fields.name),
+            o: "Queued Create",
+          }),
+        }),
+      ]),
+    );
+    expect(createClient.sync.getState().pendingCount).toBe(1);
+
+    const updateClient = createSyncedTypeClient(app, {
+      pull: () => createTotalSyncPayload(server.store, { cursor: "server:update" }),
+    });
+    updateClient.sync.apply(createTotalSyncPayload(server.store, { cursor: "server:update" }));
+    updateClient.graph.company.update(companyId, {
+      name: "Queued Update",
+    });
+    expect(updateClient.sync.getPendingTransactions()).toEqual([
+      expect.objectContaining({
+        id: "local:1",
+        ops: expect.arrayContaining([
+          expect.objectContaining({ op: "retract" }),
+          expect.objectContaining({
+            op: "assert",
+            edge: expect.objectContaining({
+              s: companyId,
+              p: edgeId(app.company.fields.name),
+              o: "Queued Update",
+            }),
+          }),
+        ]),
+      }),
+    ]);
+
+    const deleteClient = createSyncedTypeClient(app, {
+      pull: () => createTotalSyncPayload(server.store, { cursor: "server:delete" }),
+    });
+    deleteClient.sync.apply(createTotalSyncPayload(server.store, { cursor: "server:delete" }));
+    deleteClient.graph.company.delete(companyId);
+    const deletePending = deleteClient.sync.getPendingTransactions();
+    expect(deletePending).toHaveLength(1);
+    expect(deletePending[0]?.ops.every((operation) => operation.op === "retract")).toBe(true);
+
+    const predicateClient = createSyncedTypeClient(app, {
+      pull: () => createTotalSyncPayload(server.store, { cursor: "server:predicate" }),
+    });
+    predicateClient.sync.apply(
+      createTotalSyncPayload(server.store, { cursor: "server:predicate" }),
+    );
+    predicateClient.graph.company.ref(companyId).fields.tags.add("platform");
+    expect(predicateClient.sync.getPendingTransactions()).toEqual([
+      expect.objectContaining({
+        id: "local:1",
+        ops: expect.arrayContaining([
+          expect.objectContaining({
+            op: "assert",
+            edge: expect.objectContaining({
+              s: companyId,
+              p: edgeId(app.company.fields.tags),
+              o: "platform",
+            }),
+          }),
+        ]),
+      }),
+    ]);
+  });
+
+  it("flushes queued pending writes through the authority and clears them after acknowledgement", async () => {
+    const server = createServerGraph();
+    const companyId = server.graph.company.create({
+      name: "Acme Corp",
+      status: app.status.values.active.id,
+      website: new URL("https://acme.com"),
+      tags: ["enterprise"],
+    });
+    const authority = createAuthoritativeGraphWriteSession(server.store, app, {
+      cursorPrefix: "server:",
+    });
+    const client = createSyncedTypeClient(app, {
+      pull: () => createTotalSyncPayload(server.store, { cursor: authority.getCursor() ?? "server:0" }),
+      push: (transaction) => authority.apply(transaction),
+    });
+
+    client.sync.apply(createTotalSyncPayload(server.store, { cursor: "server:0" }));
+    client.graph.company.update(companyId, {
+      name: "Acme Flush Labs",
+    });
+    client.graph.company.ref(companyId).fields.tags.add("platform");
+
+    expect(client.sync.getPendingTransactions()).toHaveLength(2);
+
+    const results = await client.sync.flush();
+
+    expect(results).toEqual([
+      expect.objectContaining({
+        txId: "local:1",
+        cursor: "server:1",
+        replayed: false,
+      }),
+      expect.objectContaining({
+        txId: "local:2",
+        cursor: "server:2",
+        replayed: false,
+      }),
+    ]);
+    expect(client.sync.getPendingTransactions()).toEqual([]);
+    expect(client.sync.getState()).toMatchObject({
+      status: "ready",
+      cursor: "server:2",
+      completeness: "complete",
+      freshness: "current",
+      pendingCount: 0,
+    });
+    expect(server.graph.company.get(companyId)).toMatchObject({
+      id: companyId,
+      name: "Acme Flush Labs",
+      tags: ["enterprise", "platform"],
+    });
+    expect(client.graph.company.get(companyId)).toMatchObject({
+      id: companyId,
+      name: "Acme Flush Labs",
+      tags: ["enterprise", "platform"],
+    });
+  });
+
+  it("keeps failed pending pushes retryable and surfaces structured flush errors", async () => {
+    const server = createServerGraph();
+    const companyId = server.graph.company.create({
+      name: "Acme Corp",
+      status: app.status.values.active.id,
+      website: new URL("https://acme.com"),
+    });
+    const authority = createAuthoritativeGraphWriteSession(server.store, app, {
+      cursorPrefix: "server:",
+    });
+    let shouldFail = true;
+    const client = createSyncedTypeClient(app, {
+      pull: () => createTotalSyncPayload(server.store, { cursor: authority.getCursor() ?? "server:0" }),
+      push(transaction) {
+        if (shouldFail) {
+          shouldFail = false;
+          throw new Error("push failed");
+        }
+        return authority.apply(transaction);
+      },
+    });
+
+    client.sync.apply(createTotalSyncPayload(server.store, { cursor: "server:0" }));
+    client.graph.company.update(companyId, {
+      name: "Acme Retry Labs",
+    });
+
+    await expect(client.sync.flush()).rejects.toBeInstanceOf(GraphSyncWriteError);
+
+    expect(client.sync.getPendingTransactions()).toHaveLength(1);
+    expect(client.sync.getState()).toMatchObject({
+      status: "error",
+      cursor: "server:0",
+      freshness: "stale",
+      pendingCount: 1,
+    });
+    expect(client.sync.getState().error).toBeInstanceOf(GraphSyncWriteError);
+    const writeError = client.sync.getState().error as GraphSyncWriteError;
+    expect(writeError.transaction).toMatchObject({
+      id: "local:1",
+    });
+    expect(writeError.cause).toBeInstanceOf(Error);
+    expect(client.graph.company.get(companyId).name).toBe("Acme Retry Labs");
+    expect(server.graph.company.get(companyId).name).toBe("Acme Corp");
+
+    const retry = await client.sync.flush();
+
+    expect(retry).toEqual([
+      expect.objectContaining({
+        txId: "local:1",
+        cursor: "server:1",
+      }),
+    ]);
+    expect(client.sync.getPendingTransactions()).toEqual([]);
+    expect(client.graph.company.get(companyId).name).toBe("Acme Retry Labs");
+    expect(server.graph.company.get(companyId).name).toBe("Acme Retry Labs");
+  });
+
+  it("keeps total sync as a recovery path after pending push failures", async () => {
+    const server = createServerGraph();
+    const companyId = server.graph.company.create({
+      name: "Acme Corp",
+      status: app.status.values.active.id,
+      website: new URL("https://acme.com"),
+    });
+    const client = createSyncedTypeClient(app, {
+      pull: () => createTotalSyncPayload(server.store, { cursor: "server:recovery" }),
+      push() {
+        throw new Error("push failed");
+      },
+    });
+
+    client.sync.apply(createTotalSyncPayload(server.store, { cursor: "server:0" }));
+    client.graph.company.update(companyId, {
+      name: "Local Diverged Name",
+    });
+
+    await expect(client.sync.flush()).rejects.toBeInstanceOf(GraphSyncWriteError);
+    expect(client.sync.getPendingTransactions()).toHaveLength(1);
+    expect(client.graph.company.get(companyId).name).toBe("Local Diverged Name");
+
+    const recovered = await client.sync.sync();
+
+    expect(recovered.cursor).toBe("server:recovery");
+    expect(client.sync.getPendingTransactions()).toEqual([]);
+    expect(client.sync.getState()).toMatchObject({
+      status: "ready",
+      cursor: "server:recovery",
+      freshness: "current",
+      pendingCount: 0,
+    });
+    expect(client.graph.company.get(companyId).name).toBe("Acme Corp");
   });
 
   it("treats an accepted total snapshot as authoritative over valid local optimistic edits", async () => {
@@ -429,7 +683,7 @@ describe("total sync", () => {
     unsubscribeWebsite();
   });
 
-  it("proves authority-backed local writes become visible to synced peers without per-write total sync", () => {
+  it("proves authority-backed local writes become visible to synced peers without per-write total sync", async () => {
     const runtime = createExampleRuntime();
     const peer = runtime.createPeer();
     const syncPayloadCount = runtime.authority.getSyncPayloadCount();
@@ -437,7 +691,7 @@ describe("total sync", () => {
     expect(runtime.graph.company.get(runtime.ids.acme).name).toBe("Acme Corp");
     expect(peer.graph.company.get(runtime.ids.acme).name).toBe("Acme Corp");
 
-    const result = runtime.commitLocalMutation(runtime, "tx:runtime:1", (graph) => {
+    const result = await runtime.commitLocalMutation(runtime, "tx:runtime:1", (graph) => {
       graph.company.update(runtime.ids.acme, {
         name: "Acme Runtime Labs",
       });

@@ -48,9 +48,10 @@ is replaced:
 Invalid authoritative payloads fail the sync attempt and leave the previous
 ready state intact.
 
-Accepted total snapshots are still authoritative replaces in v1. There is no
-pending local-op merge queue yet; the durable boundary is validation-before-
-replace.
+Accepted total snapshots are still authoritative replaces in v1, and a
+successful total replace clears any locally pending write queue. Steady-state
+local edits now use queued `GraphWriteTransaction`s plus `sync.flush()`, while
+total sync remains the bootstrap and recovery boundary.
 
 That authoritative pass now also rejects data-bearing nodes that have lost all
 current `core:node:type` edges, so sync cannot silently install untyped ghost
@@ -118,25 +119,36 @@ Sources:
 The proven path today is:
 
 1. a synced client applies a normal typed local mutation against its local store
-2. the runtime captures the resulting edge-level diff as a
-   `GraphWriteTransaction`
-3. the authority applies that transaction through
+2. `createSyncedTypeClient(...)` captures the committed edge-level diff as a
+   pending `GraphWriteTransaction`
+3. `sync.flush()` pushes those pending transactions through the configured
+   write transport
+4. the authority applies each transaction through
    `createAuthoritativeGraphWriteSession(...)`
-4. the authority returns an `AuthoritativeGraphWriteResult`
-5. synced clients reconcile that acknowledged result through
-   `sync.applyWriteResult(result)`
+5. the authority returns an `AuthoritativeGraphWriteResult`
+6. synced clients reconcile that acknowledged result through
+   `sync.applyWriteResult(result)` or the built-in flush loop
 
 That means whole-graph total sync is still the bootstrap and recovery path, but
 accepted writes no longer require a full-snapshot replace per mutation. The
 per-write steady-state proof is now authoritative tx apply plus incremental
 client reconciliation.
 
+The generic synced-client contract now exposes:
+
+- `sync.getPendingTransactions()` to inspect the queued canonical tx records
+- `sync.flush()` to push the queue in order and acknowledge accepted writes
+- `GraphSyncWriteError` when a push fails; it carries the failed transaction in
+  `error.transaction` and preserves the remaining queue for retry
+- `sync.getState().pendingCount` so callers can surface pending-write state
+
 The app proof runtime demonstrates the contract with one shared authority and
 multiple synced clients:
 
 - each client still uses the normal typed graph handles for local reads and
   writes
-- the runtime turns a committed local mutation into a deterministic write tx
+- the synced client turns a committed local mutation into a deterministic
+  queued write tx
 - the authority remains the only place that decides whether the write is
   accepted
 - peer clients observe the accepted write through `applyWriteResult(...)`
@@ -150,17 +162,20 @@ Failure handling is still intentionally conservative.
   validation surface as unsynced clients.
 - Authority-side tx validation failure rejects the write and leaves the
   authoritative store unchanged.
-- A synced client that misses a write result, sees a rejected write after an
-  optimistic local commit, or needs to recover from divergence still falls back
-  to total sync via `sync.sync()` or `sync.apply(payload)`.
-- There is not yet a generic pending write queue, rollback protocol, cursor-
-  based incremental pull, or query-scoped repair path.
+- Failed `sync.flush()` calls leave the queued txs intact, mark sync state
+  stale/error, and let callers retry the same idempotent transactions.
+- A synced client that needs to discard pending optimistic state or recover
+  from divergence can still fall back to total sync via `sync.sync()` or
+  `sync.apply(payload)`, which replaces the local view authoritatively.
+- There is not yet a rollback protocol, cursor-based incremental pull, or
+  query-scoped repair path.
 
 So the durable v1 rule is:
 
 - bootstrap and recovery use total snapshots
 - accepted writes reconcile incrementally
-- rejected or missing writes recover by full snapshot today
+- failed pushes stay retryable until the caller chooses to retry or recover by
+  full snapshot
 
 For lower-level integration, `createTotalSyncSession(store)` still exposes:
 
@@ -217,53 +232,34 @@ The current sync surface now has:
 - authoritative total-snapshot pull/replace
 - a canonical write transaction envelope
 - an authority-side apply path with idempotent tx ids
-- an end-to-end runtime proof of local mutation -> authority ack -> peer
-  visibility through incremental write-result reconciliation
+- synced-client pending write queues plus `sync.flush()`
+- an end-to-end runtime proof of local mutation -> queue -> authority ack ->
+  peer visibility through incremental write-result reconciliation
 
-The next work should generalize that proof loop into a transport-backed client
-contract rather than making the snapshot contract more elaborate.
+The next work should build on that landed client contract rather than making
+the snapshot contract more elaborate.
 
-### 1. Synced-client pending write queues and push
+### 1. Incremental authoritative apply on synced clients
 
-The proof surface now shows the intended loop, but the generic client contract
-is still missing.
+The synced client now:
 
-That slice should:
-
-- capture committed local typed mutations as pending `GraphWriteTransaction`
+- captures committed local typed mutations as pending `GraphWriteTransaction`
   records
-- push those transactions to the authoritative write session or transport
-- keep local optimistic validation exactly where it already lives today, before
+- flushes those transactions through a configured authority write transport
+- rebases the local optimistic graph from the last authoritative snapshot plus
+  any still-pending txs after acknowledged write results
+- keeps local optimistic validation exactly where it already lives today, before
   a tx is queued or sent
 
-### 2. Incremental authoritative apply on synced clients
+That still leaves room for richer conflict handling later, but the generic
+queue/push path is now real.
 
-The synced client can now accept an authoritative write result through
-`sync.applyWriteResult(result)` and reconcile only the affected facts into the
-local store.
-
-That path:
-
-- preserves the existing schema baseline instead of rebuilding the whole local
-  snapshot
-- updates `cursor`, `freshness`, `lastSyncedAt`, and `status` through the same
-  sync-state object used by total sync
-- keeps predicate-slot notification behavior aligned with current local store
-  semantics by batching the exact retract/assert ops and only notifying changed
-  logical slot values
-
-Callers that need the same authoritative validation boundary before they apply a
-write result can use:
-
-- `validateAuthoritativeGraphWriteResult(result, store, namespace)`
-- `createAuthoritativeGraphWriteResultValidator(store, namespace)`
-
-### 3. Incremental pull and live tx delivery
+### 2. Incremental pull and live tx delivery
 
 After the push/ack loop is real, sync can stop relying on full-graph refresh as
 the normal read path.
 
-That slice should:
+That path:
 
 - let clients pull transactions or patches after a cursor instead of only a
   complete snapshot

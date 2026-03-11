@@ -3,13 +3,12 @@ import { bootstrap } from "./bootstrap"
 import { createTypeClient } from "./client"
 import { core } from "./core"
 import { seedExampleGraph } from "./example-data"
-import { createStore, type StoreSnapshot } from "./store"
+import { createStore } from "./store"
 import {
   createAuthoritativeGraphWriteSession,
   createSyncedTypeClient,
   createTotalSyncPayload,
   type AuthoritativeGraphWriteResult,
-  type GraphWriteTransaction,
   type SyncedTypeClient,
   type TotalSyncPayload,
 } from "./sync"
@@ -29,33 +28,6 @@ function createExampleAuthorityGraph() {
   }
 }
 
-function createGraphWriteTransactionFromSnapshots(
-  before: StoreSnapshot,
-  after: StoreSnapshot,
-  txId: string,
-): GraphWriteTransaction {
-  const beforeEdgeIds = new Set(before.edges.map((edge) => edge.id))
-  const beforeRetractedIds = new Set(before.retracted)
-
-  return {
-    id: txId,
-    ops: [
-      ...after.retracted
-        .filter((edgeId) => !beforeRetractedIds.has(edgeId))
-        .map((edgeId) => ({
-          op: "retract" as const,
-          edgeId,
-        })),
-      ...after.edges
-        .filter((edge) => !beforeEdgeIds.has(edge.id))
-        .map((edge) => ({
-          op: "assert" as const,
-          edge: { ...edge },
-        })),
-    ],
-  }
-}
-
 export type ExampleSyncedClient = SyncedTypeClient<typeof app>
 
 export function createExampleRuntime() {
@@ -64,6 +36,7 @@ export function createExampleRuntime() {
     cursorPrefix: "example:",
   })
   const clients = new Set<ExampleSyncedClient>()
+  const pendingTxIds = new WeakMap<ExampleSyncedClient, string[]>()
   let syncPayloadCount = 0
 
   function createSyncPayload(): TotalSyncPayload {
@@ -74,10 +47,24 @@ export function createExampleRuntime() {
   }
 
   function createClient(): ExampleSyncedClient {
-    const client = createSyncedTypeClient(app, {
+    let client: ExampleSyncedClient
+    const queuedTxIds: string[] = []
+    client = createSyncedTypeClient(app, {
       pull: () => createSyncPayload(),
+      createTxId() {
+        return queuedTxIds.shift() ?? "example:local"
+      },
+      push(transaction) {
+        const result = writes.apply(transaction)
+        for (const peer of clients) {
+          if (peer === client) continue
+          peer.sync.applyWriteResult(result)
+        }
+        return result
+      },
     })
     client.sync.apply(createSyncPayload())
+    pendingTxIds.set(client, queuedTxIds)
     clients.add(client)
     return client
   }
@@ -93,16 +80,18 @@ export function createExampleRuntime() {
     client: ExampleSyncedClient,
     txId: string,
     mutate: (graph: ExampleSyncedClient["graph"]) => void,
-  ): AuthoritativeGraphWriteResult {
-    const before = client.store.snapshot()
+  ): Promise<AuthoritativeGraphWriteResult> {
+    pendingTxIds.get(client)?.push(txId)
     mutate(client.graph)
-    const transaction = createGraphWriteTransactionFromSnapshots(before, client.store.snapshot(), txId)
-
-    if (transaction.ops.length === 0) {
+    if (client.sync.getPendingTransactions().length === 0) {
       throw new Error(`Local mutation for "${txId}" did not change the graph.`)
     }
 
-    return applyAuthoritativeWrite(writes.apply(transaction))
+    return client.sync.flush().then((results) => {
+      const result = results[results.length - 1]
+      if (!result) throw new Error('Expected synced flush to return an authoritative write result.')
+      return result
+    })
   }
 
   function createPeer(): ExampleSyncedClient {
@@ -110,9 +99,7 @@ export function createExampleRuntime() {
   }
 
   const runtime = createClient()
-
-  return {
-    ...runtime,
+  return Object.assign(runtime, {
     app,
     ids: authority.ids,
     createPeer,
@@ -126,5 +113,5 @@ export function createExampleRuntime() {
         return syncPayloadCount
       },
     },
-  }
+  })
 }

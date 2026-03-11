@@ -79,8 +79,9 @@ This is the current optimistic-write boundary. Invalid input never enters the
 local store.
 
 `createSyncedTypeClient(...).graph` uses that same precheck before any sync
-call happens. In v1, optimistic local edits are therefore just validated local
-store mutations; there is not yet a separate pending-op queue or merge layer.
+call happens. Synced clients queue write transactions only after that same
+validated local commit succeeds; the write queue does not introduce a second
+optimistic validation path.
 
 Callers that need the normalized result without committing can run the same
 precheck directly:
@@ -157,9 +158,9 @@ The current total-sync path is:
 This means authoritative data uses the same rule set as local mutation, but at
 the sync boundary instead of trusting remote data implicitly.
 
-What v1 sync does not do yet is merge pending local writes with accepted remote
-payloads. Once a total snapshot passes validation, it still replaces the local
-store authoritatively.
+What v1 sync does not do yet is merge pending local writes into an incoming
+authoritative total snapshot. Once a total snapshot passes validation, it still
+replaces the local store authoritatively and clears any queued local write txs.
 
 That sync boundary is now centralized in the shared total-sync session.
 

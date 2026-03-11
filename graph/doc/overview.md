@@ -177,16 +177,22 @@ Sources:
 The first shipped sync contract is a total graph snapshot applied into the local
 store.
 
-- `createSyncedTypeClient(namespace, { pull })` exposes a typed client plus a
-  pre-bound `sync.sync()` entry point
+- `createSyncedTypeClient(namespace, { pull, push? })` exposes a typed client
+  plus pre-bound `sync.sync()` and `sync.flush()` entry points
 - `createTotalSyncSession(store, { preserveSnapshot, validate })` remains the
   lower-level store integration surface; `createTotalSyncController(...)` and
   `createSyncedTypeClient(...)` both build on that same session-level apply
   boundary
+- synced clients queue locally committed write transactions automatically;
+  `sync.getPendingTransactions()` exposes that queue and
+  `sync.getState().pendingCount` tracks its size
 - synced clients and lower-level sessions can now reconcile authoritative write
   results incrementally with `sync.applyWriteResult(...)` /
   `session.applyWriteResult(...)`, preserving the current schema baseline and
   sync metadata while only mutating the affected graph facts
+- failed `sync.flush()` calls preserve the queued txs, surface a
+  `GraphSyncWriteError`, and leave total sync available as the reset/recovery
+  path
 - lower-level total-sync integrations can reuse the same authoritative
   validation boundary with
   `createAuthoritativeTotalSyncValidator(namespace)` or inspect
