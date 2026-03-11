@@ -900,6 +900,135 @@ test("AgentService writes the canonical focus doc and treats equivalent focus re
   }
 });
 
+test("AgentService writes the managed focus doc for graph parents with graph proof surfaces", async () => {
+  const root = await mkdtemp(resolve(tmpdir(), "agent-service-focus-"));
+  const replies: string[] = [];
+
+  await mkdir(resolve(root, "graph", "doc"), { recursive: true });
+  await mkdir(resolve(root, "io", "topic"), { recursive: true });
+  await mkdir(resolve(root, "llm", "topic"), { recursive: true });
+  await writeFile(
+    resolve(root, "io.json"),
+    JSON.stringify(
+      {
+        agent: { maxConcurrentAgents: 1 },
+        modules: {
+          graph: {
+            allowedSharedPaths: ["./io/topic", "./llm/topic"],
+            docs: ["./io/topic/graph.md", "./graph/doc/overview.md"],
+            path: "./graph",
+          },
+        },
+        tracker: {
+          apiKey: "$LINEAR_API_KEY",
+          kind: "linear",
+          projectSlug: "$LINEAR_PROJECT_SLUG",
+        },
+        workspace: {
+          root: resolve(root, "workspace"),
+        },
+      },
+      null,
+      2,
+    ),
+  );
+  await writeFile(resolve(root, "io.md"), "LOCAL {{ issue.identifier }}\n");
+  await writeFile(
+    resolve(root, "io", "topic", "graph.md"),
+    `# Graph Stream
+
+## Current Focus
+
+- prove managed module streams on graph
+- keep the module contract portable
+`,
+  );
+  await writeFile(resolve(root, "graph", "doc", "overview.md"), "# Graph Overview\n");
+  process.env.LINEAR_API_KEY = "linear-token";
+  process.env.LINEAR_PROJECT_SLUG = "io";
+
+  try {
+    const service = new AgentService({
+      repoRoot: root,
+      trackerFactory: () => ({
+        applyManagedCommentMutation: async (mutation) => {
+          replies.push(mutation.reply.lines.join("\n"));
+          return {
+            createdChildIssueIdentifiers: [],
+            dependencyCount: 0,
+            replyCommentId: "reply-1",
+            result: "updated",
+            updatedChildIssueIdentifiers: [],
+            updatedParentDescription: false,
+            warnings: [],
+          };
+        },
+        fetchCandidateIssues: async () => [],
+        fetchIssueStatesByIds: async () => new Map(),
+        fetchManagedCommentTriggers: async () => [
+          {
+            body: "@io focus",
+            bodyHash: "hash-focus-graph",
+            command: "focus" as const,
+            commentId: "comment-1",
+            createdAt: "2024-01-02T00:00:00.000Z",
+            issue: createIssue({
+              description: `## Outcome
+
+- Prove the managed graph stream path.
+- Keep the module contract reusable for the next package.
+`,
+              hasChildren: true,
+              id: "issue-1",
+              identifier: "OPE-135",
+              labels: ["io", "graph"],
+              priority: 3,
+              teamId: "team-1",
+              title: "Prove managed graph stream portability",
+            }),
+            payload: {
+              docs: [],
+              dryRun: false,
+            },
+            updatedAt: "2024-01-02T00:00:00.000Z",
+          },
+        ],
+        setIssueState: async () => undefined,
+      }),
+      workspaceManagerFactory: (_workflow, issueIdentifier) =>
+        ({
+          cleanup: async () => undefined,
+          createIdleWorkspace: () => ({
+            branchName: "main",
+            controlPath: root,
+            createdNow: true,
+            originPath: root,
+            path: resolve(root, "workspace", "workers", issueIdentifier ?? "supervisor", "repo"),
+            sourceRepoPath: root,
+            workerId: issueIdentifier ?? "supervisor",
+          }),
+          ensureSessionStartState: async () => ({
+            createdNow: true,
+            path: resolve(root, "workspace", "workers"),
+          }),
+          listOccupiedStreams: async () => new Map(),
+          reconcileTerminalIssues: async () => undefined,
+        }) as unknown as never,
+    });
+
+    await service.runOnce();
+
+    const focusDoc = await readFile(resolve(root, "llm", "topic", "goals.md"), "utf8");
+    expect(focusDoc).toContain("# OPE-135: Prove managed graph stream portability");
+    expect(focusDoc).toContain("./graph");
+    expect(focusDoc).toContain("./io/topic/graph.md");
+    expect(focusDoc).toContain("./graph/doc/overview.md");
+    expect(replies).toEqual([expect.stringContaining("Updated ./llm/topic/goals.md.")]);
+  } finally {
+    await rm(root, { force: true, recursive: true });
+  }
+});
+
 test("AgentService resumes an in-progress issue in its own occupied stream", async () => {
   const root = await mkdtemp(resolve(tmpdir(), "agent-service-"));
   let runnerCalls = 0;
@@ -1058,6 +1187,64 @@ test("resolveIssueRouting routes io-managed parent issues to backlog from module
   ).toEqual({
     agent: "backlog",
     profile: "backlog",
+  });
+
+  expect(
+    resolveIssueRouting(
+      {
+        defaultAgent: "execute",
+        defaultProfile: "execute",
+        routing: [],
+      },
+      createIssue({
+        hasChildren: true,
+        labels: ["io", "graph"],
+      }),
+      {
+        graph: {
+          allowedSharedPaths: ["/tmp/io/topic"],
+          docs: ["./io/topic/graph.md", "./graph/doc/overview.md"],
+          id: "graph",
+          path: "/tmp/graph",
+        },
+      },
+    ),
+  ).toEqual({
+    agent: "backlog",
+    profile: "backlog",
+  });
+});
+
+test("resolveIssueRouting rejects ambiguous io-managed parent module labels", () => {
+  expect(
+    resolveIssueRouting(
+      {
+        defaultAgent: "execute",
+        defaultProfile: "execute",
+        routing: [],
+      },
+      createIssue({
+        hasChildren: true,
+        labels: ["io", "agent", "graph"],
+      }),
+      {
+        agent: {
+          allowedSharedPaths: [],
+          docs: [],
+          id: "agent",
+          path: "/tmp/agent",
+        },
+        graph: {
+          allowedSharedPaths: [],
+          docs: [],
+          id: "graph",
+          path: "/tmp/graph",
+        },
+      },
+    ),
+  ).toEqual({
+    agent: "execute",
+    profile: "execute",
   });
 });
 
@@ -1709,6 +1896,152 @@ A fresh managed parent issue should be transformable into a durable planning bri
     expect(updatedDescription).toContain("## Decisions");
     expect(capturedPrompt).toContain("## Managed Brief");
     expect(capturedPrompt).toContain("Keep human narrowing outside managed sections.");
+    expect(capturedPrompt).toContain("You are the IO Backlog Agent.");
+  } finally {
+    await rm(root, { force: true, recursive: true });
+  }
+});
+
+test("AgentService rewrites managed graph parent backlog issues with graph module context", async () => {
+  const root = await mkdtemp(resolve(tmpdir(), "agent-service-"));
+  const workspacePath = resolve(root, "workspace", "workers", "OPE-135", "repo");
+  let capturedPrompt = "";
+  let updatedDescription = "";
+
+  await mkdir(resolve(root, "graph", "doc"), { recursive: true });
+  await mkdir(resolve(root, "io", "topic"), { recursive: true });
+  await writeFile(
+    resolve(root, "io.json"),
+    JSON.stringify(
+      {
+        agent: { maxConcurrentAgents: 1 },
+        modules: {
+          graph: {
+            allowedSharedPaths: ["./io/topic"],
+            docs: ["./io/topic/graph.md", "./graph/doc/overview.md"],
+            path: "./graph",
+          },
+        },
+        tracker: {
+          apiKey: "$LINEAR_API_KEY",
+          kind: "linear",
+          projectSlug: "$LINEAR_PROJECT_SLUG",
+        },
+        workspace: {
+          root: resolve(root, "workspace"),
+        },
+      },
+      null,
+      2,
+    ),
+  );
+  await writeFile(resolve(root, "io.md"), "LOCAL BACKLOG {{ issue.identifier }}\n");
+  await writeFile(
+    resolve(root, "io", "topic", "graph.md"),
+    `# IO Graph Stream
+
+## Current Focus
+
+- prove the managed graph stream path
+- keep the next module adoption small
+
+## Good Changes In This Stream
+
+- clearer module-local planning guidance
+`,
+  );
+  await writeFile(resolve(root, "graph", "doc", "overview.md"), "# Graph Overview\n");
+  process.env.LINEAR_API_KEY = "linear-token";
+  process.env.LINEAR_PROJECT_SLUG = "project-slug";
+
+  try {
+    const service = new AgentService({
+      once: true,
+      repoRoot: root,
+      runnerFactory: () => ({
+        run: async ({ issue, prompt, workspace }) => {
+          capturedPrompt = prompt;
+          updatedDescription = issue.description;
+          return {
+            issue,
+            prompt,
+            stderr: [],
+            stdout: [],
+            success: true,
+            workspace,
+          };
+        },
+      }),
+      trackerFactory: () => ({
+        fetchCandidateIssues: async () => [
+          createIssue({
+            id: "1",
+            identifier: "OPE-135",
+            labels: ["io", "graph"],
+            priority: 2,
+            description: `## Outcome
+
+Make the managed module stream flow portable on graph.
+
+## Deliverables
+
+- prove managed parent detection and context assembly on graph
+- keep backlog writeback aligned with graph module docs
+- leave a repeatable path for the next module
+`,
+            title: "Prove managed graph stream portability",
+          }),
+        ],
+        fetchIssueStatesByIds: async () => new Map(),
+        setIssueState: async () => undefined,
+        updateIssueDescription: async (_issueId, description) => {
+          updatedDescription = description;
+        },
+      }),
+      workspaceManagerFactory: (_workflow, issueIdentifier) =>
+        ({
+          cleanup: async () => undefined,
+          complete: async () => ({ commitSha: "a".repeat(40) }),
+          createIdleWorkspace: () => ({
+            branchName: "main",
+            controlPath: root,
+            createdNow: true,
+            originPath: root,
+            path: resolve(root, "workspace", "workers", issueIdentifier ?? "supervisor", "repo"),
+            sourceRepoPath: root,
+            workerId: issueIdentifier ?? "supervisor",
+          }),
+          ensureCheckout: async () => ({
+            createdNow: true,
+            path: workspacePath,
+          }),
+          ensureSessionStartState: async () => ({
+            createdNow: true,
+            path: resolve(root, "workspace", "workers"),
+          }),
+          listOccupiedStreams: async () => new Map(),
+          markBlocked: async () => undefined,
+          markInterrupted: async () => undefined,
+          prepare: async () => ({
+            branchName: "io/ope-135",
+            controlPath: root,
+            createdNow: true,
+            originPath: root,
+            path: workspacePath,
+            sourceRepoPath: root,
+            workerId: "OPE-135",
+          }),
+          reconcileTerminalIssues: async () => undefined,
+          runAfterRunHook: async () => undefined,
+          runBeforeRunHook: async () => undefined,
+        }) as unknown as never,
+    });
+
+    await service.start();
+
+    expect(updatedDescription).toContain("<!-- io-managed:backlog-proposal:start -->");
+    expect(updatedDescription).toContain("The primary stream is the `graph` module under `./graph`.");
+    expect(capturedPrompt).toContain("./graph/doc/overview.md");
     expect(capturedPrompt).toContain("You are the IO Backlog Agent.");
   } finally {
     await rm(root, { force: true, recursive: true });

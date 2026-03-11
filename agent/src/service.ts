@@ -12,7 +12,7 @@ import {
   recordHandledManagedComment,
 } from "./comment-state.js";
 import { renderContextBundle, resolveIssueContext, summarizeContextBundle } from "./context.js";
-import { resolveIssueModule, resolveIssueRouting } from "./issue-routing.js";
+import { hasIssueLabel, resolveIssueModule, resolveIssueRouting } from "./issue-routing.js";
 import {
   buildManagedBacklogChildren,
   MANAGED_STREAM_FOCUS_DOC_PATH,
@@ -317,7 +317,7 @@ export class AgentService {
       } else {
         const module = resolveIssueModule(workflow.modules, trigger.issue);
         const isManagedParent =
-          !trigger.issue.hasParent && trigger.issue.labels.includes("io") && Boolean(module);
+          !trigger.issue.hasParent && hasIssueLabel(trigger.issue, "io") && Boolean(module);
         const issueIdentifier = module
           ? `${trigger.issue.identifier} / ${module.id}`
           : trigger.issue.identifier;
@@ -534,7 +534,7 @@ export class AgentService {
         resolvedContext.selection.agent === "backlog" &&
         !issue.hasParent &&
         module &&
-        issue.labels.includes("io")
+        hasIssueLabel(issue, "io")
       ) {
         const proposal = buildManagedParentProposal({
           issue,

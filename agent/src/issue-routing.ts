@@ -10,21 +10,25 @@ function normalizeRoutingValue(value: string) {
   return value.trim().toLowerCase();
 }
 
+export function hasIssueLabel(issue: Pick<AgentIssue, "labels">, label: string) {
+  const normalizedLabel = normalizeRoutingValue(label);
+  return issue.labels.some((value) => normalizeRoutingValue(value) === normalizedLabel);
+}
+
 export function resolveIssueModule(
   modules: Record<string, WorkflowModule>,
   issue: Pick<AgentIssue, "labels">,
 ) {
   const issueLabels = new Set(issue.labels.map(normalizeRoutingValue));
-  for (const module of Object.values(modules)) {
-    if (issueLabels.has(module.id)) {
-      return module;
-    }
+  const matchedModules = Object.values(modules).filter((module) => issueLabels.has(module.id));
+  if (matchedModules.length !== 1) {
+    return undefined;
   }
-  return undefined;
+  return matchedModules[0];
 }
 
 function isManagedParentIssue(issue: AgentIssue, modules: Record<string, WorkflowModule>) {
-  return !issue.hasParent && issue.labels.map(normalizeRoutingValue).includes("io")
+  return !issue.hasParent && hasIssueLabel(issue, "io")
     ? Boolean(resolveIssueModule(modules, issue))
     : false;
 }

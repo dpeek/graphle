@@ -46,6 +46,23 @@ The first managed-stream slice is now in place for the `agent` module:
    clearly enough that multiple package streams can run in parallel without
    hidden routing decisions
 
+## Portable Module Adoption Checklist
+
+Once one non-`agent` module proves the flow, adding the next module should stay
+mechanical:
+
+1. add one `modules.<id>` entry in `io.ts` with:
+   - `path`: the module's primary repo root
+   - `docs`: the default module planning docs
+   - `allowedSharedPaths`: only the shared repo paths that child work may cite
+2. use the module id itself as the Linear label
+3. keep the parent contract unchanged:
+   managed parents are still `io` plus exactly one configured module label
+4. keep child issue ownership unchanged:
+   one primary module label, with explicit cross-module exceptions when needed
+5. prove the new module with focused routing, context, and managed-write tests
+   before enabling wider adoption
+
 ## Execution Order
 
 1. close the write-surface gaps so the contract is complete on one module

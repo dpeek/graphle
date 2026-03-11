@@ -414,3 +414,68 @@ test("resolveIssueContext adds module docs and limits repo-path refs to module s
     await rm(root, { force: true, recursive: true });
   }
 });
+
+test("resolveIssueContext assembles the graph module bundle and keeps refs within graph scope", async () => {
+  const root = await mkdtemp(resolve(tmpdir(), "context-"));
+  const promptPath = resolve(root, "io.md");
+  await mkdir(resolve(root, "agent", "doc"), { recursive: true });
+  await mkdir(resolve(root, "graph", "doc"), { recursive: true });
+  await mkdir(resolve(root, "io", "topic"), { recursive: true });
+  await writeFile(promptPath, "LOCAL {{ selection.agent }} {{ selection.profile }}\n");
+  await writeFile(resolve(root, "io", "topic", "graph.md"), "GRAPH STREAM DOC\n");
+  await writeFile(resolve(root, "graph", "doc", "overview.md"), "GRAPH OVERVIEW DOC\n");
+  await writeFile(resolve(root, "graph", "doc", "linked.md"), "GRAPH LINKED DOC\n");
+  await writeFile(resolve(root, "io", "topic", "shared.md"), "SHARED DOC\n");
+  await writeFile(resolve(root, "agent", "doc", "outside.md"), "AGENT OUTSIDE DOC\n");
+
+  try {
+    const workflow = createWorkflow(root, promptPath);
+    workflow.modules = {
+      graph: {
+        allowedSharedPaths: [resolve(root, "io", "topic")],
+        docs: ["./io/topic/graph.md", "./graph/doc/overview.md"],
+        id: "graph",
+        path: resolve(root, "graph"),
+      },
+    };
+
+    const resolved = await resolveIssueContext({
+      baseSelection: { agent: "execute", profile: "execute" },
+      issue: {
+        ...createIssue(`Issue refs:
+
+- \`./graph/doc/linked.md\`
+- \`./io/topic/shared.md\`
+- \`./agent/doc/outside.md\`
+`),
+        hasChildren: true,
+        labels: ["io", "graph"],
+      },
+      repoRoot: root,
+      workflow,
+    });
+
+    expect(resolved.selection).toEqual({
+      agent: "execute",
+      profile: "execute",
+    });
+    expect(resolved.bundle.docs.map((doc) => doc.id)).toEqual([
+      "builtin:io.agent.execute.default",
+      "builtin:io.context.discovery",
+      "builtin:io.linear.status-updates",
+      "builtin:io.core.validation",
+      "builtin:io.core.git-safety",
+      "context.entrypoint",
+      "./io/topic/graph.md",
+      "./graph/doc/overview.md",
+      "./graph/doc/linked.md",
+      "./io/topic/shared.md",
+      "issue.context",
+    ]);
+    expect(resolved.warnings).toEqual([
+      "Issue doc reference is outside module scope: ./agent/doc/outside.md",
+    ]);
+  } finally {
+    await rm(root, { force: true, recursive: true });
+  }
+});

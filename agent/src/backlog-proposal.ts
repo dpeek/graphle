@@ -1,6 +1,6 @@
 import { relative } from "node:path";
 
-import { resolveIssueModule } from "./issue-routing.js";
+import { hasIssueLabel, resolveIssueModule } from "./issue-routing.js";
 import type { AgentIssue, ResolvedContextBundle, Workflow, WorkflowModule } from "./types.js";
 
 export const MANAGED_BACKLOG_PROPOSAL_START = "<!-- io-managed:backlog-proposal:start -->";
@@ -54,8 +54,7 @@ export function shouldWriteManagedBacklogProposal(
   issue: AgentIssue,
   workflow: Pick<Workflow, "modules">,
 ) {
-  return !issue.hasParent &&
-    issue.labels.includes("io") &&
+  return !issue.hasParent && hasIssueLabel(issue, "io") &&
     Boolean(resolveIssueModule(workflow.modules, issue));
 }
 
