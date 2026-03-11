@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -16,9 +16,11 @@ test("@io/config exposes the repo context bundle and routing defaults", () => {
   expect(config.context?.entrypoint).toBe("./io.md");
   expect(config.context?.docs).toEqual({
     "project.architecture": "./llm/topic/architecture.md",
+    "project.managed-stream-backlog": "./llm/topic/managed-stream-backlog.md",
     "project.overview": "./llm/topic/project-overview.md",
     "project.workflow-migration": "./llm/topic/workflow-migration.md",
   });
+  expect(config.context?.profiles?.backlog?.include).toContain("project.managed-stream-backlog");
   expect(config.context?.profiles?.backlog?.include).toContain("project.workflow-migration");
   expect(config.modules?.agent).toEqual({
     allowedSharedPaths: ["./llm/topic"],
@@ -45,4 +47,16 @@ test("@io/config exposes the repo context bundle and routing defaults", () => {
   for (const module of Object.values(config.modules ?? {})) {
     expect(existsSync(resolve(repoRoot, module.path))).toBe(true);
   }
+});
+
+test("repo managed stream backlog doc captures expansion, maintenance, and operator output rules", () => {
+  const path = resolve(repoRoot, "./llm/topic/managed-stream-backlog.md");
+  const content = readFileSync(path, "utf8");
+
+  expect(content).toContain("## Stable Child Payload");
+  expect(content).toContain("blockedBy");
+  expect(content).toContain("top the stream back up to about five planned tasks");
+  expect(content).toContain("Do not destructively rewrite children that are already active or completed.");
+  expect(content).toContain("## Cross-Module Exception");
+  expect(content).toContain("## Operator-Visible Output");
 });

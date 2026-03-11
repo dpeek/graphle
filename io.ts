@@ -17,6 +17,7 @@ export default defineIoConfig({
     entrypoint: "./io.md",
     docs: {
       "project.architecture": "./io/topic/architecture.md",
+      "project.managed-stream-backlog": "./io/topic/managed-stream-backlog.md",
       "project.overview": "./io/topic/project-overview.md",
       "project.workflow-migration": "./io/topic/workflow-migration.md",
     },
@@ -29,6 +30,7 @@ export default defineIoConfig({
           "builtin:io.core.git-safety",
           "project.overview",
           "project.architecture",
+          "project.managed-stream-backlog",
           "project.workflow-migration",
         ],
       },

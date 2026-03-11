@@ -1,0 +1,115 @@
+# Managed Stream Backlog Loop
+
+Use this contract when a backlog run is refining an IO-managed parent issue into
+child work for a long-lived stream.
+
+## Objective
+
+Turn the parent brief into an execution-ready child backlog that stays healthy
+over repeated backlog runs.
+
+The result should be:
+
+- concrete child issues, not planning prose
+- ordered delivery through `blockedBy`
+- descriptions that an execution agent can act on without reopening planning
+- a short speculative tail that can be refreshed safely later
+
+## Stable Child Payload
+
+Create or update child issues with one stable shape every time:
+
+```yaml
+title: "<verb-first shipping task>"
+description: |
+  ## Outcome
+  ...
+
+  ## Scope
+  ...
+
+  ## Acceptance Criteria
+  - ...
+
+  ## Module Scope
+  - Primary module: <module id>
+  - Shared paths: <only if needed>
+
+  ## Dependencies And Docs
+  - ...
+
+  ## Out Of Scope
+  - ...
+parentId: "<parent issue id>"
+labels:
+  - agent
+  - <primary module label>
+priority: <inherit parent priority unless there is a clear reason not to>
+state: "Todo"
+blockedBy:
+  - <previous child issue id or identifier when ordering is required>
+```
+
+Keep the field set and section order stable. Child descriptions must stay
+execution-ready: concrete repository surfaces, concrete behavior, and concrete
+acceptance criteria.
+
+## Expansion Pass
+
+On the first approved parent brief:
+
+1. read the parent brief, existing children, and module docs before creating
+   anything
+2. break the work into small shipping tasks that can land cleanly on the stream
+   branch
+3. create child issues under the parent in delivery order
+4. add `blockedBy` edges so only the next child is unblocked
+5. stop once the stream has roughly five planned tasks unless the brief is
+   genuinely smaller
+
+Prefer tasks that stay within one module and one coherent change surface.
+
+## Maintenance Pass
+
+On later backlog runs for the same parent:
+
+1. inspect the existing child backlog first
+2. preserve active, in-review, and done children as-is
+3. avoid duplicates by matching on outcome, module scope, and nearby repository
+   surfaces before creating anything new
+4. keep the next tasks stable unless the parent brief materially changed
+5. refresh only the speculative tail of untouched `Todo` children
+6. top the stream back up to about five planned tasks when the tail gets short
+7. relink `blockedBy` edges if backlog edits changed ordering
+
+Do not destructively rewrite children that are already active or completed.
+
+## Module Guardrails
+
+Each child should have one primary module label and one primary implementation
+surface.
+
+Cross-module work is allowed only when it is explicit. When a child needs it:
+
+- add a `## Cross-Module Exception` section to the description
+- name the extra module or shared path directly
+- explain why the split cannot stay module-local
+- keep the exception as small as possible
+
+Accidental cross-module scope is a planning bug. Make the exception visible
+instead of letting it hide in vague task text.
+
+## Operator-Visible Output
+
+Backlog runs should report the planning transitions that matter to an operator:
+
+- stream status at start: new expansion or maintenance rerun
+- existing child counts by preserved vs speculative work
+- child issues created, reused, updated, or left untouched
+- `blockedBy` edges added or changed
+- whether the stream was topped up, skipped, or already healthy
+- any explicit cross-module exceptions
+- anything blocked on missing brief detail or unresolved design choices
+
+Keep that summary concise, but make the transition clear enough that an
+operator can tell how the backlog changed without diffing every child manually.

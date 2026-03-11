@@ -2,11 +2,13 @@ import { expect, test } from "bun:test";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { DEFAULT_BACKLOG_BUILTIN_DOC_IDS, DEFAULT_EXECUTE_BUILTIN_DOC_IDS } from "./builtins.js";
 import { renderContextBundle, resolveIssueContext } from "./context.js";
+import { resolveIssueRouting } from "./issue-routing.js";
 import type { AgentIssue, PreparedWorkspace, Workflow } from "./types.js";
-import { renderPrompt } from "./workflow.js";
+import { loadWorkflowFile, renderPrompt } from "./workflow.js";
 
 function createWorkflow(root: string, promptPath: string): Workflow {
   return {
@@ -241,6 +243,69 @@ test("resolveIssueContext supports doc-id overrides and profile entrypoint opt-o
   } finally {
     await rm(root, { force: true, recursive: true });
   }
+});
+
+test("repo backlog context includes managed stream maintenance guidance", async () => {
+  const repoRoot = fileURLToPath(new URL("../..", import.meta.url));
+  process.env.LINEAR_API_KEY = "linear-token";
+  process.env.LINEAR_PROJECT_SLUG = "io";
+
+  const workflowResult = await loadWorkflowFile(undefined, repoRoot);
+  expect(workflowResult.ok).toBe(true);
+  if (!workflowResult.ok) {
+    return;
+  }
+
+  const issue: AgentIssue = {
+    blockedBy: [],
+    createdAt: "2024-01-01T00:00:00.000Z",
+    description: "Refine the managed agent stream backlog",
+    hasChildren: true,
+    hasParent: false,
+    id: "1",
+    identifier: "OPE-129",
+    labels: ["planning", "io", "agent"],
+    priority: 2,
+    projectSlug: "io",
+    state: "Todo",
+    title: "Managed stream backlog",
+    updatedAt: "2024-01-01T00:00:00.000Z",
+  };
+
+  const resolved = await resolveIssueContext({
+    baseSelection: resolveIssueRouting(
+      workflowResult.value.issues,
+      issue,
+      workflowResult.value.modules,
+    ),
+    issue,
+    repoRoot,
+    workflow: workflowResult.value,
+  });
+  const rendered = renderPrompt(renderContextBundle(resolved.bundle), {
+    attempt: 1,
+    issue: resolved.issue,
+    selection: resolved.selection,
+    worker: { count: 1, id: issue.identifier, index: 0 },
+    workspace: {
+      branchName: "io/ope-129",
+      controlPath: repoRoot,
+      createdNow: true,
+      originPath: repoRoot,
+      path: resolve(repoRoot, ".io", "workers", issue.identifier, "repo"),
+      workerId: issue.identifier,
+    },
+  });
+
+  expect(resolved.selection).toEqual({
+    agent: "backlog",
+    profile: "backlog",
+  });
+  expect(resolved.bundle.docs.map((doc) => doc.id)).toContain("project.managed-stream-backlog");
+  expect(rendered).toContain("## Stable Child Payload");
+  expect(rendered).toContain("top the stream back up to about five planned tasks");
+  expect(rendered).toContain("Do not destructively rewrite children that are already active or completed.");
+  expect(rendered).toContain("## Operator-Visible Output");
 });
 
 test("resolveIssueContext adds module docs and limits repo-path refs to module scope", async () => {
