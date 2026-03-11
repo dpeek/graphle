@@ -53,6 +53,8 @@ test("repo managed stream backlog doc captures expansion, maintenance, and opera
   const path = resolve(repoRoot, "./llm/topic/managed-stream-backlog.md");
   const content = readFileSync(path, "utf8");
 
+  expect(content).toContain("## Stable Parent Brief Payload");
+  expect(content).toContain("io-managed:backlog-proposal:start");
   expect(content).toContain("## Stable Child Payload");
   expect(content).toContain("blockedBy");
   expect(content).toContain("top the stream back up to about five planned tasks");

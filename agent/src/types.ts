@@ -213,3 +213,10 @@ export interface IssueRunResult {
   warnings?: string[];
   workspace: PreparedWorkspace;
 }
+
+export interface IssueTracker {
+  fetchCandidateIssues: () => Promise<AgentIssue[]>;
+  fetchIssueStatesByIds: (issueIds: string[]) => Promise<Map<string, string>>;
+  setIssueState: (issueId: string, stateName: string) => Promise<void>;
+  updateIssueDescription?: (issueId: string, description: string) => Promise<void>;
+}

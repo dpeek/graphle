@@ -15,6 +15,40 @@ The result should be:
 - descriptions that an execution agent can act on without reopening planning
 - a short speculative tail that can be refreshed safely later
 
+## Stable Parent Brief Payload
+
+Backlog proposal writeback should manage one explicit block in the parent issue:
+
+```md
+<!-- io-managed:backlog-proposal:start -->
+## Managed Brief
+
+### Current Module State
+- ...
+
+### Constraints
+- ...
+
+### Work Options
+1. **Option 1**
+   Focus: ...
+   Alignment: ...
+2. **Option 2**
+   Focus: ...
+   Alignment: ...
+3. **Option 3**
+   Focus: ...
+   Alignment: ...
+<!-- io-managed:backlog-proposal:end -->
+```
+
+Rules:
+
+- append the block on first write without rewriting human-authored prose outside it
+- on reruns, replace only the content between the markers
+- preserve operator notes, decisions, and narrowing sections outside the managed block
+- keep the section names and marker ids stable so later backlog runs can refresh safely
+
 ## Stable Child Payload
 
 Create or update child issues with one stable shape every time:

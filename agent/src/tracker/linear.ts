@@ -220,6 +220,15 @@ export class LinearTrackerAdapter {
     }
   }
 
+  async updateIssueDescription(issueId: string, description: string) {
+    const client = this.#getClient();
+    const issue = await client.issue(issueId);
+    const payload = await issue.update({ description });
+    if (!payload.success) {
+      throw new Error(`linear_issue_description_update_failed:${issueId}`);
+    }
+  }
+
   async #request<T>(query: string, variables: Record<string, unknown>): Promise<T> {
     const apiKey = this.#getApiKey();
     const response = await fetch(this.#config.endpoint, {

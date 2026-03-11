@@ -3,8 +3,9 @@ import { relative, resolve } from "node:path";
 
 import { createLogger, type Logger } from "@io/lib";
 
+import { buildManagedParentProposal } from "./backlog-proposal.js";
 import { renderContextBundle, resolveIssueContext, summarizeContextBundle } from "./context.js";
-import { resolveIssueRouting } from "./issue-routing.js";
+import { resolveIssueModule, resolveIssueRouting } from "./issue-routing.js";
 import { CodexAppServerRunner } from "./runner/codex.js";
 import {
   createAgentSessionEventBus,
@@ -14,7 +15,13 @@ import {
   type AgentSessionRef,
 } from "./session-events.js";
 import { LinearTrackerAdapter } from "./tracker/linear.js";
-import type { AgentIssue, IssueRunResult, PreparedWorkspace, Workflow } from "./types.js";
+import type {
+  AgentIssue,
+  IssueRunResult,
+  IssueTracker,
+  PreparedWorkspace,
+  Workflow,
+} from "./types.js";
 import { loadWorkflowFile, renderPrompt, toWorkspaceKey } from "./workflow.js";
 import { WorkspaceManager } from "./workspace.js";
 
@@ -25,12 +32,6 @@ type IssueRunner = {
     session?: AgentSessionRef;
     workspace: PreparedWorkspace;
   }) => Promise<IssueRunResult>;
-};
-
-type IssueTracker = {
-  fetchCandidateIssues: () => Promise<AgentIssue[]>;
-  fetchIssueStatesByIds: (issueIds: string[]) => Promise<Map<string, string>>;
-  setIssueState: (issueId: string, stateName: string) => Promise<void>;
 };
 
 export interface AgentServiceOptions {
@@ -328,12 +329,40 @@ export class AgentService {
     let beforeRunCompleted = false;
     let result: IssueRunResult;
     try {
-      const resolvedContext = await resolveIssueContext({
+      let resolvedContext = await resolveIssueContext({
         baseSelection: resolveIssueRouting(workflow.issues, issue, workflow.modules),
         issue,
         repoRoot: this.#repoRoot,
         workflow,
       });
+      const module = resolveIssueModule(workflow.modules, issue);
+      if (
+        tracker.updateIssueDescription &&
+        resolvedContext.selection.agent === "backlog" &&
+        !issue.hasParent &&
+        module &&
+        issue.labels.includes("io")
+      ) {
+        const proposal = buildManagedParentProposal({
+          issue,
+          module,
+          repoRoot: this.#repoRoot,
+          resolvedContext: resolvedContext.bundle,
+        });
+        if (proposal.changed) {
+          await tracker.updateIssueDescription(issue.id, proposal.description);
+          issue = {
+            ...issue,
+            description: proposal.description,
+          };
+          resolvedContext = await resolveIssueContext({
+            baseSelection: resolveIssueRouting(workflow.issues, issue, workflow.modules),
+            issue,
+            repoRoot: this.#repoRoot,
+            workflow,
+          });
+        }
+      }
       this.#log.info("issue.context.resolved", {
         docs: resolvedContext.bundle.docs.map((doc) => ({
           id: doc.id,

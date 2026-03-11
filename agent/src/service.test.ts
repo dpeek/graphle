@@ -871,6 +871,157 @@ test("AgentService does not auto-run parent execute issues that already have chi
     await rm(root, { force: true, recursive: true });
   }
 });
+
+test("AgentService rewrites managed parent backlog issues before running the backlog prompt", async () => {
+  const root = await mkdtemp(resolve(tmpdir(), "agent-service-"));
+  const workspacePath = resolve(root, "workspace", "workers", "OPE-127", "repo");
+  let capturedPrompt = "";
+  let updatedDescription = "";
+
+  await mkdir(resolve(root, "llm", "topic"), { recursive: true });
+  await writeFile(
+    resolve(root, "io.json"),
+    JSON.stringify(
+      {
+        agent: { maxConcurrentAgents: 1 },
+        modules: {
+          agent: {
+            allowedSharedPaths: ["./llm/topic"],
+            docs: ["./llm/topic/agent.md"],
+            path: "./agent",
+          },
+        },
+        tracker: {
+          apiKey: "$LINEAR_API_KEY",
+          kind: "linear",
+          projectSlug: "$LINEAR_PROJECT_SLUG",
+        },
+        workspace: {
+          root: resolve(root, "workspace"),
+        },
+      },
+      null,
+      2,
+    ),
+  );
+  await writeFile(resolve(root, "io.md"), "LOCAL BACKLOG {{ issue.identifier }}\n");
+  await writeFile(
+    resolve(root, "llm", "topic", "agent.md"),
+    `# IO Agent Stream
+
+## Current Focus
+
+- improve operator utility
+- improve planning and context quality
+
+## Good Changes In This Stream
+
+- quality of backlog/spec refinement
+`,
+  );
+  process.env.LINEAR_API_KEY = "linear-token";
+  process.env.LINEAR_PROJECT_SLUG = "project-slug";
+
+  try {
+    const service = new AgentService({
+      once: true,
+      repoRoot: root,
+      runnerFactory: () => ({
+        run: async ({ issue, prompt, workspace }) => {
+          capturedPrompt = prompt;
+          updatedDescription = issue.description;
+          return {
+            issue,
+            prompt,
+            stderr: [],
+            stdout: [],
+            success: true,
+            workspace,
+          };
+        },
+      }),
+      trackerFactory: () => ({
+        fetchCandidateIssues: async () => [
+          createIssue({
+            id: "1",
+            identifier: "OPE-127",
+            labels: ["io", "agent"],
+            priority: 2,
+            description: `## Outcome
+
+A fresh managed parent issue should be transformable into a durable planning brief.
+
+## Deliverables
+
+- define the parent issue section format so reruns can update only agent-owned sections
+- implement proposal generation in the backlog path
+- preserve human-authored decision sections when the issue is rerun
+
+## Decisions
+
+- Keep human narrowing outside managed sections.
+`,
+            title: "Implement proposal writeback",
+          }),
+        ],
+        fetchIssueStatesByIds: async () => new Map(),
+        setIssueState: async () => undefined,
+        updateIssueDescription: async (_issueId, description) => {
+          updatedDescription = description;
+        },
+      }),
+      workspaceManagerFactory: (_workflow, issueIdentifier) =>
+        ({
+          cleanup: async () => undefined,
+          complete: async () => ({ commitSha: "a".repeat(40) }),
+          createIdleWorkspace: () => ({
+            branchName: "main",
+            controlPath: root,
+            createdNow: true,
+            originPath: root,
+            path: resolve(root, "workspace", "workers", issueIdentifier ?? "supervisor", "repo"),
+            sourceRepoPath: root,
+            workerId: issueIdentifier ?? "supervisor",
+          }),
+          ensureCheckout: async () => ({
+            createdNow: true,
+            path: workspacePath,
+          }),
+          ensureSessionStartState: async () => ({
+            createdNow: true,
+            path: resolve(root, "workspace", "workers"),
+          }),
+          listOccupiedStreams: async () => new Map(),
+          markBlocked: async () => undefined,
+          markInterrupted: async () => undefined,
+          prepare: async () => ({
+            branchName: "io/ope-127",
+            controlPath: root,
+            createdNow: true,
+            originPath: root,
+            path: workspacePath,
+            sourceRepoPath: root,
+            workerId: "OPE-127",
+          }),
+          reconcileTerminalIssues: async () => undefined,
+          runAfterRunHook: async () => undefined,
+          runBeforeRunHook: async () => undefined,
+        }) as unknown as never,
+    });
+
+    await service.start();
+
+    expect(updatedDescription).toContain("<!-- io-managed:backlog-proposal:start -->");
+    expect(updatedDescription).toContain("## Managed Brief");
+    expect(updatedDescription).toContain("## Decisions");
+    expect(capturedPrompt).toContain("## Managed Brief");
+    expect(capturedPrompt).toContain("Keep human narrowing outside managed sections.");
+    expect(capturedPrompt).toContain("You are the IO Backlog Agent.");
+  } finally {
+    await rm(root, { force: true, recursive: true });
+  }
+});
+
 test("AgentService publishes supervisor and worker session events", async () => {
   const root = await mkdtemp(resolve(tmpdir(), "agent-service-events-"));
   const workspacePath = resolve(root, "workspace", "workers", "OPE-54", "repo");
@@ -1388,6 +1539,7 @@ test("AgentService uses backlog built-ins for routed issues", async () => {
     await rm(root, { force: true, recursive: true });
   }
 });
+
 test("AgentService uses builtin override files from io.json", async () => {
   const root = await mkdtemp(resolve(tmpdir(), "agent-service-"));
   const overridePath = resolve(root, "io", "context", "validation-override.md");
