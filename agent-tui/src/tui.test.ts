@@ -287,8 +287,7 @@ test("buildAgentTuiRootComponentModel supports status-focused and raw-heavy tran
 
   expect(statusTranscript).toContain("[COMMAND] $ git status --short --branch");
   expect(statusTranscript).toContain("[CMD OUT x2] M agent/src/runner/codex.ts");
-  expect(statusTranscript).toContain("Inspecting");
-  expect(statusTranscript).toContain("runtime state");
+  expect(statusTranscript).toContain("Inspecting runtime state");
   expect(statusTranscript).not.toContain("[RAW stdout/jsonl");
   expect(statusLatestEventLine).not.toContain("stdout jsonl:");
   expect(rawTranscript).toContain("[CMD OUT x2]");
@@ -296,6 +295,39 @@ test("buildAgentTuiRootComponentModel supports status-focused and raw-heavy tran
   expect(rawTranscript).toContain("| ## main");
   expect(rawTranscript).toContain('jsonl: {"method":"thread/started"}');
   expect(rawTranscript).toContain('jsonl: {"method":"turn/completed"}');
+});
+
+test("status transcript flattens newline-heavy agent message chunks", () => {
+  const store = createAgentTuiStore();
+  const worker = createWorkerSession();
+
+  store.observe({
+    phase: "started",
+    sequence: 1,
+    session: worker,
+    timestamp: "2026-03-10T02:06:00.000Z",
+    type: "session",
+  });
+  store.observe({
+    code: "agent-message-delta",
+    format: "chunk",
+    itemId: "msg-2",
+    sequence: 2,
+    session: worker,
+    text: "I\nread\nthe\nrequired\nrepo",
+    timestamp: "2026-03-10T02:06:01.000Z",
+    type: "status",
+  });
+
+  const snapshot = store.getSnapshot();
+  const statusTranscript =
+    buildAgentTuiRootComponentModel(snapshot, {
+      selectedColumnId: worker.id,
+      viewMode: "status",
+    }).columns.find((column) => column.id === worker.id)?.transcript ?? "";
+
+  expect(statusTranscript).toContain("I read the required repo");
+  expect(statusTranscript).not.toContain("I\nread\nthe\nrequired\nrepo");
 });
 
 test("createAgentTui supports keyboard column navigation, view toggles, and transcript scrolling", async () => {
@@ -375,7 +407,7 @@ test("createAgentTui supports keyboard column navigation, view toggles, and tran
     let frame = captureCharFrame();
     expect(frame).toContain("View: STATUS");
     expect(frame).toContain("> . Supervisor");
-    expect(frame).toContain("Transcript");
+    expect(frame).toContain("--------------------------------");
 
     mockInput.pressArrow("right");
     await renderOnce();

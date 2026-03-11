@@ -1,12 +1,8 @@
-import {
-  BoxRenderable,
-  TextRenderable,
-  createCliRenderer,
-  type CliRenderer,
-} from "@opentui/core";
+import { TextRenderable, createCliRenderer, type CliRenderer } from "@opentui/core";
 
 import {
-  buildAgentTuiRootComponentModel,
+  getAgentTuiSelectedTranscriptMetrics,
+  renderAgentTuiFrame,
   type AgentTuiViewMode,
 } from "./layout.js";
 import type { AgentSessionEventObserver } from "./session-events.js";
@@ -18,8 +14,6 @@ import {
 } from "./store.js";
 
 const APP_ROOT_ID = "agent-tui-root";
-const APP_COLUMNS_ID = "agent-tui-columns";
-const APP_HEADER_ID = "agent-tui-header";
 
 export type AgentTuiTerminal = NodeJS.WriteStream;
 
@@ -39,13 +33,8 @@ export interface AgentTui {
   stop(): Promise<void>;
 }
 
-type AgentTuiColumnRenderRef = {
-  transcript: TextRenderable;
-};
-
 type AgentTuiColumnScrollState = {
   scrollY: number;
-  stickToBottom: boolean;
 };
 
 type AgentTuiRenderableView = {
@@ -77,86 +66,10 @@ function isQuitKey(key: { ctrl?: boolean; name: string }) {
   return (key.ctrl && key.name === "c") || key.name === "escape" || key.name === "q";
 }
 
-function createColumnRenderable(
-  renderer: CliRenderer,
-  model: ReturnType<typeof buildAgentTuiRootComponentModel>["columns"][number],
-  scrollState: AgentTuiColumnScrollState | undefined,
-) {
-  const box = new BoxRenderable(renderer, {
-    backgroundColor: model.isSelected ? "#111827" : "#0f172a",
-    border: true,
-    borderColor: model.isSelected ? "#f59e0b" : "#475569",
-    borderStyle: "single",
-    flexBasis: 0,
-    flexDirection: "column",
-    flexGrow: 1,
-    focusedBorderColor: "#f59e0b",
-    height: "100%",
-    id: `column:${model.id}`,
-    minWidth: 24,
-    paddingX: 1,
-    title: model.title,
-  });
-
-  box.add(
-    new TextRenderable(renderer, {
-      content: [
-        model.badgeLine,
-        model.metaLine,
-        model.statusLine,
-        model.parentLine,
-        model.childrenLine,
-        model.latestEventLine,
-      ].join("\n"),
-      id: `summary:${model.id}`,
-      wrapMode: "char",
-    }),
-  );
-
-  box.add(
-    new TextRenderable(renderer, {
-      content: "Transcript",
-      id: `transcript-label:${model.id}`,
-      marginTop: 1,
-      wrapMode: "char",
-    }),
-  );
-
-  const transcript = new TextRenderable(renderer, {
-    content: model.transcript,
-    flexGrow: 1,
-    id: `transcript:${model.id}`,
-    marginTop: 1,
-    wrapMode: "char",
-  });
-  let appliedInitialScroll = false;
-  const applyScrollState = () => {
-    if (appliedInitialScroll) {
-      return;
-    }
-    appliedInitialScroll = true;
-    const nextScrollY =
-      scrollState?.stickToBottom === false
-        ? clamp(scrollState.scrollY, 0, transcript.maxScrollY)
-        : transcript.maxScrollY;
-    transcript.scrollY = nextScrollY;
-    renderer.requestRender();
-  };
-  transcript.onSizeChange = applyScrollState;
-  box.add(transcript);
-  queueMicrotask(applyScrollState);
-
-  return {
-    box,
-    transcript,
-  };
-}
-
 function createAgentTuiRenderableView(
   renderer: CliRenderer,
   requestExit: () => void | Promise<void>,
 ): AgentTuiRenderableView {
-  const columnRefs = new Map<string, AgentTuiColumnRenderRef>();
   const scrollStateByColumnId = new Map<string, AgentTuiColumnScrollState>();
   let latestSnapshot: AgentTuiSnapshot = { columns: [], sessions: [] };
   let selectedColumnId: string | undefined;
@@ -169,15 +82,10 @@ function createAgentTuiRenderableView(
     renderer.root.remove(APP_ROOT_ID);
   };
 
-  const saveScrollState = () => {
-    for (const [columnId, ref] of columnRefs) {
-      scrollStateByColumnId.set(columnId, {
-        scrollY: ref.transcript.scrollY,
-        stickToBottom: ref.transcript.scrollY >= ref.transcript.maxScrollY - 1,
-      });
-    }
-    columnRefs.clear();
-  };
+  const getFrameSize = () => ({
+    columns: Math.max(1, renderer.width),
+    rows: Math.max(1, renderer.height - 3),
+  });
 
   const selectColumn = (nextColumnId: string | undefined) => {
     if (!nextColumnId || nextColumnId === selectedColumnId) {
@@ -203,21 +111,32 @@ function createAgentTuiRenderableView(
   };
 
   const scrollSelectedTranscript = (delta: number) => {
-    const ref = selectedColumnId ? columnRefs.get(selectedColumnId) : undefined;
-    if (!ref) {
+    if (!selectedColumnId) {
       return;
     }
-    ref.transcript.scrollY = clamp(ref.transcript.scrollY + delta, 0, ref.transcript.maxScrollY);
-    renderer.requestRender();
+    const metrics = getAgentTuiSelectedTranscriptMetrics(latestSnapshot, getFrameSize(), {
+      selectedColumnId,
+      viewMode,
+    });
+    const current = scrollStateByColumnId.get(selectedColumnId)?.scrollY ?? 0;
+    scrollStateByColumnId.set(selectedColumnId, {
+      scrollY: clamp(current + delta, 0, metrics.maxScrollY),
+    });
+    renderCurrentSnapshot();
   };
 
   const jumpSelectedTranscript = (position: "top" | "bottom") => {
-    const ref = selectedColumnId ? columnRefs.get(selectedColumnId) : undefined;
-    if (!ref) {
+    if (!selectedColumnId) {
       return;
     }
-    ref.transcript.scrollY = position === "top" ? 0 : ref.transcript.maxScrollY;
-    renderer.requestRender();
+    const metrics = getAgentTuiSelectedTranscriptMetrics(latestSnapshot, getFrameSize(), {
+      selectedColumnId,
+      viewMode,
+    });
+    scrollStateByColumnId.set(selectedColumnId, {
+      scrollY: position === "top" ? 0 : metrics.maxScrollY,
+    });
+    renderCurrentSnapshot();
   };
 
   const toggleViewMode = (nextViewMode?: AgentTuiViewMode) => {
@@ -309,54 +228,25 @@ function createAgentTuiRenderableView(
   };
 
   const renderCurrentSnapshot = () => {
-    saveScrollState();
     removeRoot();
-
-    const layout = buildAgentTuiRootComponentModel(latestSnapshot, {
+    const columns = latestSnapshot.columns ?? latestSnapshot.sessions ?? [];
+    if (!columns.find((column) => column.session.id === selectedColumnId)) {
+      selectedColumnId = columns[0]?.session.id;
+    }
+    const frame = renderAgentTuiFrame(latestSnapshot, getFrameSize(), {
       selectedColumnId,
+      selectedTranscriptScrollY: selectedColumnId
+        ? (scrollStateByColumnId.get(selectedColumnId)?.scrollY ?? 0)
+        : 0,
       viewMode,
     });
-    selectedColumnId = layout.selectedColumnId;
-
-    const root = new BoxRenderable(renderer, {
-      backgroundColor: "#020617",
-      flexDirection: "column",
-      height: "100%",
-      id: APP_ROOT_ID,
-      paddingX: 1,
-      paddingY: 1,
-      width: "100%",
-    });
-    root.add(
+    renderer.root.add(
       new TextRenderable(renderer, {
-        content: buildHeaderText(),
-        id: APP_HEADER_ID,
-        wrapMode: "char",
+        content: `${buildHeaderText()}\n\n${frame}`,
+        id: APP_ROOT_ID,
+        wrapMode: "none",
       }),
     );
-
-    const columnsRow = new BoxRenderable(renderer, {
-      flexDirection: "row",
-      flexGrow: 1,
-      gap: 1,
-      id: APP_COLUMNS_ID,
-      marginTop: 1,
-      width: "100%",
-    });
-    for (const column of layout.columns) {
-      const renderRef = createColumnRenderable(
-        renderer,
-        column,
-        scrollStateByColumnId.get(column.id),
-      );
-      columnRefs.set(column.id, {
-        transcript: renderRef.transcript,
-      });
-      columnsRow.add(renderRef.box);
-    }
-
-    root.add(columnsRow);
-    renderer.root.add(root);
     renderer.requestRender();
   };
 
@@ -365,7 +255,6 @@ function createAgentTuiRenderableView(
   return {
     destroy() {
       renderer.keyInput.off("keypress", handleKeyPress);
-      saveScrollState();
       removeRoot();
       renderer.requestRender();
     },

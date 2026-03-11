@@ -762,10 +762,12 @@ function formatAgentMessageEntry(
   mode: TranscriptRenderMode,
 ) {
   if (mode === "status") {
-    return entry.segments
-      .flatMap((segment) => segment.trimEnd().split("\n"))
-      .map((line) => line.trim())
-      .filter((line) => line.length > 0);
+    const flattened = entry.text
+      .replace(/\r\n/g, "\n")
+      .replace(/[ \t]*\n[ \t]*/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    return flattened ? [flattened] : [];
   }
   return entry.text.trimEnd().split("\n");
 }

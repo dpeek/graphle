@@ -1,3 +1,5 @@
+import { readFile } from "node:fs/promises";
+
 import { expect, test } from "bun:test";
 
 import {
@@ -51,6 +53,17 @@ function renderMessages(messages: Array<Record<string, unknown>>) {
     }
   }
   return chunks.join("");
+}
+
+async function renderFixture(name: string) {
+  const fixturePath = new URL(`./__fixtures__/${name}`, import.meta.url);
+  const content = await readFile(fixturePath, "utf8");
+  const messages = content
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => JSON.parse(line) as Record<string, unknown>);
+  return renderMessages(messages);
 }
 
 test("normalizes codex messages into typed status events", () => {
@@ -114,6 +127,17 @@ test("renders agent message deltas as streamed session text", () => {
   expect(output).toBe(
     "=== worker-1 OPE-41 Add predicate-slot subscriptions to graph runtime ===\n" +
       "I’m checking the current branch.\n",
+  );
+});
+
+test("renders mixed v2 and legacy delta fixtures as one streamed message", async () => {
+  const output = await renderFixture("legacy-agent-message-deltas.jsonl");
+
+  expect(output).toBe(
+    "=== worker-1 OPE-41 Add predicate-slot subscriptions to graph runtime ===\n" +
+      "Turn started\n" +
+      "The issue body only asks for a Linear comment.\n" +
+      "Turn completed\n",
   );
 });
 

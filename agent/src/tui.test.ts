@@ -216,7 +216,7 @@ test("renderAgentTuiFrame lays out supervisor and worker columns", () => {
   expect(frame).toContain("SUPERVISOR | STARTED");
   expect(frame).toContain("WORKER | COMPLETED");
   expect(frame).toContain("No issues");
-  expect(frame).toContain("stderr: stderr line");
+  expect(frame).toContain('jsonl: {"method":"thread/started"}');
 });
 
 test("AgentTuiRetainedReader reconstructs events.log into supervisor and worker columns", async () => {

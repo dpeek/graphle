@@ -19,6 +19,7 @@ export type AgentTuiViewMode = "raw" | "status";
 
 export interface AgentTuiLayoutOptions {
   selectedColumnId?: string;
+  selectedTranscriptScrollY?: number;
   viewMode?: AgentTuiViewMode;
 }
 
@@ -387,7 +388,7 @@ function renderColumn(model: AgentTuiColumnComponentModel, width: number, rows: 
   ];
   const bodyHeight = Math.max(0, rows - fixedLines.length);
   const wrappedBody = wrapBody(model.transcript, width);
-  const visibleBody = wrappedBody.slice(-bodyHeight);
+  const visibleBody = wrappedBody.slice(0, bodyHeight);
   const paddedBody = visibleBody
     .map((line) => padCell(line, width))
     .concat(
@@ -396,6 +397,62 @@ function renderColumn(model: AgentTuiColumnComponentModel, width: number, rows: 
       ),
     );
   return fixedLines.concat(paddedBody);
+}
+
+function renderColumnWithScroll(
+  model: AgentTuiColumnComponentModel,
+  width: number,
+  rows: number,
+  scrollY: number,
+) {
+  const fixedLines = [
+    padCell(model.title, width),
+    padCell(model.badgeLine, width),
+    padCell(model.metaLine, width),
+    padCell(model.statusLine, width),
+    padCell(model.parentLine, width),
+    padCell(model.childrenLine, width),
+    padCell(model.latestEventLine, width),
+    "".padEnd(Math.max(width, 0), "-"),
+  ];
+  const bodyHeight = Math.max(0, rows - fixedLines.length);
+  const wrappedBody = wrapBody(model.transcript, width);
+  const maxScrollY = Math.max(0, wrappedBody.length - bodyHeight);
+  const start = Math.min(Math.max(0, scrollY), maxScrollY);
+  const visibleBody = wrappedBody.slice(start, start + bodyHeight);
+  const paddedBody = visibleBody
+    .map((line) => padCell(line, width))
+    .concat(
+      Array.from({ length: Math.max(0, bodyHeight - visibleBody.length) }, () =>
+        "".padEnd(width, " "),
+      ),
+    );
+  return fixedLines.concat(paddedBody);
+}
+
+export function getAgentTuiSelectedTranscriptMetrics(
+  snapshot: AgentTuiSnapshot,
+  size: AgentTuiFrameSize = {},
+  options: AgentTuiLayoutOptions = {},
+) {
+  const columns = Math.max(1, size.columns ?? DEFAULT_FRAME_COLUMNS);
+  const rows = Math.max(1, size.rows ?? DEFAULT_FRAME_ROWS);
+  const layout = buildAgentTuiRootComponentModel(snapshot, options);
+  const widths = distributeColumnWidths(columns, layout.columns.length);
+  const selectedIndex = layout.columns.findIndex((column) => column.id === layout.selectedColumnId);
+  const selectedModel = selectedIndex >= 0 ? layout.columns[selectedIndex] : layout.columns[0];
+  const selectedWidth = widths[selectedIndex >= 0 ? selectedIndex : 0] ?? 1;
+  if (!selectedModel) {
+    return { bodyHeight: 0, maxScrollY: 0, totalLines: 0 };
+  }
+  const fixedLines = 8;
+  const bodyHeight = Math.max(0, rows - fixedLines);
+  const totalLines = wrapBody(selectedModel.transcript, selectedWidth).length;
+  return {
+    bodyHeight,
+    maxScrollY: Math.max(0, totalLines - bodyHeight),
+    totalLines,
+  };
 }
 
 export function renderAgentTuiFrame(
@@ -412,7 +469,14 @@ export function renderAgentTuiFrame(
 
   const widths = distributeColumnWidths(columns, layout.columns.length);
   const columnsByModel = layout.columns.map((model, index) =>
-    renderColumn(model, widths[index] ?? 1, rows),
+    model.id === layout.selectedColumnId
+      ? renderColumnWithScroll(
+          model,
+          widths[index] ?? 1,
+          rows,
+          options.selectedTranscriptScrollY ?? 0,
+        )
+      : renderColumn(model, widths[index] ?? 1, rows),
   );
   const lines = Array.from({ length: rows }, (_, rowIndex) =>
     columnsByModel

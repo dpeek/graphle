@@ -25,9 +25,23 @@ export type MalformedJsonRpcMessage = {
   method: "malformed";
 };
 
+export type LegacyCodexEventMessage = {
+  method: `codex/event/${string}`;
+  params?: {
+    conversationId?: string;
+    id?: string;
+    msg?: {
+      type?: string;
+      [key: string]: unknown;
+    };
+    [key: string]: unknown;
+  };
+};
+
 export type CodexSessionMessage =
   | JsonRpcErrorResponse
   | JsonRpcSuccessResponse
+  | LegacyCodexEventMessage
   | MalformedJsonRpcMessage
   | ServerNotification
   | ServerRequest;
@@ -68,6 +82,10 @@ export function isServerNotificationMessage(
   return "method" in message && !("id" in message) && message.method !== "malformed";
 }
 
+function isLegacyCodexEventMessage(message: CodexSessionMessage): message is LegacyCodexEventMessage {
+  return "method" in message && message.method.startsWith("codex/event/");
+}
+
 export function summarizeCodexMessage(message: CodexSessionMessage) {
   if ("method" in message) {
     return message.method;
@@ -97,9 +115,56 @@ function summarizeCommandExecution(item: { command: string; commandActions: Arra
   return item.commandActions.map((action) => action.command).find(Boolean) ?? item.command ?? "command";
 }
 
+function normalizeLegacyCodexEventMessage(message: LegacyCodexEventMessage): CodexStatusEvent[] {
+  const params = asRecord(message.params);
+  const payload = asRecord(params?.msg);
+  const eventType =
+    typeof payload?.type === "string"
+      ? payload.type
+      : message.method.startsWith("codex/event/")
+        ? message.method.slice("codex/event/".length)
+        : undefined;
+
+  switch (eventType) {
+    case "task_started":
+      return [{ code: "turn-started", format: "line", type: "status" }];
+    case "task_complete":
+      return [{ code: "turn-completed", format: "line", type: "status" }];
+    case "agent_message_delta":
+      // Ignore the legacy alias. The v2 item/agentMessage/delta stream carries the
+      // same text with a stable itemId and avoids fragmenting the transcript.
+      return [];
+    case "agent_message": {
+      const text = typeof payload?.message === "string" ? payload.message : undefined;
+      if (!text) {
+        return [{ code: "agent-message-completed", format: "close", type: "status" }];
+      }
+      return [
+        {
+          code: "agent-message-delta",
+          format: "chunk",
+          text,
+          type: "status",
+        },
+        {
+          code: "agent-message-completed",
+          format: "close",
+          type: "status",
+        },
+      ];
+    }
+    default:
+      return [];
+  }
+}
+
 export function normalizeCodexSessionMessage(message: CodexSessionMessage): CodexStatusEvent[] {
   if (!("method" in message)) {
     return [];
+  }
+
+  if (isLegacyCodexEventMessage(message)) {
+    return normalizeLegacyCodexEventMessage(message);
   }
 
   switch (message.method) {

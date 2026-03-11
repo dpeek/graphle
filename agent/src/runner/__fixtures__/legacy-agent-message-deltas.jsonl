@@ -1,0 +1,21 @@
+{"method":"codex/event/task_started","params":{"id":"evt-task-1","msg":{"type":"task_started","turn_id":"turn-1","model_context_window":null,"collaboration_mode_kind":"default"},"conversationId":"conv-1"}}
+{"method":"item/agentMessage/delta","params":{"threadId":"thread-1","turnId":"turn-1","itemId":"msg-1","delta":"The "}}
+{"method":"codex/event/agent_message_delta","params":{"id":"evt-msg-1","msg":{"type":"agent_message_delta","delta":"The "},"conversationId":"conv-1"}}
+{"method":"item/agentMessage/delta","params":{"threadId":"thread-1","turnId":"turn-1","itemId":"msg-1","delta":"issue "}}
+{"method":"codex/event/agent_message_delta","params":{"id":"evt-msg-2","msg":{"type":"agent_message_delta","delta":"issue "},"conversationId":"conv-1"}}
+{"method":"item/agentMessage/delta","params":{"threadId":"thread-1","turnId":"turn-1","itemId":"msg-1","delta":"body "}}
+{"method":"codex/event/agent_message_delta","params":{"id":"evt-msg-3","msg":{"type":"agent_message_delta","delta":"body "},"conversationId":"conv-1"}}
+{"method":"item/agentMessage/delta","params":{"threadId":"thread-1","turnId":"turn-1","itemId":"msg-1","delta":"only "}}
+{"method":"codex/event/agent_message_delta","params":{"id":"evt-msg-4","msg":{"type":"agent_message_delta","delta":"only "},"conversationId":"conv-1"}}
+{"method":"item/agentMessage/delta","params":{"threadId":"thread-1","turnId":"turn-1","itemId":"msg-1","delta":"asks "}}
+{"method":"codex/event/agent_message_delta","params":{"id":"evt-msg-5","msg":{"type":"agent_message_delta","delta":"asks "},"conversationId":"conv-1"}}
+{"method":"item/agentMessage/delta","params":{"threadId":"thread-1","turnId":"turn-1","itemId":"msg-1","delta":"for "}}
+{"method":"codex/event/agent_message_delta","params":{"id":"evt-msg-6","msg":{"type":"agent_message_delta","delta":"for "},"conversationId":"conv-1"}}
+{"method":"item/agentMessage/delta","params":{"threadId":"thread-1","turnId":"turn-1","itemId":"msg-1","delta":"a "}}
+{"method":"codex/event/agent_message_delta","params":{"id":"evt-msg-7","msg":{"type":"agent_message_delta","delta":"a "},"conversationId":"conv-1"}}
+{"method":"item/agentMessage/delta","params":{"threadId":"thread-1","turnId":"turn-1","itemId":"msg-1","delta":"Linear "}}
+{"method":"codex/event/agent_message_delta","params":{"id":"evt-msg-8","msg":{"type":"agent_message_delta","delta":"Linear "},"conversationId":"conv-1"}}
+{"method":"item/agentMessage/delta","params":{"threadId":"thread-1","turnId":"turn-1","itemId":"msg-1","delta":"comment."}}
+{"method":"codex/event/agent_message_delta","params":{"id":"evt-msg-9","msg":{"type":"agent_message_delta","delta":"comment."},"conversationId":"conv-1"}}
+{"method":"item/completed","params":{"item":{"type":"agentMessage","id":"msg-1"},"threadId":"thread-1","turnId":"turn-1"}}
+{"method":"codex/event/task_complete","params":{"id":"evt-task-2","msg":{"type":"task_complete","turn_id":"turn-1","last_agent_message":"The issue body only asks for a Linear comment."},"conversationId":"conv-1"}}
