@@ -6,6 +6,7 @@ import { CompanyProofPage } from "./company-proof.js";
 import { Explorer } from "./explorer.js";
 import { Outliner } from "./outliner.js";
 import { RelationshipProofPage } from "./relationship-proof.js";
+import { AppRuntimeBootstrap } from "./runtime.js";
 
 function resolveSurface() {
   const params = new URLSearchParams(window.location.search);
@@ -27,4 +28,8 @@ if (!root) {
   throw new Error("Missing #root mount element");
 }
 
-createRoot(root).render(<React.StrictMode>{app}</React.StrictMode>);
+createRoot(root).render(
+  <React.StrictMode>
+    <AppRuntimeBootstrap renderApp={() => app} />
+  </React.StrictMode>,
+);

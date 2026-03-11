@@ -1,9 +1,8 @@
-import { useRef, useState } from "react";
+import { useState } from "react";
 
 import {
   app,
   core,
-  createExampleRuntime,
   type EntityRef,
   type PredicateRef,
 } from "#graph";
@@ -17,6 +16,7 @@ import {
   type WebFilterOperatorResolution,
 } from "./bindings.js";
 import { formatPredicateValue } from "./predicate.js";
+import { useAppRuntime } from "./runtime.js";
 
 type CompanyRef = EntityRef<typeof app.company, typeof app & typeof core>;
 type AnyPredicate = PredicateRef<any, any>;
@@ -402,21 +402,30 @@ export function CompanyQueryProofSurface({
 }
 
 export function CompanyQueryProofPage() {
-  const runtimeRef = useRef<ReturnType<typeof createExampleRuntime> | null>(null);
-  if (!runtimeRef.current) {
-    runtimeRef.current = createExampleRuntime();
-    runtimeRef.current.graph.company.create({
-      name: "Atlas Labs",
-      status: app.status.values.active.id,
-      foundedYear: 2015,
-      website: new URL("https://atlas.io"),
-    });
+  const runtime = useAppRuntime();
+  const companySnapshots = runtime.graph.company.list();
+  const querySourceSnapshot =
+    companySnapshots.find((company) => company.name === "Acme Corp") ?? companySnapshots[0];
+
+  if (!querySourceSnapshot || companySnapshots.length === 0) {
+    return (
+      <main
+        className="flex min-h-screen items-center justify-center bg-stone-950 px-6 text-stone-50"
+        data-company-query="missing-demo-data"
+      >
+        <div className="w-full max-w-md rounded-[1.75rem] border border-white/10 bg-white/5 p-6">
+          <p className="text-xs uppercase tracking-[0.24em] text-amber-300">Query proof</p>
+          <h1 className="mt-3 text-2xl font-semibold">Missing company records</h1>
+          <p className="mt-2 text-sm text-stone-300">
+            The synced graph does not have company entities to drive this query proof.
+          </p>
+        </div>
+      </main>
+    );
   }
 
-  const companies = runtimeRef.current.graph.company
-    .list()
-    .map(({ id }) => runtimeRef.current!.graph.company.ref(id));
-  const querySource = runtimeRef.current.graph.company.ref(runtimeRef.current.ids.acme);
+  const companies = companySnapshots.map(({ id }) => runtime.graph.company.ref(id));
+  const querySource = runtime.graph.company.ref(querySourceSnapshot.id);
 
   return <CompanyQueryProofSurface companies={companies} querySource={querySource} />;
 }

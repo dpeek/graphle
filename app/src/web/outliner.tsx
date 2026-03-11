@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
 
-import { createExampleRuntime } from "#graph";
+import { type AppRuntime, useAppRuntime } from "./runtime.js";
 
 type OutlineNode = {
   id: string;
@@ -20,9 +20,9 @@ type StoredOutlineNode = {
   collapsed: boolean;
 };
 
+type OutlineGraph = AppRuntime["graph"];
+
 const INVISIBLE_ROOT_ID = "outline:invisible-root";
-const runtime = createExampleRuntime();
-const { graph } = runtime;
 
 function toStoredParentId(parentId?: string): string {
   return parentId ?? INVISIBLE_ROOT_ID;
@@ -41,7 +41,7 @@ function typographyClass(depth: number, text: string): string {
   return "text-sm font-normal";
 }
 
-function snapshotNodes(): StoredOutlineNode[] {
+function snapshotNodes(graph: OutlineGraph): StoredOutlineNode[] {
   return graph.block
     .list()
     .map((node) => ({
@@ -65,8 +65,8 @@ function childrenByParent(nodes: StoredOutlineNode[]): Map<string | undefined, S
   return map;
 }
 
-function reindexParent(parentId: string | undefined): void {
-  const siblings = snapshotNodes()
+function reindexParent(graph: OutlineGraph, parentId: string | undefined): void {
+  const siblings = snapshotNodes(graph)
     .filter((node) => node.parentId === parentId)
     .sort((a, b) => a.order - b.order);
   siblings.forEach((node, index) => {
@@ -75,8 +75,13 @@ function reindexParent(parentId: string | undefined): void {
   });
 }
 
-function moveNode(nodeId: string, parentId: string | undefined, index: number): void {
-  const nodes = snapshotNodes();
+function moveNode(
+  graph: OutlineGraph,
+  nodeId: string,
+  parentId: string | undefined,
+  index: number,
+): void {
+  const nodes = snapshotNodes(graph);
   const target = nodes.find((node) => node.id === nodeId);
   if (!target) throw new Error(`Node "${nodeId}" not found`);
   const resolvedParentId = toStoredParentId(parentId);
@@ -99,11 +104,11 @@ function moveNode(nodeId: string, parentId: string | undefined, index: number): 
     graph.block.node(node.id).update({ parent: graphParentId, order: siblingIndex });
   });
 
-  if (oldParentId !== resolvedParentId) reindexParent(oldParentId);
+  if (oldParentId !== resolvedParentId) reindexParent(graph, oldParentId);
 }
 
-function collectSubtreeIds(rootId: string): string[] {
-  const nodes = snapshotNodes();
+function collectSubtreeIds(graph: OutlineGraph, rootId: string): string[] {
+  const nodes = snapshotNodes(graph);
   const childMap = childrenByParent(nodes);
   const ids: string[] = [];
   function walk(nodeId: string): void {
@@ -114,8 +119,8 @@ function collectSubtreeIds(rootId: string): string[] {
   return ids;
 }
 
-function outdentWithSubsequentSiblings(nodeId: string): void {
-  const nodes = snapshotNodes();
+function outdentWithSubsequentSiblings(graph: OutlineGraph, nodeId: string): void {
+  const nodes = snapshotNodes(graph);
   const target = nodes.find((node) => node.id === nodeId);
   if (!target || !target.parentId || target.parentId === INVISIBLE_ROOT_ID) return;
 
@@ -136,20 +141,20 @@ function outdentWithSubsequentSiblings(nodeId: string): void {
   const parentIndex = parentSiblings.findIndex((node) => node.id === parent.id);
   const outdentIndex = Math.max(0, parentIndex + 1);
 
-  moveNode(target.id, toApiParentId(grandParentId), outdentIndex);
+  moveNode(graph, target.id, toApiParentId(grandParentId), outdentIndex);
 
-  const currentChildren = snapshotNodes()
+  const currentChildren = snapshotNodes(graph)
     .filter((node) => node.parentId === target.id)
     .sort((a, b) => a.order - b.order);
   let insertIndex = currentChildren.length;
   for (const siblingId of subsequentSiblingIds) {
-    moveNode(siblingId, target.id, insertIndex);
+    moveNode(graph, siblingId, target.id, insertIndex);
     insertIndex += 1;
   }
 }
 
-function flatOutline(): OutlineNode[] {
-  const nodes = snapshotNodes();
+function flatOutline(graph: OutlineGraph): OutlineNode[] {
+  const nodes = snapshotNodes(graph);
   const byId = new Map(nodes.map((node) => [node.id, node]));
   const childMap = childrenByParent(nodes);
   const roots = nodes
@@ -183,7 +188,7 @@ function flatOutline(): OutlineNode[] {
   return out;
 }
 
-function ensureSeedOutline(): void {
+function ensureSeedOutline(graph: OutlineGraph): void {
   if (graph.block.list().length > 0) return;
   graph.block.create({
     name: "Untitled",
@@ -192,7 +197,12 @@ function ensureSeedOutline(): void {
   });
 }
 
-export function Outliner() {
+export function Outliner({
+  runtime,
+}: {
+  runtime?: Pick<AppRuntime, "graph">;
+}) {
+  const { graph } = runtime ?? useAppRuntime();
   const containerRef = useRef<HTMLElement | null>(null);
   const [nodes, setNodes] = useState<OutlineNode[]>([]);
   const [activeId, setActiveId] = useState("");
@@ -202,7 +212,7 @@ export function Outliner() {
   const [busy, setBusy] = useState(false);
 
   function reload(preferredId?: string): void {
-    const next = flatOutline();
+    const next = flatOutline(graph);
     setNodes(next);
     setActiveId((current) => {
       const candidate = preferredId ?? current;
@@ -213,12 +223,12 @@ export function Outliner() {
 
   useEffect(() => {
     try {
-      ensureSeedOutline();
+      ensureSeedOutline(graph);
       reload();
     } catch (loadError: unknown) {
       setError(String(loadError));
     }
-  }, []);
+  }, [graph]);
 
   useEffect(() => {
     if (mode !== "command") return;
@@ -313,7 +323,7 @@ export function Outliner() {
         parent: activeNode.parentId,
         order: index + 1,
       });
-      moveNode(id, activeNode.parentId, index + 1);
+      moveNode(graph, id, activeNode.parentId, index + 1);
       return { id };
     });
     if (created?.id) {
@@ -334,7 +344,7 @@ export function Outliner() {
         parent: activeNode.id,
         order: count,
       });
-      moveNode(id, activeNode.id, count);
+      moveNode(graph, id, activeNode.id, count);
       return { id };
     });
     if (created?.id) {
@@ -348,7 +358,7 @@ export function Outliner() {
     const { siblings, index } = siblingContext(activeNode);
     const nextIndex = index + delta;
     if (nextIndex < 0 || nextIndex >= siblings.length) return;
-    mutate(() => moveNode(activeNode.id, activeNode.parentId, nextIndex));
+    mutate(() => moveNode(graph, activeNode.id, activeNode.parentId, nextIndex));
   }
 
   function indent(): void {
@@ -358,12 +368,12 @@ export function Outliner() {
     const newParent = siblings[index - 1];
     if (!newParent) return;
     const childCount = (childrenByParentMemo.get(newParent.id) ?? []).length;
-    mutate(() => moveNode(activeNode.id, newParent.id, childCount));
+    mutate(() => moveNode(graph, activeNode.id, newParent.id, childCount));
   }
 
   function outdent(): void {
     if (!activeNode || !activeNode.parentId) return;
-    mutate(() => outdentWithSubsequentSiblings(activeNode.id));
+    mutate(() => outdentWithSubsequentSiblings(graph, activeNode.id));
   }
 
   function deleteNode(liftChildren: boolean): void {
@@ -371,7 +381,7 @@ export function Outliner() {
     const index = indexById.get(activeNode.id) ?? -1;
     const fallback = flat[index + 1]?.id ?? flat[index - 1]?.id;
     mutate(() => {
-      const nodesSnapshot = snapshotNodes();
+      const nodesSnapshot = snapshotNodes(graph);
       const target = nodesSnapshot.find((node) => node.id === activeNode.id);
       if (!target) throw new Error(`Node "${activeNode.id}" not found`);
 
@@ -396,9 +406,9 @@ export function Outliner() {
         });
         graph.block.delete(target.id);
       } else {
-        const ids = collectSubtreeIds(target.id);
+        const ids = collectSubtreeIds(graph, target.id);
         for (const nodeId of ids.reverse()) graph.block.delete(nodeId);
-        reindexParent(target.parentId);
+        reindexParent(graph, target.parentId);
       }
     }, fallback);
   }

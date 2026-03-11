@@ -11,7 +11,6 @@ import {
 import {
   app,
   core,
-  createExampleRuntime,
   createTypeClient,
   edgeId,
   formatValidationPath,
@@ -31,12 +30,18 @@ import {
 import { PredicateFieldEditor, formatPredicateValue, usePredicateField } from "./bindings.js";
 import { performValidatedMutation } from "./mutation-validation.js";
 import { defaultWebFieldResolver } from "./resolver.js";
+import { type AppRuntime, useAppRuntime } from "./runtime.js";
 
 const explorerNamespace = { ...core, ...app };
 
 type ExplorerNamespace = typeof explorerNamespace;
 type ExplorerClient = NamespaceClient<ExplorerNamespace>;
-type ExplorerRuntime = ReturnType<typeof createExampleRuntime>;
+type ExplorerRuntime = Pick<AppRuntime, "store" | "sync">;
+type ExplorerSurfaceRuntime = {
+  graph: NamespaceClient<ExplorerNamespace>;
+  store: Store;
+  sync: AppRuntime["sync"];
+};
 type ExplorerSection = "entities" | "types" | "predicates";
 type AnyEntityRef = EntityRef<any, any>;
 type AnyPredicateRef = PredicateRef<any, any>;
@@ -1268,17 +1273,13 @@ function PredicateInspector({
 }
 
 export function Explorer({ runtime }: { runtime?: ExplorerRuntime }) {
-  const runtimeRef = useRef<ExplorerRuntime | null>(runtime ?? null);
-  if (!runtimeRef.current) {
-    runtimeRef.current = createExampleRuntime();
-  }
+  const graphRuntime = runtime ?? useAppRuntime();
 
   const clientRef = useRef<ExplorerClient | null>(null);
   if (!clientRef.current) {
-    clientRef.current = createTypeClient(runtimeRef.current.store, explorerNamespace);
+    clientRef.current = createTypeClient(graphRuntime.store, explorerNamespace);
   }
 
-  const graphRuntime = runtimeRef.current;
   const client = clientRef.current;
 
   const typeEntries = useMemo(() => buildTypeCatalog(graphRuntime.store), [graphRuntime.store]);
@@ -1547,11 +1548,7 @@ export function ExplorerSurface({
   graph,
   store,
   sync,
-}: Pick<ExplorerRuntime, "graph" | "store" | "sync">) {
-  const fallbackRuntimeRef = useRef<ExplorerRuntime | null>(null);
-  if (!fallbackRuntimeRef.current) {
-    fallbackRuntimeRef.current = createExampleRuntime();
-  }
-
-  return <Explorer runtime={{ ...fallbackRuntimeRef.current, graph, store, sync }} />;
+}: ExplorerSurfaceRuntime) {
+  void graph;
+  return <Explorer runtime={{ store, sync }} />;
 }

@@ -1,9 +1,8 @@
-import { useRef } from "react";
-
-import { app, core, createExampleRuntime, type EntityRef } from "#graph";
+import { app, core, type EntityRef } from "#graph";
 
 import { PredicateFieldEditor, PredicateFieldView } from "./bindings.js";
 import { usePredicateField } from "./predicate.js";
+import { useAppRuntime } from "./runtime.js";
 
 type PersonRef = EntityRef<typeof app.person, typeof app & typeof core>;
 
@@ -119,11 +118,28 @@ export function RelationshipProofSurface({
 }
 
 export function RelationshipProofPage() {
-  const runtimeRef = useRef<ReturnType<typeof createExampleRuntime> | null>(null);
-  if (!runtimeRef.current) {
-    runtimeRef.current = createExampleRuntime();
+  const runtime = useAppRuntime();
+  const personSnapshot =
+    runtime.graph.person.list().find((person) => person.name === "Alice") ??
+    runtime.graph.person.list()[0];
+
+  if (!personSnapshot) {
+    return (
+      <main
+        className="flex min-h-screen items-center justify-center bg-slate-950 px-6 text-slate-100"
+        data-relationship-proof="missing-demo-data"
+      >
+        <div className="w-full max-w-md rounded-[1.75rem] border border-white/10 bg-white/5 p-6">
+          <p className="text-xs uppercase tracking-[0.24em] text-cyan-300">Relationship proof</p>
+          <h1 className="mt-3 text-2xl font-semibold">Missing person records</h1>
+          <p className="mt-2 text-sm text-slate-300">
+            The synced graph does not include a person entity for this relationship demo.
+          </p>
+        </div>
+      </main>
+    );
   }
 
-  const person = runtimeRef.current.graph.person.ref(runtimeRef.current.ids.alice);
+  const person = runtime.graph.person.ref(personSnapshot.id);
   return <RelationshipProofSurface person={person} />;
 }

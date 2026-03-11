@@ -1,6 +1,8 @@
 import { describe, expect, it } from "bun:test";
 import { act, create, type ReactTestInstance } from "react-test-renderer";
 
+import { createExampleRuntime } from "../graph/runtime.js";
+
 import { Outliner } from "./outliner.js";
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT =
@@ -14,9 +16,11 @@ function collectText(node: ReactTestInstance): string {
 
 describe("outliner", () => {
   it("keeps root nodes inside the shared parent-reference validation contract", async () => {
+    const runtime = createExampleRuntime();
+
     let renderer: ReturnType<typeof create> | undefined;
     await act(async () => {
-      renderer = create(<Outliner />);
+      renderer = create(<Outliner runtime={runtime} />);
     });
 
     expect(collectText(renderer!.root)).toContain("1 nodes");

@@ -3,7 +3,6 @@ import { Profiler, useLayoutEffect, useRef, useSyncExternalStore } from "react";
 import {
   app,
   core,
-  createExampleRuntime,
   fieldGroupPath,
   type EntityRef,
   type PredicateRef,
@@ -15,6 +14,7 @@ import {
   getPredicateEntityReferenceSelection,
   usePredicateField,
 } from "./predicate.js";
+import { useAppRuntime } from "./runtime.js";
 
 type CompanyRef = EntityRef<typeof app.company, typeof app & typeof core>;
 type PersonRef = EntityRef<typeof app.person, typeof app & typeof core>;
@@ -495,12 +495,32 @@ export function CompanyProofSurface({
 }
 
 export function CompanyProofPage() {
-  const runtimeRef = useRef<ReturnType<typeof createExampleRuntime> | null>(null);
-  if (!runtimeRef.current) {
-    runtimeRef.current = createExampleRuntime();
+  const runtime = useAppRuntime();
+  const companySnapshot =
+    runtime.graph.company.list().find((company) => company.name === "Acme Corp") ??
+    runtime.graph.company.list()[0];
+  const personSnapshot =
+    runtime.graph.person.list().find((person) => person.name === "Alice") ??
+    runtime.graph.person.list()[0];
+
+  if (!companySnapshot || !personSnapshot) {
+    return (
+      <main
+        className="flex min-h-screen items-center justify-center bg-slate-950 px-6 text-slate-100"
+        data-company-proof="missing-demo-data"
+      >
+        <div className="w-full max-w-md rounded-[1.75rem] border border-white/10 bg-white/5 p-6">
+          <p className="text-xs uppercase tracking-[0.24em] text-cyan-300">Company proof</p>
+          <h1 className="mt-3 text-2xl font-semibold">Missing demo entities</h1>
+          <p className="mt-2 text-sm text-slate-300">
+            The synced graph does not include the company/person records this proof expects.
+          </p>
+        </div>
+      </main>
+    );
   }
 
-  const company = runtimeRef.current.graph.company.ref(runtimeRef.current.ids.acme);
-  const person = runtimeRef.current.graph.person.ref(runtimeRef.current.ids.alice);
+  const company = runtime.graph.company.ref(companySnapshot.id);
+  const person = runtime.graph.person.ref(personSnapshot.id);
   return <CompanyProofSurface company={company} person={person} />;
 }
