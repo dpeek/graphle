@@ -10,11 +10,14 @@ import { core } from "./core";
 import { edgeId, typeId } from "./schema";
 import { createStore } from "./store";
 import {
+  type GraphWriteTransaction,
+  createAuthoritativeGraphWriteSession,
   createAuthoritativeTotalSyncValidator,
   createSyncedTypeClient,
   createTotalSyncController,
   createTotalSyncPayload,
   createTotalSyncSession,
+  validateAuthoritativeGraphWriteTransaction,
   validateAuthoritativeTotalSyncPayload,
 } from "./sync";
 
@@ -53,6 +56,38 @@ function createDataOnlyTotalSyncPayload(
   }
 
   return createTotalSyncPayload(dataOnlyStore, options);
+}
+
+function createCompanyNameWriteTransaction(
+  store: ReturnType<typeof createServerGraph>["store"],
+  companyId: string,
+  name: string,
+  txId: string,
+  options: {
+    assertFirst?: boolean;
+    edgeId?: string;
+  } = {},
+): GraphWriteTransaction {
+  const retractOps = store
+    .facts(companyId, edgeId(app.company.fields.name))
+    .map((edge) => ({
+      op: "retract" as const,
+      edgeId: edge.id,
+    }));
+  const assertOp = {
+    op: "assert" as const,
+    edge: {
+      id: options.edgeId ?? store.newNode(),
+      s: companyId,
+      p: edgeId(app.company.fields.name),
+      o: name,
+    },
+  };
+
+  return {
+    id: txId,
+    ops: options.assertFirst ? [assertOp, ...retractOps] : [...retractOps, assertOp],
+  };
 }
 
 describe("total sync", () => {
@@ -1434,5 +1469,183 @@ describe("total sync", () => {
       freshness: "stale",
     });
     expect(client.graph.company.get(companyId).type).toEqual([app.company.values.id]);
+  });
+});
+
+describe("authoritative graph writes", () => {
+  it("applies valid write transactions atomically and advances the authority cursor", () => {
+    const server = createServerGraph();
+    const companyId = server.graph.company.create({
+      name: "Acme Corp",
+      status: app.status.values.active.id,
+      website: new URL("https://acme.com"),
+    });
+    const authority = createAuthoritativeGraphWriteSession(server.store, app, {
+      cursorPrefix: "server:",
+    });
+    const transaction = createCompanyNameWriteTransaction(
+      server.store,
+      companyId,
+      "Acme Graph Labs",
+      "tx:1",
+    );
+
+    const validation = validateAuthoritativeGraphWriteTransaction(transaction, server.store, app);
+
+    expect(validation).toMatchObject({
+      ok: true,
+      phase: "authoritative",
+      event: "reconcile",
+    });
+    if (!validation.ok) throw new Error("Expected authoritative write validation to pass");
+
+    const result = authority.apply(transaction);
+
+    expect(result).toMatchObject({
+      txId: "tx:1",
+      cursor: "server:1",
+      replayed: false,
+    });
+    expect(result.transaction).toEqual(transaction);
+    expect(authority.getCursor()).toBe("server:1");
+    expect(server.graph.company.get(companyId).name).toBe("Acme Graph Labs");
+  });
+
+  it("rejects invalid write transactions with structured validation results and leaves authority state unchanged", () => {
+    const server = createServerGraph();
+    const companyId = server.graph.company.create({
+      name: "Acme Corp",
+      status: app.status.values.active.id,
+      website: new URL("https://acme.com"),
+    });
+    const authority = createAuthoritativeGraphWriteSession(server.store, app, {
+      cursorPrefix: "server:",
+    });
+    const transaction = createCompanyNameWriteTransaction(server.store, companyId, "   ", "tx:invalid");
+
+    const validation = validateAuthoritativeGraphWriteTransaction(transaction, server.store, app);
+
+    expect(validation).toMatchObject({
+      ok: false,
+      phase: "authoritative",
+      event: "reconcile",
+    });
+    if (validation.ok) throw new Error("Expected authoritative write validation to fail");
+    expect(validation.changedPredicateKeys).toEqual([app.company.fields.name.key]);
+    expect(validation.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          source: "field",
+          code: "string.blank",
+          predicateKey: app.company.fields.name.key,
+          nodeId: companyId,
+        }),
+      ]),
+    );
+
+    let error: unknown;
+    try {
+      authority.apply(transaction);
+    } catch (caught) {
+      error = caught;
+    }
+
+    expect(error).toBeInstanceOf(GraphValidationError);
+    const validationError = error as GraphValidationError<GraphWriteTransaction>;
+    expect(validationError.result).toMatchObject({
+      ok: false,
+      phase: "authoritative",
+      event: "reconcile",
+    });
+    expect(validationError.result.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          source: "field",
+          code: "string.blank",
+          predicateKey: app.company.fields.name.key,
+          nodeId: companyId,
+        }),
+      ]),
+    );
+    expect(server.graph.company.get(companyId).name).toBe("Acme Corp");
+    expect(authority.getCursor()).toBeUndefined();
+  });
+
+  it("treats duplicate transaction ids as deterministic replays when the canonical ops match", () => {
+    const server = createServerGraph();
+    const companyId = server.graph.company.create({
+      name: "Acme Corp",
+      status: app.status.values.active.id,
+      website: new URL("https://acme.com"),
+    });
+    const authority = createAuthoritativeGraphWriteSession(server.store, app, {
+      cursorPrefix: "server:",
+    });
+    const assertedEdgeId = server.store.newNode();
+    const first = createCompanyNameWriteTransaction(server.store, companyId, "Acme Replay", "tx:1", {
+      edgeId: assertedEdgeId,
+      assertFirst: true,
+    });
+    const replay = createCompanyNameWriteTransaction(server.store, companyId, "Acme Replay", "tx:1", {
+      edgeId: assertedEdgeId,
+      assertFirst: false,
+    });
+
+    const firstResult = authority.apply(first);
+    const replayResult = authority.apply(replay);
+
+    expect(firstResult).toMatchObject({
+      txId: "tx:1",
+      cursor: "server:1",
+      replayed: false,
+    });
+    expect(replayResult).toMatchObject({
+      txId: "tx:1",
+      cursor: "server:1",
+      replayed: true,
+    });
+    expect(server.graph.company.get(companyId).name).toBe("Acme Replay");
+    expect(authority.getCursor()).toBe("server:1");
+  });
+
+  it("rejects reused transaction ids when the canonical transaction differs", () => {
+    const server = createServerGraph();
+    const companyId = server.graph.company.create({
+      name: "Acme Corp",
+      status: app.status.values.active.id,
+      website: new URL("https://acme.com"),
+    });
+    const authority = createAuthoritativeGraphWriteSession(server.store, app, {
+      cursorPrefix: "server:",
+    });
+
+    authority.apply(createCompanyNameWriteTransaction(server.store, companyId, "Acme One", "tx:1"));
+
+    let error: unknown;
+    try {
+      authority.apply(createCompanyNameWriteTransaction(server.store, companyId, "Acme Two", "tx:1"));
+    } catch (caught) {
+      error = caught;
+    }
+
+    expect(error).toBeInstanceOf(GraphValidationError);
+    const validationError = error as GraphValidationError<GraphWriteTransaction>;
+    expect(validationError.result).toMatchObject({
+      ok: false,
+      phase: "authoritative",
+      event: "reconcile",
+      changedPredicateKeys: ["$sync:tx"],
+    });
+    expect(validationError.result.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          source: "runtime",
+          code: "sync.tx.id.conflict",
+          predicateKey: "$sync:tx",
+        }),
+      ]),
+    );
+    expect(server.graph.company.get(companyId).name).toBe("Acme One");
+    expect(authority.getCursor()).toBe("server:1");
   });
 });

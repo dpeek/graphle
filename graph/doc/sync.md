@@ -82,6 +82,29 @@ The shared apply boundary now lives in the total-sync session itself.
   after local schema bootstrap. That keeps compiled schema facts durable across
   authoritative replace without merging pending local data writes.
 
+The first landed authority-side write contract now sits beside that snapshot
+path:
+
+- `GraphWriteTransaction = { id, ops }`
+- `ops` currently use canonical low-level graph mutations:
+  - `{ op: "retract", edgeId }`
+  - `{ op: "assert", edge: { id, s, p, o } }`
+- `canonicalizeGraphWriteTransaction(...)` normalizes a transaction into one
+  deterministic op order:
+  - retract ops first, sorted by `edgeId`
+  - assert ops next, sorted by `(s, p, o, id)`
+  - duplicate identical ops collapse away
+- `createAuthoritativeGraphWriteSession(store, namespace)` accepts that
+  transaction shape on the authoritative store, validates the post-apply graph
+  on a cloned store, and only then replaces the real store snapshot atomically
+- successful writes return `{ txId, cursor, replayed, transaction }`
+- transaction ids are idempotency keys for this authority session:
+  - exact replays return the original cursor with `replayed: true`
+  - reusing an accepted id for a different canonical transaction fails with a
+    structured runtime validation issue
+- direct non-throwing checks can use
+  `validateAuthoritativeGraphWriteTransaction(tx, store, namespace)`
+
 For lower-level integration, `createTotalSyncSession(store)` still exposes:
 
 - `apply(payload)` to install a total snapshot into the local store
@@ -130,42 +153,40 @@ update path still apply.
 
 ## Next Concrete Work Areas
 
-The next sync slice should focus on read-write synchronization, not on making
-the total snapshot contract more elaborate.
+The current sync surface now has:
 
-### 1. Canonical transaction envelope for client writes
+- authoritative total-snapshot pull/replace
+- a canonical write transaction envelope
+- an authority-side apply path with idempotent tx ids
 
-The first missing primitive is a durable write payload that can move through the
-same lifecycle on client and server.
+The next work should connect those landed pieces into a real client write-through
+loop rather than making the snapshot contract more elaborate.
+
+### 1. Synced-client pending write queues and push
+
+The main missing piece is still on the client side.
 
 That slice should:
 
-- define the canonical mutation/transaction envelope produced by local typed
-  create/update/delete and predicate-ref helpers
-- include enough identity/version metadata to support authoritative ack or
-  rejection without diffing whole snapshots
+- capture committed local typed mutations as pending `GraphWriteTransaction`
+  records
+- push those transactions to the authoritative write session or transport
 - keep local optimistic validation exactly where it already lives today, before
-  the transaction is queued or sent
+  a tx is queued or sent
 
-The goal is to stop treating "save the whole graph again" as the only durable
-write shape.
+### 2. Incremental authoritative apply on synced clients
 
-### 2. Authoritative push/ack reconciliation
-
-Once local writes have a stable transaction shape, the next slice is a minimal
-read-write loop with server authority.
+Once the client can push transactions, it should stop needing a full-store
+replace just to observe accepted writes locally.
 
 That slice should:
 
-- add a push path for validated local transactions beside the existing pull path
-- define how the server acknowledges, rejects, or rewrites a pushed
-  transaction
-- rebase or clear pending local writes using that authoritative response
-  instead of assuming total-snapshot replacement after every client edit
-
-The important boundary is that sync still should not invent a second mutation
-API. Typed local mutations remain the caller entry point; sync owns transport
-and reconciliation.
+- apply authoritative write results or echoed txs incrementally into the local
+  synced store
+- preserve the existing schema baseline and sync metadata while only updating
+  affected facts
+- keep predicate-slot notification behavior aligned with current local store
+  semantics
 
 ### 3. Incremental pull and live tx delivery
 

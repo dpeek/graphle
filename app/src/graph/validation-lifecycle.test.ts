@@ -7,7 +7,11 @@ import { GraphValidationError, createTypeClient } from "./client";
 import { core } from "./core";
 import { defineNamespace, defineScalar, defineType, edgeId } from "./schema";
 import { createStore } from "./store";
-import { createSyncedTypeClient, createTotalSyncPayload } from "./sync";
+import {
+  createAuthoritativeGraphWriteSession,
+  createSyncedTypeClient,
+  createTotalSyncPayload,
+} from "./sync";
 
 type ValidatorCall = {
   changedPredicateKeys: readonly string[];
@@ -393,6 +397,125 @@ describe("validation lifecycle contract", () => {
       ],
       event: "reconcile",
       nodeId: serverId,
+      path: ["score"],
+      phase: "authoritative",
+      predicateKey: fixture.namespace.reviewItem.fields.score.key,
+    });
+  });
+
+  it("reuses field and scalar validators across authoritative write application", () => {
+    const fixture = createValidationLifecycleFixture();
+    const authorityGraph = fixture.createGraph();
+    const authorityId = authorityGraph.graph.reviewItem.create({
+      name: "Authority contract",
+      title: "Ready",
+      score: 11,
+      status: app.status.values.active.id,
+    });
+    const authority = createAuthoritativeGraphWriteSession(authorityGraph.store, fixture.namespace, {
+      cursorPrefix: "server:",
+    });
+    fixture.fieldCalls.length = 0;
+    fixture.scalarCalls.length = 0;
+
+    const transaction = {
+      id: "tx:1",
+      ops: [
+        ...authorityGraph.store
+          .facts(authorityId, edgeId(fixture.namespace.reviewItem.fields.title))
+          .map((edge) => ({
+            op: "retract" as const,
+            edgeId: edge.id,
+          })),
+        ...authorityGraph.store
+          .facts(authorityId, edgeId(fixture.namespace.reviewItem.fields.score))
+          .map((edge) => ({
+            op: "retract" as const,
+            edgeId: edge.id,
+          })),
+        {
+          op: "assert" as const,
+          edge: {
+            id: authorityGraph.store.newNode(),
+            s: authorityId,
+            p: edgeId(fixture.namespace.reviewItem.fields.title),
+            o: "   ",
+          },
+        },
+        {
+          op: "assert" as const,
+          edge: {
+            id: authorityGraph.store.newNode(),
+            s: authorityId,
+            p: edgeId(fixture.namespace.reviewItem.fields.score),
+            o: "Infinity",
+          },
+        },
+      ],
+    };
+
+    let error: unknown;
+    try {
+      authority.apply(transaction);
+    } catch (caught) {
+      error = caught;
+    }
+
+    expect(error).toBeInstanceOf(GraphValidationError);
+    const validationError = error as GraphValidationError<typeof transaction>;
+    expect(validationError.result).toMatchObject({
+      ok: false,
+      phase: "authoritative",
+      event: "reconcile",
+    });
+    expect(validationError.result.changedPredicateKeys).toEqual([
+      fixture.namespace.reviewItem.fields.title.key,
+      fixture.namespace.reviewItem.fields.score.key,
+    ]);
+    expect(validationError.result.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          source: "field",
+          code: "string.blank",
+          predicateKey: fixture.namespace.reviewItem.fields.title.key,
+          path: ["title"],
+        }),
+        expect.objectContaining({
+          source: "type",
+          code: "score.notFinite",
+          predicateKey: fixture.namespace.reviewItem.fields.score.key,
+          path: ["score"],
+        }),
+      ]),
+    );
+    expect(authorityGraph.graph.reviewItem.get(authorityId)).toMatchObject({
+      title: "Ready",
+      score: 11,
+    });
+    expect(fixture.fieldCalls).toHaveLength(1);
+    expectValidatorCall(fixture.fieldCalls[0], {
+      changedPredicateKeys: [
+        core.node.fields.name.key,
+        fixture.namespace.reviewItem.fields.title.key,
+        fixture.namespace.reviewItem.fields.score.key,
+        fixture.namespace.reviewItem.fields.status.key,
+      ],
+      event: "reconcile",
+      nodeId: authorityId,
+      path: ["title"],
+      phase: "authoritative",
+      predicateKey: fixture.namespace.reviewItem.fields.title.key,
+    });
+    expect(fixture.scalarCalls).toHaveLength(1);
+    expectValidatorCall(fixture.scalarCalls[0], {
+      changedPredicateKeys: [
+        core.node.fields.name.key,
+        fixture.namespace.reviewItem.fields.title.key,
+        fixture.namespace.reviewItem.fields.score.key,
+        fixture.namespace.reviewItem.fields.status.key,
+      ],
+      event: "reconcile",
+      nodeId: authorityId,
       path: ["score"],
       phase: "authoritative",
       predicateKey: fixture.namespace.reviewItem.fields.score.key,

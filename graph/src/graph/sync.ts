@@ -29,7 +29,32 @@ export type TotalSyncPayload = {
   readonly freshness: SyncFreshness
 }
 
+export type GraphWriteAssertOperation = {
+  readonly op: "assert"
+  readonly edge: StoreSnapshot["edges"][number]
+}
+
+export type GraphWriteRetractOperation = {
+  readonly op: "retract"
+  readonly edgeId: string
+}
+
+export type GraphWriteOperation = GraphWriteAssertOperation | GraphWriteRetractOperation
+
+export type GraphWriteTransaction = {
+  readonly id: string
+  readonly ops: readonly GraphWriteOperation[]
+}
+
+export type AuthoritativeGraphWriteResult = {
+  readonly txId: string
+  readonly cursor: string
+  readonly replayed: boolean
+  readonly transaction: GraphWriteTransaction
+}
+
 const totalSyncPayloadValidationKey = "$sync:payload"
+const graphWriteTransactionValidationKey = "$sync:tx"
 
 function createPayloadValidationIssue(
   path: readonly string[],
@@ -56,6 +81,35 @@ function invalidPayloadResult(
     event: "reconcile",
     value: payload,
     changedPredicateKeys: issues.length > 0 ? [totalSyncPayloadValidationKey] : [],
+    issues,
+  }
+}
+
+function createTransactionValidationIssue(
+  path: readonly string[],
+  code: string,
+  message: string,
+): GraphValidationIssue {
+  return {
+    source: "runtime",
+    code,
+    message,
+    path: Object.freeze([...path]),
+    predicateKey: graphWriteTransactionValidationKey,
+    nodeId: graphWriteTransactionValidationKey,
+  }
+}
+
+function invalidTransactionResult(
+  transaction: GraphWriteTransaction,
+  issues: readonly GraphValidationIssue[],
+): Extract<GraphValidationResult<GraphWriteTransaction>, { ok: false }> {
+  return {
+    ok: false,
+    phase: "authoritative",
+    event: "reconcile",
+    value: transaction,
+    changedPredicateKeys: issues.length > 0 ? [graphWriteTransactionValidationKey] : [],
     issues,
   }
 }
@@ -110,6 +164,49 @@ function cloneValidationIssue(issue: GraphValidationIssue): GraphValidationIssue
   }
 }
 
+function cloneGraphWriteOperation(operation: unknown): GraphWriteOperation {
+  if (isObjectRecord(operation) && operation.op === "retract") {
+    return {
+      op: "retract",
+      edgeId: typeof operation.edgeId === "string" ? operation.edgeId : "",
+    }
+  }
+
+  const edge = isObjectRecord(operation) && isObjectRecord(operation.edge) ? operation.edge : {}
+  return {
+    op: "assert",
+    edge: {
+      id: typeof edge.id === "string" ? edge.id : "",
+      s: typeof edge.s === "string" ? edge.s : "",
+      p: typeof edge.p === "string" ? edge.p : "",
+      o: typeof edge.o === "string" ? edge.o : "",
+    },
+  }
+}
+
+function cloneGraphWriteTransaction(transaction: GraphWriteTransaction): GraphWriteTransaction {
+  const candidate = transaction as Partial<GraphWriteTransaction> & Record<string, unknown>
+  return {
+    id: typeof candidate.id === "string" ? candidate.id : "",
+    ops: Array.isArray(candidate.ops)
+      ? candidate.ops.map((operation) => cloneGraphWriteOperation(operation))
+      : [],
+  }
+}
+
+function cloneAuthoritativeGraphWriteResult(
+  result: AuthoritativeGraphWriteResult,
+  options: {
+    replayed?: boolean
+  } = {},
+): AuthoritativeGraphWriteResult {
+  return {
+    ...result,
+    replayed: options.replayed ?? result.replayed,
+    transaction: cloneGraphWriteTransaction(result.transaction),
+  }
+}
+
 function cloneTotalSyncPayload(payload: TotalSyncPayload): TotalSyncPayload {
   return {
     ...payload,
@@ -138,6 +235,73 @@ function exposeTotalSyncValidationResult(
     changedPredicateKeys: [...result.changedPredicateKeys],
     issues: result.issues.map((issue) => cloneValidationIssue(issue)),
   }
+}
+
+function exposeGraphWriteValidationResult(
+  result: GraphValidationResult<GraphWriteTransaction>,
+): GraphValidationResult<GraphWriteTransaction> {
+  if (result.ok) {
+    return {
+      ...result,
+      value: cloneGraphWriteTransaction(result.value),
+      changedPredicateKeys: [...result.changedPredicateKeys],
+    }
+  }
+
+  return {
+    ...result,
+    value: cloneGraphWriteTransaction(result.value),
+    changedPredicateKeys: [...result.changedPredicateKeys],
+    issues: result.issues.map((issue) => cloneValidationIssue(issue)),
+  }
+}
+
+function compareGraphWriteOperations(left: GraphWriteOperation, right: GraphWriteOperation): number {
+  if (left.op !== right.op) return left.op === "retract" ? -1 : 1
+
+  if (left.op === "retract" && right.op === "retract") {
+    return left.edgeId.localeCompare(right.edgeId)
+  }
+
+  if (left.op === "assert" && right.op === "assert") {
+    return (
+      left.edge.s.localeCompare(right.edge.s) ||
+      left.edge.p.localeCompare(right.edge.p) ||
+      left.edge.o.localeCompare(right.edge.o) ||
+      left.edge.id.localeCompare(right.edge.id)
+    )
+  }
+
+  return 0
+}
+
+function sameGraphWriteOperation(left: GraphWriteOperation, right: GraphWriteOperation): boolean {
+  if (left.op !== right.op) return false
+  if (left.op === "retract" && right.op === "retract") return left.edgeId === right.edgeId
+  if (left.op === "assert" && right.op === "assert") {
+    return (
+      left.edge.id === right.edge.id &&
+      left.edge.s === right.edge.s &&
+      left.edge.p === right.edge.p &&
+      left.edge.o === right.edge.o
+    )
+  }
+  return false
+}
+
+function sameGraphWriteTransaction(
+  left: GraphWriteTransaction,
+  right: GraphWriteTransaction,
+): boolean {
+  if (left.id !== right.id) return false
+  if (left.ops.length !== right.ops.length) return false
+  for (let index = 0; index < left.ops.length; index += 1) {
+    const leftOperation = left.ops[index]
+    const rightOperation = right.ops[index]
+    if (!leftOperation || !rightOperation) return false
+    if (!sameGraphWriteOperation(leftOperation, rightOperation)) return false
+  }
+  return true
 }
 
 function logicalFactKey(edge: StoreSnapshot["edges"][number]): string {
@@ -190,6 +354,306 @@ function materializeTotalSyncPayload(
 
 function isObjectRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object"
+}
+
+function validateGraphWriteTransactionShape(
+  transaction: GraphWriteTransaction,
+): readonly GraphValidationIssue[] {
+  const issues: GraphValidationIssue[] = []
+  const candidate = transaction as Partial<GraphWriteTransaction> & Record<string, unknown>
+  const assertIds = new Map<string, StoreSnapshot["edges"][number]>()
+  const retractIds = new Set<string>()
+
+  if (typeof candidate.id !== "string") {
+    issues.push(
+      createTransactionValidationIssue(
+        ["id"],
+        "sync.tx.id",
+        'Field "id" must be a string.',
+      ),
+    )
+  }
+
+  if (!Array.isArray(candidate.ops)) {
+    issues.push(
+      createTransactionValidationIssue(
+        ["ops"],
+        "sync.tx.ops",
+        'Field "ops" must be an array.',
+      ),
+    )
+    return issues
+  }
+
+  if (candidate.ops.length === 0) {
+    issues.push(
+      createTransactionValidationIssue(
+        ["ops"],
+        "sync.tx.ops.empty",
+        'Field "ops" must contain at least one operation.',
+      ),
+    )
+  }
+
+  candidate.ops.forEach((operation, index) => {
+    const opPath = `ops[${index}]`
+    if (!isObjectRecord(operation)) {
+      issues.push(
+        createTransactionValidationIssue(
+          [opPath],
+          "sync.tx.op",
+          `Field "${opPath}" must be an operation object.`,
+        ),
+      )
+      return
+    }
+
+    if (operation.op === "retract") {
+      if (typeof operation.edgeId !== "string") {
+        issues.push(
+          createTransactionValidationIssue(
+            [opPath, "edgeId"],
+            "sync.tx.op.retract.edgeId",
+            `Field "${opPath}.edgeId" must be a string.`,
+          ),
+        )
+        return
+      }
+
+      if (assertIds.has(operation.edgeId)) {
+        issues.push(
+          createTransactionValidationIssue(
+            [opPath, "edgeId"],
+            "sync.tx.op.edgeId.reused",
+            `Field "${opPath}.edgeId" must not reuse an asserted edge id in the same transaction.`,
+          ),
+        )
+      }
+      retractIds.add(operation.edgeId)
+      return
+    }
+
+    if (operation.op !== "assert") {
+      issues.push(
+        createTransactionValidationIssue(
+          [opPath, "op"],
+          "sync.tx.op.kind",
+          `Field "${opPath}.op" must be "assert" or "retract".`,
+        ),
+      )
+      return
+    }
+
+    if (!isObjectRecord(operation.edge)) {
+      issues.push(
+        createTransactionValidationIssue(
+          [opPath, "edge"],
+          "sync.tx.op.assert.edge",
+          `Field "${opPath}.edge" must be an edge object.`,
+        ),
+      )
+      return
+    }
+
+    for (const key of ["id", "s", "p", "o"] as const) {
+      if (typeof operation.edge[key] !== "string") {
+        issues.push(
+          createTransactionValidationIssue(
+            [opPath, "edge", key],
+            `sync.tx.op.assert.edge.${key}`,
+            `Field "${opPath}.edge.${key}" must be a string.`,
+          ),
+        )
+      }
+    }
+
+    if (
+      typeof operation.edge.id !== "string" ||
+      typeof operation.edge.s !== "string" ||
+      typeof operation.edge.p !== "string" ||
+      typeof operation.edge.o !== "string"
+    ) {
+      return
+    }
+    if (retractIds.has(operation.edge.id)) {
+      issues.push(
+        createTransactionValidationIssue(
+          [opPath, "edge", "id"],
+          "sync.tx.op.edgeId.reused",
+          `Field "${opPath}.edge.id" must not reuse a retracted edge id in the same transaction.`,
+        ),
+      )
+    }
+
+    const existing = assertIds.get(operation.edge.id)
+    if (!existing) {
+      assertIds.set(operation.edge.id, {
+        id: operation.edge.id,
+        s: operation.edge.s,
+        p: operation.edge.p,
+        o: operation.edge.o,
+      })
+      return
+    }
+
+    if (
+      existing.s !== operation.edge.s ||
+      existing.p !== operation.edge.p ||
+      existing.o !== operation.edge.o
+    ) {
+      issues.push(
+        createTransactionValidationIssue(
+          [opPath, "edge", "id"],
+          "sync.tx.op.assert.edge.id.conflict",
+          `Field "${opPath}.edge.id" must not describe multiple asserted edges in the same transaction.`,
+        ),
+      )
+    }
+  })
+
+  return issues
+}
+
+export function canonicalizeGraphWriteTransaction(
+  transaction: GraphWriteTransaction,
+): GraphWriteTransaction {
+  const retractIds = new Set<string>()
+  const assertById = new Map<string, StoreSnapshot["edges"][number]>()
+
+  for (const operation of transaction.ops) {
+    if (operation.op === "retract") {
+      retractIds.add(operation.edgeId)
+      continue
+    }
+
+    if (assertById.has(operation.edge.id)) continue
+    assertById.set(operation.edge.id, { ...operation.edge })
+  }
+
+  const ops: GraphWriteOperation[] = [
+    ...[...retractIds]
+      .sort((left, right) => left.localeCompare(right))
+      .map(
+        (edgeId): GraphWriteRetractOperation => ({
+          op: "retract",
+          edgeId,
+        }),
+      ),
+    ...[...assertById.values()]
+      .sort((left, right) => {
+        return (
+          left.s.localeCompare(right.s) ||
+          left.p.localeCompare(right.p) ||
+          left.o.localeCompare(right.o) ||
+          left.id.localeCompare(right.id)
+        )
+      })
+      .map(
+        (edge): GraphWriteAssertOperation => ({
+          op: "assert",
+          edge: { ...edge },
+        }),
+      ),
+  ]
+  ops.sort(compareGraphWriteOperations)
+
+  return {
+    ...transaction,
+    ops,
+  }
+}
+
+function prepareGraphWriteTransaction(
+  transaction: GraphWriteTransaction,
+):
+  | {
+      ok: true
+      value: GraphWriteTransaction
+    }
+  | {
+      ok: false
+      result: Extract<GraphValidationResult<GraphWriteTransaction>, { ok: false }>
+    } {
+  const issues = validateGraphWriteTransactionShape(transaction)
+  if (issues.length > 0) {
+    return {
+      ok: false,
+      result: invalidTransactionResult(cloneGraphWriteTransaction(transaction), issues),
+    }
+  }
+
+  return {
+    ok: true,
+    value: canonicalizeGraphWriteTransaction(transaction),
+  }
+}
+
+function materializeGraphWriteTransactionSnapshot(
+  store: Store,
+  transaction: GraphWriteTransaction,
+):
+  | {
+      ok: true
+      value: StoreSnapshot
+    }
+  | {
+      ok: false
+      result: Extract<GraphValidationResult<GraphWriteTransaction>, { ok: false }>
+    } {
+  const snapshot = store.snapshot()
+  const edges = snapshot.edges.map((edge) => ({ ...edge }))
+  const edgeById = new Map(edges.map((edge) => [edge.id, edge]))
+  const retracted = new Set(snapshot.retracted)
+  const issues: GraphValidationIssue[] = []
+
+  for (const [index, operation] of transaction.ops.entries()) {
+    const opPath = `ops[${index}]`
+    if (operation.op === "retract") {
+      if (!edgeById.has(operation.edgeId)) {
+        issues.push(
+          createTransactionValidationIssue(
+            [opPath, "edgeId"],
+            "sync.tx.op.retract.missing",
+            `Field "${opPath}.edgeId" must reference an existing edge.`,
+          ),
+        )
+        continue
+      }
+
+      retracted.add(operation.edgeId)
+      continue
+    }
+
+    if (edgeById.has(operation.edge.id)) {
+      issues.push(
+        createTransactionValidationIssue(
+          [opPath, "edge", "id"],
+          "sync.tx.op.assert.edge.id.conflict",
+          `Field "${opPath}.edge.id" must not collide with an existing edge id.`,
+        ),
+      )
+      continue
+    }
+
+    const edge = { ...operation.edge }
+    edges.push(edge)
+    edgeById.set(edge.id, edge)
+  }
+
+  if (issues.length > 0) {
+    return {
+      ok: false,
+      result: invalidTransactionResult(transaction, issues),
+    }
+  }
+
+  return {
+    ok: true,
+    value: {
+      edges,
+      retracted: [...retracted],
+    },
+  }
 }
 
 function validateStoreSnapshotShape(snapshot: unknown): readonly GraphValidationIssue[] {
@@ -387,6 +851,11 @@ export interface TotalSyncSession {
   subscribe(listener: SyncStateListener): () => void
 }
 
+export interface AuthoritativeGraphWriteSession {
+  apply(transaction: GraphWriteTransaction): AuthoritativeGraphWriteResult
+  getCursor(): string | undefined
+}
+
 export function validateAuthoritativeTotalSyncPayload<
   const T extends Record<string, AnyTypeOutput>,
 >(
@@ -407,6 +876,26 @@ export function validateAuthoritativeTotalSyncPayload<
   )
 }
 
+export function validateAuthoritativeGraphWriteTransaction<
+  const T extends Record<string, AnyTypeOutput>,
+>(
+  transaction: GraphWriteTransaction,
+  store: Store,
+  namespace: T,
+): GraphValidationResult<GraphWriteTransaction> {
+  const prepared = prepareGraphWriteTransaction(transaction)
+  if (!prepared.ok) return prepared.result
+
+  const materialized = materializeGraphWriteTransactionSnapshot(store, prepared.value)
+  if (!materialized.ok) return exposeGraphWriteValidationResult(materialized.result)
+
+  const validationStore = createStore()
+  validationStore.replace(materialized.value)
+  return exposeGraphWriteValidationResult(
+    withValidationValue(validateGraphStore(validationStore, namespace), prepared.value),
+  )
+}
+
 export function createAuthoritativeTotalSyncValidator<
   const T extends Record<string, AnyTypeOutput>,
 >(
@@ -418,6 +907,106 @@ export function createAuthoritativeTotalSyncValidator<
   return (payload) => {
     const result = validateAuthoritativeTotalSyncPayload(payload, namespace, options)
     if (!result.ok) throw new GraphValidationError(result)
+  }
+}
+
+function buildAuthoritativeGraphWriteReplayResult(
+  result: AuthoritativeGraphWriteResult,
+): AuthoritativeGraphWriteResult {
+  return cloneAuthoritativeGraphWriteResult(result, { replayed: true })
+}
+
+type AuthoritativeGraphWriteRecord =
+  | {
+      ok: true
+      transaction: GraphWriteTransaction
+      result: AuthoritativeGraphWriteResult
+    }
+  | {
+      ok: false
+      transaction: GraphWriteTransaction
+      result: Extract<GraphValidationResult<GraphWriteTransaction>, { ok: false }>
+    }
+
+export function createAuthoritativeGraphWriteSession<
+  const T extends Record<string, AnyTypeOutput>,
+>(
+  store: Store,
+  namespace: T,
+  options: {
+    cursorPrefix?: string
+    initialSequence?: number
+  } = {},
+): AuthoritativeGraphWriteSession {
+  const cursorPrefix = options.cursorPrefix ?? "tx:"
+  const txRecords = new Map<string, AuthoritativeGraphWriteRecord>()
+  let sequence = options.initialSequence ?? 0
+
+  function currentCursor(): string | undefined {
+    return sequence > 0 ? `${cursorPrefix}${sequence}` : undefined
+  }
+
+  function apply(transaction: GraphWriteTransaction): AuthoritativeGraphWriteResult {
+    const prepared = prepareGraphWriteTransaction(transaction)
+    if (!prepared.ok) throw new GraphValidationError(prepared.result)
+
+    const existing = txRecords.get(prepared.value.id)
+    if (existing) {
+      if (!sameGraphWriteTransaction(existing.transaction, prepared.value)) {
+        throw new GraphValidationError(
+          invalidTransactionResult(prepared.value, [
+            createTransactionValidationIssue(
+              ["id"],
+              "sync.tx.id.conflict",
+              'Field "id" must not be reused for a different transaction.',
+            ),
+          ]),
+        )
+      }
+
+      if (existing.ok) return buildAuthoritativeGraphWriteReplayResult(existing.result)
+      throw new GraphValidationError(existing.result)
+    }
+
+    const materialized = materializeGraphWriteTransactionSnapshot(store, prepared.value)
+    if (!materialized.ok) {
+      txRecords.set(prepared.value.id, {
+        ok: false,
+        transaction: prepared.value,
+        result: materialized.result,
+      })
+      throw new GraphValidationError(materialized.result)
+    }
+
+    const validation = validateAuthoritativeGraphWriteTransaction(prepared.value, store, namespace)
+    if (!validation.ok) {
+      txRecords.set(prepared.value.id, {
+        ok: false,
+        transaction: prepared.value,
+        result: validation,
+      })
+      throw new GraphValidationError(validation)
+    }
+
+    store.replace(materialized.value)
+    sequence += 1
+    const result: AuthoritativeGraphWriteResult = {
+      txId: prepared.value.id,
+      cursor: `${cursorPrefix}${sequence}`,
+      replayed: false,
+      transaction: prepared.value,
+    }
+    txRecords.set(prepared.value.id, {
+      ok: true,
+      transaction: prepared.value,
+      result,
+    })
+    return cloneAuthoritativeGraphWriteResult(result)
+  }
+
+  return {
+    apply,
+    getCursor: currentCursor,
   }
 }
 

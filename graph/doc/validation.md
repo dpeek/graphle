@@ -183,6 +183,26 @@ That sync boundary is now centralized in the shared total-sync session.
   after local schema bootstrap. This keeps local typed mutation validation
   coherent after a data-only authoritative replace.
 
+Authority-side write application now uses that same authoritative validation
+boundary too.
+
+- `validateAuthoritativeGraphWriteTransaction(tx, store, namespace)` applies the
+  canonical write ops to a cloned store snapshot, runs `validateGraphStore(...)`
+  with `phase: "authoritative"` and `event: "reconcile"`, and returns the same
+  structured `GraphValidationResult`
+- `createAuthoritativeGraphWriteSession(store, namespace)` commits only after
+  that cloned-store validation passes, so invalid remote writes leave the real
+  authoritative store unchanged
+- accepted tx ids are stored as idempotency keys for the session:
+  - replaying the same canonical transaction returns the original cursor safely
+  - reusing the same id for a different canonical transaction fails with a
+    structured runtime validation issue at `id`
+- this write path does not invent new rule ownership:
+  - scalar and enum definitions still own reusable value semantics
+  - field definitions still own predicate-specific validation
+  - runtime graph invariants still come from the shared `validateGraphStore(...)`
+    pass after the candidate post-apply graph is materialized
+
 ### 4. Future partial sync
 
 The same model should extend to patch or query-scoped sync later:
@@ -230,6 +250,9 @@ patterns.
 - authoritative total-sync validation also returns the payload it validated in
   `result.value`, so direct callers can inspect the exact materialized snapshot
   without having to run `apply(...)`
+- authoritative write validation returns the canonical transaction it validated
+  in `result.value`, so direct callers and replay handling can compare the
+  exact tx identity/content that reached the apply boundary
 - `formatValidationPath(issue.path)` converts the stored path into an explorer-
   or form-friendly field string.
 
