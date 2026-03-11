@@ -281,7 +281,7 @@ export class AgentService {
     if (!issue.hasChildren || issue.hasParent) {
       return true;
     }
-    return resolveIssueRouting(workflow.issues, issue).agent === "backlog";
+    return resolveIssueRouting(workflow.issues, issue, workflow.modules).agent === "backlog";
   }
 
   async #runIssue(
@@ -329,7 +329,7 @@ export class AgentService {
     let result: IssueRunResult;
     try {
       const resolvedContext = await resolveIssueContext({
-        baseSelection: resolveIssueRouting(workflow.issues, issue),
+        baseSelection: resolveIssueRouting(workflow.issues, issue, workflow.modules),
         issue,
         repoRoot: this.#repoRoot,
         workflow,

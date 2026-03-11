@@ -129,11 +129,18 @@ const contextProfileSchema = z.object({
   includeEntrypoint: z.boolean().default(true),
 });
 
+const workflowModuleSchema = z.object({
+  allowedSharedPaths: z.array(z.string().min(1)).default([]),
+  docs: z.array(z.string().min(1)).default([]),
+  path: z.string().min(1),
+});
+
 const ioExtensionsSchema = z
   .object({
     context: z
       .object({
         docs: z.record(z.string().min(1), z.string().min(1)).default({}),
+        entrypoint: z.string().min(1).optional(),
         overrides: z.record(z.string().min(1), z.string().min(1)).default({}),
         profiles: z.record(z.string().min(1), contextProfileSchema).default({}),
       })
@@ -148,6 +155,7 @@ const ioExtensionsSchema = z
         defaultAgent: "execute",
         routing: [],
       }),
+    modules: z.record(z.string().min(1), workflowModuleSchema).default({}),
   })
   .passthrough();
 const workflowFrontMatterSchema = z
@@ -218,10 +226,19 @@ const workflowFrontMatterSchema = z
 
 type IoExtensions = z.infer<typeof ioExtensionsSchema>;
 type IoIssueRoutingConfig = IoExtensions["issues"];
+type IoModuleConfig = IoExtensions["modules"];
 type WorkflowFrontMatter = z.infer<typeof workflowFrontMatterSchema>;
 type WorkflowConfigFields = Pick<
   Workflow,
-  "agent" | "codex" | "context" | "hooks" | "issues" | "polling" | "tracker" | "workspace"
+  | "agent"
+  | "codex"
+  | "context"
+  | "hooks"
+  | "issues"
+  | "modules"
+  | "polling"
+  | "tracker"
+  | "workspace"
 >;
 
 function splitFrontMatter(document: string) {
@@ -306,6 +323,25 @@ function normalizeIssueRouting(config: IoIssueRoutingConfig): IssueRoutingConfig
   };
 }
 
+function normalizeModules(config: IoModuleConfig, baseDir: string) {
+  return Object.fromEntries(
+    Object.entries(config).map(([id, module]) => {
+      const normalizedId = id.trim().toLowerCase();
+      return [
+        normalizedId,
+        {
+          allowedSharedPaths: module.allowedSharedPaths.map((path) =>
+            expandPathValue(path, baseDir),
+          ),
+          docs: module.docs.map((reference) => reference.trim()).filter(Boolean),
+          id: normalizedId,
+          path: expandPathValue(module.path, baseDir),
+        },
+      ];
+    }),
+  );
+}
+
 function normalizeIoExtensions(config: IoExtensions, baseDir: string) {
   const defaultProfiles = {
     backlog: {
@@ -345,12 +381,13 @@ function normalizeIoExtensions(config: IoExtensions, baseDir: string) {
       },
     },
     issues: normalizeIssueRouting(config.issues),
-  } satisfies Pick<WorkflowConfigFields, "context" | "issues">;
+    modules: normalizeModules(config.modules, baseDir),
+  } satisfies Pick<WorkflowConfigFields, "context" | "issues" | "modules">;
 }
 
 function normalizeLoadedIoConfig(
   config: NormalizedIoConfig,
-  extensions: Pick<WorkflowConfigFields, "context" | "issues">,
+  extensions: Pick<WorkflowConfigFields, "context" | "issues" | "modules">,
 ): WorkflowConfigFields {
   return {
     agent: {
@@ -376,6 +413,7 @@ function normalizeLoadedIoConfig(
       timeoutMs: config.hooks.timeoutMs,
     },
     issues: extensions.issues,
+    modules: extensions.modules,
     polling: {
       intervalMs: config.polling.intervalMs,
     },
@@ -435,6 +473,7 @@ function normalizeWorkflowFrontMatter(
       timeoutMs: frontMatter.hooks.timeout_ms,
     },
     issues: DEFAULT_ISSUE_ROUTING,
+    modules: {},
     polling: {
       intervalMs: frontMatter.polling.interval_ms,
     },
@@ -488,7 +527,7 @@ async function loadRawIoConfig(path: string) {
 
 async function loadIoExtensions(
   configPath: string,
-): Promise<ValidationResult<Pick<WorkflowConfigFields, "context" | "issues">>> {
+): Promise<ValidationResult<Pick<WorkflowConfigFields, "context" | "issues" | "modules">>> {
   try {
     const rawConfig = await loadRawIoConfig(configPath);
     if (!isRecord(rawConfig)) {

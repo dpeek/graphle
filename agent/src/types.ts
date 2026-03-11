@@ -90,6 +90,13 @@ export interface IssueRoutingSelection {
   profile: string;
 }
 
+export interface WorkflowModule {
+  allowedSharedPaths: string[];
+  docs: string[];
+  id: string;
+  path: string;
+}
+
 export interface WorkflowContextProfile {
   include: string[];
   includeEntrypoint: boolean;
@@ -127,6 +134,7 @@ export interface Workflow {
   entrypoint: WorkflowEntrypoint;
   hooks: HookConfig;
   issues: IssueRoutingConfig;
+  modules: Record<string, WorkflowModule>;
   polling: PollingConfig;
   entrypointContent: string;
   tracker: TrackerConfig;

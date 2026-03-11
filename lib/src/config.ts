@@ -82,6 +82,47 @@ export interface IoPollingConfigInput {
   intervalMs?: number;
 }
 
+export type IoAgentRole = "backlog" | "execute";
+
+export interface IoContextProfileInput {
+  include?: string[];
+  includeEntrypoint?: boolean;
+}
+
+export interface IoContextConfigInput {
+  docs?: Record<string, string>;
+  entrypoint?: string;
+  overrides?: Record<string, string>;
+  profiles?: Record<string, IoContextProfileInput>;
+}
+
+export interface IoIssueRoutingConditionInput {
+  hasChildren?: boolean;
+  hasParent?: boolean;
+  labelsAll?: StateListInput;
+  labelsAny?: StateListInput;
+  projectSlugIn?: StateListInput;
+  stateIn?: StateListInput;
+}
+
+export interface IoIssueRoutingRuleInput {
+  agent: IoAgentRole;
+  if: IoIssueRoutingConditionInput;
+  profile: string;
+}
+
+export interface IoIssuesConfigInput {
+  defaultAgent?: IoAgentRole;
+  defaultProfile?: string;
+  routing?: IoIssueRoutingRuleInput[];
+}
+
+export interface IoModuleConfigInput {
+  allowedSharedPaths?: string[];
+  docs?: string[];
+  path: string;
+}
+
 export interface IoTrackerConfigInput {
   activeStates?: StateListInput;
   apiKey?: StringInput;
@@ -100,8 +141,11 @@ export interface IoConfigInput extends Record<string, unknown> {
   agent?: IoAgentConfigInput;
   brews?: string[];
   codex?: IoCodexConfigInput;
+  context?: IoContextConfigInput;
   hooks?: IoHookConfigInput;
   install?: IoInstallConfigInput;
+  issues?: IoIssuesConfigInput;
+  modules?: Record<string, IoModuleConfigInput>;
   plugins?: Record<string, Record<string, unknown>>;
   polling?: IoPollingConfigInput;
   providers?: Record<string, Record<string, unknown>>;

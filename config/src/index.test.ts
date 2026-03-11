@@ -15,11 +15,16 @@ test("@io/config re-exports the repo root config", () => {
 test("@io/config exposes the repo context bundle and routing defaults", () => {
   expect(config.context?.entrypoint).toBe("./io.md");
   expect(config.context?.docs).toEqual({
-    "project.architecture": "./io/context/architecture.md",
-    "project.overview": "./io/context/project-overview.md",
-    "project.workflow-migration": "./io/context/workflow-migration.md",
+    "project.architecture": "./llm/topic/architecture.md",
+    "project.overview": "./llm/topic/project-overview.md",
+    "project.workflow-migration": "./llm/topic/workflow-migration.md",
   });
   expect(config.context?.profiles?.backlog?.include).toContain("project.workflow-migration");
+  expect(config.modules?.agent).toEqual({
+    allowedSharedPaths: ["./llm/topic"],
+    docs: ["./llm/topic/agent.md", "./agent/doc/stream-workflow.md"],
+    path: "./agent",
+  });
   expect(config.issues).toEqual({
     defaultAgent: "execute",
     defaultProfile: "execute",
@@ -36,5 +41,8 @@ test("@io/config exposes the repo context bundle and routing defaults", () => {
 
   for (const path of Object.values(config.context?.docs ?? {})) {
     expect(existsSync(resolve(repoRoot, path))).toBe(true);
+  }
+  for (const module of Object.values(config.modules ?? {})) {
+    expect(existsSync(resolve(repoRoot, module.path))).toBe(true);
   }
 });

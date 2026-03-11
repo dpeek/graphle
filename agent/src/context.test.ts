@@ -54,6 +54,7 @@ function createWorkflow(root: string, promptPath: string): Workflow {
       defaultProfile: "execute",
       routing: [],
     },
+    modules: {},
     polling: {
       intervalMs: 30_000,
     },
@@ -236,6 +237,64 @@ test("resolveIssueContext supports doc-id overrides and profile entrypoint opt-o
         path: undefined,
         source: "synthesized",
       },
+    ]);
+  } finally {
+    await rm(root, { force: true, recursive: true });
+  }
+});
+
+test("resolveIssueContext adds module docs and limits repo-path refs to module scope", async () => {
+  const root = await mkdtemp(resolve(tmpdir(), "context-"));
+  const promptPath = resolve(root, "io.md");
+  await mkdir(resolve(root, "agent", "doc"), { recursive: true });
+  await mkdir(resolve(root, "graph", "doc"), { recursive: true });
+  await mkdir(resolve(root, "llm", "topic"), { recursive: true });
+  await writeFile(promptPath, "LOCAL {{ selection.agent }} {{ selection.profile }}\n");
+  await writeFile(resolve(root, "agent", "doc", "module-default.md"), "MODULE DEFAULT DOC\n");
+  await writeFile(resolve(root, "agent", "doc", "linked.md"), "MODULE LINKED DOC\n");
+  await writeFile(resolve(root, "graph", "doc", "outside.md"), "OUTSIDE MODULE DOC\n");
+  await writeFile(resolve(root, "llm", "topic", "shared.md"), "SHARED DOC\n");
+
+  try {
+    const workflow = createWorkflow(root, promptPath);
+    workflow.modules = {
+      agent: {
+        allowedSharedPaths: [resolve(root, "llm", "topic")],
+        docs: ["./agent/doc/module-default.md"],
+        id: "agent",
+        path: resolve(root, "agent"),
+      },
+    };
+
+    const resolvedWithLabels = await resolveIssueContext({
+      baseSelection: { agent: "execute", profile: "execute" },
+      issue: {
+        ...createIssue(`Issue refs:
+
+- \`./agent/doc/linked.md\`
+- \`./llm/topic/shared.md\`
+- \`./graph/doc/outside.md\`
+`),
+        labels: ["io", "agent"],
+      },
+      repoRoot: root,
+      workflow,
+    });
+
+    expect(resolvedWithLabels.bundle.docs.map((doc) => doc.id)).toEqual([
+      "builtin:io.agent.execute.default",
+      "builtin:io.context.discovery",
+      "builtin:io.linear.status-updates",
+      "builtin:io.core.validation",
+      "builtin:io.core.git-safety",
+      "context.entrypoint",
+      "./agent/doc/module-default.md",
+      "./agent/doc/linked.md",
+      "./llm/topic/shared.md",
+      "issue.context",
+    ]);
+    expect(resolvedWithLabels.warnings).toEqual([
+      "Issue doc reference is outside module scope: ./graph/doc/outside.md",
     ]);
   } finally {
     await rm(root, { force: true, recursive: true });

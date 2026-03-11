@@ -1,5 +1,5 @@
 import { readFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import { isAbsolute, relative, resolve } from "node:path";
 
 import { parse as parseYaml } from "yaml";
 import z from "zod";
@@ -9,6 +9,7 @@ import {
   DEFAULT_EXECUTE_BUILTIN_DOC_IDS,
   resolveBuiltinDoc,
 } from "./builtins.js";
+import { resolveIssueModule } from "./issue-routing.js";
 import type {
   AgentIssue,
   AgentRole,
@@ -96,6 +97,11 @@ function isRepoPathDocReference(reference: string) {
 
 function usesLegacyWorkflowPrompt(workflow: Workflow) {
   return workflow.entrypoint.promptPath.endsWith(WORKFLOW_FILE);
+}
+
+function isPathWithinRoot(path: string, root: string) {
+  const value = relative(root, path);
+  return value === "" || (!value.startsWith("..") && !isAbsolute(value));
 }
 
 function getDefaultProfileInclude(agent: AgentRole) {
@@ -316,6 +322,25 @@ function resolveProfileInclude(workflow: Workflow, selection: IssueRoutingSelect
   };
 }
 
+function isAllowedModuleIssueDoc(
+  workflow: Workflow,
+  issue: AgentIssue,
+  repoRoot: string,
+  reference: string,
+) {
+  if (!isRepoPathDocReference(reference)) {
+    return true;
+  }
+  const module = resolveIssueModule(workflow.modules, issue);
+  if (!module) {
+    return true;
+  }
+  const absolutePath = resolve(repoRoot, stripPathFragment(reference));
+  return [module.path, ...module.allowedSharedPaths].some((root) =>
+    isPathWithinRoot(absolutePath, root),
+  );
+}
+
 export function renderContextBundle(bundle: ResolvedContextBundle) {
   return bundle.docs.map((doc) => `<!-- ${doc.label} -->\n${doc.content}`).join("\n\n");
 }
@@ -344,6 +369,7 @@ export async function resolveIssueContext(options: {
   const docs: PendingResolvedContextDoc[] = [];
   const seenDocIds = new Set<string>();
   const seenPaths = new Set<string>();
+  const module = resolveIssueModule(workflow.modules, issue);
   const issueForPrompt = {
     ...issue,
     description: descriptionWithoutHints,
@@ -375,11 +401,23 @@ export async function resolveIssueContext(options: {
     for (const doc of postEntrypointDocs) {
       appendDoc(docs, seenDocIds, seenPaths, doc);
     }
+
+    for (const reference of module?.docs ?? []) {
+      const doc = await resolveDocReference(workflow, repoRoot, reference);
+      if (!doc) {
+        throw new Error(`workflow_doc_missing:${reference}`);
+      }
+      appendDoc(docs, seenDocIds, seenPaths, doc);
+    }
   } else {
     appendDoc(docs, seenDocIds, seenPaths, createEntrypointDoc(workflow));
   }
 
   for (const reference of issueDocReferences) {
+    if (!isAllowedModuleIssueDoc(workflow, issue, repoRoot, reference)) {
+      warnings.push(`Issue doc reference is outside module scope: ${reference}`);
+      continue;
+    }
     try {
       const doc = await resolveDocReference(workflow, repoRoot, reference);
       if (!doc) {

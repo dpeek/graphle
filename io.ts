@@ -14,6 +14,7 @@ export default defineIoConfig({
     afterCreate: "bun install",
   },
   context: {
+    entrypoint: "./io.md",
     docs: {
       "project.architecture": "./io/topic/architecture.md",
       "project.overview": "./io/topic/project-overview.md",
@@ -42,6 +43,43 @@ export default defineIoConfig({
           "project.architecture",
         ],
       },
+    },
+  },
+  modules: {
+    agent: {
+      allowedSharedPaths: ["./llm/topic"],
+      docs: ["./llm/topic/agent.md", "./agent/doc/stream-workflow.md"],
+      path: "./agent",
+    },
+    app: {
+      allowedSharedPaths: ["./graph/doc", "./llm/topic"],
+      docs: ["./llm/topic/graph.md"],
+      path: "./app",
+    },
+    cli: {
+      allowedSharedPaths: ["./llm/topic"],
+      docs: ["./llm/topic/io-ts-config.md"],
+      path: "./cli",
+    },
+    config: {
+      allowedSharedPaths: ["./llm/topic"],
+      docs: ["./llm/topic/io-ts-config.md"],
+      path: "./config",
+    },
+    graph: {
+      allowedSharedPaths: ["./llm/topic"],
+      docs: ["./llm/topic/graph.md", "./graph/doc/overview.md"],
+      path: "./graph",
+    },
+    lib: {
+      allowedSharedPaths: ["./llm/topic"],
+      docs: ["./llm/topic/io-ts-config.md"],
+      path: "./lib",
+    },
+    tui: {
+      allowedSharedPaths: ["./agent/doc", "./llm/topic"],
+      docs: ["./llm/topic/agent-opentui.md"],
+      path: "./tui",
     },
   },
   install: {

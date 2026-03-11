@@ -3,10 +3,30 @@ import type {
   IssueRoutingConfig,
   IssueRoutingRule,
   IssueRoutingSelection,
+  WorkflowModule,
 } from "./types.js";
 
 function normalizeRoutingValue(value: string) {
   return value.trim().toLowerCase();
+}
+
+export function resolveIssueModule(
+  modules: Record<string, WorkflowModule>,
+  issue: Pick<AgentIssue, "labels">,
+) {
+  const issueLabels = new Set(issue.labels.map(normalizeRoutingValue));
+  for (const module of Object.values(modules)) {
+    if (issueLabels.has(module.id)) {
+      return module;
+    }
+  }
+  return undefined;
+}
+
+function isManagedParentIssue(issue: AgentIssue, modules: Record<string, WorkflowModule>) {
+  return !issue.hasParent && issue.labels.map(normalizeRoutingValue).includes("io")
+    ? Boolean(resolveIssueModule(modules, issue))
+    : false;
 }
 
 export function matchesIssueRoutingRule(issue: AgentIssue, rule: IssueRoutingRule) {
@@ -40,6 +60,7 @@ export function matchesIssueRoutingRule(issue: AgentIssue, rule: IssueRoutingRul
 export function resolveIssueRouting(
   config: IssueRoutingConfig,
   issue: AgentIssue,
+  modules: Record<string, WorkflowModule> = {},
 ): IssueRoutingSelection {
   for (const rule of config.routing) {
     if (matchesIssueRoutingRule(issue, rule)) {
@@ -48,6 +69,12 @@ export function resolveIssueRouting(
         profile: rule.profile,
       };
     }
+  }
+  if (isManagedParentIssue(issue, modules)) {
+    return {
+      agent: "backlog",
+      profile: "backlog",
+    };
   }
   return {
     agent: config.defaultAgent,

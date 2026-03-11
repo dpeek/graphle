@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 
 import { DEFAULT_EXECUTE_BUILTIN_DOC_IDS } from "./builtins.js";
+import { resolveIssueRouting } from "./issue-routing.js";
 import { loadWorkflowFile, parseWorkflow, renderPrompt } from "./workflow.js";
 
 async function mkdtempInRepo(prefix: string) {
@@ -507,6 +508,80 @@ test("loadWorkflowFile parses issue routing defaults and normalized rules from i
           profile: "backlog",
         },
       ],
+    });
+  } finally {
+    await rm(root, { force: true, recursive: true });
+  }
+});
+
+test("loadWorkflowFile normalizes modules and routes managed parents from labels", async () => {
+  const root = await mkdtemp(resolve(tmpdir(), "workflow-"));
+
+  await mkdir(resolve(root, "agent", "doc"), { recursive: true });
+  await mkdir(resolve(root, "llm", "topic"), { recursive: true });
+  await writeFile(
+    resolve(root, "io.json"),
+    JSON.stringify(
+      {
+        modules: {
+          agent: {
+            allowedSharedPaths: ["./llm/topic"],
+            docs: ["./agent/doc/stream-workflow.md"],
+            path: "./agent",
+          },
+        },
+        tracker: {
+          apiKey: "$LINEAR_API_KEY",
+          kind: "linear",
+        },
+        workspace: {
+          root: "./workspace",
+        },
+      },
+      null,
+      2,
+    ),
+  );
+  await writeFile(resolve(root, "io.md"), "IO {{ issue.identifier }}\n");
+
+  try {
+    const result = await loadWorkflowFile(undefined, root);
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+
+    expect(result.value.modules).toEqual({
+      agent: {
+        allowedSharedPaths: [resolve(root, "llm", "topic")],
+        docs: ["./agent/doc/stream-workflow.md"],
+        id: "agent",
+        path: resolve(root, "agent"),
+      },
+    });
+    expect(
+      resolveIssueRouting(
+        result.value.issues,
+        {
+          blockedBy: [],
+          createdAt: "2024-01-01T00:00:00.000Z",
+          description: "",
+          hasChildren: true,
+          hasParent: false,
+          id: "1",
+          identifier: "OPE-124",
+          labels: ["io", "agent"],
+          priority: 2,
+          projectSlug: "io",
+          state: "Todo",
+          title: "Managed parent",
+          updatedAt: "2024-01-01T00:00:00.000Z",
+        },
+        result.value.modules,
+      ),
+    ).toEqual({
+      agent: "backlog",
+      profile: "backlog",
     });
   } finally {
     await rm(root, { force: true, recursive: true });

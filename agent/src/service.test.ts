@@ -341,6 +341,33 @@ test("resolveIssueRouting uses repo defaults and first matching rule precedence"
   });
 });
 
+test("resolveIssueRouting routes io-managed parent issues to backlog from module labels", () => {
+  expect(
+    resolveIssueRouting(
+      {
+        defaultAgent: "execute",
+        defaultProfile: "execute",
+        routing: [],
+      },
+      createIssue({
+        hasChildren: true,
+        labels: ["io", "agent"],
+      }),
+      {
+        agent: {
+          allowedSharedPaths: [],
+          docs: [],
+          id: "agent",
+          path: "/tmp/agent",
+        },
+      },
+    ),
+  ).toEqual({
+    agent: "backlog",
+    profile: "backlog",
+  });
+});
+
 test("AgentService moves standalone issues to In Review after success", async () => {
   const root = await mkdtemp(resolve(tmpdir(), "agent-service-"));
   const workspacePath = resolve(root, "workspace", "workers", "OPE-57", "repo");
