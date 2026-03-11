@@ -629,6 +629,258 @@ test("buildAgentTuiRootComponentModel keeps failed Linear writes visible", () =>
   expect(content).not.toContain("Tool: linear.save_issue [failed]");
 });
 
+test("buildAgentTuiRootComponentModel keeps live transcript slices readable in replayable snapshots", () => {
+  const store = createAgentTuiStore();
+  const worker = createWorkerSession();
+
+  store.observe({
+    phase: "started",
+    sequence: 1,
+    session: worker,
+    timestamp: "2026-03-10T02:09:40.000Z",
+    type: "session",
+  });
+  store.observe({
+    method: "item/started",
+    params: {
+      item: {
+        commandActions: [{ command: "git diff --stat" }],
+        id: "cmd-1",
+        type: "commandExecution",
+      },
+    },
+    sequence: 2,
+    session: worker,
+    timestamp: "2026-03-10T02:09:41.000Z",
+    type: "codex-notification",
+  });
+  store.observe({
+    method: "item/commandExecution/outputDelta",
+    params: {
+      delta: "agent/src/runner/codex.ts | 4 ++--\ntui/src/tui.test.ts | 8 ++++++--\n",
+      itemId: "cmd-1",
+    },
+    sequence: 3,
+    session: worker,
+    timestamp: "2026-03-10T02:09:42.000Z",
+    type: "codex-notification",
+  });
+  store.observe({
+    method: "item/started",
+    params: {
+      item: {
+        id: "reason-2",
+        type: "reasoning",
+      },
+    },
+    sequence: 4,
+    session: worker,
+    timestamp: "2026-03-10T02:09:43.000Z",
+    type: "codex-notification",
+  });
+  store.observe({
+    method: "item/reasoning/summaryTextDelta",
+    params: {
+      delta: "Checking transcript seams",
+      itemId: "reason-2",
+      summaryIndex: 0,
+    },
+    sequence: 5,
+    session: worker,
+    timestamp: "2026-03-10T02:09:44.000Z",
+    type: "codex-notification",
+  });
+  store.observe({
+    method: "item/reasoning/textDelta",
+    params: {
+      contentIndex: 0,
+      delta: "Keeping replay readable",
+      itemId: "reason-2",
+    },
+    sequence: 6,
+    session: worker,
+    timestamp: "2026-03-10T02:09:45.000Z",
+    type: "codex-notification",
+  });
+  store.observe({
+    method: "item/started",
+    params: {
+      item: {
+        arguments: {
+          id: "OPE-68",
+          state: "In Progress",
+          title: "Run plan",
+        },
+        id: "tool-4",
+        server: "linear",
+        tool: "save_issue",
+        type: "mcpToolCall",
+      },
+    },
+    sequence: 7,
+    session: worker,
+    timestamp: "2026-03-10T02:09:46.000Z",
+    type: "codex-notification",
+  });
+  store.observe({
+    method: "item/started",
+    params: {
+      item: {
+        arguments: {
+          mode: "helper",
+          task: "summarize",
+        },
+        id: "tool-5",
+        server: "spawned",
+        tool: "run",
+        type: "mcpToolCall",
+      },
+    },
+    sequence: 8,
+    session: worker,
+    timestamp: "2026-03-10T02:09:47.000Z",
+    type: "codex-notification",
+  });
+
+  const liveContent =
+    buildAgentTuiRootComponentModel(store.getSnapshot(), {
+      animationFrame: 1,
+      selectedColumnId: worker.id,
+    }).columns.find((column) => column.id === worker.id)?.content ?? "";
+
+  expect(liveContent).toContain("$ git diff --stat");
+  expect(liveContent).toContain("output:");
+  expect(liveContent).toContain("  agent/src/runner/codex.ts | 4 ++--");
+  expect(liveContent).toContain("Reasoning [/]");
+  expect(liveContent).toContain("Checking transcript seams");
+  expect(liveContent).toContain("Keeping replay readable");
+  expect(liveContent).toContain("Tool: linear.save_issue [running]");
+  expect(liveContent).toContain("Tool: spawned.run [running]");
+
+  store.observe({
+    method: "item/completed",
+    params: {
+      item: {
+        aggregatedOutput: "agent/src/runner/codex.ts | 4 ++--\ntui/src/tui.test.ts | 8 ++++++--\n",
+        exitCode: 1,
+        id: "cmd-1",
+        status: "failed",
+        type: "commandExecution",
+      },
+    },
+    sequence: 9,
+    session: worker,
+    timestamp: "2026-03-10T02:09:48.000Z",
+    type: "codex-notification",
+  });
+  store.observe({
+    method: "item/completed",
+    params: {
+      item: {
+        arguments: {
+          id: "OPE-68",
+          state: "In Progress",
+          title: "Run plan",
+        },
+        id: "tool-4",
+        result: {
+          structuredContent: {
+            issue: {
+              identifier: "OPE-68",
+              title: "Run plan",
+              url: "https://linear.app/io/issue/OPE-68",
+            },
+          },
+        },
+        server: "linear",
+        tool: "save_issue",
+        type: "mcpToolCall",
+      },
+    },
+    sequence: 10,
+    session: worker,
+    timestamp: "2026-03-10T02:09:49.000Z",
+    type: "codex-notification",
+  });
+  store.observe({
+    method: "item/completed",
+    params: {
+      item: {
+        content: ["Keeping replay readable", "Retaining fallback output"],
+        id: "reason-2",
+        summary: ["Checking transcript seams"],
+        type: "reasoning",
+      },
+    },
+    sequence: 11,
+    session: worker,
+    timestamp: "2026-03-10T02:09:50.000Z",
+    type: "codex-notification",
+  });
+  store.observe({
+    method: "item/completed",
+    params: {
+      item: {
+        arguments: {
+          mode: "helper",
+          task: "summarize",
+        },
+        error: { message: "permission denied" },
+        id: "tool-5",
+        server: "spawned",
+        tool: "run",
+        type: "mcpToolCall",
+      },
+    },
+    sequence: 12,
+    session: worker,
+    timestamp: "2026-03-10T02:09:51.000Z",
+    type: "codex-notification",
+  });
+  store.observe({
+    encoding: "text",
+    line: "retained stderr line",
+    sequence: 13,
+    session: worker,
+    stream: "stderr",
+    timestamp: "2026-03-10T02:09:52.000Z",
+    type: "raw-line",
+  });
+
+  const snapshot = store.getSnapshot();
+  const snapshotColumn = snapshot.columns.find((column) => column.session.id === worker.id);
+  const replaySnapshot = JSON.parse(JSON.stringify(snapshot));
+  const replayContent =
+    buildAgentTuiRootComponentModel(replaySnapshot, {
+      selectedColumnId: worker.id,
+    }).columns.find((column) => column.id === worker.id)?.content ?? "";
+
+  expect(snapshotColumn?.blocks.map((entry) => entry.kind)).toEqual([
+    "lifecycle",
+    "command",
+    "reasoning",
+    "tool",
+    "tool",
+    "raw",
+  ]);
+  expect(replayContent).toContain("$ git diff --stat");
+  expect(replayContent).toContain("Command failed (exit 1)");
+  expect(replayContent).toContain("Linear issue updated: OPE-68");
+  expect(replayContent).toContain("  issue: OPE-68");
+  expect(replayContent).toContain("  title: Run plan");
+  expect(replayContent).toContain("  state: In Progress");
+  expect(replayContent).toContain("  url: https://linear.app/io/issue/OPE-68");
+  expect(replayContent).toContain("Reasoning [done]");
+  expect(replayContent).toContain("Retaining fallback output");
+  expect(replayContent).toContain("Tool: spawned.run [failed]");
+  expect(replayContent).toContain("  mode: helper");
+  expect(replayContent).toContain("  task: summarize");
+  expect(replayContent).toContain("error:");
+  expect(replayContent).toContain("  permission denied");
+  expect(replayContent).toContain("stderr: retained stderr line");
+  expect(replayContent).not.toContain("Tool: linear.save_issue");
+});
+
 test("createAgentTui supports keyboard column navigation and content scrolling", async () => {
   const { captureCharFrame, mockInput, renderOnce, renderer } = await createTestRenderer({
     height: 18,
