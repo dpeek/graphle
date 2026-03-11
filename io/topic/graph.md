@@ -18,82 +18,63 @@ application surface for IO.
 
 ## Current Focus
 
-The main priorities in this stream are:
+The main priorities in this stream are now the concrete follow-on slices after
+the landed validation lifecycle and total-snapshot sync contract.
 
-### 1. Finalize the new type and field APIs
+### 1. Define the canonical write stream
 
-The migration to the new type-module and field-authoring model should become the
-default, not an optional side path.
+We have typed local mutation plus authoritative total replace, but no durable
+per-mutation wire shape between them.
+
+The next work should define:
+
+- the transaction envelope emitted by typed create/update/delete and
+  predicate-ref edits
+- the version/cursor metadata needed for authoritative ack or rejection
+- the pending-write boundary after local validation and before remote
+  confirmation
+
+### 2. Add authoritative push/ack reconciliation
+
+Once local writes have a stable transaction shape, the next slice is a minimal
+server-authoritative read-write loop.
 
 That means:
 
-- finish moving remaining built-in types and fields to the new APIs
-- reduce compatibility seams
-- make the authoring model clear enough that new work naturally uses it
+- clients push validated local transactions instead of saving the whole graph
+- the server can accept, reject, or rewrite a transaction explicitly
+- the client can reconcile or rebase pending local writes without replacing the
+  entire local graph after every edit
 
-### 2. Harden the validation lifecycle and built-in types
+### 3. Move normal sync traffic from snapshots to tx streams
 
-The first durable validation model is now landed.
+Full snapshots should remain the bootstrap and recovery path, not the steady-
+state mutation path.
 
-That contract is:
+The follow-on read work is:
 
-- reusable value semantics live with scalar and enum definitions
-- predicate-specific rules live with field definitions
-- runtime graph invariants stay centralized in the client/store validation path
-- local create/update/delete plus typed predicate mutations all preflight before
-  touching the real store
-- authoritative total-sync payloads validate at the apply boundary before local
-  replacement
-- callers, explorer surfaces, and future sync flows all consume the same
-  structured validation result shape
+- pull transactions or patches after a cursor
+- keep predicate-slot subscriptions and typed reads stable while the delivery
+  model changes under them
+- let partial or query-scoped sync build on the same transaction stream later
+
+The other graph workstreams stay important, but they should follow this sync
+ordering:
+
+- validation and built-in type work should support the same local-write and
+  authoritative-reconcile result surface
+- the typed graph API should stay simple while gaining push/reconcile behavior
+- explorer work should expose transaction state, pending writes, and
+  reconciliation outcomes once they exist
 
 Read:
 
 - `graph/doc/validation.md`
 - `graph/doc/sync.md`
+- `graph/doc/big-picture.md`
 - `graph/src/graph/client.ts`
 - `graph/src/graph/sync.ts`
-
-Follow-on work in this area should build on that shared lifecycle rather than
-adding new ad hoc checks. The main remaining work is richer built-in scalar and
-field helpers plus future async/server-only validation layers on top of the
-same result surface.
-
-### 3. Define the simple user-facing graph API
-
-The client API should feel dead simple:
-
-- get a typed client for the graph
-- issue typed queries
-- receive promises that resolve to the exact requested shape
-
-This is the beginning of the real data API, not just UI bindings.
-
-### 4. Start the sync model
-
-We should begin with a simple total-sync story, but design it in a way that can
-grow into partial and incremental sync later.
-
-The important questions are:
-
-- what the client contract looks like for initial sync
-- how query results and completeness are represented
-- how local subscriptions and sync delivery fit together
-- how we evolve from total sync to partial sync without replacing the whole API
-
-### 5. Keep expanding the explorer
-
-The explorer should become the main graph devtool.
-
-It should make it possible to inspect and edit:
-
-- graph data
-- schema definitions
-- type and predicate metadata
-- eventually query and sync state
-
-The goal is visibility and editability across the whole model, not just
-entities.
+- `app/src/graph/runtime.ts`
 
 ## Where To Look
 

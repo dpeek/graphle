@@ -127,3 +127,59 @@ What does change later is where completeness is tracked. With whole-graph total
 sync, completeness is one global state value. With partial sync, completeness
 must become scope-aware and query-aware, but the same metadata words and store
 update path still apply.
+
+## Next Concrete Work Areas
+
+The next sync slice should focus on read-write synchronization, not on making
+the total snapshot contract more elaborate.
+
+### 1. Canonical transaction envelope for client writes
+
+The first missing primitive is a durable write payload that can move through the
+same lifecycle on client and server.
+
+That slice should:
+
+- define the canonical mutation/transaction envelope produced by local typed
+  create/update/delete and predicate-ref helpers
+- include enough identity/version metadata to support authoritative ack or
+  rejection without diffing whole snapshots
+- keep local optimistic validation exactly where it already lives today, before
+  the transaction is queued or sent
+
+The goal is to stop treating "save the whole graph again" as the only durable
+write shape.
+
+### 2. Authoritative push/ack reconciliation
+
+Once local writes have a stable transaction shape, the next slice is a minimal
+read-write loop with server authority.
+
+That slice should:
+
+- add a push path for validated local transactions beside the existing pull path
+- define how the server acknowledges, rejects, or rewrites a pushed
+  transaction
+- rebase or clear pending local writes using that authoritative response
+  instead of assuming total-snapshot replacement after every client edit
+
+The important boundary is that sync still should not invent a second mutation
+API. Typed local mutations remain the caller entry point; sync owns transport
+and reconciliation.
+
+### 3. Incremental pull and live tx delivery
+
+After the push/ack loop is real, sync can stop relying on full-graph refresh as
+the normal read path.
+
+That slice should:
+
+- let clients pull transactions or patches after a cursor instead of only a
+  complete snapshot
+- keep total snapshot apply as the bootstrap and recovery path
+- preserve the existing typed-read and predicate-slot subscription surface while
+  changing only how new authoritative state arrives
+
+This is the point where "graph stream" becomes literal: normal sync traffic is
+an ordered transaction stream, while total snapshots become a fallback for
+bootstrap, reset, or resubscribe flows.
