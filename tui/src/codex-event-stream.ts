@@ -7,6 +7,7 @@ import type {
   AgentTuiStatusSummary,
   AgentTuiBlock,
 } from "./transcript.js";
+import { summarizeLinearToolCall } from "./linear-tool-format.js";
 
 type CodexBlockAdapter = {
   appendEntry: (entry: AgentTuiBlock) => void;
@@ -62,6 +63,52 @@ function getCodexOutputLines(text: string | undefined) {
   }
   const normalized = text.replace(/\r\n/g, "\n").replace(/\n$/, "");
   return normalized ? normalized.split("\n") : [];
+}
+
+function getCodexToolResultData(result: unknown) {
+  const record = asRecord(result);
+  if (!record) {
+    return undefined;
+  }
+
+  if (record.structuredContent !== undefined && record.structuredContent !== null) {
+    return record.structuredContent;
+  }
+
+  const content = Array.isArray(record.content) ? record.content : [];
+  for (const entry of content) {
+    const contentRecord = asRecord(entry);
+    if (!contentRecord) {
+      continue;
+    }
+    if (contentRecord.type === "text" && typeof contentRecord.text === "string") {
+      try {
+        return JSON.parse(contentRecord.text);
+      } catch {
+        continue;
+      }
+    }
+    return contentRecord;
+  }
+
+  return undefined;
+}
+
+function getLinearToolSummaryText(options: {
+  argumentsData?: unknown;
+  resultData?: unknown;
+  server?: string;
+  status: "completed" | "failed" | "running";
+  tool?: string;
+}) {
+  if (options.server !== "linear") {
+    return undefined;
+  }
+  return summarizeLinearToolCall(options)?.summaryText;
+}
+
+function getLinearFailureText(summaryText: string | undefined, message: string) {
+  return summaryText ? `${summaryText} (${message})` : `Tool failed: ${message}`;
 }
 
 function getCodexApprovalText(params: Record<string, unknown>) {
@@ -137,14 +184,20 @@ function toDisplayStatusEventsForCodexNotification(
         case "mcpToolCall": {
           const server = asString(item?.server);
           const tool = asString(item?.tool);
+          const summaryText = getLinearToolSummaryText({
+            argumentsData: item?.arguments,
+            server,
+            status: "running",
+            tool,
+          });
           return server && tool
             ? [
                 {
                   ...base,
                   code: "tool",
-                  data: { arguments: item?.arguments, server, tool },
+                  data: summaryText ? undefined : { arguments: item?.arguments, server, tool },
                   format: "line",
-                  text: getCodexToolText(server, tool, item?.arguments),
+                  text: summaryText ?? getCodexToolText(server, tool, item?.arguments),
                 },
               ]
             : [];
@@ -201,16 +254,39 @@ function toDisplayStatusEventsForCodexNotification(
         case "mcpToolCall": {
           const error = asRecord(item?.error);
           const message = asString(error?.message);
-          return message
-            ? [
-                {
-                  ...base,
-                  code: "tool-failed",
-                  data: { message },
-                  format: "line",
-                },
-              ]
-            : [];
+          const server = asString(item?.server);
+          const tool = asString(item?.tool);
+          const resultData = getCodexToolResultData(item?.result);
+          const summaryText = getLinearToolSummaryText({
+            argumentsData: item?.arguments,
+            resultData,
+            server,
+            status: message ? "failed" : "completed",
+            tool,
+          });
+
+          if (message) {
+            return [
+              {
+                ...base,
+                code: "tool-failed",
+                data: summaryText ? undefined : { message },
+                format: "line",
+                text: getLinearFailureText(summaryText, message),
+              },
+            ];
+          }
+          if (summaryText) {
+            return [
+              {
+                ...base,
+                code: "tool",
+                format: "line",
+                text: summaryText,
+              },
+            ];
+          }
+          return [];
         }
         default:
           return [];
@@ -476,6 +552,7 @@ function appendCodexToolCompletionEntry(
   const tool = asString(item?.tool) ?? "call";
   const errorText = asString(asRecord(item?.error)?.message);
   const result = asRecord(item?.result);
+  const resultData = getCodexToolResultData(result);
   const resultContent = Array.isArray(result?.content) ? result.content : [];
   const resultText = asString(resultContent.length ? asRecord(resultContent[0])?.text : undefined);
 
@@ -483,6 +560,7 @@ function appendCodexToolCompletionEntry(
     existing.argumentsData = item?.arguments ?? existing.argumentsData;
     existing.count += 1;
     existing.errorText = errorText ?? existing.errorText;
+    existing.resultData = resultData ?? existing.resultData;
     existing.resultText = resultText ?? existing.resultText;
     existing.sequenceEnd = event.sequence;
     existing.status = errorText ? "failed" : "completed";
@@ -498,6 +576,7 @@ function appendCodexToolCompletionEntry(
     errorText,
     itemId,
     kind: "tool",
+    resultData,
     resultText,
     server,
     sequenceEnd: event.sequence,
@@ -685,7 +764,14 @@ export function formatCodexNotificationSummary(event: AgentCodexNotificationEven
         case "commandExecution":
           return `$ ${getCodexCommandText(item)}`;
         case "mcpToolCall":
-          return getCodexToolText(asString(item?.server), asString(item?.tool), item?.arguments);
+          return (
+            getLinearToolSummaryText({
+              argumentsData: item?.arguments,
+              server: asString(item?.server),
+              status: "running",
+              tool: asString(item?.tool),
+            }) ?? getCodexToolText(asString(item?.server), asString(item?.tool), item?.arguments)
+          );
         case "plan":
           return "Plan started";
         case "reasoning":
@@ -707,10 +793,17 @@ export function formatCodexNotificationSummary(event: AgentCodexNotificationEven
         }
         case "mcpToolCall": {
           const errorMessage = asString(asRecord(item?.error)?.message);
+          const summaryText = getLinearToolSummaryText({
+            argumentsData: item?.arguments,
+            resultData: getCodexToolResultData(item?.result),
+            server: asString(item?.server),
+            status: errorMessage ? "failed" : "completed",
+            tool: asString(item?.tool),
+          });
           if (errorMessage) {
-            return `Tool failed: ${errorMessage}`;
+            return getLinearFailureText(summaryText, errorMessage);
           }
-          return getCodexToolText(asString(item?.server), asString(item?.tool), item?.arguments);
+          return summaryText ?? getCodexToolText(asString(item?.server), asString(item?.tool), item?.arguments);
         }
         case "plan":
           return asString(item?.text) ? `Plan: ${truncateSummary(asString(item?.text) ?? "")}` : "Plan updated";
@@ -821,11 +914,17 @@ export function createStatusSummaryFromCodexNotification(
         case "mcpToolCall": {
           const server = asString(item?.server);
           const tool = asString(item?.tool);
-          const text = getCodexToolText(server, tool, item?.arguments);
+          const text =
+            getLinearToolSummaryText({
+              argumentsData: item?.arguments,
+              server,
+              status: "running",
+              tool,
+            }) ?? getCodexToolText(server, tool, item?.arguments);
           return server && tool
             ? {
                 code: "tool",
-                data: { arguments: item?.arguments, server, tool },
+                data: text?.startsWith("Linear ") ? undefined : { arguments: item?.arguments, server, tool },
                 format: "line",
                 itemId: asString(item?.id),
                 text,
@@ -852,13 +951,29 @@ export function createStatusSummaryFromCodexNotification(
       }
       if (asString(item?.type) === "mcpToolCall") {
         const error = asString(asRecord(item?.error)?.message);
+        const summaryText = getLinearToolSummaryText({
+          argumentsData: item?.arguments,
+          resultData: getCodexToolResultData(item?.result),
+          server: asString(item?.server),
+          status: error ? "failed" : "completed",
+          tool: asString(item?.tool),
+        });
         if (error) {
           return {
             code: "tool-failed",
-            data: { message: error },
+            data: summaryText ? undefined : { message: error },
             format: "line",
             itemId: asString(item?.id),
-            text: `Tool failed: ${error}`,
+            text: getLinearFailureText(summaryText, error),
+            timestamp: event.timestamp,
+          };
+        }
+        if (summaryText) {
+          return {
+            code: "tool",
+            format: "line",
+            itemId: asString(item?.id),
+            text: summaryText,
             timestamp: event.timestamp,
           };
         }

@@ -15,6 +15,7 @@ import {
   formatCodexNotificationSummary,
   renderCodexNotificationEvent as renderCodexNotificationEventImpl,
 } from "./codex-event-stream.js";
+import { summarizeLinearToolCall } from "./linear-tool-format.js";
 export { createStatusSummaryFromCodexNotification } from "./codex-event-stream.js";
 
 const DEFAULT_TRANSCRIPT_WAITING_MESSAGE = "Waiting for session transcript...";
@@ -83,6 +84,7 @@ export interface AgentTuiToolEntry extends AgentTuiBlockBase {
   errorText?: string;
   itemId?: string;
   kind: "tool";
+  resultData?: unknown;
   resultText?: string;
   server: string;
   status: "completed" | "failed" | "running";
@@ -776,19 +778,8 @@ function formatLinearToolArgumentLines(tool: string, record: Record<string, unkn
     create_attachment: ["issue", "filename", "title", "subtitle"],
     create_document: ["issue", "project", "title", "icon"],
     save_comment: ["issueId", "id", "parentId", "body"],
-    save_issue: [
-      "id",
-      "title",
-      "state",
-      "priority",
-      "project",
-      "assignee",
-      "labels",
-      "dueDate",
-      "parentId",
-      "description",
-    ],
-    update_document: ["id", "project", "title", "icon", "content"],
+    save_issue: ["id", "title", "state", "priority", "project", "assignee", "labels", "dueDate"],
+    update_document: ["id", "project", "title", "icon"],
   };
 
   return formatRecordSummaryLines(record, preferredKeysByTool[tool] ?? []);
@@ -855,6 +846,7 @@ function formatToolBlock(options: {
   argumentsData?: unknown;
   argumentsText?: string;
   errorText?: string;
+  resultData?: unknown;
   server?: string;
   status?: "completed" | "failed" | "running";
   tool?: string;
@@ -863,6 +855,26 @@ function formatToolBlock(options: {
   const tool = options.tool;
   if (!server || !tool) {
     return options.errorText ? [`Tool failed: ${options.errorText}`] : [];
+  }
+
+  if (server === "linear" && options.status && options.status !== "running") {
+    const summary = summarizeLinearToolCall({
+      argumentsData: options.argumentsData,
+      resultData: options.resultData,
+      status: options.status,
+      tool,
+    });
+    if (summary) {
+      const lines = [summary.summaryText];
+      if (summary.detailLines.length) {
+        lines.push(...indentBlockLines(summary.detailLines));
+      }
+      if (options.errorText) {
+        lines.push("error:");
+        lines.push(...indentBlockLines(normalizeBlockLines(options.errorText)));
+      }
+      return lines;
+    }
   }
 
   const statusSuffix =

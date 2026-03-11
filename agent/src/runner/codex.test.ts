@@ -189,8 +189,49 @@ test("renders approval prompts and tool failures", () => {
   expect(output).toBe(
     "=== worker-1 OPE-41 Add predicate-slot subscriptions to graph runtime ===\n" +
       'Approval required: Approve app tool call?: The linear MCP server wants to run the tool "Save issue", which may modify or delete data. Allow this action?\n' +
-      'Tool: linear.save_issue {"id":"OPE-41","state":"In Progress"}\n' +
+      "Linear issue update: OPE-41\n" +
       "Tool failed: user cancelled MCP tool call\n",
+  );
+});
+
+test("renders successful Linear writes as readable summaries", () => {
+  const output = renderMessages([
+    {
+      method: "item/started",
+      params: {
+        item: {
+          arguments: { id: "OPE-41", state: "In Progress", title: "Run plan" },
+          server: "linear",
+          tool: "save_issue",
+          type: "mcpToolCall",
+        },
+      },
+    },
+    {
+      method: "item/completed",
+      params: {
+        item: {
+          arguments: { id: "OPE-41", state: "In Progress", title: "Run plan" },
+          result: {
+            structuredContent: {
+              issue: {
+                identifier: "OPE-41",
+                title: "Run plan",
+              },
+            },
+          },
+          server: "linear",
+          tool: "save_issue",
+          type: "mcpToolCall",
+        },
+      },
+    },
+  ]);
+
+  expect(output).toBe(
+    "=== worker-1 OPE-41 Add predicate-slot subscriptions to graph runtime ===\n" +
+      "Linear issue update: OPE-41\n" +
+      "Linear issue updated: OPE-41\n",
   );
 });
 

@@ -480,6 +480,155 @@ test("buildAgentTuiRootComponentModel formats tool calls and reasoning as struct
   expect(frameOne).toContain("Checking transcript formatting");
 });
 
+test("buildAgentTuiRootComponentModel highlights completed Linear writes", () => {
+  const store = createAgentTuiStore();
+  const worker = createWorkerSession();
+
+  store.observe({
+    phase: "started",
+    sequence: 1,
+    session: worker,
+    timestamp: "2026-03-10T02:09:00.000Z",
+    type: "session",
+  });
+  store.observe({
+    method: "item/started",
+    params: {
+      item: {
+        arguments: {
+          id: "OPE-68",
+          priority: 2,
+          state: "In Progress",
+          title: "Run plan",
+        },
+        id: "tool-2",
+        server: "linear",
+        tool: "save_issue",
+        type: "mcpToolCall",
+      },
+    },
+    sequence: 2,
+    session: worker,
+    timestamp: "2026-03-10T02:09:01.000Z",
+    type: "codex-notification",
+  });
+  store.observe({
+    method: "item/completed",
+    params: {
+      item: {
+        arguments: {
+          id: "OPE-68",
+          priority: 2,
+          state: "In Progress",
+          title: "Run plan",
+        },
+        id: "tool-2",
+        result: {
+          structuredContent: {
+            issue: {
+              identifier: "OPE-68",
+              title: "Run plan",
+              url: "https://linear.app/io/issue/OPE-68",
+            },
+          },
+        },
+        server: "linear",
+        status: "completed",
+        tool: "save_issue",
+        type: "mcpToolCall",
+      },
+    },
+    sequence: 3,
+    session: worker,
+    timestamp: "2026-03-10T02:09:02.000Z",
+    type: "codex-notification",
+  });
+
+  const snapshot = store.getSnapshot();
+  const renderedColumn =
+    buildAgentTuiRootComponentModel(snapshot, {
+      selectedColumnId: worker.id,
+    }).columns.find((column) => column.id === worker.id);
+  const snapshotColumn = snapshot.columns.find((column) => column.session.id === worker.id);
+  const content = renderedColumn?.content ?? "";
+
+  expect(content).toContain("Linear issue updated: OPE-68");
+  expect(content).toContain("  issue: OPE-68");
+  expect(content).toContain("  title: Run plan");
+  expect(content).toContain("  state: In Progress");
+  expect(content).toContain("  url: https://linear.app/io/issue/OPE-68");
+  expect(content).not.toContain("Tool: linear.save_issue");
+  expect(content).not.toContain("args:");
+  expect(snapshotColumn?.status?.text).toBe("Linear issue updated: OPE-68");
+  expect(snapshotColumn?.eventHistory.at(-1)?.summary).toBe(
+    "item/completed: Linear issue updated: OPE-68",
+  );
+});
+
+test("buildAgentTuiRootComponentModel keeps failed Linear writes visible", () => {
+  const store = createAgentTuiStore();
+  const worker = createWorkerSession();
+
+  store.observe({
+    phase: "started",
+    sequence: 1,
+    session: worker,
+    timestamp: "2026-03-10T02:09:30.000Z",
+    type: "session",
+  });
+  store.observe({
+    method: "item/started",
+    params: {
+      item: {
+        arguments: {
+          id: "OPE-68",
+          state: "In Progress",
+        },
+        id: "tool-3",
+        server: "linear",
+        tool: "save_issue",
+        type: "mcpToolCall",
+      },
+    },
+    sequence: 2,
+    session: worker,
+    timestamp: "2026-03-10T02:09:31.000Z",
+    type: "codex-notification",
+  });
+  store.observe({
+    method: "item/completed",
+    params: {
+      item: {
+        arguments: {
+          id: "OPE-68",
+          state: "In Progress",
+        },
+        error: { message: "user cancelled MCP tool call" },
+        id: "tool-3",
+        server: "linear",
+        status: "failed",
+        tool: "save_issue",
+        type: "mcpToolCall",
+      },
+    },
+    sequence: 3,
+    session: worker,
+    timestamp: "2026-03-10T02:09:32.000Z",
+    type: "codex-notification",
+  });
+
+  const content =
+    buildAgentTuiRootComponentModel(store.getSnapshot(), {
+      selectedColumnId: worker.id,
+    }).columns.find((column) => column.id === worker.id)?.content ?? "";
+
+  expect(content).toContain("Linear issue update failed: OPE-68");
+  expect(content).toContain("  state: In Progress");
+  expect(content).toContain("error:");
+  expect(content).toContain("  user cancelled MCP tool call");
+  expect(content).not.toContain("Tool: linear.save_issue [failed]");
+});
+
 test("createAgentTui supports keyboard column navigation and content scrolling", async () => {
   const { captureCharFrame, mockInput, renderOnce, renderer } = await createTestRenderer({
     height: 18,
