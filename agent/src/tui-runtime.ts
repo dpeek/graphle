@@ -1,8 +1,9 @@
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
-import { normalizeCodexSessionMessage } from "./runner/codex-events.js";
+import { toCodexNotificationEvent } from "./runner/codex-events.js";
 import type {
+  AgentCodexNotificationEvent,
   AgentRawLineEvent,
   AgentSessionEvent,
   AgentSessionIssueRef,
@@ -341,17 +342,11 @@ export class AgentTuiRetainedReader {
       const rawLine = this.#buildRawLineEvent(line);
       events.push(rawLine);
       try {
-        const message = JSON.parse(line) as Parameters<typeof normalizeCodexSessionMessage>[0];
-        const stamped = normalizeCodexSessionMessage(message).map((event) =>
-          this.#buildStatusFromNormalizedEvent(
-            event.code,
-            event.format,
-            event.data,
-            event.text,
-            event.itemId,
-          ),
-        );
-        events.push(...stamped);
+        const message = JSON.parse(line);
+        const codexEvent = toCodexNotificationEvent(message);
+        if (codexEvent) {
+          events.push(this.#buildCodexNotificationEvent(codexEvent.method, codexEvent.params));
+        }
       } catch {
         // Keep the raw stdout line even when the JSON payload is malformed.
       }
@@ -372,24 +367,18 @@ export class AgentTuiRetainedReader {
     };
   }
 
-  #buildStatusFromNormalizedEvent(
-    code: AgentStatusCode,
-    format: AgentStatusEvent["format"],
-    data?: Record<string, unknown>,
-    text?: string,
-    itemId?: string,
-  ): AgentStatusEvent {
+  #buildCodexNotificationEvent(
+    method: string,
+    params: Record<string, unknown>,
+  ): AgentCodexNotificationEvent {
     const sequence = this.#nextSyntheticSequence();
     return {
-      code,
-      data,
-      format,
-      itemId,
+      method,
+      params,
       sequence,
       session: this.#workerSession,
-      text,
       timestamp: toSyntheticTimestamp(this.#syntheticTimeBase, sequence),
-      type: "status",
+      type: "codex-notification",
     };
   }
 

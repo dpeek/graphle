@@ -13,7 +13,7 @@
       "name": "@io/agent",
       "version": "0.0.0",
       "dependencies": {
-        "@io/agent-tui": "workspace:*",
+        "@io/tui": "workspace:*",
         "@io/lib": "workspace:*",
         "@linear/sdk": "^76.0.0",
         "yaml": "^2.8.2",
@@ -28,8 +28,8 @@
         "oxlint": "^1.50.0",
       },
     },
-    "agent-tui": {
-      "name": "@io/agent-tui",
+    "tui": {
+      "name": "@io/tui",
       "version": "0.0.0",
       "dependencies": {
         "@opentui/core": "^0.1.87",
@@ -352,7 +352,7 @@
 
     "@io/agent": ["@io/agent@workspace:agent"],
 
-    "@io/agent-tui": ["@io/agent-tui@workspace:agent-tui"],
+    "@io/tui": ["@io/tui@workspace:tui"],
 
     "@io/cli": ["@io/cli@workspace:cli"],
 

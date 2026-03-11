@@ -27,16 +27,18 @@ import {
   isJsonRpcSuccessResponse,
   isServerNotificationMessage,
   isServerRequestMessage,
-  normalizeCodexSessionMessage,
   summarizeCodexMessage,
   summarizeCodexParams,
+  toCodexNotificationEvent,
   type CodexSessionMessage,
 } from "./codex-events.js";
 import {
   closeAgentSessionDisplayLine,
+  renderCodexNotificationEvent,
   createAgentSessionDisplayState,
   createAgentSessionEventBus,
   renderAgentStatusEvent,
+  type AgentCodexNotificationEventInit,
   type AgentSessionEventBus,
   type AgentSessionEventInit,
   type AgentSessionLifecycleEventInit,
@@ -48,7 +50,7 @@ import {
 import type { AgentIssue, CodexConfig, IssueRunResult, PreparedWorkspace } from "../types.js";
 
 export {
-  normalizeCodexSessionMessage,
+  toCodexNotificationEvent,
   type CodexSessionMessage,
 } from "./codex-events.js";
 
@@ -229,6 +231,7 @@ export function buildAutomaticUserInputResponse(
 }
 
 type RunnerSessionEvent =
+  | Omit<AgentCodexNotificationEventInit, "session">
   | Omit<AgentStatusEventInit, "session">
   | Omit<AgentRawLineEventInit, "session">
   | Omit<AgentSessionLifecycleEventInit, "session">;
@@ -288,6 +291,18 @@ async function createWorkspaceLogObserver(
 
       if (event.type === "status") {
         renderAgentStatusEvent({
+          event,
+          state: displayState,
+          writeDisplay: (text) => {
+            enqueueAppend(displayLogPath, text);
+            enqueueAppend(mainOutputPath, text);
+          },
+        });
+        return;
+      }
+
+      if (event.type === "codex-notification") {
+        renderCodexNotificationEvent({
           event,
           state: displayState,
           writeDisplay: (text) => {
@@ -407,8 +422,9 @@ export class CodexAppServerRunner {
             stream: "stdout",
             type: "raw-line",
           });
-          for (const event of normalizeCodexSessionMessage(message)) {
-            publish(event);
+          const codexEvent = toCodexNotificationEvent(message);
+          if (codexEvent) {
+            publish(codexEvent);
           }
           state.lastEvent = summarizeCodexMessage(message);
           if (

@@ -1,4 +1,5 @@
 import type {
+  AgentCodexNotificationEvent,
   AgentRawLineEvent,
   AgentSessionDisplayState,
   AgentSessionEvent,
@@ -9,13 +10,17 @@ import type {
   AgentStatusEvent,
   AgentStatusFormat,
 } from "./session-events.js";
+import {
+  appendCodexNotificationToBlocks,
+  formatCodexNotificationSummary,
+  renderCodexNotificationEvent as renderCodexNotificationEventImpl,
+} from "./codex-event-stream.js";
+export { createStatusSummaryFromCodexNotification } from "./codex-event-stream.js";
 
 const DEFAULT_TRANSCRIPT_WAITING_MESSAGE = "Waiting for session transcript...";
 
-type TranscriptRenderMode = "plain" | "raw" | "status";
-
-type TranscriptEntryTarget = {
-  transcriptEntries: AgentTuiTranscriptEntry[];
+type BlockTarget = {
+  blocks: AgentTuiBlock[];
 };
 
 export interface AgentTuiStatusSummary {
@@ -27,20 +32,20 @@ export interface AgentTuiStatusSummary {
   timestamp: string;
 }
 
-interface AgentTuiTranscriptEntryBase {
+interface AgentTuiBlockBase {
   count: number;
   sequenceEnd: number;
   sequenceStart: number;
   timestamp: string;
 }
 
-export interface AgentTuiLifecycleEntry extends AgentTuiTranscriptEntryBase {
+export interface AgentTuiLifecycleEntry extends AgentTuiBlockBase {
   kind: "lifecycle";
   phase: AgentSessionPhase;
   text: string;
 }
 
-export interface AgentTuiStatusEntry extends AgentTuiTranscriptEntryBase {
+export interface AgentTuiStatusEntry extends AgentTuiBlockBase {
   code: AgentStatusCode;
   data?: Record<string, unknown>;
   format: AgentStatusFormat;
@@ -49,37 +54,83 @@ export interface AgentTuiStatusEntry extends AgentTuiTranscriptEntryBase {
   text: string;
 }
 
-export interface AgentTuiAgentMessageEntry extends AgentTuiTranscriptEntryBase {
+export interface AgentTuiAgentMessageEntry extends AgentTuiBlockBase {
   itemId?: string;
   kind: "agent-message";
   segments: string[];
   text: string;
 }
 
-export interface AgentTuiCommandOutputEntry extends AgentTuiTranscriptEntryBase {
+export interface AgentTuiCommandOutputEntry extends AgentTuiBlockBase {
   kind: "command-output";
   lines: string[];
 }
 
-export interface AgentTuiRawEntry extends AgentTuiTranscriptEntryBase {
+export interface AgentTuiCommandEntry extends AgentTuiBlockBase {
+  command: string;
+  cwd?: string;
+  exitCode?: number;
+  itemId?: string;
+  kind: "command";
+  outputLines: string[];
+  status: "completed" | "failed" | "running";
+}
+
+export interface AgentTuiToolEntry extends AgentTuiBlockBase {
+  argumentsText?: string;
+  errorText?: string;
+  itemId?: string;
+  kind: "tool";
+  resultText?: string;
+  server: string;
+  status: "completed" | "failed" | "running";
+  tool: string;
+}
+
+export interface AgentTuiApprovalEntry extends AgentTuiBlockBase {
+  kind: "approval";
+  text: string;
+}
+
+export interface AgentTuiPlanEntry extends AgentTuiBlockBase {
+  itemId?: string;
+  kind: "plan";
+  status: "completed" | "streaming";
+  text: string;
+}
+
+export interface AgentTuiReasoningEntry extends AgentTuiBlockBase {
+  content: string[];
+  itemId?: string;
+  kind: "reasoning";
+  status: "completed" | "streaming";
+  summary: string[];
+}
+
+export interface AgentTuiRawEntry extends AgentTuiBlockBase {
   encoding: AgentRawLineEvent["encoding"];
   kind: "raw";
   lines: string[];
   stream: AgentRawLineEvent["stream"];
 }
 
-export interface AgentTuiMirrorEntry extends AgentTuiTranscriptEntryBase {
+export interface AgentTuiMirrorEntry extends AgentTuiBlockBase {
   kind: "mirror";
   text: string;
 }
 
-export type AgentTuiTranscriptEntry =
+export type AgentTuiBlock =
   | AgentTuiAgentMessageEntry
+  | AgentTuiApprovalEntry
+  | AgentTuiCommandEntry
   | AgentTuiCommandOutputEntry
   | AgentTuiLifecycleEntry
   | AgentTuiMirrorEntry
+  | AgentTuiPlanEntry
   | AgentTuiRawEntry
-  | AgentTuiStatusEntry;
+  | AgentTuiReasoningEntry
+  | AgentTuiStatusEntry
+  | AgentTuiToolEntry;
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
   if (!value || typeof value !== "object") {
@@ -247,6 +298,17 @@ export function formatStatusEventText(event: AgentStatusEvent) {
   }
 }
 
+export function renderCodexNotificationEvent(options: {
+  event: AgentCodexNotificationEvent;
+  state: AgentSessionDisplayState;
+  writeDisplay: (text: string) => void;
+}) {
+  renderCodexNotificationEventImpl({
+    ...options,
+    renderStatusEvent: renderAgentStatusEvent,
+  });
+}
+
 export function renderAgentStatusEvent(options: {
   event: AgentStatusEvent;
   state: AgentSessionDisplayState;
@@ -314,6 +376,17 @@ export function createAgentSessionStdoutObserver(): AgentSessionEventObserver {
       return;
     }
 
+    if (event.type === "codex-notification") {
+      renderCodexNotificationEvent({
+        event,
+        state: displayState,
+        writeDisplay: (text) => {
+          process.stdout.write(text);
+        },
+      });
+      return;
+    }
+
     if (event.stream === "stdout" && event.encoding !== "text") {
       return;
     }
@@ -335,39 +408,11 @@ export function createAgentSessionStdoutObserver(): AgentSessionEventObserver {
   };
 }
 
-function estimateTranscriptEntryChars(entry: AgentTuiTranscriptEntry) {
-  switch (entry.kind) {
-    case "lifecycle":
-    case "mirror":
-    case "status":
-      return entry.text.length + 1;
-    case "agent-message":
-      return entry.segments.reduce((total, segment) => total + segment.length + 1, 0);
-    case "command-output":
-      return entry.lines.reduce((total, line) => total + line.length + 1, 12);
-    case "raw":
-      return entry.lines.reduce((total, line) => total + line.length + 1, 20);
-  }
-}
-
-function trimTranscriptEntries(target: TranscriptEntryTarget, maxTranscriptChars: number) {
-  let totalChars = target.transcriptEntries.reduce(
-    (total, entry) => total + estimateTranscriptEntryChars(entry),
-    0,
-  );
-  while (totalChars > maxTranscriptChars && target.transcriptEntries.length) {
-    const removed = target.transcriptEntries.shift();
-    totalChars -= removed ? estimateTranscriptEntryChars(removed) : 0;
-  }
-}
-
-export function appendTranscriptEntry(
-  target: TranscriptEntryTarget,
-  entry: AgentTuiTranscriptEntry,
-  maxTranscriptChars: number,
+export function appendBlock(
+  target: BlockTarget,
+  entry: AgentTuiBlock,
 ) {
-  target.transcriptEntries.push(entry);
-  trimTranscriptEntries(target, maxTranscriptChars);
+  target.blocks.push(entry);
 }
 
 export function formatLifecycleText(
@@ -404,25 +449,23 @@ export function formatRawLineEvent(event: AgentRawLineEvent) {
 }
 
 function appendAgentMessageEntry(
-  target: TranscriptEntryTarget,
+  target: BlockTarget,
   event: AgentStatusEvent,
-  maxTranscriptChars: number,
 ) {
   const text = event.text ?? "";
   if (!text) {
     return;
   }
-  const lastEntry = target.transcriptEntries.at(-1);
+  const lastEntry = target.blocks.at(-1);
   if (lastEntry?.kind === "agent-message" && lastEntry.itemId === event.itemId) {
     lastEntry.count += 1;
     lastEntry.sequenceEnd = event.sequence;
     lastEntry.segments.push(text);
     lastEntry.text += text;
     lastEntry.timestamp = event.timestamp;
-    trimTranscriptEntries(target, maxTranscriptChars);
     return;
   }
-  appendTranscriptEntry(
+  appendBlock(
     target,
     {
       count: 1,
@@ -434,29 +477,26 @@ function appendAgentMessageEntry(
       text,
       timestamp: event.timestamp,
     },
-    maxTranscriptChars,
   );
 }
 
 function appendCommandOutputEntry(
-  target: TranscriptEntryTarget,
+  target: BlockTarget,
   event: AgentStatusEvent,
-  maxTranscriptChars: number,
 ) {
   const lines = getCommandOutputLines(event);
   if (!lines.length) {
     return;
   }
-  const lastEntry = target.transcriptEntries.at(-1);
+  const lastEntry = target.blocks.at(-1);
   if (lastEntry?.kind === "command-output") {
     lastEntry.count += lines.length;
     lastEntry.lines.push(...lines);
     lastEntry.sequenceEnd = event.sequence;
     lastEntry.timestamp = event.timestamp;
-    trimTranscriptEntries(target, maxTranscriptChars);
     return;
   }
-  appendTranscriptEntry(
+  appendBlock(
     target,
     {
       count: lines.length,
@@ -466,17 +506,58 @@ function appendCommandOutputEntry(
       sequenceStart: event.sequence,
       timestamp: event.timestamp,
     },
-    maxTranscriptChars,
   );
 }
 
-export function appendTranscriptEntriesForEvent(
-  target: TranscriptEntryTarget,
+function getBlockItemId(entry: AgentTuiBlock) {
+  switch (entry.kind) {
+    case "agent-message":
+    case "command":
+    case "plan":
+    case "reasoning":
+    case "status":
+    case "tool":
+      return entry.itemId;
+    default:
+      return undefined;
+  }
+}
+
+function findBlockByItemId(
+  target: BlockTarget,
+  itemId: string | undefined,
+): AgentTuiBlock | undefined {
+  if (!itemId) {
+    return undefined;
+  }
+  for (let index = target.blocks.length - 1; index >= 0; index -= 1) {
+    const entry = target.blocks[index];
+    if (entry && getBlockItemId(entry) === itemId) {
+      return entry;
+    }
+  }
+  return undefined;
+}
+
+export function appendBlocksForEvent(
+  target: BlockTarget,
   event: AgentSessionEvent,
-  maxTranscriptChars: number,
 ) {
+  if (event.type === "codex-notification") {
+    appendCodexNotificationToBlocks(
+      {
+        appendEntry: (entry) => {
+          appendBlock(target, entry);
+        },
+        findEntryByItemId: (itemId) => findBlockByItemId(target, itemId),
+      },
+      event,
+    );
+    return;
+  }
+
   if (event.type === "session") {
-    appendTranscriptEntry(
+    appendBlock(
       target,
       {
         count: 1,
@@ -487,13 +568,12 @@ export function appendTranscriptEntriesForEvent(
         text: formatLifecycleText(event.phase, event.data, event.session),
         timestamp: event.timestamp,
       },
-      maxTranscriptChars,
     );
     return;
   }
 
   if (event.type === "raw-line") {
-    const lastEntry = target.transcriptEntries.at(-1);
+    const lastEntry = target.blocks.at(-1);
     if (
       lastEntry?.kind === "raw" &&
       lastEntry.encoding === event.encoding &&
@@ -503,10 +583,9 @@ export function appendTranscriptEntriesForEvent(
       lastEntry.lines.push(event.line);
       lastEntry.sequenceEnd = event.sequence;
       lastEntry.timestamp = event.timestamp;
-      trimTranscriptEntries(target, maxTranscriptChars);
       return;
     }
-    appendTranscriptEntry(
+    appendBlock(
       target,
       {
         count: 1,
@@ -518,7 +597,6 @@ export function appendTranscriptEntriesForEvent(
         stream: event.stream,
         timestamp: event.timestamp,
       },
-      maxTranscriptChars,
     );
     return;
   }
@@ -527,15 +605,15 @@ export function appendTranscriptEntriesForEvent(
     return;
   }
   if (event.format === "chunk") {
-    appendAgentMessageEntry(target, event, maxTranscriptChars);
+    appendAgentMessageEntry(target, event);
     return;
   }
   if (event.code === "command-output") {
-    appendCommandOutputEntry(target, event, maxTranscriptChars);
+    appendCommandOutputEntry(target, event);
     return;
   }
 
-  appendTranscriptEntry(
+  appendBlock(
     target,
     {
       code: event.code,
@@ -549,67 +627,15 @@ export function appendTranscriptEntriesForEvent(
       text: formatStatusEventText(event) ?? event.code,
       timestamp: event.timestamp,
     },
-    maxTranscriptChars,
   );
-}
-
-function formatSessionLabel(session: AgentSessionRef) {
-  return session.issue?.identifier ?? session.workerId ?? session.title;
-}
-
-export function shouldMirrorEventToSupervisor(event: AgentSessionEvent) {
-  if (event.session.kind === "supervisor") {
-    return false;
-  }
-  if (event.type === "raw-line") {
-    return false;
-  }
-  if (event.type === "status") {
-    switch (event.code) {
-      case "agent-message-completed":
-      case "agent-message-delta":
-      case "command-output":
-        return false;
-    }
-  }
-  return true;
-}
-
-export function createSupervisorMirrorEntry(
-  event: AgentSessionEvent,
-): AgentTuiMirrorEntry | undefined {
-  const prefix = `[${formatSessionLabel(event.session)}]`;
-  let text: string | undefined;
-
-  if (event.type === "session") {
-    text = `${prefix} ${formatLifecycleText(event.phase, event.data, event.session)}`;
-  } else if (event.type === "status") {
-    const rendered = formatStatusEventText(event)?.trim();
-    if (rendered) {
-      text = `${prefix} ${rendered}`;
-    } else if (event.itemId) {
-      text = `${prefix} ${event.code}: ${event.itemId}`;
-    } else {
-      text = `${prefix} ${event.code}`;
-    }
-  }
-
-  if (!text) {
-    return undefined;
-  }
-
-  return {
-    count: 1,
-    kind: "mirror",
-    sequenceEnd: event.sequence,
-    sequenceStart: event.sequence,
-    text,
-    timestamp: event.timestamp,
-  };
 }
 
 export function summarizeAgentSessionEvent(event: AgentSessionEvent) {
   switch (event.type) {
+    case "codex-notification": {
+      const text = formatCodexNotificationSummary(event)?.trim();
+      return text ? `${event.method}: ${text}` : event.method;
+    }
     case "session":
       return formatLifecycleText(event.phase, event.data, event.session);
     case "status": {
@@ -652,77 +678,11 @@ export function createStatusSummary(event: AgentStatusEvent): AgentTuiStatusSumm
   };
 }
 
-function truncateSummary(text: string, maxChars = 120) {
-  const compact = text.replace(/\s+/g, " ").trim();
-  if (compact.length <= maxChars) {
-    return compact;
-  }
-  return `${compact.slice(0, Math.max(0, maxChars - 3))}...`;
-}
-
-function summarizeJsonLine(line: string) {
-  try {
-    const parsed = JSON.parse(line) as {
-      method?: unknown;
-      params?: unknown;
-    };
-    if (!parsed || typeof parsed !== "object" || typeof parsed.method !== "string") {
-      return undefined;
-    }
-    if (parsed.method === "item/started") {
-      const params =
-        parsed.params && typeof parsed.params === "object"
-          ? (parsed.params as { item?: { type?: unknown } })
-          : undefined;
-      const itemType = params?.item?.type;
-      return typeof itemType === "string" ? `${parsed.method} ${itemType}` : parsed.method;
-    }
-    if (parsed.method === "item/completed") {
-      const params =
-        parsed.params && typeof parsed.params === "object"
-          ? (parsed.params as {
-              item?: { exitCode?: unknown; status?: unknown; type?: unknown };
-            })
-          : undefined;
-      const itemType = params?.item?.type;
-      const status = params?.item?.status;
-      const exitCode = params?.item?.exitCode;
-      const parts = [parsed.method];
-      if (typeof itemType === "string") {
-        parts.push(itemType);
-      }
-      if (typeof status === "string") {
-        parts.push(status);
-      }
-      if (typeof exitCode === "number") {
-        parts.push(`exit=${exitCode}`);
-      }
-      return parts.join(" ");
-    }
-    return parsed.method;
-  } catch {
-    return undefined;
-  }
-}
-
-function formatLifecycleEntry(
-  entry: Extract<AgentTuiTranscriptEntry, { kind: "lifecycle" }>,
-  mode: TranscriptRenderMode,
-) {
-  if (mode === "plain") {
-    return [entry.text];
-  }
+function formatLifecycleEntry(entry: Extract<AgentTuiBlock, { kind: "lifecycle" }>) {
   return [`[SESSION ${entry.phase.toUpperCase()}] ${entry.text}`];
 }
 
-function formatStatusEntry(
-  entry: Extract<AgentTuiTranscriptEntry, { kind: "status" }>,
-  mode: TranscriptRenderMode,
-) {
-  if (mode === "plain") {
-    return [entry.text];
-  }
-
+function formatStatusEntry(entry: Extract<AgentTuiBlock, { kind: "status" }>) {
   let label = "STATUS";
   switch (entry.code) {
     case "approval-required":
@@ -757,89 +717,110 @@ function formatStatusEntry(
   return [`[${label}] ${entry.text}`];
 }
 
-function formatAgentMessageEntry(
-  entry: Extract<AgentTuiTranscriptEntry, { kind: "agent-message" }>,
-  mode: TranscriptRenderMode,
-) {
-  if (mode === "status") {
-    const flattened = entry.text
-      .replace(/\r\n/g, "\n")
-      .replace(/[ \t]*\n[ \t]*/g, " ")
-      .replace(/\s+/g, " ")
-      .trim();
-    return flattened ? [flattened] : [];
-  }
-  return entry.text.trimEnd().split("\n");
+function formatApprovalEntry(entry: Extract<AgentTuiBlock, { kind: "approval" }>) {
+  return [`[APPROVAL] ${entry.text}`];
 }
 
-function formatCommandOutputEntry(
-  entry: Extract<AgentTuiTranscriptEntry, { kind: "command-output" }>,
-  mode: TranscriptRenderMode,
-) {
+function formatAgentMessageEntry(entry: Extract<AgentTuiBlock, { kind: "agent-message" }>) {
+  const flattened = entry.text
+    .replace(/\r\n/g, "\n")
+    .replace(/[ \t]*\n[ \t]*/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return flattened ? [flattened] : [];
+}
+
+function formatCommandEntry(entry: Extract<AgentTuiBlock, { kind: "command" }>) {
+  const header = `$ ${entry.command}`;
+  const lines = [`[COMMAND] ${header}`];
+  if (entry.status === "failed") {
+    lines.push(
+      `[COMMAND FAIL] Command failed${typeof entry.exitCode === "number" ? ` (exit ${entry.exitCode})` : ""}`,
+    );
+  }
+  if (entry.outputLines.length) {
+    lines.push(...entry.outputLines.map((line) => `| ${line}`));
+  }
+  return lines;
+}
+
+function formatCommandOutputEntry(entry: Extract<AgentTuiBlock, { kind: "command-output" }>) {
   if (!entry.lines.length) {
     return [];
   }
-  if (mode === "status") {
-    const preview = entry.lines.at(-1) ?? entry.lines[0] ?? "";
-    return [`[CMD OUT x${entry.count}] ${truncateSummary(preview)}`];
-  }
-  if (mode === "plain") {
-    return entry.lines.map((line) => `| ${line}`);
-  }
-  return [`[CMD OUT x${entry.count}]`, ...entry.lines.map((line) => `| ${line}`)];
+  return entry.lines.map((line) => `| ${line}`);
 }
 
-function formatRawEntry(entry: Extract<AgentTuiTranscriptEntry, { kind: "raw" }>, mode: TranscriptRenderMode) {
-  if (mode === "plain") {
-    const prefix = entry.encoding === "jsonl" ? "jsonl" : entry.stream;
-    return entry.lines.map((line) => `${prefix}: ${line}`);
-  }
-  if (mode === "status" && entry.stream === "stdout" && entry.encoding === "jsonl") {
+function formatRawEntry(entry: Extract<AgentTuiBlock, { kind: "raw" }>) {
+  if (entry.stream === "stdout" && entry.encoding === "jsonl") {
     return [];
   }
-  const label = `RAW ${entry.stream}/${entry.encoding} x${entry.count}`;
-  if (mode === "status") {
-    const preview = entry.lines.at(-1) ?? entry.lines[0] ?? "";
-    const summarized =
-      entry.encoding === "jsonl" ? summarizeJsonLine(preview) ?? truncateSummary(preview) : truncateSummary(preview);
-    return summarized ? [`[${label}] ${summarized}`] : [`[${label}]`];
-  }
   const prefix = entry.encoding === "jsonl" ? "jsonl" : entry.stream;
-  return [`[${label}]`, ...entry.lines.map((line) => `${prefix}: ${line}`)];
+  return entry.lines.map((line) => `${prefix}: ${line}`);
 }
 
-function formatMirrorEntry(entry: Extract<AgentTuiTranscriptEntry, { kind: "mirror" }>) {
+function formatMirrorEntry(entry: Extract<AgentTuiBlock, { kind: "mirror" }>) {
   return [entry.text];
 }
 
-export function formatTranscriptEntries(
-  transcriptEntries: AgentTuiTranscriptEntry[],
-  mode: TranscriptRenderMode,
-) {
-  if (!transcriptEntries.length) {
-    return mode === "plain" ? "" : DEFAULT_TRANSCRIPT_WAITING_MESSAGE;
+function formatPlanEntry(entry: Extract<AgentTuiBlock, { kind: "plan" }>) {
+  if (!entry.text.trim()) {
+    return [];
+  }
+  return [`[PLAN] ${entry.text.replace(/\r\n/g, "\n").replace(/\n+/g, " ").trim()}`];
+}
+
+function formatReasoningEntry(entry: Extract<AgentTuiBlock, { kind: "reasoning" }>) {
+  const combined = [...entry.summary, ...entry.content].filter(Boolean);
+  if (!combined.length) {
+    return [];
+  }
+  return [
+    `[REASONING] ${(combined.at(-1) ?? combined[0] ?? "").replace(/\r\n/g, "\n").replace(/\n+/g, " ").trim()}`,
+  ];
+}
+
+function formatToolEntry(entry: Extract<AgentTuiBlock, { kind: "tool" }>) {
+  const header = `Tool: ${entry.server}.${entry.tool}${entry.argumentsText ? ` ${entry.argumentsText}` : ""}`;
+  const lines = [`[TOOL] ${header}`];
+  if (entry.errorText) {
+    lines.push(`[TOOL FAIL] ${entry.errorText}`);
+  }
+  return lines;
+}
+
+export function formatBlocks(blocks: AgentTuiBlock[]) {
+  if (!blocks.length) {
+    return DEFAULT_TRANSCRIPT_WAITING_MESSAGE;
   }
 
-  const lines = transcriptEntries.flatMap((entry) => {
+  const lines = blocks.flatMap((entry) => {
     switch (entry.kind) {
+      case "approval":
+        return formatApprovalEntry(entry);
+      case "command":
+        return formatCommandEntry(entry);
       case "lifecycle":
-        return formatLifecycleEntry(entry, mode);
+        return formatLifecycleEntry(entry);
       case "status":
-        return formatStatusEntry(entry, mode);
+        return formatStatusEntry(entry);
       case "agent-message":
-        return formatAgentMessageEntry(entry, mode);
+        return formatAgentMessageEntry(entry);
       case "command-output":
-        return formatCommandOutputEntry(entry, mode);
+        return formatCommandOutputEntry(entry);
       case "mirror":
         return formatMirrorEntry(entry);
+      case "plan":
+        return formatPlanEntry(entry);
       case "raw":
-        return formatRawEntry(entry, mode);
+        return formatRawEntry(entry);
+      case "reasoning":
+        return formatReasoningEntry(entry);
+      case "tool":
+        return formatToolEntry(entry);
     }
   });
 
   const filteredLines = lines.map((line) => line.trimEnd()).filter((line) => line.length > 0);
-  if (mode === "plain") {
-    return filteredLines.length ? `${filteredLines.join("\n")}\n` : "";
-  }
   return filteredLines.join("\n") || DEFAULT_TRANSCRIPT_WAITING_MESSAGE;
 }

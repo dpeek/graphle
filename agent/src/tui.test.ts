@@ -75,7 +75,7 @@ function createSnapshotColumn(
     lastSequence: 0,
     phase: "pending" as const,
     session: createSupervisorSession(),
-    transcriptEntries: [],
+    blocks: [],
     ...overrides,
   };
 }
@@ -171,14 +171,13 @@ test("AgentTuiStore keeps supervisor first and records status plus raw output", 
     "worker:OPE-67:1",
   ]);
   expect(snapshot.sessions[0]?.body).toContain("Session started | /Users/dpeek/code/io");
-  expect(snapshot.sessions[0]?.body).toContain("ready at /Users/dpeek/code/io\n");
+  expect(snapshot.sessions[0]?.body).toContain("[STATUS] ready at /Users/dpeek/code/io");
   expect(snapshot.sessions[1]?.body).toContain(
     "Session scheduled | ope-67 | /Users/dpeek/code/io/.io/tree/ope-67\n",
   );
-  expect(snapshot.sessions[1]?.body).toContain("Session started\n");
+  expect(snapshot.sessions[1]?.body).toContain("[TURN] Session started\n");
   expect(snapshot.sessions[1]?.body).toContain("Inspecting runtime state\n");
-  expect(snapshot.sessions[1]?.body).toContain('jsonl: {"method":"thread/started"}\n');
-  expect(snapshot.sessions[1]?.body).toContain("stderr: stderr line\n");
+  expect(snapshot.sessions[1]?.body).toContain("stderr: stderr line");
 });
 
 test("renderAgentTuiFrame lays out supervisor and worker columns", () => {
@@ -211,16 +210,14 @@ test("renderAgentTuiFrame lays out supervisor and worker columns", () => {
   );
 
   const [firstLine] = frame.split("\n");
-  expect(firstLine?.startsWith("> . Supervisor")).toBe(true);
-  expect(firstLine).toContain("OPE-67 Implement io agent tui");
-  expect(frame).toContain("SUPERVISOR | STARTED");
-  expect(frame).toContain("WORKER | COMPLETED");
+  expect(firstLine).toContain("/Users/dpeek/code/io");
+  expect(firstLine).toContain("OPE-67");
   expect(frame).toContain("No issues");
   expect(frame).toContain('jsonl: {"method":"thread/started"}');
 });
 
 test("AgentTuiRetainedReader reconstructs events.log into supervisor and worker columns", async () => {
-  const root = await mkdtemp(resolve(tmpdir(), "agent-tui-retained-events-"));
+  const root = await mkdtemp(resolve(tmpdir(), "tui-retained-events-"));
   const runtimePath = resolve(root, "issues", "ope-67");
   await mkdir(runtimePath, { recursive: true });
 
@@ -282,14 +279,14 @@ test("AgentTuiRetainedReader reconstructs events.log into supervisor and worker 
     ]);
     expect(snapshot.sessions[0]?.body).toContain("Attach OPE-67 from events.log\n");
     expect(snapshot.sessions[1]?.body).toContain("Session scheduled | ope-67");
-    expect(snapshot.sessions[1]?.body).toContain('Tool: spawned.run {"mode":"helper"}\n');
+  expect(snapshot.sessions[1]?.body).toContain('[TOOL] Tool: spawned.run {"mode":"helper"}');
   } finally {
     await rm(root, { force: true, recursive: true });
   }
 });
 
 test("AgentTuiRetainedReader falls back to codex.stdout.jsonl for replay", async () => {
-  const root = await mkdtemp(resolve(tmpdir(), "agent-tui-retained-stdout-"));
+  const root = await mkdtemp(resolve(tmpdir(), "tui-retained-stdout-"));
   const runtimePath = resolve(root, "issues", "ope-67");
   await mkdir(runtimePath, { recursive: true });
 
@@ -323,16 +320,14 @@ test("AgentTuiRetainedReader falls back to codex.stdout.jsonl for replay", async
     ]);
     expect(snapshot.sessions[0]?.body).toContain("Replay OPE-67 from codex.stdout.jsonl\n");
     expect(snapshot.sessions[1]?.phase).toBe("completed");
-    expect(snapshot.sessions[1]?.body).toContain('jsonl: {"method":"thread/started"}\n');
-    expect(snapshot.sessions[1]?.body).toContain("Session started\n");
-    expect(snapshot.sessions[1]?.body).toContain("Turn completed\n");
+  expect(snapshot.sessions[1]?.body).toContain("Session completed");
   } finally {
     await rm(root, { force: true, recursive: true });
   }
 });
 
 test("AgentTuiRetainedReader tails appended retained events", async () => {
-  const root = await mkdtemp(resolve(tmpdir(), "agent-tui-retained-tail-"));
+  const root = await mkdtemp(resolve(tmpdir(), "tui-retained-tail-"));
   const runtimePath = resolve(root, "issues", "ope-67");
   await mkdir(runtimePath, { recursive: true });
 

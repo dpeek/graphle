@@ -104,28 +104,18 @@ test("AgentTuiStore tracks column hierarchy, summaries, and event history", () =
   expect(columns[2]?.parentSessionId).toBe("worker:OPE-68:1");
   expect(columns[2]?.status?.text).toBe('Tool: helper.spawn {"mode":"plan"}');
   expect(columns[2]?.eventHistory.at(-1)?.summary).toContain("tool");
-  expect(columns[1]?.body).toContain("Session started\n");
-  expect(columns[1]?.transcriptEntries.map((entry) => entry.kind)).toEqual(["lifecycle", "status"]);
-  expect(columns[2]?.transcriptEntries.at(-1)).toMatchObject({
+  expect(columns[1]?.body).toContain("[TURN] Session started");
+  expect(columns[1]?.blocks.map((entry) => entry.kind)).toEqual(["lifecycle", "status"]);
+  expect(columns[2]?.blocks.at(-1)).toMatchObject({
     kind: "status",
     text: 'Tool: helper.spawn {"mode":"plan"}',
   });
-  expect(columns[0]?.transcriptEntries.map((entry) => entry.kind)).toEqual([
-    "lifecycle",
-    "mirror",
-    "mirror",
-    "mirror",
-    "mirror",
-  ]);
-  const supervisorTranscript = buildAgentTuiRootComponentModel(snapshot, {
+  expect(columns[0]?.blocks.map((entry) => entry.kind)).toEqual(["lifecycle"]);
+  const supervisorContent = buildAgentTuiRootComponentModel(snapshot, {
     selectedColumnId: supervisor.id,
-    viewMode: "status",
-  }).columns.find((column) => column.id === supervisor.id)?.transcript;
-  expect(supervisorTranscript).toContain("[SESSION STARTED] Session started | /Users/dpeek/code/io");
-  expect(supervisorTranscript).toContain("[OPE-68] Session scheduled | ope-68 | /Users/dpeek/code/io/.io/tree/ope-68");
-  expect(supervisorTranscript).toContain("[OPE-68] Session started");
-  expect(supervisorTranscript).toContain("[OPE-68] Session started | /Users/dpeek/code/io/.io/tree/ope-68");
-  expect(supervisorTranscript).toContain('[OPE-68] Tool: helper.spawn {"mode":"plan"}');
+  }).columns.find((column) => column.id === supervisor.id)?.content;
+  expect(supervisorContent).toContain("[SESSION STARTED] Session started | /Users/dpeek/code/io");
+  expect(supervisorContent).not.toContain("OPE-68");
 });
 
 test("AgentTuiStore prunes completed non-supervisor sessions when retention is disabled", () => {
@@ -179,14 +169,13 @@ test("AgentTuiStore prunes completed non-supervisor sessions when retention is d
 
   snapshot = store.getSnapshot();
   expect(snapshot.columns.map((column) => column.session.id)).toEqual(["supervisor"]);
-  const supervisorTranscript = buildAgentTuiRootComponentModel(snapshot, {
+  const supervisorContent = buildAgentTuiRootComponentModel(snapshot, {
     selectedColumnId: supervisor.id,
-    viewMode: "status",
-  }).columns[0]?.transcript;
-  expect(supervisorTranscript).toContain("[OPE-68] Session completed");
+  }).columns[0]?.content;
+  expect(supervisorContent).toContain("[SESSION STARTED] Session started | /Users/dpeek/code/io");
 });
 
-test("buildAgentTuiRootComponentModel supports status-focused and raw-heavy transcript views", () => {
+test("buildAgentTuiRootComponentModel renders a single human-readable block stream", () => {
   const store = createAgentTuiStore();
   const supervisor = createSupervisorSession();
   const worker = createWorkerSession();
@@ -272,32 +261,19 @@ test("buildAgentTuiRootComponentModel supports status-focused and raw-heavy tran
   });
 
   const snapshot = store.getSnapshot();
-  const statusModel = buildAgentTuiRootComponentModel(snapshot, {
+  const model = buildAgentTuiRootComponentModel(snapshot, {
     selectedColumnId: worker.id,
-    viewMode: "status",
   });
-  const rawModel = buildAgentTuiRootComponentModel(snapshot, {
-    selectedColumnId: worker.id,
-    viewMode: "raw",
-  });
-  const statusTranscript = statusModel.columns.find((column) => column.id === worker.id)?.transcript ?? "";
-  const rawTranscript = rawModel.columns.find((column) => column.id === worker.id)?.transcript ?? "";
-  const statusLatestEventLine =
-    statusModel.columns.find((column) => column.id === worker.id)?.latestEventLine ?? "";
+  const content = model.columns.find((column) => column.id === worker.id)?.content ?? "";
 
-  expect(statusTranscript).toContain("[COMMAND] $ git status --short --branch");
-  expect(statusTranscript).toContain("[CMD OUT x2] M agent/src/runner/codex.ts");
-  expect(statusTranscript).toContain("Inspecting runtime state");
-  expect(statusTranscript).not.toContain("[RAW stdout/jsonl");
-  expect(statusLatestEventLine).not.toContain("stdout jsonl:");
-  expect(rawTranscript).toContain("[CMD OUT x2]");
-  expect(rawTranscript).toContain("Inspecting runtime state");
-  expect(rawTranscript).toContain("| ## main");
-  expect(rawTranscript).toContain('jsonl: {"method":"thread/started"}');
-  expect(rawTranscript).toContain('jsonl: {"method":"turn/completed"}');
+  expect(content).toContain("[COMMAND] $ git status --short --branch");
+  expect(content).toContain("| ## main");
+  expect(content).toContain("|  M agent/src/runner/codex.ts");
+  expect(content).toContain("Inspecting runtime state");
+  expect(content).not.toContain('jsonl: {"method":"thread/started"}');
 });
 
-test("status transcript flattens newline-heavy agent message chunks", () => {
+test("content flattens newline-heavy agent message chunks", () => {
   const store = createAgentTuiStore();
   const worker = createWorkerSession();
 
@@ -320,17 +296,108 @@ test("status transcript flattens newline-heavy agent message chunks", () => {
   });
 
   const snapshot = store.getSnapshot();
-  const statusTranscript =
+  const content =
     buildAgentTuiRootComponentModel(snapshot, {
       selectedColumnId: worker.id,
-      viewMode: "status",
-    }).columns.find((column) => column.id === worker.id)?.transcript ?? "";
+    }).columns.find((column) => column.id === worker.id)?.content ?? "";
 
-  expect(statusTranscript).toContain("I read the required repo");
-  expect(statusTranscript).not.toContain("I\nread\nthe\nrequired\nrepo");
+  expect(content).toContain("I read the required repo");
+  expect(content).not.toContain("I\nread\nthe\nrequired\nrepo");
 });
 
-test("createAgentTui supports keyboard column navigation, view toggles, and transcript scrolling", async () => {
+test("store renders codex v2 notifications as item blocks", () => {
+  const store = createAgentTuiStore();
+  const worker = createWorkerSession();
+
+  store.observe({
+    phase: "started",
+    sequence: 1,
+    session: worker,
+    timestamp: "2026-03-10T02:07:00.000Z",
+    type: "session",
+  });
+  store.observe({
+    method: "turn/started",
+    params: {
+      turn: { id: "turn-1", status: "in_progress" },
+    },
+    sequence: 2,
+    session: worker,
+    timestamp: "2026-03-10T02:07:01.000Z",
+    type: "codex-notification",
+  });
+  store.observe({
+    method: "item/started",
+    params: {
+      item: {
+        id: "call-1",
+        command: '/bin/zsh -lc "git status --short --branch"',
+        commandActions: [{ command: "git status --short --branch" }],
+        cwd: "/Users/dpeek/code/io",
+        type: "commandExecution",
+      },
+    },
+    sequence: 3,
+    session: worker,
+    timestamp: "2026-03-10T02:07:02.000Z",
+    type: "codex-notification",
+  });
+  store.observe({
+    method: "item/completed",
+    params: {
+      item: {
+        aggregatedOutput: "## main\n M tui/src/store.ts\n",
+        exitCode: 0,
+        id: "call-1",
+        status: "completed",
+        type: "commandExecution",
+      },
+    },
+    sequence: 4,
+    session: worker,
+    timestamp: "2026-03-10T02:07:03.000Z",
+    type: "codex-notification",
+  });
+  store.observe({
+    method: "item/started",
+    params: {
+      item: { id: "msg-1", phase: "commentary", text: "", type: "agentMessage" },
+    },
+    sequence: 5,
+    session: worker,
+    timestamp: "2026-03-10T02:07:04.000Z",
+    type: "codex-notification",
+  });
+  store.observe({
+    method: "item/agentMessage/delta",
+    params: { delta: "Inspecting ", itemId: "msg-1" },
+    sequence: 6,
+    session: worker,
+    timestamp: "2026-03-10T02:07:05.000Z",
+    type: "codex-notification",
+  });
+  store.observe({
+    method: "item/agentMessage/delta",
+    params: { delta: "runtime state", itemId: "msg-1" },
+    sequence: 7,
+    session: worker,
+    timestamp: "2026-03-10T02:07:06.000Z",
+    type: "codex-notification",
+  });
+
+  const snapshot = store.getSnapshot();
+  const content =
+    buildAgentTuiRootComponentModel(snapshot, {
+      selectedColumnId: worker.id,
+    }).columns.find((column) => column.id === worker.id)?.content ?? "";
+
+  expect(content).toContain("[COMMAND] $ git status --short --branch");
+  expect(content).toContain("| ## main");
+  expect(content).toContain("|  M tui/src/store.ts");
+  expect(content).toContain("Inspecting runtime state");
+});
+
+test("createAgentTui supports keyboard column navigation and content scrolling", async () => {
   const { captureCharFrame, mockInput, renderOnce, renderer } = await createTestRenderer({
     height: 18,
     width: 96,
@@ -405,31 +472,23 @@ test("createAgentTui supports keyboard column navigation, view toggles, and tran
     await renderOnce();
 
     let frame = captureCharFrame();
-    expect(frame).toContain("View: STATUS");
-    expect(frame).toContain("> . Supervisor");
-    expect(frame).toContain("--------------------------------");
+    expect(frame).toContain("/Users/dpeek/code/io");
 
     mockInput.pressArrow("right");
     await renderOnce();
     frame = captureCharFrame();
-    expect(frame).toContain("> * OPE-68 Run plan");
+    expect(frame).toContain("OPE-68");
+    expect(frame).toContain("| output line 11");
 
-    await mockInput.typeText("v");
+    mockInput.pressArrow("up");
     await renderOnce();
     frame = captureCharFrame();
-    expect(frame).toContain("View: RAW");
+    expect(frame).toContain("| output line 10");
 
-    await mockInput.typeText("g");
+    mockInput.pressArrow("up");
     await renderOnce();
     frame = captureCharFrame();
-    expect(frame).toContain("| output line 0");
-
-    await mockInput.typeText("j");
-    await renderOnce();
-    await mockInput.typeText("j");
-    await renderOnce();
-    frame = captureCharFrame();
-    expect(frame).toContain("| output line 2");
+    expect(frame).toContain("| output line 9");
 
     await mockInput.typeText("q");
     await Promise.resolve();

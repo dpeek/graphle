@@ -2,6 +2,7 @@ export {
   closeAgentSessionDisplayLine,
   createAgentSessionDisplayState,
   createAgentSessionStdoutObserver,
+  renderCodexNotificationEvent,
   renderAgentStatusEvent,
 } from "./transcript.js";
 
@@ -86,7 +87,17 @@ export interface AgentRawLineEvent extends AgentSessionEventBase {
   type: "raw-line";
 }
 
-export type AgentSessionEvent = AgentSessionLifecycleEvent | AgentStatusEvent | AgentRawLineEvent;
+export interface AgentCodexNotificationEvent extends AgentSessionEventBase {
+  method: string;
+  params: Record<string, unknown>;
+  type: "codex-notification";
+}
+
+export type AgentSessionEvent =
+  | AgentCodexNotificationEvent
+  | AgentSessionLifecycleEvent
+  | AgentStatusEvent
+  | AgentRawLineEvent;
 
 export type AgentSessionLifecycleEventInit = Omit<
   AgentSessionLifecycleEvent,
@@ -94,7 +105,12 @@ export type AgentSessionLifecycleEventInit = Omit<
 >;
 export type AgentStatusEventInit = Omit<AgentStatusEvent, "sequence" | "timestamp">;
 export type AgentRawLineEventInit = Omit<AgentRawLineEvent, "sequence" | "timestamp">;
+export type AgentCodexNotificationEventInit = Omit<
+  AgentCodexNotificationEvent,
+  "sequence" | "timestamp"
+>;
 export type AgentSessionEventInit =
+  | AgentCodexNotificationEventInit
   | AgentSessionLifecycleEventInit
   | AgentStatusEventInit
   | AgentRawLineEventInit;

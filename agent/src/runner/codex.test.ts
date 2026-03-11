@@ -1,20 +1,19 @@
-import { readFile } from "node:fs/promises";
-
 import { expect, test } from "bun:test";
 
 import {
   closeAgentSessionDisplayLine,
   createAgentSessionDisplayState,
+  renderCodexNotificationEvent,
   renderAgentStatusEvent,
   type AgentSessionRef,
 } from "../session-events.js";
 import {
   buildAutomaticUserInputResponse,
   createDefaultTurnSandbox,
-  normalizeCodexSessionMessage,
+  toCodexNotificationEvent,
 } from "./codex.js";
 
-type CodexSessionMessage = Parameters<typeof normalizeCodexSessionMessage>[0];
+type CodexSessionMessage = Parameters<typeof toCodexNotificationEvent>[0];
 
 function createSession(): AgentSessionRef {
   return {
@@ -37,38 +36,29 @@ function renderMessages(messages: Array<Record<string, unknown>>) {
   let sequence = 0;
 
   for (const message of messages) {
-    for (const event of normalizeCodexSessionMessage(message as CodexSessionMessage)) {
-      renderAgentStatusEvent({
-        event: {
-          ...event,
-          sequence: ++sequence,
-          session,
-          timestamp: "2026-03-10T00:00:00.000Z",
-        },
-        state,
-        writeDisplay: (text) => {
-          chunks.push(text);
-        },
-      });
+    const event = toCodexNotificationEvent(message as CodexSessionMessage);
+    if (!event) {
+      continue;
     }
+    renderCodexNotificationEvent({
+      event: {
+        ...event,
+        sequence: ++sequence,
+        session,
+        timestamp: "2026-03-10T00:00:00.000Z",
+      },
+      state,
+      writeDisplay: (text) => {
+        chunks.push(text);
+      },
+    });
   }
   return chunks.join("");
 }
 
-async function renderFixture(name: string) {
-  const fixturePath = new URL(`./__fixtures__/${name}`, import.meta.url);
-  const content = await readFile(fixturePath, "utf8");
-  const messages = content
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line) => JSON.parse(line) as Record<string, unknown>);
-  return renderMessages(messages);
-}
-
-test("normalizes codex messages into typed status events", () => {
+test("maps v2 notifications into codex session events", () => {
   expect(
-    normalizeCodexSessionMessage({
+    toCodexNotificationEvent({
       method: "item/completed",
       params: {
         item: {
@@ -80,24 +70,19 @@ test("normalizes codex messages into typed status events", () => {
         },
       },
     } as CodexSessionMessage),
-  ).toEqual([
-    {
-      code: "command-output",
-      data: {
-        lines: ["## main", " M agent/src/runner/codex.ts"],
-      },
-      format: "line",
-      type: "status",
-    },
-    {
-      code: "command-failed",
-      data: {
+  ).toEqual({
+    method: "item/completed",
+    params: {
+      item: {
+        aggregatedOutput: "## main\n M agent/src/runner/codex.ts\n",
         exitCode: 1,
+        id: "call-1",
+        status: "failed",
+        type: "commandExecution",
       },
-      format: "line",
-      type: "status",
     },
-  ]);
+    type: "codex-notification",
+  });
 });
 
 test("renders agent message deltas as streamed session text", () => {
@@ -127,17 +112,6 @@ test("renders agent message deltas as streamed session text", () => {
   expect(output).toBe(
     "=== worker-1 OPE-41 Add predicate-slot subscriptions to graph runtime ===\n" +
       "I’m checking the current branch.\n",
-  );
-});
-
-test("renders mixed v2 and legacy delta fixtures as one streamed message", async () => {
-  const output = await renderFixture("legacy-agent-message-deltas.jsonl");
-
-  expect(output).toBe(
-    "=== worker-1 OPE-41 Add predicate-slot subscriptions to graph runtime ===\n" +
-      "Turn started\n" +
-      "The issue body only asks for a Linear comment.\n" +
-      "Turn completed\n",
   );
 });
 

@@ -1,1 +1,1 @@
-export * from "@io/agent-tui";
+export * from "@io/tui";

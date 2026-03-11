@@ -3,7 +3,10 @@ import type {
   ServerNotification,
   ServerRequest,
 } from "../plugin/codex/server/api/index.js";
-import type { AgentStatusEventInit } from "../session-events.js";
+import type {
+  AgentCodexNotificationEventInit,
+  AgentStatusEventInit,
+} from "../session-events.js";
 
 export type JsonRpcError = {
   code?: number;
@@ -53,6 +56,19 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
     return undefined;
   }
   return value as Record<string, unknown>;
+}
+
+export function toCodexNotificationEvent(
+  message: CodexSessionMessage,
+): Omit<AgentCodexNotificationEventInit, "session"> | undefined {
+  if (!isServerNotificationMessage(message)) {
+    return undefined;
+  }
+  return {
+    method: message.method,
+    params: asRecord(message.params) ?? {},
+    type: "codex-notification",
+  };
 }
 
 function renderCommandOutputLines(output: string) {

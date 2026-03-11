@@ -6,26 +6,27 @@ import type {
   AgentSessionRef,
 } from "./session-events.js";
 import {
-  appendTranscriptEntriesForEvent,
-  appendTranscriptEntry,
+  appendBlocksForEvent,
+  createStatusSummaryFromCodexNotification,
   createStatusSummary,
-  createSupervisorMirrorEntry,
-  formatTranscriptEntries,
-  shouldMirrorEventToSupervisor,
-  shouldUpdateStatusSummary,
+  formatBlocks,
   summarizeAgentSessionEvent,
+  type AgentTuiApprovalEntry,
   type AgentTuiAgentMessageEntry,
+  type AgentTuiCommandEntry,
   type AgentTuiCommandOutputEntry,
   type AgentTuiLifecycleEntry,
   type AgentTuiMirrorEntry,
+  type AgentTuiPlanEntry,
   type AgentTuiRawEntry,
+  type AgentTuiReasoningEntry,
   type AgentTuiStatusEntry,
   type AgentTuiStatusSummary,
-  type AgentTuiTranscriptEntry,
+  type AgentTuiBlock,
+  type AgentTuiToolEntry,
 } from "./transcript.js";
 
 const DEFAULT_MAX_EVENT_HISTORY = 128;
-const DEFAULT_MAX_TRANSCRIPT_CHARS = 24_000;
 
 type AgentTuiInternalColumnState = {
   eventHistory: AgentTuiEventRecord[];
@@ -34,18 +35,23 @@ type AgentTuiInternalColumnState = {
   phase: AgentSessionPhase | "pending";
   session: AgentSessionRef;
   status?: AgentTuiStatusSummary;
-  transcriptEntries: AgentTuiTranscriptEntry[];
+  blocks: AgentTuiBlock[];
 };
 
 export type {
+  AgentTuiApprovalEntry,
   AgentTuiAgentMessageEntry,
+  AgentTuiCommandEntry,
   AgentTuiCommandOutputEntry,
   AgentTuiLifecycleEntry,
   AgentTuiMirrorEntry,
+  AgentTuiPlanEntry,
   AgentTuiRawEntry,
+  AgentTuiReasoningEntry,
   AgentTuiStatusEntry,
   AgentTuiStatusSummary,
-  AgentTuiTranscriptEntry,
+  AgentTuiBlock,
+  AgentTuiToolEntry,
 };
 
 export interface AgentTuiEventRecord {
@@ -66,7 +72,7 @@ export interface AgentTuiColumnSnapshot {
   phase: AgentSessionPhase | "pending";
   session: AgentSessionRef;
   status?: AgentTuiStatusSummary;
-  transcriptEntries: AgentTuiTranscriptEntry[];
+  blocks: AgentTuiBlock[];
 }
 
 export type AgentTuiSessionSnapshot = AgentTuiColumnSnapshot;
@@ -85,7 +91,6 @@ export interface AgentTuiStore {
 
 export interface AgentTuiStoreOptions {
   maxEventHistory?: number;
-  maxTranscriptChars?: number;
   retainTerminalSessions?: boolean;
 }
 
@@ -114,7 +119,7 @@ function createSessionState(
     lastSequence: sequence,
     phase: "pending",
     session,
-    transcriptEntries: [],
+    blocks: [],
   };
 }
 
@@ -132,18 +137,6 @@ function pushEventHistory(
   if (state.eventHistory.length > maxEventHistory) {
     state.eventHistory.splice(0, state.eventHistory.length - maxEventHistory);
   }
-}
-
-function appendSupervisorMirrorEntry(
-  state: AgentTuiInternalColumnState,
-  event: AgentSessionEvent,
-  maxTranscriptChars: number,
-) {
-  const mirrorEntry = createSupervisorMirrorEntry(event);
-  if (!mirrorEntry) {
-    return;
-  }
-  appendTranscriptEntry(state, mirrorEntry, maxTranscriptChars);
 }
 
 function compareColumnOrder(left: AgentTuiInternalColumnState, right: AgentTuiInternalColumnState) {
@@ -193,7 +186,7 @@ function buildColumnSnapshots(
     visited.add(state.session.id);
     const childStates = childrenByParent.get(state.session.id) ?? [];
     columns.push({
-      body: formatTranscriptEntries(state.transcriptEntries, "plain"),
+      body: formatBlocks(state.blocks),
       childSessionIds: childStates.map((child) => child.session.id),
       depth,
       eventHistory: [...state.eventHistory],
@@ -203,7 +196,7 @@ function buildColumnSnapshots(
       phase: state.phase,
       session: state.session,
       status: state.status,
-      transcriptEntries: [...state.transcriptEntries],
+      blocks: [...state.blocks],
     });
     for (const child of childStates) {
       visit(child, depth + 1);
@@ -225,7 +218,6 @@ function buildColumnSnapshots(
 export function createAgentTuiStore(options: AgentTuiStoreOptions = {}): AgentTuiStore {
   const listeners = new Set<() => void>();
   const maxEventHistory = options.maxEventHistory ?? DEFAULT_MAX_EVENT_HISTORY;
-  const maxTranscriptChars = options.maxTranscriptChars ?? DEFAULT_MAX_TRANSCRIPT_CHARS;
   const retainTerminalSessions = options.retainTerminalSessions ?? true;
   const sessions = new Map<string, AgentTuiInternalColumnState>();
   let updatedAt: string | undefined;
@@ -270,15 +262,10 @@ export function createAgentTuiStore(options: AgentTuiStoreOptions = {}): AgentTu
     observe(event) {
       const state = getSessionState(event);
       updatedAt = event.timestamp;
-      const supervisorState = sessions.get("supervisor");
-
       if (event.type === "session") {
         state.phase = event.phase;
-        appendTranscriptEntriesForEvent(state, event, maxTranscriptChars);
+        appendBlocksForEvent(state, event);
         pushEventHistory(state, event, maxEventHistory);
-        if (supervisorState && shouldMirrorEventToSupervisor(event)) {
-          appendSupervisorMirrorEntry(supervisorState, event, maxTranscriptChars);
-        }
         if (
           !retainTerminalSessions &&
           event.session.kind !== "supervisor" &&
@@ -290,15 +277,25 @@ export function createAgentTuiStore(options: AgentTuiStoreOptions = {}): AgentTu
         return;
       }
 
-      if (event.type === "status" && shouldUpdateStatusSummary(event)) {
-        state.status = createStatusSummary(event);
+      if (event.type === "codex-notification") {
+        const summary = createStatusSummaryFromCodexNotification(event);
+        if (summary) {
+          state.status = summary;
+        }
+      } else if (event.type === "status" && event.format !== "close") {
+        switch (event.code) {
+          case "agent-message-delta":
+          case "agent-message-completed":
+          case "command-output":
+            break;
+          default:
+            state.status = createStatusSummary(event);
+            break;
+        }
       }
 
-      appendTranscriptEntriesForEvent(state, event, maxTranscriptChars);
+      appendBlocksForEvent(state, event);
       pushEventHistory(state, event, maxEventHistory);
-      if (supervisorState && shouldMirrorEventToSupervisor(event)) {
-        appendSupervisorMirrorEntry(supervisorState, event, maxTranscriptChars);
-      }
       notify();
     },
     subscribe(listener) {
