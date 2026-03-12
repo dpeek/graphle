@@ -15,20 +15,18 @@ test("@io/config re-exports the repo root config", () => {
 test("@io/config exposes the repo context bundle and routing defaults", () => {
   expect(config.context?.entrypoint).toBe("./io/overview.md");
   expect(config.context?.docs).toEqual({
-    "project.focus": "./io/goals.md",
     "project.managed-stream-comments": "./agent/io/managed-stream-comments.md",
     "project.managed-stream-backlog": "./agent/io/managed-stream-backlog.md",
     "project.managed-stream-goals": "./agent/io/managed-stream-goals.md",
     "project.module-stream-workflow-plan": "./agent/io/module-stream-workflow-plan.md",
     "project.overview": "./io/overview.md",
   });
-  expect(config.context?.profiles?.backlog?.include).not.toContain("project.focus");
   expect(config.context?.profiles?.backlog?.include).toContain("project.managed-stream-goals");
   expect(config.context?.profiles?.backlog?.include).toContain("project.managed-stream-backlog");
   expect(config.context?.profiles?.backlog?.include).toContain("project.managed-stream-comments");
   expect(config.modules?.agent).toEqual({
     allowedSharedPaths: ["./io"],
-    docs: ["./agent/io/overview.md", "./agent/io/goals.md", "./agent/doc/stream-workflow.md"],
+    docs: ["./agent/io/overview.md", "./agent/io/module-stream-workflow-plan.md"],
     path: "./agent",
   });
   expect(config.issues).toEqual({
@@ -57,18 +55,20 @@ test("repo managed stream backlog doc captures direct description refresh, expan
   const path = resolve(repoRoot, "./agent/io/managed-stream-backlog.md");
   const content = readFileSync(path, "utf8");
 
-  expect(content).toContain("## Stable Parent Brief Shape");
-  expect(content).toContain("refresh the whole parent description");
-  expect(content).toContain("## Stable Child Payload");
+  expect(content).toContain("## Current Parent Brief Shape");
+  expect(content).toContain("rewrites the parent description directly");
+  expect(content).toContain("## Current Child Payload");
   expect(content).toContain("blockedBy");
-  expect(content).toContain("current-approach bootstrap seeds new child issues in `Todo`");
-  expect(content).toContain("keeps seeded `Todo`");
-  expect(content).toContain("top the stream back up to about five planned tasks");
+  expect(content).toContain("state starts at `Todo`");
   expect(content).toContain(
-    "Do not destructively rewrite children that are already active or completed.",
+    "the parent must move to `In Progress` before child execution can start",
   );
-  expect(content).toContain("## Cross-Module Exception");
-  expect(content).toContain("## Operator-Visible Output");
+  expect(content).toContain("topped back up to a short tail rather than replanned from scratch");
+  expect(content).toContain(
+    "backlog refresh should avoid destructive rewrites of already active or completed children",
+  );
+  expect(content).toContain("## Current Guardrails");
+  expect(content).toContain("operator review");
 });
 
 test("repo managed stream contract docs lock the label, comment, and current-approach workflow shapes", () => {
@@ -79,53 +79,48 @@ test("repo managed stream contract docs lock the label, comment, and current-app
     "utf8",
   );
 
-  expect(goals).toContain("## Managed Parent Label Contract");
-  expect(goals).toContain("## Module Identity Contract");
-  expect(goals).toContain("## Parent Description Template");
-  expect(goals).not.toContain("io-managed:<section-id>:start");
-  expect(goals).toContain("humans and agents both edit the same parent description");
+  expect(goals).toContain("## Current Managed Parent Contract");
+  expect(goals).toContain("## Current Module Boundaries");
+  expect(goals).toContain("## Current Ownership Split");
+  expect(goals).toContain("The code already assumes shared ownership of the parent description");
 
-  expect(comments).toContain("## Accepted Command Shape");
+  expect(comments).toContain("## Current Command Shape");
   expect(comments).toContain("@io <command>");
-  expect(comments).toContain("### `@io backlog`");
-  expect(comments).toContain("### `@io status`");
+  expect(comments).toContain("`@io backlog`: may refresh the parent description");
+  expect(comments).toContain("`@io status`");
   expect(comments).toContain("<!-- io-managed:comment-result -->");
   expect(comments).toContain("dryRun: true");
 
-  expect(workflowPlan).toContain("## Stable Contract Sources");
-  expect(workflowPlan).toContain("## Current Runtime Baseline");
-  expect(workflowPlan).toContain("## Current Approach Linear Contract");
-  expect(workflowPlan).toContain("## Proof Surface");
-  expect(workflowPlan).toContain("./managed-stream-backlog.md");
-  expect(workflowPlan).toContain("./managed-stream-comments.md");
-  expect(workflowPlan).toContain("../doc/stream-workflow.md");
-  expect(workflowPlan).toContain("only auto-runs children whose parent is `In Progress`");
-  expect(workflowPlan).toContain("successful parent backlog runs move the parent to `In Review`");
+  expect(workflowPlan).toContain("## Current Workflow Surface");
+  expect(workflowPlan).toContain("`io.ts` for runtime config plus `io.md` for prompt body");
+  expect(workflowPlan).toContain("## Current Doc Reference Rules");
+  expect(workflowPlan).toContain("## Current Prompt Model");
+  expect(workflowPlan).toContain("exactly one configured module label");
+  expect(workflowPlan).toContain("synthesized issue description context");
 });
 
 test("repo managed stream contract docs capture label, ownership, and comment rules", () => {
   const goalsPath = resolve(repoRoot, "./agent/io/managed-stream-goals.md");
   const goals = readFileSync(goalsPath, "utf8");
-  expect(goals).toContain("the issue has the `io` label");
-  expect(goals).toContain("exactly one module label that matches a configured module id");
-  expect(goals).toContain("package `*/io/goals.md` docs may still exist as repo docs");
-  expect(goals).toContain("## Parent Description Template");
-  expect(goals).toContain("Human-owned:");
-  expect(goals).toContain("Agent-owned:");
+  expect(goals).toContain("- it has the `io` label");
+  expect(goals).toContain("exactly one label that matches a configured module id");
+  expect(goals).toContain("Module identity comes from `workflow.modules.<id>` in `io.ts`.");
+  expect(goals).toContain("## Current Ownership Split");
+  expect(goals).toContain("Humans still own:");
+  expect(goals).toContain("The agent currently owns:");
 
   const commentsPath = resolve(repoRoot, "./agent/io/managed-stream-comments.md");
   const comments = readFileSync(commentsPath, "utf8");
   expect(comments).toContain("@io backlog");
   expect(comments).toContain("@io status");
-  expect(comments).toContain("the first non-empty line must start with `@io `");
+  expect(comments).toContain("the first non-empty line is always the command line");
   expect(comments).not.toContain("@io focus");
 
   const planPath = resolve(repoRoot, "./agent/io/module-stream-workflow-plan.md");
   const plan = readFileSync(planPath, "utf8");
-  expect(plan).toContain("## Stable Contract Sources");
-  expect(plan).toContain("## Done Means");
-  expect(plan).toContain("new streams bootstrap with parent `In Review` and children in `Todo`");
-  expect(plan).toContain("## Out Of Scope For This Slice");
+  expect(plan).toContain("## Current Constraints");
+  expect(plan).toContain("workflow loading is repo-local and file-based");
+  expect(plan).toContain("## Future Work Suggestions");
 });
 
 test("repo current focus doc captures the phase gate and separated transitions", () => {
@@ -137,6 +132,8 @@ test("repo current focus doc captures the phase gate and separated transitions",
   expect(focus).toContain("Seed new implementation children in `Todo`");
   expect(focus).toContain("Keep parent and child Linear transitions separate");
   expect(focus).toContain("child execution still lands on `Done`");
-  expect(focus).toContain("Do not auto-run child issues unless their parent stream is `In Progress`");
+  expect(focus).toContain(
+    "Do not auto-run child issues unless their parent stream is `In Progress`",
+  );
   expect(focus).toContain("Keep one active child per stream");
 });

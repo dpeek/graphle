@@ -25,7 +25,7 @@ test("parseManagedComment accepts the stable line plus YAML shape", () => {
   const parsed = parseManagedComment({
     body: `@io backlog
 docs:
-  - ./agent/io/goals.md
+  - ./agent/io/overview.md
 dryRun: true
 note: refresh`,
     commentId: "comment-1",
@@ -37,12 +37,12 @@ note: refresh`,
   expect(parsed).toEqual({
     body: `@io backlog
 docs:
-  - ./agent/io/goals.md
+  - ./agent/io/overview.md
 dryRun: true
 note: refresh`,
     bodyHash: hashManagedCommentBody(`@io backlog
 docs:
-  - ./agent/io/goals.md
+  - ./agent/io/overview.md
 dryRun: true
 note: refresh`),
     command: "backlog",
@@ -50,7 +50,7 @@ note: refresh`),
     createdAt: "2024-01-02T00:00:00.000Z",
     issue,
     payload: {
-      docs: ["./agent/io/goals.md"],
+      docs: ["./agent/io/overview.md"],
       dryRun: true,
       note: "refresh",
     },

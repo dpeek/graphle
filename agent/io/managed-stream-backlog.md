@@ -1,212 +1,85 @@
-# Managed Stream Backlog Loop
+# Managed Stream Backlog Refresh
 
-Use this contract when a backlog run is refining an IO-managed parent issue into
-child work for a long-lived stream.
+## Purpose
 
-This doc defines the parent-description refresh and child issue payload. Use
-[`./managed-stream-goals.md`](./managed-stream-goals.md) for the parent label
-contract, description template, and ownership split, and
-[`./managed-stream-comments.md`](./managed-stream-comments.md) for `@io ...`
-comment triggers.
+This document is the entry point for agents working on parent brief normalization, managed child payloads, or backlog rerun behavior.
 
-## Objective
+## Current Parent Brief Shape
 
-Turn the parent brief into an execution-ready child backlog that stays healthy
-over repeated backlog runs.
+Backlog refreshes already normalize the managed parent description toward one shared shape:
 
-The result should be:
+- `Objective`
+- `Current Focus`
+- `Constraints`
+- `Proof Surfaces`
+- `Work Options`
+- `Deferred`
 
-- concrete child issues, not planning prose
-- implementation steps, not extra planning or review tiers
-- ordered delivery through `blockedBy`
-- descriptions that an execution agent can act on without reopening planning
-- a short speculative tail that can be refreshed safely later
+Current behavior:
 
-## Stable Parent Brief Shape
+- the refresh rewrites the parent description directly instead of maintaining protected blocks
+- useful human-authored sections such as decisions, approvals, risks, and notes are preserved when possible
+- `Work Options` are the canonical input for rebuilding speculative child backlog
+- repo-relative proof surfaces are preferred because they are useful for both humans and later agent reruns
 
-Backlog refreshes should rewrite the parent issue description directly toward
-one stable shape:
+## Current Child Payload
 
-```md
-## Objective
-- ...
+Managed child issues are currently execution-step issues with a stable description shape:
 
-## Current Focus
-- ...
+- `Outcome`
+- `Scope`
+- `Acceptance Criteria`
+- `Module Scope`
+- `Dependencies And Docs`
+- `Out Of Scope`
 
-## Constraints
-- ...
+Current child defaults:
 
-## Proof Surfaces
-- ...
+- state starts at `Todo`
+- priority inherits from the parent unless explicitly changed
+- one primary module label is retained
+- dependency ordering is expressed through `blockedBy`
+- docs requested by the parent refresh or `@io backlog` are attached to the child payload
 
-## Work Options
-1. **Option 1**
-   Focus: ...
-   Alignment: ...
-2. **Option 2**
-   Focus: ...
-   Alignment: ...
-3. **Option 3**
-   Focus: ...
-   Alignment: ...
+## Current Rerun Behavior
 
-## Deferred
-- ...
-```
+The current maintenance loop already distinguishes between durable work and speculative tail work:
 
-Rules:
+- active, in-review, and done children are preserved
+- untouched Todo children are the main rewrite surface
+- matching existing Todo children are reused before creating new ones
+- dependency edges are relinked when ordering changes
+- the stream is usually topped back up to a short tail rather than replanned from scratch
 
-- refresh the whole parent description instead of writing protected marker
-  blocks
-- preserve useful human-authored sections when possible, especially decisions,
-  approvals, and notes that still help execution
-- normalize toward the shared headings even when the starting description uses a
-  different shape
-- keep `Work Options` stable enough that later backlog runs can refresh the
-  speculative tail without recreating the entire child backlog
+This keeps reruns stable enough that backlog refreshes do not churn every child issue.
 
-## Stable Child Payload
+## Current Bootstrap And Release
 
-Create or update child issues with one stable shape every time:
+- a successful managed backlog pass moves the parent to `In Review`
+- new or refreshed child issues remain `Todo`
+- the parent must move to `In Progress` before child execution can start
+- child success moves only the child to `Done`
 
-```yaml
-title: "<verb-first shipping task>"
-description: |
-  ## Outcome
-  ...
+Backlog planning and child execution remain separate transitions even though they share one stream branch.
 
-  ## Scope
-  ...
+## Current Guardrails
 
-  ## Acceptance Criteria
-  - ...
+- child issues should stay centered on one primary module surface
+- cross-module work should be explicit in the child description rather than implied
+- backlog refresh should avoid destructive rewrites of already active or completed children
+- the agent should report created, reused, updated, and relinked backlog state clearly enough for operator review
 
-  ## Module Scope
-  - Primary module: <module id>
-  - Shared paths: <only if needed>
+## Roadmap
 
-  ## Dependencies And Docs
-  - ...
+- tighten duplicate detection without making reruns opaque
+- improve operator summaries of what changed across a refresh
+- decide whether the target speculative tail length should become configurable
+- clarify when cross-module exceptions deserve a new stream instead of a larger child
 
-  ## Out Of Scope
-  - ...
-parentId: "<parent issue id>"
-labels:
-  - agent
-  - <primary module label>
-priority: <inherit parent priority unless there is a clear reason not to>
-state: "Todo"
-blockedBy:
-  - <previous child issue id or identifier when ordering is required>
-```
+## Future Work Suggestions
 
-Keep the field set and section order stable. Child descriptions must stay
-execution-ready: concrete repository surfaces, concrete behavior, and concrete
-acceptance criteria.
-
-Rules:
-
-- child issues are implementation-step only for this first pass
-- current-approach bootstrap seeds new child issues in `Todo`
-- parent stream phase, not a child-only planning tier, keeps seeded `Todo`
-  children non-runnable until the parent moves to `In Progress`
-- automatic backlog scheduling stops once the parent leaves `Todo`, but
-  explicit backlog reruns may still target the parent while it is in
-  `In Review` or `In Progress` through direct routing or top-level
-  `@io backlog`
-- reruns should treat untouched `Todo` children as the speculative tail unless
-  they have already moved into active review or done states
-
-## Safe Bootstrap
-
-Seed new streams conservatively under the current runtime:
-
-1. set the parent issue to `In Review`
-2. create the initial implementation child backlog in `Todo`
-3. keep the parent in `In Review` while humans edit and approve the brief
-4. move the parent to `In Progress` only when execution may begin
-
-This keeps the current 2-level parent/child model intact while preventing new
-`Todo` child issues from becoming runnable before the parent stream is
-explicitly released.
-
-Transition split for the current approach:
-
-- backlog success moves the parent from `Todo` to `In Review`
-- a human later moves the parent from `In Review` to `In Progress` to release
-  execution
-- child execution success moves only the child to `Done`
-
-## Transition Rules
-
-Keep parent backlog transitions and child execution transitions separate:
-
-- successful parent backlog runs start from parent `Todo` and return the parent
-  to `In Review`
-- successful child execution runs move the child to `Done`
-- moving the parent to `In Progress` is the human release step for execution;
-  it does not imply a child state change
-- terminal worktree cleanup happens after the Linear state transition, once the
-  runtime verifies the child landed on the stream branch or the parent landed
-  on `main`
-
-## Expansion Pass
-
-On the first approved parent brief:
-
-1. read the parent brief, existing children, and module docs before creating
-   anything
-2. break the work into small shipping tasks that can land cleanly on the stream
-   branch
-3. create child issues under the parent in delivery order
-4. add `blockedBy` edges so only the next child is unblocked
-5. stop once the stream has roughly five planned tasks unless the brief is
-   genuinely smaller
-
-Prefer tasks that stay within one module and one coherent change surface.
-
-## Maintenance Pass
-
-On later backlog runs for the same parent:
-
-1. inspect the existing child backlog first
-2. preserve active, in-review, and done children as-is
-3. avoid duplicates by matching on outcome, module scope, and nearby repository
-   surfaces before creating anything new
-4. keep the next tasks stable unless the parent brief materially changed
-5. refresh only the speculative tail of untouched `Todo` children
-6. top the stream back up to about five planned tasks when the tail gets short
-7. relink `blockedBy` edges if backlog edits changed ordering
-
-Do not destructively rewrite children that are already active or completed.
-
-## Module Guardrails
-
-Each child should have one primary module label and one primary implementation
-surface.
-
-Cross-module work is allowed only when it is explicit. When a child needs it:
-
-- add a `## Cross-Module Exception` section to the description
-- name the extra module or shared path directly
-- explain why the split cannot stay module-local
-- keep the exception as small as possible
-
-Accidental cross-module scope is a planning bug. Make the exception visible
-instead of letting it hide in vague task text.
-
-## Operator-Visible Output
-
-Backlog runs should report the planning transitions that matter to an operator:
-
-- stream status at start: new expansion or maintenance rerun
-- existing child counts by preserved vs speculative work
-- child issues created, reused, updated, or left untouched
-- `blockedBy` edges added or changed
-- whether the stream was topped up, skipped, or already healthy
-- any explicit cross-module exceptions
-- anything blocked on missing brief detail or unresolved design choices
-
-Keep that summary concise, but make the transition clear enough that an
-operator can tell how the backlog changed without diffing every child manually.
+1. Add one concrete before-and-after example of a parent brief refresh.
+2. Document which child fields are intended to remain stable for downstream automation.
+3. Add a short matrix for reuse versus update versus create decisions during reruns.
+4. Clarify how explicit cross-module exceptions should be phrased.
+5. Record which parts of the backlog summary are meant for humans versus future machine consumers.

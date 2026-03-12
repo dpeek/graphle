@@ -231,7 +231,7 @@ test("renders successful Linear writes as readable summaries", () => {
   expect(output).toBe(
     "=== worker-1 OPE-41 Add predicate-slot subscriptions to graph runtime ===\n" +
       "Linear issue update: OPE-41\n" +
-      "Linear issue updated: OPE-41\n",
+      'Tool: linear.save_issue {"id":"OPE-41","state":"In Progress","title":"Run plan"}\n',
   );
 });
 

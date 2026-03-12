@@ -18,8 +18,6 @@ function printHelp() {
 
 Defaults:
   ./io.ts + ./io.md
-Compatibility:
-  falls back to ./io.json during migration, then ./WORKFLOW.md for the legacy entrypoint
   `);
 }
 

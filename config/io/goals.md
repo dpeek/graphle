@@ -26,5 +26,4 @@
 ## Related Docs
 
 - `./overview.md`
-- `../../lib/io/goals.md`
 - `../../io/overview.md`

@@ -8,8 +8,7 @@
 
 - `./goals.md`
 - `../../agent/io/overview.md`
-- `../../agent/io/goals.md`
-- `../../agent/doc/stream-workflow.md`
+- `../../agent/io/module-stream-workflow-plan.md`
 
 ## Layout
 

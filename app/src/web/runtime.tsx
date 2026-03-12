@@ -6,15 +6,17 @@ import {
   type TotalSyncPayload,
 } from "#graph";
 
-import { appNamespace, resolveBrowserRuntimeConfig, type AppRuntimeConfig } from "../config.js";
+import { app } from "../graph/app.js";
 
-export type AppRuntime = SyncedTypeClient<typeof appNamespace>;
+const syncUrl = "/api/sync";
+
+export type AppRuntime = SyncedTypeClient<typeof app>;
 
 const runtimeCache = new Map<string, Promise<AppRuntime>>();
 
 const AppRuntimeContext = createContext<AppRuntime | null>(null);
 
-async function fetchSyncPayload(syncUrl: string): Promise<TotalSyncPayload> {
+async function fetchSyncPayload(): Promise<TotalSyncPayload> {
   const response = await fetch(syncUrl, {
     cache: "no-store",
     headers: {
@@ -29,29 +31,29 @@ async function fetchSyncPayload(syncUrl: string): Promise<TotalSyncPayload> {
   return (await response.json()) as TotalSyncPayload;
 }
 
-export async function createAppRuntime(config: AppRuntimeConfig): Promise<AppRuntime> {
-  const runtime = createSyncedTypeClient(appNamespace, {
-    pull: () => fetchSyncPayload(config.syncUrl),
+export async function createAppRuntime(): Promise<AppRuntime> {
+  const runtime = createSyncedTypeClient(app, {
+    pull: () => fetchSyncPayload(),
   });
 
   await runtime.sync.sync();
   return runtime;
 }
 
-export function loadSharedAppRuntime(config: AppRuntimeConfig): Promise<AppRuntime> {
-  const cached = runtimeCache.get(config.syncUrl);
+export function loadSharedAppRuntime(): Promise<AppRuntime> {
+  const cached = runtimeCache.get(syncUrl);
   if (cached) return cached;
 
-  const pending = createAppRuntime(config).catch((error) => {
-    runtimeCache.delete(config.syncUrl);
+  const pending = createAppRuntime().catch((error) => {
+    runtimeCache.delete(syncUrl);
     throw error;
   });
-  runtimeCache.set(config.syncUrl, pending);
+  runtimeCache.set(syncUrl, pending);
   return pending;
 }
 
-export function resetSharedAppRuntime(config: AppRuntimeConfig): void {
-  runtimeCache.delete(config.syncUrl);
+export function resetSharedAppRuntime(): void {
+  runtimeCache.delete(syncUrl);
 }
 
 export function useAppRuntime(): AppRuntime {
@@ -63,8 +65,7 @@ export function useAppRuntime(): AppRuntime {
 }
 
 type AppBootstrapProps = {
-  config?: AppRuntimeConfig;
-  loadRuntime?: (config: AppRuntimeConfig) => Promise<AppRuntime>;
+  loadRuntime?: () => Promise<AppRuntime>;
   renderApp?: () => ReactNode;
 };
 
@@ -78,7 +79,7 @@ function formatBootstrapError(error: unknown): string {
   return String(error);
 }
 
-function LoadingState({ config }: { config: AppRuntimeConfig }) {
+function LoadingState() {
   return (
     <main
       className="flex min-h-screen items-center justify-center bg-slate-950 px-6 text-slate-100"
@@ -88,7 +89,7 @@ function LoadingState({ config }: { config: AppRuntimeConfig }) {
         <p className="text-xs uppercase tracking-[0.28em] text-cyan-300">Graph sync</p>
         <h1 className="mt-3 text-2xl font-semibold">Loading authoritative graph</h1>
         <p className="mt-2 text-sm text-slate-300">
-          Waiting for the first total snapshot from <code>{config.syncUrl}</code>.
+          Waiting for the first total snapshot from <code>{syncUrl}</code>.
         </p>
       </div>
     </main>
@@ -96,11 +97,9 @@ function LoadingState({ config }: { config: AppRuntimeConfig }) {
 }
 
 function ErrorState({
-  config,
   error,
   onRetry,
 }: {
-  config: AppRuntimeConfig;
   error: unknown;
   onRetry(): void;
 }) {
@@ -114,7 +113,7 @@ function ErrorState({
         <h1 className="mt-3 text-2xl font-semibold">Unable to load the graph</h1>
         <p className="mt-2 text-sm text-rose-100/85">{formatBootstrapError(error)}</p>
         <p className="mt-2 text-xs text-rose-100/65">
-          Endpoint: <code>{config.syncUrl}</code>
+          Endpoint: <code>{syncUrl}</code>
         </p>
         <button
           className="mt-5 rounded-full border border-rose-100/25 bg-rose-100/10 px-4 py-2 text-sm font-medium"
@@ -129,11 +128,9 @@ function ErrorState({
 }
 
 export function AppRuntimeBootstrap({
-  config,
   loadRuntime = loadSharedAppRuntime,
   renderApp,
 }: AppBootstrapProps) {
-  const [resolvedConfig] = useState(() => config ?? resolveBrowserRuntimeConfig());
   const [state, setState] = useState<BootstrapState>({ status: "loading" });
   const [attempt, setAttempt] = useState(0);
 
@@ -141,7 +138,7 @@ export function AppRuntimeBootstrap({
     let cancelled = false;
     setState({ status: "loading" });
 
-    loadRuntime(resolvedConfig)
+    loadRuntime()
       .then((runtime) => {
         if (cancelled) return;
         setState({ status: "ready", runtime });
@@ -154,19 +151,18 @@ export function AppRuntimeBootstrap({
     return () => {
       cancelled = true;
     };
-  }, [attempt, loadRuntime, resolvedConfig]);
+  }, [attempt, loadRuntime]);
 
   if (state.status === "loading") {
-    return <LoadingState config={resolvedConfig} />;
+    return <LoadingState />;
   }
 
   if (state.status === "error") {
     return (
       <ErrorState
-        config={resolvedConfig}
         error={state.error}
         onRetry={() => {
-          resetSharedAppRuntime(resolvedConfig);
+          resetSharedAppRuntime();
           setAttempt((current) => current + 1);
         }}
       />

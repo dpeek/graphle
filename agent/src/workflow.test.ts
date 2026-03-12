@@ -5,120 +5,56 @@ import { resolve } from "node:path";
 
 import { DEFAULT_EXECUTE_BUILTIN_DOC_IDS } from "./builtins.js";
 import { resolveIssueRouting } from "./issue-routing.js";
-import { loadWorkflowFile, parseWorkflow, renderPrompt } from "./workflow.js";
+import { loadWorkflowFile, renderPrompt } from "./workflow.js";
 
 async function mkdtempInRepo(prefix: string) {
   return mkdtemp(resolve(process.cwd(), prefix));
 }
 
-test("parseWorkflow normalizes legacy WORKFLOW front matter and env-backed values", () => {
-  process.env.LINEAR_API_KEY = "linear-token";
-  process.env.LINEAR_PROJECT_SLUG = "project-slug";
-  process.env.AGENT_WORKSPACE_ROOT = "/tmp/workspace";
+async function writeIoTsConfig(root: string, config: Record<string, unknown>) {
+  await writeFile(resolve(root, "io.ts"), `export default ${JSON.stringify(config, null, 2)};\n`);
+}
 
-  const result = parseWorkflow(`---
-tracker:
-  kind: linear
-  api_key: $LINEAR_API_KEY
-  project_slug: $LINEAR_PROJECT_SLUG
-workspace:
-  root: $AGENT_WORKSPACE_ROOT
-agent:
-  max_turns: 1
----
-Issue {{ issue.identifier }}: {{ issue.title }}
-`);
-
-  expect(result.ok).toBe(true);
-  if (!result.ok) {
-    return;
-  }
-
-  expect(result.value.entrypoint.kind).toBe("workflow");
-  expect(result.value.tracker.apiKey).toBe("linear-token");
-  expect(result.value.tracker.projectSlug).toBe("project-slug");
-  expect(result.value.workspace.root).toBe("/tmp/workspace");
-  expect(result.value.workspace.origin).toBeUndefined();
-  expect(result.value.context.overrides).toEqual({});
-  expect(result.value.agent.maxTurns).toBe(1);
-});
-
-test("loadWorkflowFile prefers io.ts over io.json when both are present", async () => {
+test("loadWorkflowFile loads io.ts and io.md by default", async () => {
   const root = await mkdtempInRepo(".workflow-");
   process.env.LINEAR_API_KEY = "linear-token";
   process.env.LINEAR_PROJECT_SLUG = "project-slug";
 
   await mkdir(resolve(root, "io", "context"), { recursive: true });
-  await writeFile(
-    resolve(root, "io.ts"),
-    `import { defineIoConfig, env, linearTracker } from "@io/lib/config";
-
-export default defineIoConfig({
-  agent: { maxTurns: 3 },
-  context: {
-    docs: {
-      "project.overview": "./io/context/overview.md",
-    },
-    profiles: {
-      execute: {
-        include: ["builtin:io.agent.execute.default", "project.overview"],
+  await writeIoTsConfig(root, {
+    agent: { maxTurns: 3 },
+    context: {
+      docs: {
+        "project.overview": "./io/context/overview.md",
       },
-    },
-  },
-  install: { brews: ["bat"] },
-  issues: {
-    defaultAgent: "execute",
-    routing: [
-      {
-        agent: "backlog",
-        if: { labelsAny: ["planning"] },
-        profile: "backlog",
-      },
-    ],
-  },
-  tracker: linearTracker({
-    apiKey: env.secret("LINEAR_API_KEY"),
-    projectSlug: env.string("LINEAR_PROJECT_SLUG"),
-  }),
-  workspace: {
-    root: "./workspace",
-  },
-});
-`,
-  );
-  await writeFile(
-    resolve(root, "io.json"),
-    JSON.stringify(
-      {
-        agent: { maxTurns: 2 },
-        brews: ["ripgrep"],
-        tracker: {
-          apiKey: "$LINEAR_API_KEY",
-          kind: "linear",
-          projectSlug: "$LINEAR_PROJECT_SLUG",
-        },
-        workspace: {
-          root: "./workspace",
+      profiles: {
+        execute: {
+          include: ["builtin:io.agent.execute.default", "project.overview"],
         },
       },
-      null,
-      2,
-    ),
-  );
+    },
+    install: { brews: ["bat"] },
+    issues: {
+      defaultAgent: "execute",
+      routing: [
+        {
+          agent: "backlog",
+          if: { labelsAny: ["planning"] },
+          profile: "backlog",
+        },
+      ],
+    },
+    tracker: {
+      apiKey: "$LINEAR_API_KEY",
+      kind: "linear",
+      projectSlug: "$LINEAR_PROJECT_SLUG",
+    },
+    workspace: {
+      root: "./workspace",
+    },
+  });
   await writeFile(resolve(root, "io.md"), "IO {{ issue.identifier }}\n");
   await writeFile(resolve(root, "io", "context", "overview.md"), "PROJECT OVERVIEW\n");
-  await writeFile(
-    resolve(root, "WORKFLOW.md"),
-    `---
-tracker:
-  kind: linear
-  api_key: $LINEAR_API_KEY
-workspace:
-  root: ./legacy-workspace
----
-WORKFLOW {{ issue.identifier }}
-`,
-  );
 
   try {
     const result = await loadWorkflowFile(undefined, root);
@@ -160,32 +96,69 @@ WORKFLOW {{ issue.identifier }}
   }
 });
 
-test("loadWorkflowFile resolves builtin override paths from io.json", async () => {
+test("loadWorkflowFile rejects legacy entrypoint paths", async () => {
+  const root = await mkdtemp(resolve(tmpdir(), "workflow-"));
+  await writeIoTsConfig(root, {
+    tracker: {
+      apiKey: "$LINEAR_API_KEY",
+      kind: "linear",
+    },
+    workspace: {
+      root: "./workspace",
+    },
+  });
+  await writeFile(resolve(root, "io.md"), "IO {{ issue.identifier }}\n");
+  await writeFile(resolve(root, "io.json"), "{}\n");
+  await writeFile(resolve(root, "WORKFLOW.md"), "legacy\n");
+
+  try {
+    const ioJsonResult = await loadWorkflowFile("io.json", root);
+    expect(ioJsonResult.ok).toBe(false);
+    if (ioJsonResult.ok) {
+      return;
+    }
+    expect(ioJsonResult.errors).toEqual([
+      {
+        message: "Unsupported entrypoint path: io.json. Expected io.ts or io.md.",
+        path: "$",
+      },
+    ]);
+
+    const workflowResult = await loadWorkflowFile("WORKFLOW.md", root);
+    expect(workflowResult.ok).toBe(false);
+    if (workflowResult.ok) {
+      return;
+    }
+    expect(workflowResult.errors).toEqual([
+      {
+        message: "Unsupported entrypoint path: WORKFLOW.md. Expected io.ts or io.md.",
+        path: "$",
+      },
+    ]);
+  } finally {
+    await rm(root, { force: true, recursive: true });
+  }
+});
+
+test("loadWorkflowFile resolves builtin override paths from io.ts", async () => {
   const root = await mkdtemp(resolve(tmpdir(), "workflow-"));
   process.env.LINEAR_API_KEY = "linear-token";
 
   await mkdir(resolve(root, "io", "context"), { recursive: true });
-  await writeFile(
-    resolve(root, "io.json"),
-    JSON.stringify(
-      {
-        context: {
-          overrides: {
-            "builtin:io.core.validation": "./io/context/validation.md",
-          },
-        },
-        tracker: {
-          apiKey: "$LINEAR_API_KEY",
-          kind: "linear",
-        },
-        workspace: {
-          root: "./workspace",
-        },
+  await writeIoTsConfig(root, {
+    context: {
+      overrides: {
+        "builtin:io.core.validation": "./io/context/validation.md",
       },
-      null,
-      2,
-    ),
-  );
+    },
+    tracker: {
+      apiKey: "$LINEAR_API_KEY",
+      kind: "linear",
+    },
+    workspace: {
+      root: "./workspace",
+    },
+  });
   await writeFile(resolve(root, "io.md"), "IO {{ issue.identifier }}\n");
 
   try {
@@ -208,32 +181,25 @@ test("loadWorkflowFile resolves registered docs and merges default context profi
   process.env.LINEAR_API_KEY = "linear-token";
 
   await mkdir(resolve(root, "io", "context"), { recursive: true });
-  await writeFile(
-    resolve(root, "io.json"),
-    JSON.stringify(
-      {
-        context: {
-          docs: {
-            "project.architecture": "./io/context/architecture.md",
-          },
-          profiles: {
-            backlog: {
-              include: ["builtin:io.agent.backlog.default", "project.architecture"],
-            },
-          },
-        },
-        tracker: {
-          apiKey: "$LINEAR_API_KEY",
-          kind: "linear",
-        },
-        workspace: {
-          root: "./workspace",
+  await writeIoTsConfig(root, {
+    context: {
+      docs: {
+        "project.architecture": "./io/context/architecture.md",
+      },
+      profiles: {
+        backlog: {
+          include: ["builtin:io.agent.backlog.default", "project.architecture"],
         },
       },
-      null,
-      2,
-    ),
-  );
+    },
+    tracker: {
+      apiKey: "$LINEAR_API_KEY",
+      kind: "linear",
+    },
+    workspace: {
+      root: "./workspace",
+    },
+  });
   await writeFile(resolve(root, "io.md"), "IO {{ issue.identifier }}\n");
   await writeFile(resolve(root, "io", "context", "architecture.md"), "ARCHITECTURE\n");
 
@@ -264,30 +230,23 @@ test("loadWorkflowFile preserves profile entrypoint opt-out", async () => {
   const root = await mkdtemp(resolve(tmpdir(), "workflow-"));
   process.env.LINEAR_API_KEY = "linear-token";
 
-  await writeFile(
-    resolve(root, "io.json"),
-    JSON.stringify(
-      {
-        context: {
-          profiles: {
-            execute: {
-              include: ["builtin:io.agent.execute.default"],
-              includeEntrypoint: false,
-            },
-          },
-        },
-        tracker: {
-          apiKey: "$LINEAR_API_KEY",
-          kind: "linear",
-        },
-        workspace: {
-          root: "./workspace",
+  await writeIoTsConfig(root, {
+    context: {
+      profiles: {
+        execute: {
+          include: ["builtin:io.agent.execute.default"],
+          includeEntrypoint: false,
         },
       },
-      null,
-      2,
-    ),
-  );
+    },
+    tracker: {
+      apiKey: "$LINEAR_API_KEY",
+      kind: "linear",
+    },
+    workspace: {
+      root: "./workspace",
+    },
+  });
   await writeFile(resolve(root, "io.md"), "IO {{ issue.identifier }}\n");
 
   try {
@@ -306,182 +265,35 @@ test("loadWorkflowFile preserves profile entrypoint opt-out", async () => {
   }
 });
 
-test("loadWorkflowFile reuses WORKFLOW.md prompt text when io.json has runtime config but io.md is absent", async () => {
-  const root = await mkdtemp(resolve(tmpdir(), "workflow-"));
-  process.env.LINEAR_API_KEY = "linear-token";
-
-  await writeFile(
-    resolve(root, "io.json"),
-    JSON.stringify(
-      {
-        tracker: {
-          apiKey: "$LINEAR_API_KEY",
-          kind: "linear",
-        },
-        workspace: {
-          root: "./workspace",
-        },
-      },
-      null,
-      2,
-    ),
-  );
-  await writeFile(
-    resolve(root, "WORKFLOW.md"),
-    `---
-tracker:
-  kind: linear
-  api_key: ignored-token
-workspace:
-  root: ./legacy-workspace
----
-WORKFLOW {{ issue.identifier }}
-`,
-  );
-
-  try {
-    const result = await loadWorkflowFile(undefined, root);
-    expect(result.ok).toBe(true);
-    if (!result.ok) {
-      return;
-    }
-
-    expect(result.value.entrypoint.kind).toBe("io");
-    expect(result.value.entrypoint.configPath).toBe(resolve(root, "io.json"));
-    expect(result.value.entrypoint.promptPath).toBe(resolve(root, "WORKFLOW.md"));
-    expect(result.value.entrypointContent).toBe("WORKFLOW {{ issue.identifier }}");
-    expect(result.value.tracker.apiKey).toBe("linear-token");
-    expect(result.value.workspace.root).toBe(resolve(root, "workspace"));
-  } finally {
-    await rm(root, { force: true, recursive: true });
-  }
-});
-
-test("loadWorkflowFile falls back to WORKFLOW.md when io.md is absent", async () => {
-  const root = await mkdtemp(resolve(tmpdir(), "workflow-"));
-  process.env.LINEAR_API_KEY = "linear-token";
-
-  await writeFile(resolve(root, "io.json"), JSON.stringify({ brews: ["ripgrep"] }, null, 2));
-  await writeFile(
-    resolve(root, "WORKFLOW.md"),
-    `---
-tracker:
-  kind: linear
-  api_key: $LINEAR_API_KEY
-workspace:
-  root: ./workspace
----
-WORKFLOW {{ issue.identifier }}
-`,
-  );
-
-  try {
-    const result = await loadWorkflowFile(undefined, root);
-    expect(result.ok).toBe(true);
-    if (!result.ok) {
-      return;
-    }
-
-    expect(result.value.entrypoint.kind).toBe("workflow");
-    expect(result.value.entrypoint.configPath).toBe(resolve(root, "WORKFLOW.md"));
-    expect(result.value.entrypointContent).toBe("WORKFLOW {{ issue.identifier }}");
-    expect(result.value.workspace.root).toBe(resolve(root, "workspace"));
-  } finally {
-    await rm(root, { force: true, recursive: true });
-  }
-});
-
-test("loadWorkflowFile uses io.json config with WORKFLOW.md prompt during migration", async () => {
-  const root = await mkdtemp(resolve(tmpdir(), "workflow-"));
-  process.env.LINEAR_API_KEY = "linear-token";
-  process.env.LINEAR_PROJECT_SLUG = "project-slug";
-
-  await writeFile(
-    resolve(root, "io.json"),
-    JSON.stringify(
-      {
-        agent: { maxTurns: 2 },
-        tracker: {
-          apiKey: "$LINEAR_API_KEY",
-          kind: "linear",
-          projectSlug: "$LINEAR_PROJECT_SLUG",
-        },
-        workspace: {
-          root: "./workspace",
-        },
-      },
-      null,
-      2,
-    ),
-  );
-  await writeFile(
-    resolve(root, "WORKFLOW.md"),
-    `---
-tracker:
-  kind: linear
-  api_key: $LINEAR_API_KEY
-workspace:
-  root: ./legacy-workspace
----
-WORKFLOW {{ issue.identifier }}
-`,
-  );
-
-  try {
-    const result = await loadWorkflowFile(undefined, root);
-    expect(result.ok).toBe(true);
-    if (!result.ok) {
-      return;
-    }
-
-    expect(result.value.entrypoint.kind).toBe("io");
-    expect(result.value.entrypoint.configPath).toBe(resolve(root, "io.json"));
-    expect(result.value.entrypoint.promptPath).toBe(resolve(root, "WORKFLOW.md"));
-    expect(result.value.entrypointContent).toBe("WORKFLOW {{ issue.identifier }}");
-    expect(result.value.agent.maxTurns).toBe(2);
-    expect(result.value.tracker.projectSlug).toBe("project-slug");
-    expect(result.value.workspace.root).toBe(resolve(root, "workspace"));
-  } finally {
-    await rm(root, { force: true, recursive: true });
-  }
-});
-
-test("loadWorkflowFile parses issue routing defaults and normalized rules from io.json", async () => {
+test("loadWorkflowFile parses issue routing defaults and normalized rules from io.ts", async () => {
   const root = await mkdtemp(resolve(tmpdir(), "workflow-"));
 
-  await writeFile(
-    resolve(root, "io.json"),
-    JSON.stringify(
-      {
-        issues: {
-          defaultAgent: "execute",
-          routing: [
-            {
-              agent: "backlog",
-              if: {
-                hasChildren: false,
-                hasParent: true,
-                labelsAll: ["Planning", "Docs"],
-                labelsAny: ["docs"],
-                projectSlugIn: ["IO"],
-                stateIn: ["Todo", "In Progress"],
-              },
-              profile: "backlog",
-            },
-          ],
+  await writeIoTsConfig(root, {
+    issues: {
+      defaultAgent: "execute",
+      routing: [
+        {
+          agent: "backlog",
+          if: {
+            hasChildren: false,
+            hasParent: true,
+            labelsAll: ["Planning", "Docs"],
+            labelsAny: ["docs"],
+            projectSlugIn: ["IO"],
+            stateIn: ["Todo", "In Progress"],
+          },
+          profile: "backlog",
         },
-        tracker: {
-          apiKey: "$LINEAR_API_KEY",
-          kind: "linear",
-        },
-        workspace: {
-          root: "./workspace",
-        },
-      },
-      null,
-      2,
-    ),
-  );
+      ],
+    },
+    tracker: {
+      apiKey: "$LINEAR_API_KEY",
+      kind: "linear",
+    },
+    workspace: {
+      root: "./workspace",
+    },
+  });
   await writeFile(resolve(root, "io.md"), "IO {{ issue.identifier }}\n");
 
   try {
@@ -519,29 +331,22 @@ test("loadWorkflowFile normalizes modules and routes managed parents from labels
 
   await mkdir(resolve(root, "agent", "doc"), { recursive: true });
   await mkdir(resolve(root, "io"), { recursive: true });
-  await writeFile(
-    resolve(root, "io.json"),
-    JSON.stringify(
-      {
-        modules: {
-          agent: {
-            allowedSharedPaths: ["./io"],
-            docs: ["./agent/doc/stream-workflow.md"],
-            path: "./agent",
-          },
-        },
-        tracker: {
-          apiKey: "$LINEAR_API_KEY",
-          kind: "linear",
-        },
-        workspace: {
-          root: "./workspace",
-        },
+  await writeIoTsConfig(root, {
+    modules: {
+      agent: {
+        allowedSharedPaths: ["./io"],
+        docs: ["./agent/doc/stream-workflow.md"],
+        path: "./agent",
       },
-      null,
-      2,
-    ),
-  );
+    },
+    tracker: {
+      apiKey: "$LINEAR_API_KEY",
+      kind: "linear",
+    },
+    workspace: {
+      root: "./workspace",
+    },
+  });
   await writeFile(resolve(root, "io.md"), "IO {{ issue.identifier }}\n");
 
   try {

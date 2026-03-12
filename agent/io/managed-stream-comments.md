@@ -1,116 +1,97 @@
-# Managed Stream Comment Trigger Contract
-
-Status: Accepted target for implementation.
+# Managed Stream Comments
 
 ## Purpose
 
-This document defines the stable parser and writeback contract for `@io ...`
-comments on managed parent issues.
+This document is the entry point for agents working on `@io` comment parsing, managed command execution, or reply-comment behavior.
 
-## Trigger Scope
+## Current Trigger Scope
 
-`@io` comments apply only to managed parent issues that satisfy the label and
-module rules in [`./managed-stream-goals.md`](./managed-stream-goals.md).
+`@io` comments currently apply only to top-level comments on managed parent issues.
 
-Rules:
+Current scope rules:
 
-- only top-level comments on managed parent issues can trigger managed actions
-- child issues ignore `@io` comments unless a later contract adds explicit
-  child-scope commands
+- child issues ignore `@io` commands
 - one comment requests one command
-- the first non-empty line is the command line; later lines are optional
-  command arguments
-- if the parent is not managed, the runtime should reply with a blocked result
-  and make no writes
+- the first non-empty line is always the command line
+- non-managed parents still receive a reply, but the result is blocked and no managed writes happen
 
-## Accepted Command Shape
+## Current Command Shape
 
-The first version uses a narrow line-plus-YAML shape:
+The parser in `../src/managed-comments.ts` already expects a narrow line-plus-YAML form:
 
 ```md
 @io <command>
 docs:
-  - ./agent/io/goals.md
-dryRun: true
-note: Refresh after the latest scope review
+
+- ./agent/io/overview.md
+  dryRun: true
+  note: Refresh after the latest scope review
 ```
 
-Rules:
+Current accepted payload keys:
 
-- the first non-empty line must start with `@io `
-- `<command>` is a single lowercase token
-- the remaining body, when present, must parse as one YAML mapping
-- unknown commands or unknown top-level keys are rejected with a reply comment
-- commands never rely on free-form natural-language parsing outside the
-  accepted keys
+- `docs`
+- `dryRun`
+- `note`
 
-## Initial Command Set
+Unknown commands, malformed YAML, or unknown top-level keys already turn into parse-error replies rather than partial guessing.
 
-### `@io backlog`
+## Current Command Set
 
-Refresh the parent description toward the shared stream template and refresh the
-speculative child backlog.
+- `@io backlog`: may refresh the parent description and sync speculative child backlog
+- `@io status`: reports the current managed-stream state without rewriting the issue body
+- `@io help`: reports accepted commands and payload keys
 
-Write surface:
+`docs` can narrow or extend the doc list used for a backlog refresh, and `dryRun: true` computes the result without applying tracker writes.
 
-- parent issue description
-- child issues under the parent
+## Current Execution Model
 
-### `@io status`
+`../src/service.ts` currently handles managed comments by:
 
-Report the current managed-stream state without rewriting the issue body.
+1. polling managed parent issues for top-level comments
+2. parsing `@io` commands
+3. checking whether the exact comment body hash was already handled
+4. validating current managed-parent eligibility and module identity
+5. applying only the write surface allowed for that command
+6. posting one reply comment and recording the handled comment state
 
-Write surface:
+Comment dedupe is retained in per-issue runtime files by `../src/comment-state.ts`.
 
-- reply comment only
+## Current Reply Shape
 
-### `@io help`
+Reply comments already use one stable machine marker and a human-readable summary:
 
-Return the accepted commands and key validation rules.
+- `<!-- io-managed:comment-result -->`
+- `Command: ...`
+- `Result: ...`
+- `Target: ...`
+- bullet lines summarizing writes, no-ops, or warnings
 
-Write surface:
+Current result values in the code are:
 
-- reply comment only
+- `blocked`
+- `noop`
+- `partial`
+- `updated`
 
-## Execution Model
+## Current Safety Rules
 
-For each accepted trigger:
+- managed commands do not treat any parent-description region as machine-protected
+- module identity must come from labels plus workflow config, not inference from comment text
+- repeated equivalent commands are valid no-ops
+- command writes remain narrow and explicit enough to summarize in one reply
 
-1. resolve the parent issue, child issues, module identity, and referenced docs
-2. validate that the parent still satisfies the managed-parent contract
-3. execute only the write surfaces allowed for that command
-4. post one reply comment that reports `updated`, `noop`, or `blocked`
-5. leave the original trigger comment untouched
+## Roadmap
 
-If multiple unhandled trigger comments exist on one parent, process them in
-comment order so the command stream stays deterministic.
+- improve status output without widening the command surface
+- decide whether additional managed commands are worth supporting
+- clarify which reply fields should be treated as stable machine-readable output
+- keep dry-run behavior aligned with real writes as the backlog sync surface grows
 
-## Reply Comment Shape
+## Future Work Suggestions
 
-Every handled trigger should produce one concise reply with a stable shape:
-
-```md
-<!-- io-managed:comment-result -->
-Command: backlog
-Result: updated
-Target: OPE-122 / agent
-
-- Updated the parent description
-- Left existing in-progress child issues untouched
-- Warning: skipped one requested write because the parent is not eligible
-```
-
-Rules:
-
-- keep the result summary operator-readable first
-- mention each written surface or explicit no-op
-- surface blocking conditions or validation warnings directly in the reply
-
-## Safety Rules
-
-- never treat any region of the parent description as a protected marker block
-- never infer module identity from `io`; require the module label match
-- reject ambiguous module labels instead of choosing one silently
-- allow `dryRun: true` to compute and report the intended changes without
-  writing them
-- treat repeated equivalent commands as valid no-ops, not as errors
+1. Add one table mapping each command to its allowed write surfaces.
+2. Document which parse errors are expected to remain stable for operator feedback.
+3. Add an example of dry-run backlog output versus applied backlog output.
+4. Clarify whether handled-comment retention should ever expire by policy rather than count.
+5. Capture when child-scope commands would justify a separate contract instead of extending this one.

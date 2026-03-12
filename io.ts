@@ -16,7 +16,6 @@ export default defineIoConfig({
   context: {
     entrypoint: "./io/overview.md",
     docs: {
-      "project.focus": "./io/goals.md",
       "project.managed-stream-comments": "./agent/io/managed-stream-comments.md",
       "project.managed-stream-backlog": "./agent/io/managed-stream-backlog.md",
       "project.managed-stream-goals": "./agent/io/managed-stream-goals.md",
@@ -51,37 +50,37 @@ export default defineIoConfig({
   modules: {
     agent: {
       allowedSharedPaths: ["./io"],
-      docs: ["./agent/io/overview.md", "./agent/io/goals.md", "./agent/doc/stream-workflow.md"],
+      docs: ["./agent/io/overview.md", "./agent/io/module-stream-workflow-plan.md"],
       path: "./agent",
     },
     app: {
-      allowedSharedPaths: ["./graph/doc", "./io"],
-      docs: ["./app/io/overview.md", "./app/io/goals.md"],
+      allowedSharedPaths: ["./graph/io", "./io"],
+      docs: ["./app/io/overview.md"],
       path: "./app",
     },
     cli: {
       allowedSharedPaths: ["./io"],
-      docs: ["./cli/io/overview.md", "./cli/io/goals.md"],
+      docs: ["./cli/io/overview.md"],
       path: "./cli",
     },
     config: {
       allowedSharedPaths: ["./io"],
-      docs: ["./config/io/overview.md", "./config/io/goals.md"],
+      docs: ["./config/io/overview.md"],
       path: "./config",
     },
     graph: {
       allowedSharedPaths: ["./io"],
-      docs: ["./graph/io/overview.md", "./graph/io/goals.md", "./graph/doc/overview.md"],
+      docs: ["./graph/io/overview.md", "./graph/io/architecture.md"],
       path: "./graph",
     },
     lib: {
       allowedSharedPaths: ["./io"],
-      docs: ["./lib/io/overview.md", "./lib/io/goals.md"],
+      docs: ["./lib/io/overview.md"],
       path: "./lib",
     },
     tui: {
       allowedSharedPaths: ["./agent/doc", "./io"],
-      docs: ["./tui/io/overview.md", "./tui/io/goals.md"],
+      docs: ["./tui/io/overview.md"],
       path: "./tui",
     },
   },

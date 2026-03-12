@@ -139,7 +139,7 @@ export interface CodexConfig {
 
 export interface WorkflowEntrypoint {
   configPath: string;
-  kind: "io" | "workflow";
+  kind: "io";
   promptPath: string;
 }
 

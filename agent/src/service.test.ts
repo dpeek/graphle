@@ -62,8 +62,8 @@ function buildExpectedPrompt(
 
 async function writeServiceTestRepo(root: string, overrides: Record<string, unknown> = {}) {
   await writeFile(
-    resolve(root, "io.json"),
-    JSON.stringify(
+    resolve(root, "io.ts"),
+    `export default ${JSON.stringify(
       {
         agent: { maxConcurrentAgents: 1 },
         tracker: {
@@ -78,11 +78,15 @@ async function writeServiceTestRepo(root: string, overrides: Record<string, unkn
       },
       null,
       2,
-    ),
+    )};\n`,
   );
   await writeFile(resolve(root, "io.md"), "Issue {{ issue.identifier }}\n");
   process.env.LINEAR_API_KEY = "linear-token";
   process.env.LINEAR_PROJECT_SLUG = "project-slug";
+}
+
+async function writeIoTsConfig(root: string, config: Record<string, unknown>) {
+  await writeFile(resolve(root, "io.ts"), `export default ${JSON.stringify(config, null, 2)};\n`);
 }
 
 test("normalizeLinearIssue lowercases labels and fills defaults", () => {
@@ -265,59 +269,57 @@ test("LinearTrackerAdapter fetches parent stream state for child issue candidate
 test("LinearTrackerAdapter fetches top-level managed comment triggers on managed parents in review hold", async () => {
   const originalFetch = globalThis.fetch;
   let requestBody: { variables?: { states?: string[] } } | undefined;
-  globalThis.fetch = mock(
-    async (_input, init) => {
-      requestBody = JSON.parse(String(init?.body ?? "{}")) as typeof requestBody;
-      return new Response(
-        JSON.stringify({
-          data: {
-            issues: {
-              nodes: [
-                {
-                  children: { nodes: [] },
-                  comments: {
-                    nodes: [
-                      {
-                        body: "@io backlog\ndryRun: true",
-                        createdAt: "2024-01-02T00:00:00.000Z",
-                        id: "comment-1",
-                        parent: null,
-                        updatedAt: "2024-01-02T00:00:00.000Z",
-                      },
-                      {
-                        body: "@io backlog",
-                        createdAt: "2024-01-03T00:00:00.000Z",
-                        id: "comment-2",
-                        parent: { id: "comment-1" },
-                        updatedAt: "2024-01-03T00:00:00.000Z",
-                      },
-                    ],
-                  },
-                  createdAt: "2024-01-01T00:00:00.000Z",
-                  description: "Managed parent",
-                  id: "issue-1",
-                  identifier: "OPE-126",
-                  inverseRelations: { nodes: [] },
-                  labels: { nodes: [{ name: "io" }, { name: "agent" }] },
-                  priority: 2,
-                  project: { slugId: "io" },
-                  state: { name: "In Review" },
-                  team: { id: "team-1" },
-                  title: "Managed stream",
-                  updatedAt: "2024-01-01T00:00:00.000Z",
+  globalThis.fetch = mock(async (_input, init) => {
+    requestBody = JSON.parse(String(init?.body ?? "{}")) as typeof requestBody;
+    return new Response(
+      JSON.stringify({
+        data: {
+          issues: {
+            nodes: [
+              {
+                children: { nodes: [] },
+                comments: {
+                  nodes: [
+                    {
+                      body: "@io backlog\ndryRun: true",
+                      createdAt: "2024-01-02T00:00:00.000Z",
+                      id: "comment-1",
+                      parent: null,
+                      updatedAt: "2024-01-02T00:00:00.000Z",
+                    },
+                    {
+                      body: "@io backlog",
+                      createdAt: "2024-01-03T00:00:00.000Z",
+                      id: "comment-2",
+                      parent: { id: "comment-1" },
+                      updatedAt: "2024-01-03T00:00:00.000Z",
+                    },
+                  ],
                 },
-              ],
-              pageInfo: {
-                endCursor: null,
-                hasNextPage: false,
+                createdAt: "2024-01-01T00:00:00.000Z",
+                description: "Managed parent",
+                id: "issue-1",
+                identifier: "OPE-126",
+                inverseRelations: { nodes: [] },
+                labels: { nodes: [{ name: "io" }, { name: "agent" }] },
+                priority: 2,
+                project: { slugId: "io" },
+                state: { name: "In Review" },
+                team: { id: "team-1" },
+                title: "Managed stream",
+                updatedAt: "2024-01-01T00:00:00.000Z",
               },
+            ],
+            pageInfo: {
+              endCursor: null,
+              hasNextPage: false,
             },
           },
-        }),
-        { status: 200 },
-      );
-    },
-  ) as unknown as typeof fetch;
+        },
+      }),
+      { status: 200 },
+    );
+  }) as unknown as typeof fetch;
 
   try {
     const tracker = new LinearTrackerAdapter({
@@ -440,7 +442,7 @@ test("LinearTrackerAdapter applies managed comment mutations and posts a reply",
       {
         blockedBy: ["OPE-125"],
         description: "Child description",
-        docs: ["./io/goals.md"],
+        docs: ["./io/overview.md"],
         labels: ["agent"],
         priority: 2,
         reference: "managed-child-1",
@@ -499,8 +501,8 @@ test("LinearTrackerAdapter applies managed comment mutations and posts a reply",
   expect(calls.attachmentLinkURL).toEqual([
     {
       issueId: "child-1",
-      title: "./io/goals.md",
-      url: "./io/goals.md",
+      title: "./io/overview.md",
+      url: "./io/overview.md",
     },
   ]);
   expect(calls.createIssueRelation).toEqual([
@@ -617,7 +619,7 @@ test("LinearTrackerAdapter reuses todo children and relinks dependencies without
       {
         blockedBy: [],
         description: "New child description",
-        docs: ["./io/goals.md"],
+        docs: ["./io/overview.md"],
         labels: ["agent"],
         priority: 2,
         reference: "managed-child-1",
@@ -685,11 +687,13 @@ test("LinearTrackerAdapter reuses todo children and relinks dependencies without
   expect(calls.attachmentLinkURL).toEqual([
     {
       issueId: "child-1",
-      title: "./io/goals.md",
-      url: "./io/goals.md",
+      title: "./io/overview.md",
+      url: "./io/overview.md",
     },
   ]);
-  expect(calls.update).toEqual([{ description: "New child description", title: "New child title" }]);
+  expect(calls.update).toEqual([
+    { description: "New child description", title: "New child title" },
+  ]);
   expect(calls.deleteIssueRelation).toEqual(["relation-1"]);
 });
 
@@ -857,24 +861,17 @@ test("AgentService does not auto-run child issues while the parent stream is not
   let runnerCalls = 0;
   const transitions: string[] = [];
 
-  await writeFile(
-    resolve(root, "io.json"),
-    JSON.stringify(
-      {
-        agent: { maxConcurrentAgents: 1 },
-        tracker: {
-          apiKey: "$LINEAR_API_KEY",
-          kind: "linear",
-          projectSlug: "$LINEAR_PROJECT_SLUG",
-        },
-        workspace: {
-          root: resolve(root, "workspace"),
-        },
-      },
-      null,
-      2,
-    ),
-  );
+  await writeIoTsConfig(root, {
+    agent: { maxConcurrentAgents: 1 },
+    tracker: {
+      apiKey: "$LINEAR_API_KEY",
+      kind: "linear",
+      projectSlug: "$LINEAR_PROJECT_SLUG",
+    },
+    workspace: {
+      root: resolve(root, "workspace"),
+    },
+  });
   await writeFile(resolve(root, "io.md"), "Issue {{ issue.identifier }}\n");
   process.env.LINEAR_API_KEY = "linear-token";
   process.env.LINEAR_PROJECT_SLUG = "project-slug";
@@ -972,33 +969,26 @@ test("AgentService records handled managed comments and skips them on the next p
   };
 
   await mkdir(resolve(root, "agent", "io"), { recursive: true });
-  await writeFile(
-    resolve(root, "io.json"),
-    JSON.stringify(
-      {
-        agent: { maxConcurrentAgents: 1 },
-        modules: {
-          agent: {
-            allowedSharedPaths: ["./io"],
-            docs: ["./agent/io/goals.md"],
-            path: "./agent",
-          },
-        },
-        tracker: {
-          apiKey: "$LINEAR_API_KEY",
-          kind: "linear",
-          projectSlug: "$LINEAR_PROJECT_SLUG",
-        },
-        workspace: {
-          root: resolve(root, "workspace"),
-        },
+  await writeIoTsConfig(root, {
+    agent: { maxConcurrentAgents: 1 },
+    modules: {
+      agent: {
+        allowedSharedPaths: ["./io"],
+        docs: ["./agent/io/overview.md"],
+        path: "./agent",
       },
-      null,
-      2,
-    ),
-  );
+    },
+    tracker: {
+      apiKey: "$LINEAR_API_KEY",
+      kind: "linear",
+      projectSlug: "$LINEAR_PROJECT_SLUG",
+    },
+    workspace: {
+      root: resolve(root, "workspace"),
+    },
+  });
   await writeFile(resolve(root, "io.md"), "LOCAL {{ issue.identifier }}\n");
-  await writeFile(resolve(root, "agent", "io", "goals.md"), "# Agent\n");
+  await writeFile(resolve(root, "agent", "io", "overview.md"), "# Agent\n");
   process.env.LINEAR_API_KEY = "linear-token";
   process.env.LINEAR_PROJECT_SLUG = "io";
 
@@ -1069,35 +1059,28 @@ test("AgentService routes @io backlog comments to parent description refresh and
   const childCounts: number[] = [];
 
   await mkdir(resolve(root, "agent", "io"), { recursive: true });
-  await writeFile(
-    resolve(root, "io.json"),
-    JSON.stringify(
-      {
-        agent: { maxConcurrentAgents: 1 },
-        modules: {
-          agent: {
-            allowedSharedPaths: ["./io"],
-            docs: ["./agent/io/overview.md", "./agent/io/goals.md"],
-            path: "./agent",
-          },
-        },
-        tracker: {
-          apiKey: "$LINEAR_API_KEY",
-          kind: "linear",
-          projectSlug: "$LINEAR_PROJECT_SLUG",
-        },
-        workspace: {
-          root: resolve(root, "workspace"),
-        },
+  await writeIoTsConfig(root, {
+    agent: { maxConcurrentAgents: 1 },
+    modules: {
+      agent: {
+        allowedSharedPaths: ["./io"],
+        docs: ["./agent/io/overview.md", "./agent/io/overview.md"],
+        path: "./agent",
       },
-      null,
-      2,
-    ),
-  );
+    },
+    tracker: {
+      apiKey: "$LINEAR_API_KEY",
+      kind: "linear",
+      projectSlug: "$LINEAR_PROJECT_SLUG",
+    },
+    workspace: {
+      root: resolve(root, "workspace"),
+    },
+  });
   await writeFile(resolve(root, "io.md"), "LOCAL {{ issue.identifier }}\n");
   await writeFile(resolve(root, "agent", "io", "overview.md"), "# Agent Overview\n");
   await writeFile(
-    resolve(root, "agent", "io", "goals.md"),
+    resolve(root, "agent", "io", "overview.md"),
     `# Agent Stream
 
 ## Current Focus
@@ -1194,7 +1177,9 @@ test("AgentService routes @io backlog comments to parent description refresh and
     expect(parentDescriptions[0]).toContain("## Objective");
     expect(parentDescriptions[0]).toContain("## Work Options");
     expect(parentDescriptions[0]).toContain("## Decisions");
-    expect(parentDescriptions[0]).toContain("Prefer one shared description over agent-only blocks.");
+    expect(parentDescriptions[0]).toContain(
+      "Prefer one shared description over agent-only blocks.",
+    );
     expect(childCounts).toEqual([3]);
   } finally {
     await rm(root, { force: true, recursive: true });
@@ -1206,33 +1191,26 @@ test("AgentService reports removed @io focus commands as blocked parse errors", 
   const replies: string[] = [];
 
   await mkdir(resolve(root, "agent", "io"), { recursive: true });
-  await writeFile(
-    resolve(root, "io.json"),
-    JSON.stringify(
-      {
-        agent: { maxConcurrentAgents: 1 },
-        modules: {
-          agent: {
-            allowedSharedPaths: ["./io"],
-            docs: ["./agent/io/goals.md"],
-            path: "./agent",
-          },
-        },
-        tracker: {
-          apiKey: "$LINEAR_API_KEY",
-          kind: "linear",
-          projectSlug: "$LINEAR_PROJECT_SLUG",
-        },
-        workspace: {
-          root: resolve(root, "workspace"),
-        },
+  await writeIoTsConfig(root, {
+    agent: { maxConcurrentAgents: 1 },
+    modules: {
+      agent: {
+        allowedSharedPaths: ["./io"],
+        docs: ["./agent/io/overview.md"],
+        path: "./agent",
       },
-      null,
-      2,
-    ),
-  );
+    },
+    tracker: {
+      apiKey: "$LINEAR_API_KEY",
+      kind: "linear",
+      projectSlug: "$LINEAR_PROJECT_SLUG",
+    },
+    workspace: {
+      root: resolve(root, "workspace"),
+    },
+  });
   await writeFile(resolve(root, "io.md"), "LOCAL {{ issue.identifier }}\n");
-  await writeFile(resolve(root, "agent", "io", "goals.md"), "# Agent\n");
+  await writeFile(resolve(root, "agent", "io", "overview.md"), "# Agent\n");
   process.env.LINEAR_API_KEY = "linear-token";
   process.env.LINEAR_PROJECT_SLUG = "io";
 
@@ -1309,24 +1287,17 @@ test("AgentService resumes an in-progress issue in its own occupied stream", asy
   const root = await mkdtemp(resolve(tmpdir(), "agent-service-"));
   let runnerCalls = 0;
 
-  await writeFile(
-    resolve(root, "io.json"),
-    JSON.stringify(
-      {
-        agent: { maxConcurrentAgents: 1 },
-        tracker: {
-          apiKey: "$LINEAR_API_KEY",
-          kind: "linear",
-          projectSlug: "$LINEAR_PROJECT_SLUG",
-        },
-        workspace: {
-          root: resolve(root, "workspace"),
-        },
-      },
-      null,
-      2,
-    ),
-  );
+  await writeIoTsConfig(root, {
+    agent: { maxConcurrentAgents: 1 },
+    tracker: {
+      apiKey: "$LINEAR_API_KEY",
+      kind: "linear",
+      projectSlug: "$LINEAR_PROJECT_SLUG",
+    },
+    workspace: {
+      root: resolve(root, "workspace"),
+    },
+  });
   await writeFile(resolve(root, "io.md"), "Issue {{ issue.identifier }}\n");
   process.env.LINEAR_API_KEY = "linear-token";
   process.env.LINEAR_PROJECT_SLUG = "project-slug";
@@ -1505,7 +1476,7 @@ test("resolveIssueRouting routes io-managed parent issues to backlog from module
       {
         graph: {
           allowedSharedPaths: ["/tmp/io"],
-          docs: ["./graph/io/goals.md", "./graph/doc/overview.md"],
+          docs: ["./graph/io/overview.md", "./graph/io/architecture.md"],
           id: "graph",
           path: "/tmp/graph",
         },
@@ -1855,33 +1826,26 @@ test("AgentService does not auto-run managed parent backlog after the parent lea
   let runnerCalls = 0;
   const transitions: string[] = [];
 
-  await writeFile(
-    resolve(root, "io.json"),
-    JSON.stringify(
-      {
-        agent: { maxConcurrentAgents: 1 },
-        modules: {
-          agent: {
-            allowedSharedPaths: ["./io"],
-            docs: ["./agent/io/goals.md"],
-            path: "./agent",
-          },
-        },
-        tracker: {
-          apiKey: "$LINEAR_API_KEY",
-          kind: "linear",
-          projectSlug: "$LINEAR_PROJECT_SLUG",
-        },
-        workspace: {
-          root: resolve(root, "workspace"),
-        },
+  await writeIoTsConfig(root, {
+    agent: { maxConcurrentAgents: 1 },
+    modules: {
+      agent: {
+        allowedSharedPaths: ["./io"],
+        docs: ["./agent/io/overview.md"],
+        path: "./agent",
       },
-      null,
-      2,
-    ),
-  );
+    },
+    tracker: {
+      apiKey: "$LINEAR_API_KEY",
+      kind: "linear",
+      projectSlug: "$LINEAR_PROJECT_SLUG",
+    },
+    workspace: {
+      root: resolve(root, "workspace"),
+    },
+  });
   await mkdir(resolve(root, "agent", "io"), { recursive: true });
-  await writeFile(resolve(root, "agent", "io", "goals.md"), "# Agent\n");
+  await writeFile(resolve(root, "agent", "io", "overview.md"), "# Agent\n");
   await writeFile(resolve(root, "io.md"), "Issue {{ issue.identifier }}\n");
   process.env.LINEAR_API_KEY = "linear-token";
   process.env.LINEAR_PROJECT_SLUG = "project-slug";
@@ -2071,33 +2035,26 @@ test("AgentService proves the current approach stream flow end to end", async ()
     parentState: parentIssue.state,
   };
 
-  await writeFile(
-    resolve(root, "io.json"),
-    JSON.stringify(
-      {
-        agent: { maxConcurrentAgents: 1 },
-        modules: {
-          agent: {
-            allowedSharedPaths: ["./io"],
-            docs: ["./agent/io/goals.md"],
-            path: "./agent",
-          },
-        },
-        tracker: {
-          apiKey: "$LINEAR_API_KEY",
-          kind: "linear",
-          projectSlug: "$LINEAR_PROJECT_SLUG",
-        },
-        workspace: {
-          root: resolve(root, "workspace"),
-        },
+  await writeIoTsConfig(root, {
+    agent: { maxConcurrentAgents: 1 },
+    modules: {
+      agent: {
+        allowedSharedPaths: ["./io"],
+        docs: ["./agent/io/overview.md"],
+        path: "./agent",
       },
-      null,
-      2,
-    ),
-  );
+    },
+    tracker: {
+      apiKey: "$LINEAR_API_KEY",
+      kind: "linear",
+      projectSlug: "$LINEAR_PROJECT_SLUG",
+    },
+    workspace: {
+      root: resolve(root, "workspace"),
+    },
+  });
   await mkdir(resolve(root, "agent", "io"), { recursive: true });
-  await writeFile(resolve(root, "agent", "io", "goals.md"), "# Agent\n");
+  await writeFile(resolve(root, "agent", "io", "overview.md"), "# Agent\n");
   await writeFile(resolve(root, "io.md"), "Issue {{ issue.identifier }}\n");
   process.env.LINEAR_API_KEY = "linear-token";
   process.env.LINEAR_PROJECT_SLUG = "project-slug";
@@ -2226,24 +2183,17 @@ test("AgentService preserves timed out runs as interrupted", async () => {
   const workspacePath = resolve(root, "workspace", "workers", "OPE-66", "repo");
   const events: string[] = [];
 
-  await writeFile(
-    resolve(root, "io.json"),
-    JSON.stringify(
-      {
-        agent: { maxConcurrentAgents: 1 },
-        tracker: {
-          apiKey: "$LINEAR_API_KEY",
-          kind: "linear",
-          projectSlug: "$LINEAR_PROJECT_SLUG",
-        },
-        workspace: {
-          root: resolve(root, "workspace"),
-        },
-      },
-      null,
-      2,
-    ),
-  );
+  await writeIoTsConfig(root, {
+    agent: { maxConcurrentAgents: 1 },
+    tracker: {
+      apiKey: "$LINEAR_API_KEY",
+      kind: "linear",
+      projectSlug: "$LINEAR_PROJECT_SLUG",
+    },
+    workspace: {
+      root: resolve(root, "workspace"),
+    },
+  });
   await writeFile(resolve(root, "io.md"), "Issue {{ issue.identifier }}\n");
   process.env.LINEAR_API_KEY = "linear-token";
   process.env.LINEAR_PROJECT_SLUG = "project-slug";
@@ -2322,24 +2272,17 @@ test("AgentService eagerly creates worker checkout on start", async () => {
   const root = await mkdtemp(resolve(tmpdir(), "agent-service-"));
   const writes: string[] = [];
 
-  await writeFile(
-    resolve(root, "io.json"),
-    JSON.stringify(
-      {
-        agent: { maxConcurrentAgents: 1 },
-        tracker: {
-          apiKey: "$LINEAR_API_KEY",
-          kind: "linear",
-          projectSlug: "$LINEAR_PROJECT_SLUG",
-        },
-        workspace: {
-          root: resolve(root, "workspace"),
-        },
-      },
-      null,
-      2,
-    ),
-  );
+  await writeIoTsConfig(root, {
+    agent: { maxConcurrentAgents: 1 },
+    tracker: {
+      apiKey: "$LINEAR_API_KEY",
+      kind: "linear",
+      projectSlug: "$LINEAR_PROJECT_SLUG",
+    },
+    workspace: {
+      root: resolve(root, "workspace"),
+    },
+  });
   await writeFile(resolve(root, "io.md"), "Issue {{ issue.identifier }}\n");
   process.env.LINEAR_API_KEY = "linear-token";
   process.env.LINEAR_PROJECT_SLUG = "project-slug";
@@ -2413,24 +2356,17 @@ test("AgentService does not auto-run parent execute issues that already have chi
   const root = await mkdtemp(resolve(tmpdir(), "agent-service-"));
   let runnerCalls = 0;
 
-  await writeFile(
-    resolve(root, "io.json"),
-    JSON.stringify(
-      {
-        agent: { maxConcurrentAgents: 1 },
-        tracker: {
-          apiKey: "$LINEAR_API_KEY",
-          kind: "linear",
-          projectSlug: "$LINEAR_PROJECT_SLUG",
-        },
-        workspace: {
-          root: resolve(root, "workspace"),
-        },
-      },
-      null,
-      2,
-    ),
-  );
+  await writeIoTsConfig(root, {
+    agent: { maxConcurrentAgents: 1 },
+    tracker: {
+      apiKey: "$LINEAR_API_KEY",
+      kind: "linear",
+      projectSlug: "$LINEAR_PROJECT_SLUG",
+    },
+    workspace: {
+      root: resolve(root, "workspace"),
+    },
+  });
   await writeFile(resolve(root, "io.md"), "Issue {{ issue.identifier }}\n");
   process.env.LINEAR_API_KEY = "linear-token";
   process.env.LINEAR_PROJECT_SLUG = "project-slug";
@@ -2527,34 +2463,27 @@ test("AgentService rewrites managed parent backlog issues before running the bac
   let updatedDescription = "";
 
   await mkdir(resolve(root, "agent", "io"), { recursive: true });
-  await writeFile(
-    resolve(root, "io.json"),
-    JSON.stringify(
-      {
-        agent: { maxConcurrentAgents: 1 },
-        modules: {
-          agent: {
-            allowedSharedPaths: ["./io"],
-            docs: ["./agent/io/goals.md"],
-            path: "./agent",
-          },
-        },
-        tracker: {
-          apiKey: "$LINEAR_API_KEY",
-          kind: "linear",
-          projectSlug: "$LINEAR_PROJECT_SLUG",
-        },
-        workspace: {
-          root: resolve(root, "workspace"),
-        },
+  await writeIoTsConfig(root, {
+    agent: { maxConcurrentAgents: 1 },
+    modules: {
+      agent: {
+        allowedSharedPaths: ["./io"],
+        docs: ["./agent/io/overview.md"],
+        path: "./agent",
       },
-      null,
-      2,
-    ),
-  );
+    },
+    tracker: {
+      apiKey: "$LINEAR_API_KEY",
+      kind: "linear",
+      projectSlug: "$LINEAR_PROJECT_SLUG",
+    },
+    workspace: {
+      root: resolve(root, "workspace"),
+    },
+  });
   await writeFile(resolve(root, "io.md"), "LOCAL BACKLOG {{ issue.identifier }}\n");
   await writeFile(
-    resolve(root, "agent", "io", "goals.md"),
+    resolve(root, "agent", "io", "overview.md"),
     `# IO Agent Stream
 
 ## Current Focus
@@ -2676,36 +2605,29 @@ test("AgentService rewrites managed graph parent backlog issues with graph modul
   let capturedPrompt = "";
   let updatedDescription = "";
 
-  await mkdir(resolve(root, "graph", "doc"), { recursive: true });
   await mkdir(resolve(root, "graph", "io"), { recursive: true });
-  await writeFile(
-    resolve(root, "io.json"),
-    JSON.stringify(
-      {
-        agent: { maxConcurrentAgents: 1 },
-        modules: {
-          graph: {
-            allowedSharedPaths: ["./io"],
-            docs: ["./graph/io/goals.md", "./graph/doc/overview.md"],
-            path: "./graph",
-          },
-        },
-        tracker: {
-          apiKey: "$LINEAR_API_KEY",
-          kind: "linear",
-          projectSlug: "$LINEAR_PROJECT_SLUG",
-        },
-        workspace: {
-          root: resolve(root, "workspace"),
-        },
+  await writeIoTsConfig(root, {
+    agent: { maxConcurrentAgents: 1 },
+    modules: {
+      graph: {
+        allowedSharedPaths: ["./io"],
+        docs: ["./graph/io/overview.md", "./graph/io/architecture.md"],
+        path: "./graph",
       },
-      null,
-      2,
-    ),
-  );
+    },
+    tracker: {
+      apiKey: "$LINEAR_API_KEY",
+      kind: "linear",
+      projectSlug: "$LINEAR_PROJECT_SLUG",
+    },
+    workspace: {
+      root: resolve(root, "workspace"),
+    },
+  });
   await writeFile(resolve(root, "io.md"), "LOCAL BACKLOG {{ issue.identifier }}\n");
+  await writeFile(resolve(root, "graph", "io", "architecture.md"), "# Graph Architecture\n");
   await writeFile(
-    resolve(root, "graph", "io", "goals.md"),
+    resolve(root, "graph", "io", "overview.md"),
     `# IO Graph Stream
 
 ## Current Focus
@@ -2718,7 +2640,6 @@ test("AgentService rewrites managed graph parent backlog issues with graph modul
 - clearer module-local planning guidance
 `,
   );
-  await writeFile(resolve(root, "graph", "doc", "overview.md"), "# Graph Overview\n");
   process.env.LINEAR_API_KEY = "linear-token";
   process.env.LINEAR_PROJECT_SLUG = "project-slug";
 
@@ -2810,7 +2731,7 @@ Make the managed module stream flow portable on graph.
     expect(updatedDescription).toContain("## Objective");
     expect(updatedDescription).toContain("## Work Options");
     expect(updatedDescription).toContain("./graph");
-    expect(capturedPrompt).toContain("./graph/doc/overview.md");
+    expect(capturedPrompt).toContain("./graph/io/architecture.md");
     expect(capturedPrompt).toContain("You are the IO Backlog Agent.");
   } finally {
     await rm(root, { force: true, recursive: true });
@@ -2822,24 +2743,17 @@ test("AgentService publishes supervisor and worker session events", async () => 
   const workspacePath = resolve(root, "workspace", "workers", "OPE-54", "repo");
   const events: AgentSessionEvent[] = [];
 
-  await writeFile(
-    resolve(root, "io.json"),
-    JSON.stringify(
-      {
-        agent: { maxConcurrentAgents: 1 },
-        tracker: {
-          apiKey: "$LINEAR_API_KEY",
-          kind: "linear",
-          projectSlug: "$LINEAR_PROJECT_SLUG",
-        },
-        workspace: {
-          root: resolve(root, "workspace"),
-        },
-      },
-      null,
-      2,
-    ),
-  );
+  await writeIoTsConfig(root, {
+    agent: { maxConcurrentAgents: 1 },
+    tracker: {
+      apiKey: "$LINEAR_API_KEY",
+      kind: "linear",
+      projectSlug: "$LINEAR_PROJECT_SLUG",
+    },
+    workspace: {
+      root: resolve(root, "workspace"),
+    },
+  });
   await writeFile(resolve(root, "io.md"), "Issue {{ issue.identifier }}\n");
   process.env.LINEAR_API_KEY = "linear-token";
   process.env.LINEAR_PROJECT_SLUG = "project-slug";
@@ -2971,7 +2885,7 @@ test("AgentService publishes supervisor and worker session events", async () => 
           event.type === "status" &&
           event.code === "issue-assigned" &&
           event.session.id === "supervisor" &&
-          event.text.includes("Starting agent in"),
+          event.text?.includes("Starting agent in"),
       ),
     ).toBe(true);
 
@@ -2995,24 +2909,17 @@ test("AgentService composes execute built-ins with io.md", async () => {
   const workspacePath = resolve(root, "workspace", "workers", "OPE-54", "repo");
   let capturedPrompt = "";
 
-  await writeFile(
-    resolve(root, "io.json"),
-    JSON.stringify(
-      {
-        agent: { maxConcurrentAgents: 1 },
-        tracker: {
-          apiKey: "$LINEAR_API_KEY",
-          kind: "linear",
-          projectSlug: "$LINEAR_PROJECT_SLUG",
-        },
-        workspace: {
-          root: resolve(root, "workspace"),
-        },
-      },
-      null,
-      2,
-    ),
-  );
+  await writeIoTsConfig(root, {
+    agent: { maxConcurrentAgents: 1 },
+    tracker: {
+      apiKey: "$LINEAR_API_KEY",
+      kind: "linear",
+      projectSlug: "$LINEAR_PROJECT_SLUG",
+    },
+    workspace: {
+      root: resolve(root, "workspace"),
+    },
+  });
   await writeFile(ioPromptPath, localPrompt);
   process.env.LINEAR_API_KEY = "linear-token";
   process.env.LINEAR_PROJECT_SLUG = "project-slug";
@@ -3156,42 +3063,35 @@ test("AgentService uses backlog built-ins for routed issues", async () => {
   const workspacePath = resolve(root, "workspace", "workers", "OPE-55", "repo");
   let capturedPrompt = "";
 
-  await writeFile(
-    resolve(root, "io.json"),
-    JSON.stringify(
-      {
-        agent: { maxConcurrentAgents: 1 },
-        issues: {
-          defaultAgent: "execute",
-          defaultProfile: "execute",
-          routing: [
-            {
-              agent: "backlog",
-              if: {
-                hasChildren: false,
-                hasParent: true,
-                labelsAll: ["planning", "docs"],
-                labelsAny: ["planning"],
-                projectSlugIn: ["docs-project"],
-                stateIn: ["todo"],
-              },
-              profile: "backlog",
-            },
-          ],
+  await writeIoTsConfig(root, {
+    agent: { maxConcurrentAgents: 1 },
+    issues: {
+      defaultAgent: "execute",
+      defaultProfile: "execute",
+      routing: [
+        {
+          agent: "backlog",
+          if: {
+            hasChildren: false,
+            hasParent: true,
+            labelsAll: ["planning", "docs"],
+            labelsAny: ["planning"],
+            projectSlugIn: ["docs-project"],
+            stateIn: ["todo"],
+          },
+          profile: "backlog",
         },
-        tracker: {
-          apiKey: "$LINEAR_API_KEY",
-          kind: "linear",
-          projectSlug: "$LINEAR_PROJECT_SLUG",
-        },
-        workspace: {
-          root: resolve(root, "workspace"),
-        },
-      },
-      null,
-      2,
-    ),
-  );
+      ],
+    },
+    tracker: {
+      apiKey: "$LINEAR_API_KEY",
+      kind: "linear",
+      projectSlug: "$LINEAR_PROJECT_SLUG",
+    },
+    workspace: {
+      root: resolve(root, "workspace"),
+    },
+  });
   await writeFile(ioPromptPath, localPrompt);
   process.env.LINEAR_API_KEY = "linear-token";
   process.env.LINEAR_PROJECT_SLUG = "docs-project";
@@ -3340,7 +3240,7 @@ test("AgentService uses backlog built-ins for routed issues", async () => {
   }
 });
 
-test("AgentService uses builtin override files from io.json", async () => {
+test("AgentService uses builtin override files from io.ts", async () => {
   const root = await mkdtemp(resolve(tmpdir(), "agent-service-"));
   const overridePath = resolve(root, "io", "context", "validation-override.md");
   const ioPromptPath = resolve(root, "io.md");
@@ -3349,29 +3249,22 @@ test("AgentService uses builtin override files from io.json", async () => {
   let capturedPrompt = "";
 
   await mkdir(resolve(root, "io", "context"), { recursive: true });
-  await writeFile(
-    resolve(root, "io.json"),
-    JSON.stringify(
-      {
-        agent: { maxConcurrentAgents: 1 },
-        context: {
-          overrides: {
-            "builtin:io.core.validation": "./io/context/validation-override.md",
-          },
-        },
-        tracker: {
-          apiKey: "$LINEAR_API_KEY",
-          kind: "linear",
-          projectSlug: "$LINEAR_PROJECT_SLUG",
-        },
-        workspace: {
-          root: resolve(root, "workspace"),
-        },
+  await writeIoTsConfig(root, {
+    agent: { maxConcurrentAgents: 1 },
+    context: {
+      overrides: {
+        "builtin:io.core.validation": "./io/context/validation-override.md",
       },
-      null,
-      2,
-    ),
-  );
+    },
+    tracker: {
+      apiKey: "$LINEAR_API_KEY",
+      kind: "linear",
+      projectSlug: "$LINEAR_PROJECT_SLUG",
+    },
+    workspace: {
+      root: resolve(root, "workspace"),
+    },
+  });
   await writeFile(ioPromptPath, localPrompt);
   await writeFile(overridePath, "VALIDATE WITH OVERRIDE {{ issue.identifier }}\n");
   process.env.LINEAR_API_KEY = "linear-token";
@@ -3488,24 +3381,17 @@ test("AgentService writes unresolved issue doc warnings to the run summary", asy
 
   await mkdir(resolve(root, "io", "context"), { recursive: true });
   await mkdir(resolve(root, "workspace", "workers", "OPE-61"), { recursive: true });
-  await writeFile(
-    resolve(root, "io.json"),
-    JSON.stringify(
-      {
-        agent: { maxConcurrentAgents: 1 },
-        tracker: {
-          apiKey: "$LINEAR_API_KEY",
-          kind: "linear",
-          projectSlug: "$LINEAR_PROJECT_SLUG",
-        },
-        workspace: {
-          root: resolve(root, "workspace"),
-        },
-      },
-      null,
-      2,
-    ),
-  );
+  await writeIoTsConfig(root, {
+    agent: { maxConcurrentAgents: 1 },
+    tracker: {
+      apiKey: "$LINEAR_API_KEY",
+      kind: "linear",
+      projectSlug: "$LINEAR_PROJECT_SLUG",
+    },
+    workspace: {
+      root: resolve(root, "workspace"),
+    },
+  });
   await writeFile(ioPromptPath, "LOCAL EXECUTE {{ issue.identifier }}\n");
   await writeFile(resolve(root, "io", "context", "linked.md"), "LINKED ISSUE DOC\n");
   process.env.LINEAR_API_KEY = "linear-token";

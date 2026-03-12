@@ -19,7 +19,7 @@ Local constraints:
 
 - keep changes narrow and reviewable across workspaces
 - update docs, examples, and tests together when entrypoint or context behavior changes
-- treat `WORKFLOW.md` as a compatibility fallback; repo-local guidance belongs in `io.md` and `io/overview.md`
+- keep repo-local guidance in `io.md` and `io/overview.md`
 
 Output:
 

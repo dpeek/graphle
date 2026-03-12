@@ -8,9 +8,8 @@
 
 - `./goals.md`
 - `../../graph/io/overview.md`
-- `../../graph/io/goals.md`
-- `../../graph/doc/schema-driven-ui.md`
-- `../../graph/doc/schema-driven-ui-implementation-plan.md`
+- `../../graph/io/type-modules.md`
+- `../../graph/io/refs-and-ui.md`
 
 ## Layout
 

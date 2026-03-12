@@ -1,110 +1,91 @@
-# Managed Module Stream Workflow Plan
-
-Status: Current-approach contract after the first end-to-end proof pass.
+# Agent Workflow And Context
 
 ## Purpose
 
-Keep the next managed-stream change narrow: use parent stream state to separate
-backlog grooming, human review, and child execution while keeping Linear as the
-canonical evolving brief.
+This document is the entry point for agents working on workflow loading, issue routing, context assembly, or module-scoped doc selection.
 
-## Stable Contract Sources
+## Current Workflow Surface
 
-- label and parent ownership contract:
-  [`./managed-stream-goals.md`](./managed-stream-goals.md)
-- parent brief and child backlog shape:
-  [`./managed-stream-backlog.md`](./managed-stream-backlog.md)
-- `@io` comment trigger model:
-  [`./managed-stream-comments.md`](./managed-stream-comments.md)
-- branch, worktree, and landing lifecycle:
-  [`../doc/stream-workflow.md`](../doc/stream-workflow.md)
+### Entrypoints
 
-## Current Runtime Baseline
+`../src/workflow.ts` uses a single repo-local entry style:
 
-- managed parent identity already uses `io` plus exactly one configured module
-  label
-- `@io` comments already refresh the parent description and speculative `Todo`
-  children
-- tracker candidate polling still uses `activeStates = ["Todo", "In Progress"]`
-- managed parent comment polling also includes `In Review` so explicit
-  `@io backlog`, `@io status`, and `@io help` remain available during the human
-  review hold
-- child candidates carry parent stream state, so execution can distinguish
-  stream phase from child readiness
-- the service respects child `blockedBy` edges, keeps one active child per
-  parent stream, and only auto-runs children whose parent is `In Progress`
-- managed parents keep the backlog profile for explicit runs and `@io`
-  commands, but automatic backlog scheduling stops once the parent leaves
-  `Todo`
-- successful parent backlog runs move the parent to `In Review`; successful
-  child runs move the child to `Done`
-- workspace runtime state is split into flat child worktrees under `tree/`,
-  per-issue runtime state under `issue/`, and per-parent stream state under
-  `stream/`
+- `io.ts` for runtime config plus `io.md` for prompt body
 
-## Current Approach Linear Contract
+Resolved workflow state already includes:
 
-### Parent stream phases
+- agent concurrency and retry settings
+- Codex command, timeouts, and sandbox config
+- tracker settings
+- hook scripts
+- context docs, overrides, and profiles
+- issue routing rules
+- module path and shared-path boundaries
 
-- parent `Todo`: explicit backlog-authoring state; use it only when a human
-  wants another backlog pass before execution resumes
-- parent `In Review`: safe bootstrap and post-backlog holding state; new
-  streams start here so humans can edit and approve the parent brief without
-  releasing child execution
-- parent `In Progress`: execution-released state; unblocked child issues may
-  run when they are ready for implementation
-- parent `Done`: stream-complete state; no new backlog or execution work should
-  be scheduled automatically
+### Routing
 
-### Child role and bootstrap
+`../src/issue-routing.ts` currently picks backlog versus execute runs from:
 
-- child issues are implementation steps only in this first pass; planning,
-  review, and approval stay on the parent issue
-- safe bootstrap seeds the parent in `In Review` and seeds all new child issues
-  in `Todo`
-- seeded `Todo` children stay parked because the parent gate only releases
-  execution once the stream moves to `In Progress`
-- moving the parent to `In Progress` is a human approval step; it does not
-  imply a child state transition
-- child readiness still respects `blockedBy` and one active child per stream
-- the first pass keeps the current 2-level parent/child model; it does not
-  add a separate planning tier beneath the parent
+- first matching explicit routing rule
+- fallback repo defaults
+- managed-parent detection for top-level issues labeled `io` plus exactly one configured module label
 
-## Proof Surface
+Issue-body hints parsed by `../src/context.ts` can still override the base selection with:
 
-- parent stream phase is visible on child candidates:
-  `agent/src/types.ts`, `agent/src/tracker/linear.ts`,
-  `agent/src/service.test.ts`
-- automatic scheduling is phase-gated:
-  `agent/src/service.ts`, `agent/src/service.test.ts`
-- explicit backlog/context routing stays available on managed parents:
-  `agent/src/issue-routing.ts`, `agent/src/workflow.test.ts`
-- parent and child transitions stay separate:
-  `agent/src/service.ts`, `agent/src/service.test.ts`,
-  `agent/src/workspace.ts`, `agent/src/workspace.test.ts`
-- current repo docs summarize the contract tersely:
-  `io/goals.md`, `agent/io/managed-stream-backlog.md`,
-  `agent/io/module-stream-workflow-plan.md`
+- `agent`
+- `profile`
+- `docs`
 
-## Explicit Follow-ups
+### Context assembly
 
-- Decide whether mutating `@io backlog` should stay available after a parent
-  stream reaches `Done`.
+`../src/context.ts` already builds one ordered context bundle from:
 
-## Out Of Scope For This Slice
+- built-in docs
+- the resolved entrypoint prompt
+- profile-specific registered docs
+- module default docs
+- issue-linked doc references
+- issue-body hint docs
+- synthesized issue description context
 
-- 3-level stream/planning/implementation hierarchy
-- changing child payload shape beyond what parent-phase gating requires
-- reworking stream branch or worktree lifecycle beyond the current
-  parent-branch model
-- parallel child execution inside a single stream
+The bundle preserves source, order, override status, and file path when available.
 
-## Done Means
+## Current Doc Reference Rules
 
-- parent phase is visible on child candidates
-- parent `Todo`, `In Review`, `In Progress`, and `Done` have explicit stream
-  meanings
-- new streams bootstrap with parent `In Review` and children in `Todo`
-- only children of parent `In Progress` streams auto-run
-- managed parents do not auto-run backlog after they leave `Todo`
-- docs and tests match the documented current approach contract
+- `builtin:*` references resolve from `../src/builtins.ts`
+- registered doc ids resolve from `workflow.context.docs`
+- repo-path docs must use `./...`
+- module-labeled issues may only pull repo-path docs from the module root or configured shared paths
+- unknown or out-of-scope issue doc refs become warnings rather than silent omissions
+
+## Current Prompt Model
+
+- prompt rendering is simple template substitution over the assembled doc bundle and runtime context
+- built-ins lead the bundle so role and safety guidance arrives before repo detail
+- the entrypoint doc sits between built-ins and most repo docs unless a profile opts out
+- issue description context is synthesized at the end for `io`-style entrypoints
+
+This is already real runtime behavior, not a draft plan.
+
+## Current Constraints
+
+- workflow loading is repo-local and file-based; there is no remote config source
+- routing precedence is first-match rather than score-based or merge-based
+- module scoping only applies to repo-path references, not built-ins or registered ids
+- prompt rendering is string-template-based rather than schema-driven
+- profile names and doc ids are configuration contracts, not discovered automatically
+
+## Roadmap
+
+- clarify which workflow fields are intended as stable public config versus repo proof surface
+- add better diagnostics for why one profile or routing rule won
+- improve doc navigation for common tasks without widening the prompt assembly model
+- decide whether richer structured prompt sections belong here or in a higher-level package
+
+## Future Work Suggestions
+
+1. Add one end-to-end example showing `io.ts`, `io.md`, issue hints, and the resulting context bundle order.
+2. Document the expected stability of issue-body hint keys and doc-id conventions.
+3. Add a compact routing precedence table with representative examples.
+4. Clarify when a doc should be registered by id versus linked by repo path.
+5. Add a short debugging checklist for unresolved doc warnings and scope failures.

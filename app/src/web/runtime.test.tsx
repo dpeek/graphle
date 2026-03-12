@@ -45,7 +45,6 @@ describe("app runtime bootstrap", () => {
     await act(async () => {
       renderer = create(
         <AppRuntimeBootstrap
-          config={{ syncUrl: "http://app.local/api/sync" }}
           loadRuntime={() => deferred.promise}
           renderApp={() => <RuntimeProbe />}
         />,
@@ -78,7 +77,6 @@ describe("app runtime bootstrap", () => {
     await act(async () => {
       renderer = create(
         <AppRuntimeBootstrap
-          config={{ syncUrl: "http://app.local/api/sync" }}
           loadRuntime={() => deferred.promise}
           renderApp={() => <RuntimeProbe />}
         />,

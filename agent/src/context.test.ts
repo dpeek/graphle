@@ -44,7 +44,7 @@ function createWorkflow(root: string, promptPath: string): Workflow {
       },
     },
     entrypoint: {
-      configPath: resolve(root, "io.json"),
+      configPath: resolve(root, "io.ts"),
       kind: "io",
       promptPath,
     },
@@ -304,12 +304,14 @@ test("repo backlog context includes managed stream maintenance guidance", async 
   expect(resolved.bundle.docs.map((doc) => doc.id)).toContain("project.managed-stream-goals");
   expect(resolved.bundle.docs.map((doc) => doc.id)).toContain("project.managed-stream-backlog");
   expect(resolved.bundle.docs.map((doc) => doc.id)).toContain("project.managed-stream-comments");
-  expect(rendered).toContain("exactly one module label that matches a configured module id");
-  expect(rendered).toContain("## Stable Child Payload");
+  expect(rendered).toContain("exactly one label that matches a configured module id");
+  expect(rendered).toContain("## Current Child Payload");
   expect(rendered).toContain("@io backlog");
-  expect(rendered).toContain("top the stream back up to about five planned tasks");
-  expect(rendered).toContain("Do not destructively rewrite children that are already active or completed.");
-  expect(rendered).toContain("## Operator-Visible Output");
+  expect(rendered).toContain("topped back up to a short tail rather than replanned from scratch");
+  expect(rendered).toContain(
+    "backlog refresh should avoid destructive rewrites of already active or completed children",
+  );
+  expect(rendered).toContain("## Current Reply Shape");
 });
 
 test("repo config allows shared repo docs in managed issue descriptions without warning", async () => {
@@ -326,7 +328,7 @@ test("repo config allows shared repo docs in managed issue descriptions without 
   const issue: AgentIssue = {
     blockedBy: [],
     createdAt: "2024-01-01T00:00:00.000Z",
-    description: "Keep the stream description aligned with `./io/goals.md`.",
+    description: "Keep the stream description aligned with `./io/overview.md`.",
     hasChildren: true,
     hasParent: false,
     id: "1",
@@ -351,7 +353,7 @@ test("repo config allows shared repo docs in managed issue descriptions without 
   });
 
   expect(resolved.warnings).not.toContain(
-    "Issue doc reference is outside module scope: ./io/goals.md",
+    "Issue doc reference is outside module scope: ./io/overview.md",
   );
 });
 
@@ -417,14 +419,13 @@ test("resolveIssueContext assembles the graph module bundle and keeps refs withi
   const root = await mkdtemp(resolve(tmpdir(), "context-"));
   const promptPath = resolve(root, "io.md");
   await mkdir(resolve(root, "agent", "doc"), { recursive: true });
-  await mkdir(resolve(root, "graph", "doc"), { recursive: true });
   await mkdir(resolve(root, "graph", "io"), { recursive: true });
   await mkdir(resolve(root, "io"), { recursive: true });
   await writeFile(promptPath, "LOCAL {{ selection.agent }} {{ selection.profile }}\n");
   await writeFile(resolve(root, "graph", "io", "goals.md"), "GRAPH STREAM DOC\n");
-  await writeFile(resolve(root, "graph", "doc", "overview.md"), "GRAPH OVERVIEW DOC\n");
-  await writeFile(resolve(root, "graph", "doc", "linked.md"), "GRAPH LINKED DOC\n");
   await writeFile(resolve(root, "graph", "io", "overview.md"), "GRAPH IO OVERVIEW DOC\n");
+  await writeFile(resolve(root, "graph", "io", "architecture.md"), "GRAPH ARCHITECTURE DOC\n");
+  await writeFile(resolve(root, "graph", "io", "linked.md"), "GRAPH LINKED DOC\n");
   await writeFile(resolve(root, "io", "shared.md"), "SHARED DOC\n");
   await writeFile(resolve(root, "agent", "doc", "outside.md"), "AGENT OUTSIDE DOC\n");
 
@@ -433,7 +434,7 @@ test("resolveIssueContext assembles the graph module bundle and keeps refs withi
     workflow.modules = {
       graph: {
         allowedSharedPaths: [resolve(root, "io")],
-        docs: ["./graph/io/overview.md", "./graph/io/goals.md", "./graph/doc/overview.md"],
+        docs: ["./graph/io/overview.md", "./graph/io/overview.md", "./graph/io/architecture.md"],
         id: "graph",
         path: resolve(root, "graph"),
       },
@@ -444,7 +445,7 @@ test("resolveIssueContext assembles the graph module bundle and keeps refs withi
       issue: {
         ...createIssue(`Issue refs:
 
-- \`./graph/doc/linked.md\`
+- \`./graph/io/linked.md\`
 - \`./io/shared.md\`
 - \`./agent/doc/outside.md\`
 `),
@@ -467,9 +468,8 @@ test("resolveIssueContext assembles the graph module bundle and keeps refs withi
       "builtin:io.core.git-safety",
       "context.entrypoint",
       "./graph/io/overview.md",
-      "./graph/io/goals.md",
-      "./graph/doc/overview.md",
-      "./graph/doc/linked.md",
+      "./graph/io/architecture.md",
+      "./graph/io/linked.md",
       "./io/shared.md",
       "issue.context",
     ]);

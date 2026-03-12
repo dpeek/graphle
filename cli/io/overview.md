@@ -6,9 +6,7 @@
 
 ## Docs
 
-- `./goals.md`
 - `../../lib/io/overview.md`
-- `../../lib/io/goals.md`
 - `../../io/overview.md`
 
 ## Layout

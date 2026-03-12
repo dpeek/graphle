@@ -2,20 +2,33 @@
 
 ## Purpose
 
-`graph` owns the reusable graph runtime: schema, store, validation, sync, type modules, and the typed client surface.
+`graph` owns the reusable graph engine: schema authoring, stable ids, bootstrap, the append-only store, typed refs, validation, sync, and type-module contracts.
 
-## Docs
+## Entry Points
 
-- `./goals.md`
-- `../doc/overview.md`
-- `../doc/big-picture.md`
-- `../doc/validation.md`
-- `../doc/sync.md`
-- `../doc/type-modules.md`
+- `./goals.md`: cross-cutting package direction, constraints, and deferred work
+- `./architecture.md`: durable engine model, current primitives, and longer-range platform shape
+- `./authority.md`: authority boundaries, predicate visibility, typed business methods, and secrets
+- `./runtime.md`: schema authoring, id maps, core schema, bootstrap, and store behavior
+- `./validation.md`: local and authoritative validation lifecycle plus result surfaces
+- `./sync.md`: total snapshot bootstrap, incremental write reconciliation, and sync state
+- `./type-modules.md`: scalar/enum modules, field metadata/filter contracts, and reference-field helpers
+- `./refs-and-ui.md`: typed refs, predicate-slot subscriptions, and the current UI-adjacent surface
 
-## Layout
+## Current Package Layout
 
-- `../src/graph/`: core runtime, schema, client, store, sync, bootstrap, type-module APIs
-- `../src/type/`: built-in scalar, enum, and field helper modules
+- `../src/graph/`: runtime kernel, schema, ids, bootstrap, client, sync, and helper APIs
+- `../src/type/`: built-in scalar, enum, and richer domain modules
 - `../src/index.ts`: public package exports
-- `../doc/`: architecture and roadmap docs
+
+## Current vs Roadmap
+
+Current code already ships typed entity/predicate refs, predicate-slot subscriptions, type-module metadata/filter contracts, and incremental authoritative sync primitives. The remaining roadmap is mostly around persistence, richer query semantics, policy/secrets, and fully realized web/TUI tooling.
+
+## Future Work Suggestions
+
+1. Add a short “start here by task” matrix so agents can jump from goals like “sync bug” or “field authoring” to the right doc and source files.
+2. Add a compact API index for the top exported symbols from `src/graph/index.ts`.
+3. Document which behaviors are public contract versus internal helper surface.
+4. Add references to the most important app proof surfaces once those stay stable.
+5. Keep this page limited to navigation and move topic detail into the focused docs linked above.

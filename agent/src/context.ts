@@ -19,7 +19,6 @@ import type {
   Workflow,
 } from "./types.js";
 
-const WORKFLOW_FILE = "WORKFLOW.md";
 const CONTEXT_ENTRYPOINT_DOC_ID = "context.entrypoint";
 const ISSUE_CONTEXT_DOC_ID = "issue.context";
 const ISSUE_HINT_BLOCK_PATTERN = /<!--\s*io\b([\s\S]*?)-->/gi;
@@ -93,10 +92,6 @@ function isBuiltinDocReference(reference: string) {
 
 function isRepoPathDocReference(reference: string) {
   return reference.startsWith("./");
-}
-
-function usesLegacyWorkflowPrompt(workflow: Workflow) {
-  return workflow.entrypoint.promptPath.endsWith(WORKFLOW_FILE);
 }
 
 function isPathWithinRoot(path: string, root: string) {
@@ -375,42 +370,35 @@ export async function resolveIssueContext(options: {
     description: descriptionWithoutHints,
   };
 
-  if (workflow.entrypoint.kind === "io") {
-    const profileResolution = resolveProfileInclude(workflow, selection);
-    warnings.push(...profileResolution.warnings);
-    const postEntrypointDocs: PendingResolvedContextDoc[] = [];
+  const profileResolution = resolveProfileInclude(workflow, selection);
+  warnings.push(...profileResolution.warnings);
+  const postEntrypointDocs: PendingResolvedContextDoc[] = [];
 
-    for (const reference of profileResolution.include) {
-      const doc = await resolveDocReference(workflow, repoRoot, reference);
-      if (!doc) {
-        throw new Error(`workflow_doc_missing:${reference}`);
-      }
-      if (usesLegacyWorkflowPrompt(workflow) && doc.source === "builtin") {
-        continue;
-      }
-      if (doc.source === "builtin") {
-        appendDoc(docs, seenDocIds, seenPaths, doc);
-        continue;
-      }
-      postEntrypointDocs.push(doc);
+  for (const reference of profileResolution.include) {
+    const doc = await resolveDocReference(workflow, repoRoot, reference);
+    if (!doc) {
+      throw new Error(`workflow_doc_missing:${reference}`);
     }
-
-    if (profileResolution.includeEntrypoint) {
-      appendDoc(docs, seenDocIds, seenPaths, createEntrypointDoc(workflow));
-    }
-    for (const doc of postEntrypointDocs) {
+    if (doc.source === "builtin") {
       appendDoc(docs, seenDocIds, seenPaths, doc);
+      continue;
     }
+    postEntrypointDocs.push(doc);
+  }
 
-    for (const reference of module?.docs ?? []) {
-      const doc = await resolveDocReference(workflow, repoRoot, reference);
-      if (!doc) {
-        throw new Error(`workflow_doc_missing:${reference}`);
-      }
-      appendDoc(docs, seenDocIds, seenPaths, doc);
-    }
-  } else {
+  if (profileResolution.includeEntrypoint) {
     appendDoc(docs, seenDocIds, seenPaths, createEntrypointDoc(workflow));
+  }
+  for (const doc of postEntrypointDocs) {
+    appendDoc(docs, seenDocIds, seenPaths, doc);
+  }
+
+  for (const reference of module?.docs ?? []) {
+    const doc = await resolveDocReference(workflow, repoRoot, reference);
+    if (!doc) {
+      throw new Error(`workflow_doc_missing:${reference}`);
+    }
+    appendDoc(docs, seenDocIds, seenPaths, doc);
   }
 
   for (const reference of issueDocReferences) {
@@ -430,9 +418,7 @@ export async function resolveIssueContext(options: {
     }
   }
 
-  if (workflow.entrypoint.kind === "io" && !usesLegacyWorkflowPrompt(workflow)) {
-    appendDoc(docs, seenDocIds, seenPaths, createIssueContextDoc(descriptionWithoutHints));
-  }
+  appendDoc(docs, seenDocIds, seenPaths, createIssueContextDoc(descriptionWithoutHints));
 
   return {
     bundle: finalizeBundle(docs),

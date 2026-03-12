@@ -7,14 +7,14 @@
 
 ## This Week
 
-- Remove stale assumptions from CLI flows that still reflect the old `WORKFLOW.md` or `io.json`-first model.
+- Remove stale assumptions from CLI flows so agent commands consistently target the `io.ts` plus `io.md` repo shape.
 - Keep `create` and install-oriented commands aligned with the shared loader contract in `lib`.
 - Make command help and examples point users toward the current repo shape: `io.ts`, `io.md`, repo docs, and package-local goals docs.
 
 ## Constraints
 
 - CLI behavior should consume the shared config/runtime surface instead of re-implementing loader or routing rules.
-- Migration support still matters, but it should stay compatibility-only and clearly separated from the default path.
+- Unsupported legacy agent entrypoints should fail clearly instead of being treated as alternate defaults.
 - User-facing commands need stable, reviewable semantics before new convenience layers are added.
 
 ## Proof Surfaces
@@ -29,6 +29,4 @@
 ## Related Docs
 
 - `./overview.md`
-- `../../lib/io/goals.md`
-- `../../config/io/goals.md`
 - `../../io/overview.md`

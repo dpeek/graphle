@@ -15,7 +15,7 @@
 
 - `lib` owns config semantics; workspace packages should consume them rather than inventing parallel rules.
 - The exported config stays config-like and serializable even when authored in TypeScript.
-- Compatibility with `io.json` and `WORKFLOW.md` stays available, but the default path remains `io.ts` plus `io.md`.
+- Keep downstream loader expectations centered on the `io.ts` plus `io.md` repo contract.
 
 ## Proof Surfaces
 
@@ -29,6 +29,4 @@
 ## Related Docs
 
 - `./overview.md`
-- `../../cli/io/goals.md`
-- `../../config/io/goals.md`
 - `../../io/overview.md`

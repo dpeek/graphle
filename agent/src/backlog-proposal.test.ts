@@ -27,7 +27,7 @@ function createWorkflow(root: string): Pick<Workflow, "modules"> {
     modules: {
       agent: {
         allowedSharedPaths: [resolve(root, "io", "topic")],
-        docs: ["./agent/io/goals.md"],
+        docs: ["./agent/io/overview.md"],
         id: "agent",
         path: resolve(root, "agent"),
       },
@@ -72,8 +72,8 @@ function createBundle(root: string): ResolvedContextBundle {
 - quality of backlog/spec refinement
 - automatic creation of better child-task structure
 `,
-        id: "./agent/io/goals.md",
-        label: "./agent/io/goals.md",
+        id: "./agent/io/overview.md",
+        label: "./agent/io/overview.md",
         order: 2,
         overridden: false,
         path: resolve(root, "io", "goals.md"),
@@ -116,7 +116,9 @@ Turn a fresh parent issue into a durable planning brief.
   expect(rewritten).toContain("## Work Options");
   expect(rewritten).toContain("1. **Define stable managed sections**");
   expect(rewritten).toContain("2. **Implement proposal generation in the backlog");
-  expect(rewritten).toContain("Alignment: Turn a fresh parent issue into a durable planning brief.");
+  expect(rewritten).toContain(
+    "Alignment: Turn a fresh parent issue into a durable planning brief.",
+  );
   expect(rewritten).toContain("## Deferred");
 });
 

@@ -1,165 +1,87 @@
-# Managed Module Stream Contract
-
-Status: Accepted target for the first managed-stream implementation pass.
+# Managed Streams
 
 ## Purpose
 
-This document defines the first concrete contract for turning a repo module into
-an IO-managed stream. Follow-on implementation work should target these rules
-instead of inventing new label, comment, or issue-body shapes per feature.
+This document is the entry point for agents working on managed parent detection, parent/child phase rules, or stream-level scheduling behavior.
 
-## Managed Parent Label Contract
+## Current Managed Parent Contract
 
-A parent issue is managed only when all of the following are true:
+A parent issue is currently managed only when all of the following are true:
 
-- the issue has no parent
-- the issue has the `io` label
-- the issue has exactly one module label that matches a configured module id
-- the issue is intended to accumulate child issues on one stream branch
+- it has no parent
+- it has the `io` label
+- it has exactly one label that matches a configured module id
 
-Rules:
+Current meaning:
 
-- `io` means the parent opts into agent-managed sections and `@io` comment
-  triggers
-- `io` never identifies the module; the module label does
-- child issues do not need the `io` label; they inherit stream membership from
-  `parentId`
-- removing `io` disables managed-parent behavior without deleting the
-  human-authored brief
-- zero or multiple module labels are a blocking ambiguity that the human must
-  fix before managed automation continues
+- `io` opts the parent into managed backlog refresh and `@io` comments
+- the module label, not `io`, picks module identity
+- child issues inherit stream membership from `parentId`
+- ambiguous module identity blocks managed automation rather than guessing
 
-## Module Identity Contract
+## Current Stream Phase Model
 
-Module identity comes from `io.ts` or `io.json` under `modules.<id>`.
+The parent issue state is the automatic phase gate for the whole stream:
 
-Example:
+- `Todo`: backlog-authoring state; automatic backlog polling may still pick the parent
+- `In Review`: post-backlog human hold; explicit `@io` commands still work here
+- `In Progress`: execution-released state; runnable children may now execute
+- `Done`: stream-complete state
 
-- label: `agent`
-- module id: `agent`
-- primary path: `./agent`
+Current scheduling rules:
 
-Rules:
-
-- the issue label must match the module id after lowercase normalization
-- `modules.<id>.path` is the canonical primary implementation root
-- `modules.<id>.docs` are the default context docs for that module
-- `modules.<id>.allowedSharedPaths` define the shared repo paths that are still
-  considered in-bounds for a module-local child
-- each child issue keeps one primary module label for routing, context
-  narrowing, and operator scanning
-- cross-module work requires an explicit exception in the child description;
-  touching shared code does not change primary module identity
-
-## Current Approach Parent Phase Contract
-
-For the current 2-level bootstrap, the parent issue state is the only automatic
-phase gate between backlog work and child execution.
-
-Parent phases:
-
-- `Todo`: backlog-authoring phase; automatic backlog polling may select the
-  managed parent only in this state
-- `In Review`: human review and edit hold state after backlog work; keep the
-  parent parked here until a human is ready to release execution
-- `In Progress`: execution-released state; unblocked child issues may now run
-- `Done`: stream-complete state; no new backlog or child execution should be
-  scheduled automatically
-
-Rules:
-
-- managed parents keep backlog routing in every non-terminal phase so explicit
-  backlog reruns and top-level `@io` commands still land on the backlog agent
-  while the parent is in `Todo`, `In Review`, or `In Progress`
 - automatic backlog scheduling stops once the parent leaves `Todo`
-- child readiness is determined by the parent phase plus child-local
-  `blockedBy` ordering and the one-active-child-per-stream rule
-- the current approach keeps planning, review, and approval on the parent;
-  children remain implementation-only
+- explicit backlog reruns and top-level `@io` comments can still target managed parents in non-terminal states
+- child execution requires parent `In Progress`, no active blocker, and no other active issue in the same stream
+- child completion does not advance the parent state automatically
 
-## Current Approach Transition Contract
+## Current Module Boundaries
 
-Parent backlog work and child execution keep separate Linear transitions even
-while they share one stream branch.
+Module identity comes from `workflow.modules.<id>` in `io.ts`.
 
-Rules:
+Current module fields already matter to managed streams:
 
-- a successful parent backlog run moves the parent to `In Review`
-- moving the parent to `In Progress` is a human-controlled release step; it
-  does not imply any child state transition
-- a successful child execution run moves only that child to `Done`
-- child completion does not move the parent out of its current phase
+- `path`: canonical module root
+- `docs`: default module docs added to context
+- `allowedSharedPaths`: extra repo roots that still count as in-bounds for module-scoped issue refs
 
-## Parent Description Template
+Each managed child still keeps one primary module label even when it touches shared code.
 
-The top-level managed parent issue description is the canonical evolving brief
-for the stream. Managed refreshes should move the description toward one shared
-markdown template rather than splitting state across protected blocks or
-separate focus docs.
+## Current Ownership Split
 
-Recommended shape:
+Humans still own:
 
-```md
-## Objective
+- the intended outcome
+- acceptance judgment
+- priority and release timing
+- freeform decisions, approvals, and notes in the parent brief
 
-- one or two bullets defining the shipping outcome
+The agent currently owns:
 
-## Current Focus
+- refreshing the parent description toward the shared stream shape
+- generating or updating speculative Todo child issues
+- writing reply comments for handled `@io` commands
 
-- the next one to three concrete work areas
+The code already assumes shared ownership of the parent description, not protected machine-only regions.
 
-## Constraints
+## Current Limits
 
-- repo or stream rules that narrow the work
+- the model is still two levels: parent stream plus implementation children
+- parent phase is the only automatic release gate; there is no separate planning-tier issue type
+- only one child may execute automatically per stream at a time
+- managed behavior is currently tuned for Linear issue states and relations
 
-## Proof Surfaces
+## Roadmap
 
-- repo paths or docs that must stay aligned
+- make stream state easier to inspect without widening the write surface
+- decide whether managed backlog mutation should remain available after parent `Done`
+- clarify whether any additional parent states deserve first-class meaning
+- keep child payloads narrow unless a stronger planning model becomes necessary
 
-## Work Options
+## Future Work Suggestions
 
-1. **Option 1**
-   Focus: ...
-   Alignment: ...
-
-## Deferred
-
-- work intentionally outside the current slice
-```
-
-Rules:
-
-- humans and agents both edit the same parent description
-- agents should normalize toward the recommended headings when refreshing the
-  brief, but they do not require an exact starting template
-- preserve useful human-authored sections when possible, especially decisions,
-  approvals, and notes that still help execution
-- `Proof Surfaces` should use repo-relative paths
-- `Work Options` are the canonical child-backlog planning surface for managed
-  reruns
-- package `*/io/goals.md` docs may still exist as repo docs, but they are not
-  the canonical evolving stream brief for managed parent issues
-
-## Human And Agent Ownership In The Parent Issue
-
-Human-owned:
-
-- outcome, scope, priority, acceptance intent, constraints that require
-  judgment, decisions, approvals, and freeform notes anywhere in the
-  description
-
-Agent-owned:
-
-- direct description refreshes that improve structure, summarize current focus,
-  and keep `Work Options` usable for backlog reruns
-- later machine-maintained links or status summaries for child backlog state
-- reply comments generated from `@io` trigger execution
-
-Ownership rule:
-
-- humans can edit anything, and agents should respond cooperatively by using the
-  current description as source material for the next refresh
-- agents may rewrite the parent description directly, but they should preserve
-  useful intent and move the brief toward the shared template instead of
-  treating any region as protected
-- reply comments remain agent-owned status output
+1. Add a compact matrix showing which parent states allow auto backlog, explicit backlog, and child execution.
+2. Document the expected stability of module-label matching and ambiguity handling.
+3. Add one example of a good managed parent brief after several reruns.
+4. Clarify when cross-module work should stay a child-level exception versus become a separate stream.
+5. Record which stream rules are specific to Linear today.

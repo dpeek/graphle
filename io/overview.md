@@ -8,14 +8,11 @@ application direction the rest of the workspace is proving.
 
 ## Docs
 
-- `./goals.md`
 - `../io.md`
 - `../agent/io/overview.md`
-- `../agent/io/goals.md`
+- `../agent/io/managed-stream-goals.md`
 - `../graph/io/overview.md`
-- `../graph/io/goals.md`
 - `../tui/io/overview.md`
-- `../tui/io/goals.md`
 
 ## Layout
 
