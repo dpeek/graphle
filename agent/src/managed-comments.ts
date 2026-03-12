@@ -14,7 +14,6 @@ import type {
 const MANAGED_COMMENT_RESULT_MARKER = "<!-- io-managed:comment-result -->";
 const SUPPORTED_COMMANDS = new Set<ManagedCommentCommandName>([
   "backlog",
-  "focus",
   "help",
   "status",
 ]);

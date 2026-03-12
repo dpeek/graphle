@@ -1,7 +1,6 @@
 # Managed Stream Comment Trigger Contract
 
-Status: Accepted target for implementation. Comment-triggered execution is not
-fully shipped yet.
+Status: Accepted target for implementation.
 
 ## Purpose
 
@@ -49,21 +48,13 @@ Rules:
 
 ### `@io backlog`
 
-Refresh the parent `backlog-proposal` managed block and the speculative child
-backlog.
+Refresh the parent description toward the shared stream template and refresh the
+speculative child backlog.
 
 Write surface:
 
-- parent issue `<!-- io-managed:backlog-proposal:* -->`
+- parent issue description
 - child issues under the parent
-
-### `@io focus`
-
-Refresh `./io/goals.md` using the repo-wide focus doc shape.
-
-Write surface:
-
-- `./io/goals.md`
 
 ### `@io status`
 
@@ -104,9 +95,9 @@ Command: backlog
 Result: updated
 Target: OPE-122 / agent
 
-- Updated the parent managed brief
+- Updated the parent description
 - Left existing in-progress child issues untouched
-- Warning: skipped focus doc refresh because this command does not own it
+- Warning: skipped one requested write because the parent is not eligible
 ```
 
 Rules:
@@ -117,7 +108,7 @@ Rules:
 
 ## Safety Rules
 
-- never rewrite human-authored prose outside managed markers
+- never treat any region of the parent description as a protected marker block
 - never infer module identity from `io`; require the module label match
 - reject ambiguous module labels instead of choosing one silently
 - allow `dryRun: true` to compute and report the intended changes without

@@ -90,17 +90,16 @@ Rules:
 - a successful child execution run moves only that child to `Done`
 - child completion does not move the parent out of its current phase
 
-## Repo-Wide Focus Document Shape
+## Parent Description Template
 
-Managed streams may maintain one repo-wide focus doc at `./io/goals.md`. The
-doc should stay plain markdown with stable headings and reflect the current
-state of the stream rather than a long-lived roadmap.
+The top-level managed parent issue description is the canonical evolving brief
+for the stream. Managed refreshes should move the description toward one shared
+markdown template rather than splitting state across protected blocks or
+separate focus docs.
 
-Required shape:
+Recommended shape:
 
 ```md
-# <stream focus title>
-
 ## Objective
 
 - one or two bullets defining the shipping outcome
@@ -111,76 +110,56 @@ Required shape:
 
 ## Constraints
 
-- repo or stream rules that can narrow the work
+- repo or stream rules that narrow the work
 
 ## Proof Surfaces
 
 - repo paths or docs that must stay aligned
 
+## Work Options
+
+1. **Option 1**
+   Focus: ...
+   Alignment: ...
+
 ## Deferred
 
-- work that is intentionally outside the current slice
+- work intentionally outside the current slice
 ```
 
 Rules:
 
-- the focus doc summarizes active stream intent; it does not replace the full
-  parent issue brief
-- bullets should stay short and concrete enough for backlog or comment refresh
-  passes to quote directly
-- humans may edit any section; agents should refresh the doc only when a
-  managed trigger explicitly asks for it
+- humans and agents both edit the same parent description
+- agents should normalize toward the recommended headings when refreshing the
+  brief, but they do not require an exact starting template
+- preserve useful human-authored sections when possible, especially decisions,
+  approvals, and notes that still help execution
 - `Proof Surfaces` should use repo-relative paths
-
-## Parent Issue Managed-Section Model
-
-Managed parent issues separate human-owned prose from agent-owned sections.
-
-Marker format:
-
-```md
-<!-- io-managed:<section-id>:start -->
-
-...
-
-<!-- io-managed:<section-id>:end -->
-```
-
-Phase 1 required section id:
-
-- `backlog-proposal`
-
-Reserved section ids for later:
-
-- `focus`
-- `status`
-- `comment-log`
-
-Rules:
-
-- on first write, append the managed block after the existing human brief
-- on reruns, replace only the content between matching markers
-- preserve human-authored sections before, between, and after managed blocks
-- keep section ids, headings, and section order stable once published
-- agent-owned blocks are for derived state and proposals, not for human
-  approvals or decisions
+- `Work Options` are the canonical child-backlog planning surface for managed
+  reruns
+- package `*/io/goals.md` docs may still exist as repo docs, but they are not
+  the canonical evolving stream brief for managed parent issues
 
 ## Human And Agent Ownership In The Parent Issue
 
 Human-owned:
 
 - outcome, scope, priority, acceptance intent, constraints that require
-  judgment, decisions, approvals, and freeform notes outside managed markers
+  judgment, decisions, approvals, and freeform notes anywhere in the
+  description
 
 Agent-owned:
 
-- content inside `io-managed:*` markers
-- derived backlog proposal text
+- direct description refreshes that improve structure, summarize current focus,
+  and keep `Work Options` usable for backlog reruns
 - later machine-maintained links or status summaries for child backlog state
 - reply comments generated from `@io` trigger execution
 
 Ownership rule:
 
-- humans can edit anything, but agents may only overwrite content inside managed
-  markers or inside their own reply comments
-- if a human edits inside a managed block, a later agent refresh may replace it
+- humans can edit anything, and agents should respond cooperatively by using the
+  current description as source material for the next refresh
+- agents may rewrite the parent description directly, but they should preserve
+  useful intent and move the brief toward the shared template instead of
+  treating any region as protected
+- reply comments remain agent-owned status output

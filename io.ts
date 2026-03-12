@@ -31,7 +31,6 @@ export default defineIoConfig({
           "builtin:io.linear.status-updates",
           "builtin:io.core.git-safety",
           "project.overview",
-          "project.focus",
           "project.managed-stream-goals",
           "project.managed-stream-backlog",
           "project.managed-stream-comments",

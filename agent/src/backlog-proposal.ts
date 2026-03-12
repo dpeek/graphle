@@ -3,40 +3,34 @@ import { relative } from "node:path";
 import { hasIssueLabel, resolveIssueModule } from "./issue-routing.js";
 import type { AgentIssue, ResolvedContextBundle, Workflow, WorkflowModule } from "./types.js";
 
-export const MANAGED_BACKLOG_PROPOSAL_START = "<!-- io-managed:backlog-proposal:start -->";
-export const MANAGED_BACKLOG_PROPOSAL_END = "<!-- io-managed:backlog-proposal:end -->";
-
-const MANAGED_BACKLOG_PROPOSAL_BLOCK = new RegExp(
-  `${escapeForRegExp(MANAGED_BACKLOG_PROPOSAL_START)}[\\s\\S]*?${escapeForRegExp(MANAGED_BACKLOG_PROPOSAL_END)}\\s*`,
-);
-
-const STATE_HEADING_PATTERNS = [
-  /what this stream is about/i,
-  /what has landed/i,
-  /current focus/i,
-  /current state/i,
-  /current behavior/i,
-  /what io is/i,
-  /purpose/i,
+const OBJECTIVE_HEADING_PATTERNS = [/^objective$/i, /^outcome$/i, /^goals?$/i, /^purpose$/i] as const;
+const CURRENT_FOCUS_HEADING_PATTERNS = [
+  /^current focus$/i,
+  /^this week$/i,
+  /^deliverables$/i,
+  /^target workflow$/i,
+  /^current state$/i,
 ] as const;
-
 const CONSTRAINT_HEADING_PATTERNS = [
-  /when changing this repo/i,
-  /local constraints/i,
-  /validation/i,
-  /module guardrails/i,
-  /migration boundary/i,
-  /scope/i,
-  /out of scope/i,
-  /notes/i,
+  /^constraints$/i,
+  /^scope$/i,
+  /^notes$/i,
+  /^validation$/i,
+  /^module guardrails$/i,
 ] as const;
-
-const GOAL_HEADING_PATTERNS = [
-  /objective/i,
-  /current focus/i,
-  /long-term goal/i,
-  /good changes/i,
-  /what this stream is about/i,
+const PROOF_SURFACE_HEADING_PATTERNS = [/^proof surfaces?$/i, /^docs$/i, /^context$/i] as const;
+const WORK_OPTION_HEADING_PATTERNS = [/^work options$/i] as const;
+const DEFERRED_HEADING_PATTERNS = [/^deferred$/i, /^out of scope$/i] as const;
+const PRESERVED_SECTION_PATTERNS = [
+  /decision/i,
+  /approval/i,
+  /question/i,
+  /risk/i,
+  /note/i,
+  /success criteria/i,
+  /context/i,
+  /current state/i,
+  /target workflow/i,
 ] as const;
 
 interface MarkdownSection {
@@ -69,23 +63,13 @@ export function rewriteManagedBacklogDescription(options: {
   if (!module) {
     return issue.description;
   }
-
-  const managedBlock = renderManagedBacklogProposalBlock({
+  return renderManagedParentDescription({
     bundle,
     description: issue.description,
+    issue,
     module,
     repoRoot,
   });
-
-  if (MANAGED_BACKLOG_PROPOSAL_BLOCK.test(issue.description)) {
-    return issue.description.replace(MANAGED_BACKLOG_PROPOSAL_BLOCK, `${managedBlock}\n\n`).trimEnd();
-  }
-
-  const preservedDescription = issue.description.trimEnd();
-  if (!preservedDescription) {
-    return managedBlock;
-  }
-  return `${preservedDescription}\n\n${managedBlock}`;
 }
 
 export function buildManagedParentProposal(options: {
@@ -94,15 +78,12 @@ export function buildManagedParentProposal(options: {
   repoRoot: string;
   resolvedContext: ResolvedContextBundle;
 }) {
-  const description = rewriteManagedBacklogDescription({
+  const description = renderManagedParentDescription({
     bundle: options.resolvedContext,
+    description: options.issue.description,
     issue: options.issue,
+    module: options.module,
     repoRoot: options.repoRoot,
-    workflow: {
-      modules: {
-        [options.module.id]: options.module,
-      },
-    },
   });
 
   return {
@@ -111,70 +92,143 @@ export function buildManagedParentProposal(options: {
   };
 }
 
-function renderManagedBacklogProposalBlock(options: {
+function renderManagedParentDescription(options: {
   bundle: ResolvedContextBundle;
   description: string;
+  issue: AgentIssue;
   module: WorkflowModule;
   repoRoot: string;
 }) {
-  const { bundle, description, module, repoRoot } = options;
-  const analysisText = stripManagedBacklogProposal(stripHtmlComments(description));
+  const { bundle, description, issue, module, repoRoot } = options;
+  const normalizedDescription = normalizeDescriptionText(description);
   const repoDocs = bundle.docs.filter((doc) => doc.source !== "builtin");
+  const prioritizedDocs = prioritizeModuleDocs(repoDocs, module);
+  const analysisDocs = [...prioritizedDocs, createIssueDocForAnalysis(normalizedDescription)];
   const modulePath = toRepoRelativePath(repoRoot, module.path);
-  const stateBullets = collectHighlights({
-    docs: prioritizeModuleDocs(repoDocs, module),
+
+  const objective = findSectionBullets({
+    docs: analysisDocs,
     fallback: [
-      `The primary stream is the \`${module.id}\` module under \`${modulePath}\`.`,
-      "Keep the planning brief aligned with the module's shipped workflow and docs.",
+      `Ship the next managed ${module.id} stream slice for ${issue.identifier}.`,
+      "Keep the parent description and child backlog aligned.",
     ],
-    headingPatterns: STATE_HEADING_PATTERNS,
-    maxItems: 4,
+    headingPatterns: OBJECTIVE_HEADING_PATTERNS,
+    maxItems: 3,
   });
-  const constraintBullets = collectHighlights({
-    docs: [...prioritizeModuleDocs(repoDocs, module), createIssueDocForAnalysis(analysisText)],
+  const workOptions = resolveWorkOptions({
+    description: normalizedDescription,
+    goals: objective,
+    module,
+    repoRoot,
+  });
+  const currentFocus = uniqueOrdered([
+    ...findSectionBullets({
+      docs: analysisDocs,
+      fallback: [],
+      headingPatterns: CURRENT_FOCUS_HEADING_PATTERNS,
+      maxItems: 4,
+    }),
+    ...workOptions.map((option) => option.focus),
+    `Keep the next ${module.id} slice explicit and reviewable.`,
+  ]).slice(0, 4);
+  const constraints = findSectionBullets({
+    docs: analysisDocs,
     fallback: [
-      "Preserve human-authored notes and narrowing decisions outside this managed block.",
+      "Preserve useful human-authored notes and decisions when refreshing the stream brief.",
       "Keep the brief concise, concrete, and easy to refresh on later backlog runs.",
       "Prefer one primary module surface unless a cross-module exception is explicit.",
     ],
     headingPatterns: CONSTRAINT_HEADING_PATTERNS,
     maxItems: 4,
   });
-  const goalBullets = collectHighlights({
-    docs: prioritizeModuleDocs(repoDocs, module),
-    fallback: [
-      "Improve planning quality without losing operator visibility.",
-      "Keep the next slice explicit, narrow, and reviewable.",
-      "Turn the parent issue into durable execution guidance.",
-    ],
-    headingPatterns: GOAL_HEADING_PATTERNS,
-    maxItems: 4,
+  const proofSurfaces = uniqueOrdered([
+    ...findSectionBullets({
+      docs: analysisDocs,
+      fallback: [],
+      headingPatterns: PROOF_SURFACE_HEADING_PATTERNS,
+      maxItems: 6,
+    }),
+    ...extractRepoPaths(normalizedDescription),
+    modulePath,
+    ...module.docs,
+    ...bundle.docs.map((doc) => (doc.path ? toRepoRelativePath(repoRoot, doc.path) : undefined)),
+  ]).slice(0, 6);
+  const deferred = findSectionBullets({
+    docs: analysisDocs,
+    fallback: ["Non-essential work outside the current managed stream slice."],
+    headingPatterns: DEFERRED_HEADING_PATTERNS,
+    maxItems: 3,
   });
-  const optionsList = buildWorkOptions({
-    goals: goalBullets,
-    module,
-    repoRoot,
-    themes: extractIssueThemes(analysisText),
-  });
+  const preservedSections = selectPreservedSections(normalizedDescription);
 
   return [
-    MANAGED_BACKLOG_PROPOSAL_START,
-    "## Managed Brief",
+    "## Objective",
+    ...objective.map((line) => `- ${line}`),
     "",
-    "### Current Module State",
-    ...stateBullets.map((bullet) => `- ${bullet}`),
+    "## Current Focus",
+    ...currentFocus.map((line) => `- ${line}`),
     "",
-    "### Constraints",
-    ...constraintBullets.map((bullet) => `- ${bullet}`),
+    "## Constraints",
+    ...constraints.map((line) => `- ${line}`),
     "",
-    "### Work Options",
-    ...optionsList.flatMap((option, index) => [
+    "## Proof Surfaces",
+    ...(proofSurfaces.length ? proofSurfaces : [modulePath]).map((line) => `- ${line}`),
+    "",
+    "## Work Options",
+    ...workOptions.flatMap((option, index) => [
       `${index + 1}. **${option.title}**`,
       `   Focus: ${option.focus}`,
       `   Alignment: ${option.alignment}`,
     ]),
-    MANAGED_BACKLOG_PROPOSAL_END,
-  ].join("\n");
+    ...preservedSections.flatMap((section) => [
+      "",
+      `## ${section.heading}`,
+      "",
+      ...trimTrailingBlankLines(section.lines),
+    ]),
+    "",
+    "## Deferred",
+    ...deferred.map((line) => `- ${line}`),
+  ]
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trimEnd();
+}
+
+function resolveWorkOptions(options: {
+  description: string;
+  goals: string[];
+  module: WorkflowModule;
+  repoRoot: string;
+}) {
+  const parsed = parseWorkOptions(options.description);
+  if (parsed.length) {
+    return parsed;
+  }
+  return buildWorkOptions({
+    goals: options.goals,
+    module: options.module,
+    repoRoot: options.repoRoot,
+    themes: extractIssueThemes(options.description),
+  });
+}
+
+function parseWorkOptions(description: string) {
+  const options: ProposalOption[] = [];
+  for (const section of splitMarkdownSections(description).filter((entry) =>
+    matchesAnyPattern(entry.heading, WORK_OPTION_HEADING_PATTERNS)
+  )) {
+    for (let index = 0; index < section.lines.length; index++) {
+      const title = section.lines[index]?.match(/^\d+\.\s+\*\*(.+?)\*\*$/)?.[1]?.trim();
+      const focus = section.lines[index + 1]?.match(/^\s*Focus:\s*(.+)$/)?.[1]?.trim();
+      const alignment = section.lines[index + 2]?.match(/^\s*Alignment:\s*(.+)$/)?.[1]?.trim();
+      if (!title || !focus || !alignment) {
+        continue;
+      }
+      options.push({ alignment, focus, title });
+    }
+  }
+  return options;
 }
 
 function buildWorkOptions(options: {
@@ -186,8 +240,8 @@ function buildWorkOptions(options: {
   const { goals, module, repoRoot, themes } = options;
   const modulePath = toRepoRelativePath(repoRoot, module.path);
   const fallbackThemes = [
-    `Stabilize the parent brief contract for \`${module.id}\` in \`${modulePath}\`.`,
-    `Generate planning guidance directly from the assembled \`${module.id}\` context bundle.`,
+    `Stabilize the parent description contract for \`${module.id}\` in \`${modulePath}\`.`,
+    `Generate clearer execution guidance directly from the assembled \`${module.id}\` context bundle.`,
     `Prove rerun safety and keep the next slice reviewable in \`${modulePath}\`.`,
   ];
   const fallbackGoals = [
@@ -222,60 +276,61 @@ function createOptionTitle(focus: string, index: number) {
 function extractIssueThemes(description: string) {
   const sections = splitMarkdownSections(description);
   const prioritizedSections = [
-    { limit: 3, pattern: /deliverables/i },
-    { limit: 2, pattern: /scope/i },
-    { limit: 1, pattern: /outcome/i },
-    { limit: 1, pattern: /notes/i },
+    { limit: 3, patterns: [/^deliverables$/i, /^current focus$/i] as const },
+    { limit: 2, patterns: [/^scope$/i, /^target workflow$/i] as const },
+    { limit: 1, patterns: [/^objective$/i, /^outcome$/i] as const },
+    { limit: 1, patterns: [/^notes$/i, /^context$/i] as const },
   ] as const;
   const prioritizedThemes: string[] = [];
 
-  for (const { limit, pattern } of prioritizedSections) {
-    for (const section of sections.filter((entry) => matchesAnyPattern(entry.heading, [pattern]))) {
-      prioritizedThemes.push(...extractSectionHighlights(section, limit).map(normalizeHighlight));
+  for (const { limit, patterns } of prioritizedSections) {
+    for (const section of sections.filter((entry) => matchesAnyPattern(entry.heading, patterns))) {
+      prioritizedThemes.push(...extractSectionHighlights(section, limit));
       if (uniqueOrdered(prioritizedThemes).length >= 3) {
-        return uniqueOrdered(prioritizedThemes).filter(Boolean).slice(0, 3);
+        return uniqueOrdered(prioritizedThemes).slice(0, 3);
       }
     }
   }
 
-  const themes = uniqueOrdered(prioritizedThemes).filter(Boolean);
-  if (themes.length) {
-    return themes.slice(0, 3);
-  }
-
-  const fallback = uniqueOrdered(
-    sections.flatMap((section) => extractSectionHighlights(section, 1)).map(normalizeHighlight),
-  ).filter(Boolean);
-  return fallback.slice(0, 3);
+  return uniqueOrdered(
+    sections.flatMap((section) => extractSectionHighlights(section, 1)),
+  ).slice(0, 3);
 }
 
-function collectHighlights(options: {
-  docs: Array<{ content: string; id: string; path?: string }>;
+function findSectionBullets(options: {
+  docs: Array<{ content: string; path?: string }>;
   fallback: string[];
   headingPatterns: readonly RegExp[];
   maxItems: number;
 }) {
-  const { docs, fallback, headingPatterns, maxItems } = options;
   const highlights = uniqueOrdered(
-    docs.flatMap((doc) => {
-      const sections = splitMarkdownSections(doc.content);
-      const matched = sections.filter((section) => matchesAnyPattern(section.heading, headingPatterns));
-      return matched.flatMap((section) => extractSectionHighlights(section, 2));
-    }),
-  )
-    .map(normalizeHighlight)
-    .filter(Boolean);
-  if (highlights.length >= maxItems) {
-    return highlights.slice(0, maxItems);
-  }
-  return uniqueOrdered([...highlights, ...fallback.map(normalizeHighlight).filter(Boolean)]).slice(
-    0,
-    maxItems,
+    options.docs.flatMap((doc) =>
+      splitMarkdownSections(doc.content)
+        .filter((section) => matchesAnyPattern(section.heading, options.headingPatterns))
+        .flatMap((section) => extractSectionHighlights(section, 2))
+    ),
   );
+  return uniqueOrdered([...highlights, ...options.fallback]).slice(0, options.maxItems);
 }
 
+function selectPreservedSections(description: string) {
+  return splitMarkdownSections(description)
+    .filter((section) => matchesAnyPattern(section.heading, PRESERVED_SECTION_PATTERNS))
+    .filter((section) => !matchesAnyPattern(section.heading, STANDARD_SECTION_PATTERNS))
+    .filter((section) => trimTrailingBlankLines(section.lines).some((line) => line.trim().length > 0));
+}
+
+const STANDARD_SECTION_PATTERNS = [
+  ...OBJECTIVE_HEADING_PATTERNS,
+  ...CURRENT_FOCUS_HEADING_PATTERNS,
+  ...CONSTRAINT_HEADING_PATTERNS,
+  ...PROOF_SURFACE_HEADING_PATTERNS,
+  ...WORK_OPTION_HEADING_PATTERNS,
+  ...DEFERRED_HEADING_PATTERNS,
+] as const;
+
 function prioritizeModuleDocs(
-  docs: Array<{ content: string; id: string; path?: string; source?: string }>,
+  docs: Array<{ content: string; path?: string; source?: string }>,
   module: WorkflowModule,
 ) {
   return [...docs].sort((left, right) => {
@@ -290,14 +345,11 @@ function isModuleDoc(path: string | undefined, module: WorkflowModule) {
 }
 
 function createIssueDocForAnalysis(content: string) {
-  return {
-    content,
-    id: "issue.context",
-  };
+  return { content };
 }
 
 function extractSectionHighlights(section: MarkdownSection, limit: number) {
-  const bullets = section.lines
+  const bullets = trimTrailingBlankLines(section.lines)
     .filter((line) => isListItem(line))
     .map((line) => line.replace(/^\s*(?:[-*+]|\d+\.)\s+/, ""))
     .map(normalizeHighlight)
@@ -332,8 +384,27 @@ function splitMarkdownSections(content: string) {
   if (current.heading || current.lines.length) {
     sections.push(current);
   }
-
   return sections;
+}
+
+function trimTrailingBlankLines(lines: string[]) {
+  const trimmed = [...lines];
+  while (trimmed.length && !trimmed[trimmed.length - 1]!.trim()) {
+    trimmed.pop();
+  }
+  return trimmed;
+}
+
+function extractRepoPaths(content: string) {
+  const matches = content.match(/(?:\.\/|\.\.\/)[A-Za-z0-9_./-]+/g) ?? [];
+  return uniqueOrdered(matches);
+}
+
+function normalizeDescriptionText(description: string) {
+  return description
+    .replace(/<!--\s*io-managed:backlog-proposal:start\s*-->/g, "")
+    .replace(/<!--\s*io-managed:backlog-proposal:end\s*-->/g, "")
+    .trim();
 }
 
 function normalizeHighlight(value: string) {
@@ -346,14 +417,6 @@ function normalizeHighlight(value: string) {
   );
 }
 
-function stripManagedBacklogProposal(description: string) {
-  return description.replace(MANAGED_BACKLOG_PROPOSAL_BLOCK, "").trim();
-}
-
-function stripHtmlComments(description: string) {
-  return description.replace(/<!--[\s\S]*?-->/g, " ").trim();
-}
-
 function truncateText(value: string, maxLength = 180) {
   if (!value || value.length <= maxLength) {
     return value;
@@ -361,16 +424,17 @@ function truncateText(value: string, maxLength = 180) {
   return `${value.slice(0, maxLength - 3).trimEnd()}...`;
 }
 
-function uniqueOrdered(values: string[]) {
+function uniqueOrdered(values: Array<string | undefined>) {
   const seen = new Set<string>();
   const result: string[] = [];
   for (const value of values) {
-    const normalized = value.trim().toLowerCase();
-    if (!normalized || seen.has(normalized)) {
+    const trimmed = value?.trim();
+    const normalized = trimmed?.toLowerCase();
+    if (!trimmed || !normalized || seen.has(normalized)) {
       continue;
     }
     seen.add(normalized);
-    result.push(value.trim());
+    result.push(trimmed);
   }
   return result;
 }
@@ -389,8 +453,4 @@ function isListItem(line: string) {
 function toRepoRelativePath(repoRoot: string, path: string) {
   const relativePath = relative(repoRoot, path);
   return relativePath && !relativePath.startsWith("..") ? `./${relativePath}` : path;
-}
-
-function escapeForRegExp(value: string) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }

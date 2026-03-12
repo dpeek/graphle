@@ -22,7 +22,7 @@ test("@io/config exposes the repo context bundle and routing defaults", () => {
     "project.module-stream-workflow-plan": "./agent/io/module-stream-workflow-plan.md",
     "project.overview": "./io/overview.md",
   });
-  expect(config.context?.profiles?.backlog?.include).toContain("project.focus");
+  expect(config.context?.profiles?.backlog?.include).not.toContain("project.focus");
   expect(config.context?.profiles?.backlog?.include).toContain("project.managed-stream-goals");
   expect(config.context?.profiles?.backlog?.include).toContain("project.managed-stream-backlog");
   expect(config.context?.profiles?.backlog?.include).toContain("project.managed-stream-comments");
@@ -53,12 +53,12 @@ test("@io/config exposes the repo context bundle and routing defaults", () => {
   }
 });
 
-test("repo managed stream backlog doc captures expansion, maintenance, and operator output rules", () => {
+test("repo managed stream backlog doc captures direct description refresh, expansion, and operator output rules", () => {
   const path = resolve(repoRoot, "./agent/io/managed-stream-backlog.md");
   const content = readFileSync(path, "utf8");
 
-  expect(content).toContain("## Stable Parent Brief Payload");
-  expect(content).toContain("io-managed:backlog-proposal:start");
+  expect(content).toContain("## Stable Parent Brief Shape");
+  expect(content).toContain("refresh the whole parent description");
   expect(content).toContain("## Stable Child Payload");
   expect(content).toContain("blockedBy");
   expect(content).toContain("current-approach bootstrap seeds new child issues in `Todo`");
@@ -81,15 +81,13 @@ test("repo managed stream contract docs lock the label, comment, and current-app
 
   expect(goals).toContain("## Managed Parent Label Contract");
   expect(goals).toContain("## Module Identity Contract");
-  expect(goals).toContain("## Repo-Wide Focus Document Shape");
-  expect(goals).toContain("## Parent Issue Managed-Section Model");
-  expect(goals).toContain("io-managed:<section-id>:start");
-  expect(goals).toContain("backlog-proposal");
+  expect(goals).toContain("## Parent Description Template");
+  expect(goals).not.toContain("io-managed:<section-id>:start");
+  expect(goals).toContain("humans and agents both edit the same parent description");
 
   expect(comments).toContain("## Accepted Command Shape");
   expect(comments).toContain("@io <command>");
   expect(comments).toContain("### `@io backlog`");
-  expect(comments).toContain("### `@io focus`");
   expect(comments).toContain("### `@io status`");
   expect(comments).toContain("<!-- io-managed:comment-result -->");
   expect(comments).toContain("dryRun: true");
@@ -110,18 +108,17 @@ test("repo managed stream contract docs capture label, ownership, and comment ru
   const goals = readFileSync(goalsPath, "utf8");
   expect(goals).toContain("the issue has the `io` label");
   expect(goals).toContain("exactly one module label that matches a configured module id");
-  expect(goals).toContain("./io/goals.md");
-  expect(goals).toContain("Reserved section ids for later");
+  expect(goals).toContain("package `*/io/goals.md` docs may still exist as repo docs");
+  expect(goals).toContain("## Parent Description Template");
   expect(goals).toContain("Human-owned:");
   expect(goals).toContain("Agent-owned:");
 
   const commentsPath = resolve(repoRoot, "./agent/io/managed-stream-comments.md");
   const comments = readFileSync(commentsPath, "utf8");
-  expect(comments).toContain("@io focus");
   expect(comments).toContain("@io backlog");
   expect(comments).toContain("@io status");
   expect(comments).toContain("the first non-empty line must start with `@io `");
-  expect(comments).toContain("./io/goals.md");
+  expect(comments).not.toContain("@io focus");
 
   const planPath = resolve(repoRoot, "./agent/io/module-stream-workflow-plan.md");
   const plan = readFileSync(planPath, "utf8");

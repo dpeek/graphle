@@ -3,9 +3,9 @@
 Use this contract when a backlog run is refining an IO-managed parent issue into
 child work for a long-lived stream.
 
-This doc defines the backlog proposal block and child issue payload. Use
+This doc defines the parent-description refresh and child issue payload. Use
 [`./managed-stream-goals.md`](./managed-stream-goals.md) for the parent label
-contract, focus-doc shape, and ownership split, and
+contract, description template, and ownership split, and
 [`./managed-stream-comments.md`](./managed-stream-comments.md) for `@io ...`
 comment triggers.
 
@@ -22,21 +22,25 @@ The result should be:
 - descriptions that an execution agent can act on without reopening planning
 - a short speculative tail that can be refreshed safely later
 
-## Stable Parent Brief Payload
+## Stable Parent Brief Shape
 
-Backlog proposal writeback should manage one explicit block in the parent issue:
+Backlog refreshes should rewrite the parent issue description directly toward
+one stable shape:
 
 ```md
-<!-- io-managed:backlog-proposal:start -->
-## Managed Brief
-
-### Current Module State
+## Objective
 - ...
 
-### Constraints
+## Current Focus
 - ...
 
-### Work Options
+## Constraints
+- ...
+
+## Proof Surfaces
+- ...
+
+## Work Options
 1. **Option 1**
    Focus: ...
    Alignment: ...
@@ -46,15 +50,21 @@ Backlog proposal writeback should manage one explicit block in the parent issue:
 3. **Option 3**
    Focus: ...
    Alignment: ...
-<!-- io-managed:backlog-proposal:end -->
+
+## Deferred
+- ...
 ```
 
 Rules:
 
-- append the block on first write without rewriting human-authored prose outside it
-- on reruns, replace only the content between the markers
-- preserve operator notes, decisions, and narrowing sections outside the managed block
-- keep the section names and marker ids stable so later backlog runs can refresh safely
+- refresh the whole parent description instead of writing protected marker
+  blocks
+- preserve useful human-authored sections when possible, especially decisions,
+  approvals, and notes that still help execution
+- normalize toward the shared headings even when the starting description uses a
+  different shape
+- keep `Work Options` stable enough that later backlog runs can refresh the
+  speculative tail without recreating the entire child backlog
 
 ## Stable Child Payload
 

@@ -23,7 +23,7 @@ export interface AgentIssue {
   updatedAt: string;
 }
 
-export type ManagedCommentCommandName = "backlog" | "focus" | "help" | "status";
+export type ManagedCommentCommandName = "backlog" | "help" | "status";
 export type ManagedCommentResult = "blocked" | "noop" | "partial" | "updated";
 
 export interface ManagedCommentPayload {

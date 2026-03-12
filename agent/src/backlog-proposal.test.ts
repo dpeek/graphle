@@ -1,11 +1,7 @@
 import { expect, test } from "bun:test";
 import { resolve } from "node:path";
 
-import {
-  MANAGED_BACKLOG_PROPOSAL_END,
-  MANAGED_BACKLOG_PROPOSAL_START,
-  rewriteManagedBacklogDescription,
-} from "./backlog-proposal.js";
+import { rewriteManagedBacklogDescription } from "./backlog-proposal.js";
 import type { AgentIssue, ResolvedContextBundle, Workflow } from "./types.js";
 
 function createIssue(description: string): AgentIssue {
@@ -87,7 +83,7 @@ function createBundle(root: string): ResolvedContextBundle {
   };
 }
 
-test("rewriteManagedBacklogDescription appends a stable managed brief on first write", () => {
+test("rewriteManagedBacklogDescription normalizes the parent description toward the shared template", () => {
   const root = "/repo";
   const description = `## Outcome
 
@@ -111,27 +107,26 @@ Turn a fresh parent issue into a durable planning brief.
     workflow: createWorkflow(root),
   });
 
-  expect(rewritten.startsWith("## Outcome")).toBe(true);
-  expect(rewritten).toContain(MANAGED_BACKLOG_PROPOSAL_START);
-  expect(rewritten).toContain("## Managed Brief");
-  expect(rewritten).toContain("### Current Module State");
-  expect(rewritten).toContain("typed repo config in `io.ts`");
-  expect(rewritten).toContain("### Constraints");
+  expect(rewritten.startsWith("## Objective")).toBe(true);
+  expect(rewritten).toContain("## Current Focus");
+  expect(rewritten).toContain("## Constraints");
+  expect(rewritten).toContain("## Proof Surfaces");
+  expect(rewritten).toContain("./io/overview.md");
   expect(rewritten).toContain("Keep it useful, not verbose.");
-  expect(rewritten).toContain("### Work Options");
+  expect(rewritten).toContain("## Work Options");
   expect(rewritten).toContain("1. **Define stable managed sections**");
   expect(rewritten).toContain("2. **Implement proposal generation in the backlog");
-  expect(rewritten).toContain("Alignment: quality of backlog/spec refinement");
-  expect(rewritten.trimEnd().endsWith(MANAGED_BACKLOG_PROPOSAL_END)).toBe(true);
+  expect(rewritten).toContain("Alignment: Turn a fresh parent issue into a durable planning brief.");
+  expect(rewritten).toContain("## Deferred");
 });
 
-test("rewriteManagedBacklogDescription rewrites only the managed block on rerun", () => {
+test("rewriteManagedBacklogDescription removes legacy markers and preserves useful human sections", () => {
   const root = "/repo";
   const original = `## Outcome
 
 Turn a fresh parent issue into a durable planning brief.
 
-${MANAGED_BACKLOG_PROPOSAL_START}
+<!-- io-managed:backlog-proposal:start -->
 ## Managed Brief
 
 ### Current Module State
@@ -144,7 +139,7 @@ ${MANAGED_BACKLOG_PROPOSAL_START}
 1. **Old option**
    Focus: old focus
    Alignment: old alignment
-${MANAGED_BACKLOG_PROPOSAL_END}
+<!-- io-managed:backlog-proposal:end -->
 
 ## Decisions
 
@@ -158,13 +153,11 @@ ${MANAGED_BACKLOG_PROPOSAL_END}
     workflow: createWorkflow(root),
   });
 
-  expect(rewritten.split(MANAGED_BACKLOG_PROPOSAL_START)).toHaveLength(2);
+  expect(rewritten).not.toContain("io-managed:backlog-proposal:start");
   expect(rewritten).not.toContain("old state");
   expect(rewritten).not.toContain("old option");
   expect(rewritten).toContain("## Decisions");
   expect(rewritten).toContain("Keep the operator summary outside the managed block.");
-  expect(rewritten).toContain("quality of backlog/spec refinement");
-  expect(rewritten.indexOf(MANAGED_BACKLOG_PROPOSAL_START)).toBeLessThan(
-    rewritten.indexOf("## Decisions"),
-  );
+  expect(rewritten).toContain("Keep the operator summary outside the managed block.");
+  expect(rewritten).toContain("## Work Options");
 });

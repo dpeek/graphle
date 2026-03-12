@@ -1,5 +1,5 @@
-import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
-import { dirname, relative, resolve } from "node:path";
+import { appendFile } from "node:fs/promises";
+import { relative, resolve } from "node:path";
 
 import { createLogger, type Logger } from "@io/lib";
 
@@ -13,11 +13,7 @@ import {
 } from "./comment-state.js";
 import { renderContextBundle, resolveIssueContext, summarizeContextBundle } from "./context.js";
 import { hasIssueLabel, resolveIssueModule, resolveIssueRouting } from "./issue-routing.js";
-import {
-  buildManagedBacklogChildren,
-  MANAGED_STREAM_FOCUS_DOC_PATH,
-  renderManagedFocusDoc,
-} from "./managed-stream.js";
+import { buildManagedBacklogChildren } from "./managed-stream.js";
 import { isManagedCommentCommand } from "./managed-comments.js";
 import { CodexAppServerRunner } from "./runner/codex.js";
 import {
@@ -339,7 +335,7 @@ export class AgentService {
             command: trigger.command,
             issueIdentifier,
             lines: [
-              "Accepted commands: backlog, focus, status, help.",
+              "Accepted commands: backlog, status, help.",
               "Accepted keys: docs, dryRun, note.",
               "Only top-level comments on managed parent issues are processed.",
             ],
@@ -351,58 +347,10 @@ export class AgentService {
             issueIdentifier,
             lines: [
               `Module: ${module!.id}`,
-              `Managed block present: ${trigger.issue.description.includes("<!-- io-managed:backlog-proposal:start -->") ? "yes" : "no"}`,
+              `Work options present: ${/(^|\n)## Work Options\b/i.test(trigger.issue.description) ? "yes" : "no"}`,
               `Requested docs: ${trigger.payload.docs.length ? trigger.payload.docs.join(", ") : "none"}`,
             ],
             result: "noop",
-          };
-        } else if (trigger.command === "focus") {
-          const focusDocPathRef = MANAGED_STREAM_FOCUS_DOC_PATH;
-          const resolvedContext = await resolveIssueContext({
-            baseSelection: resolveIssueRouting(workflow.issues, trigger.issue, workflow.modules),
-            issue: trigger.issue,
-            repoRoot: this.#repoRoot,
-            workflow,
-          });
-          const proposal = buildManagedParentProposal({
-            issue: trigger.issue,
-            module: module!,
-            repoRoot: this.#repoRoot,
-            resolvedContext: resolvedContext.bundle,
-          });
-          const focusDoc = `${renderManagedFocusDoc({
-            docs: uniqueOrdered([focusDocPathRef, ...trigger.payload.docs]),
-            issue: trigger.issue,
-            module: module!,
-            parentDescription: proposal.description,
-            repoRoot: this.#repoRoot,
-            resolvedContext: resolvedContext.bundle,
-          })}\n`;
-          const focusDocPath = resolve(
-            this.#repoRoot,
-            focusDocPathRef.replace(/^\.\//, ""),
-          );
-          const existingFocusDoc = await this.#readOptionalFile(focusDocPath);
-          const changed = existingFocusDoc !== focusDoc;
-          if (changed && !trigger.payload.dryRun) {
-            await mkdir(dirname(focusDocPath), { recursive: true });
-            await writeFile(focusDocPath, focusDoc, "utf8");
-          }
-          reply = {
-            command: trigger.command,
-            issueIdentifier,
-            lines: trigger.payload.dryRun
-              ? [
-                  changed
-                    ? `Dry run: would update ${focusDocPathRef}.`
-                    : `Dry run: ${focusDocPathRef} is already up to date.`,
-                ]
-              : [
-                  changed
-                    ? `Updated ${focusDocPathRef}.`
-                    : `${focusDocPathRef} was already up to date.`,
-                ],
-            result: trigger.payload.dryRun ? "noop" : changed ? "updated" : "noop",
           };
         } else {
           const resolvedContext = await resolveIssueContext({
@@ -804,22 +752,6 @@ export class AgentService {
       workerId: workspace.workerId,
       workspacePath: workspace.path,
     };
-  }
-
-  async #readOptionalFile(path: string) {
-    try {
-      return await readFile(path, "utf8");
-    } catch (error) {
-      if (
-        error &&
-        typeof error === "object" &&
-        "code" in error &&
-        error.code === "ENOENT"
-      ) {
-        return "";
-      }
-      throw error;
-    }
   }
 
   async #appendIssueOutput(path: string | undefined, text: string) {

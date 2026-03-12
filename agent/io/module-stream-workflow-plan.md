@@ -23,12 +23,12 @@ canonical evolving brief.
 
 - managed parent identity already uses `io` plus exactly one configured module
   label
-- `@io` comments already refresh the managed brief, focus doc, and speculative
-  `Todo` children
+- `@io` comments already refresh the parent description and speculative `Todo`
+  children
 - tracker candidate polling still uses `activeStates = ["Todo", "In Progress"]`
 - managed parent comment polling also includes `In Review` so explicit
-  `@io backlog`, `@io focus`, `@io status`, and `@io help` remain available
-  during the human review hold
+  `@io backlog`, `@io status`, and `@io help` remain available during the human
+  review hold
 - child candidates carry parent stream state, so execution can distinguish
   stream phase from child readiness
 - the service respects child `blockedBy` edges, keeps one active child per
@@ -88,8 +88,8 @@ canonical evolving brief.
 
 ## Explicit Follow-ups
 
-- Decide whether mutating `@io backlog` and `@io focus` commands should stay
-  available after a parent stream reaches `Done`.
+- Decide whether mutating `@io backlog` should stay available after a parent
+  stream reaches `Done`.
 
 ## Out Of Scope For This Slice
 

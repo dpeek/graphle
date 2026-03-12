@@ -1005,13 +1005,13 @@ export class LinearTrackerAdapter {
     }
     if (!options.changed && !options.updated) {
       return options.dryRun
-        ? ["Dry run: the parent managed brief is already up to date."]
-        : ["The parent managed brief was already up to date."];
+        ? ["Dry run: the parent description is already up to date."]
+        : ["The parent description was already up to date."];
     }
     if (options.dryRun) {
-      return ["Dry run: would update the parent managed brief."];
+      return ["Dry run: would update the parent description."];
     }
-    return options.updated ? ["Updated the parent managed brief."] : [];
+    return options.updated ? ["Updated the parent description."] : [];
   }
 
   #renderReplyBody(options: {

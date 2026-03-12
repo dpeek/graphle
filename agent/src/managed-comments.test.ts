@@ -74,12 +74,27 @@ invalid: true`,
   });
 });
 
+test("parseManagedComment rejects removed commands", () => {
+  const parsed = parseManagedComment({
+    body: "@io focus",
+    commentId: "comment-3",
+    createdAt: "2024-01-02T00:00:00.000Z",
+    issue,
+    updatedAt: "2024-01-02T00:00:00.000Z",
+  });
+
+  expect(parsed).toMatchObject({
+    commentId: "comment-3",
+    error: "Unknown command: focus.",
+  });
+});
+
 test("renderManagedCommentReply keeps the stable operator-facing shape", () => {
   expect(
     renderManagedCommentReply({
       command: "backlog",
       issueIdentifier: "OPE-126",
-      lines: ["Updated the parent managed brief."],
+      lines: ["Updated the parent description."],
       result: "updated",
     }),
   ).toBe(`<!-- io-managed:comment-result -->
@@ -87,5 +102,5 @@ Command: backlog
 Result: updated
 Target: OPE-126
 
-- Updated the parent managed brief.`);
+- Updated the parent description.`);
 });

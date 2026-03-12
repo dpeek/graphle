@@ -1063,13 +1063,12 @@ test("AgentService records handled managed comments and skips them on the next p
   }
 });
 
-test("AgentService writes the canonical focus doc and treats equivalent focus refreshes as no-ops", async () => {
-  const root = await mkdtemp(resolve(tmpdir(), "agent-service-focus-"));
-  const replies: string[] = [];
-  let triggerFetches = 0;
+test("AgentService routes @io backlog comments to parent description refresh and child sync", async () => {
+  const root = await mkdtemp(resolve(tmpdir(), "agent-service-backlog-comment-"));
+  const parentDescriptions: string[] = [];
+  const childCounts: number[] = [];
 
   await mkdir(resolve(root, "agent", "io"), { recursive: true });
-  await mkdir(resolve(root, "io"), { recursive: true });
   await writeFile(
     resolve(root, "io.json"),
     JSON.stringify(
@@ -1096,6 +1095,7 @@ test("AgentService writes the canonical focus doc and treats equivalent focus re
     ),
   );
   await writeFile(resolve(root, "io.md"), "LOCAL {{ issue.identifier }}\n");
+  await writeFile(resolve(root, "agent", "io", "overview.md"), "# Agent Overview\n");
   await writeFile(
     resolve(root, "agent", "io", "goals.md"),
     `# Agent Stream
@@ -1106,158 +1106,6 @@ test("AgentService writes the canonical focus doc and treats equivalent focus re
 - keep reruns deterministic
 `,
   );
-  await writeFile(resolve(root, "agent", "io", "overview.md"), "# Agent Overview\n");
-  process.env.LINEAR_API_KEY = "linear-token";
-  process.env.LINEAR_PROJECT_SLUG = "io";
-
-  const baseTrigger = {
-    body: "@io focus",
-    bodyHash: "hash-focus",
-    command: "focus" as const,
-    createdAt: "2024-01-02T00:00:00.000Z",
-    issue: createIssue({
-      description: `## Outcome
-
-- Implement repo-wide focus refresh.
-- Keep managed write surfaces aligned.
-
-## Scope
-
-- Update the canonical focus doc path.
-- Keep backlog and focus refreshes deterministic.
-
-## Out Of Scope
-
-- Non-agent module rollout.
-`,
-      hasChildren: true,
-      id: "issue-1",
-      identifier: "OPE-134",
-      labels: ["io", "agent"],
-      priority: 3,
-      teamId: "team-1",
-      title: "Implement repo-wide focus refresh",
-    }),
-    payload: {
-      docs: [],
-      dryRun: false,
-    },
-    updatedAt: "2024-01-02T00:00:00.000Z",
-  };
-
-  try {
-    const service = new AgentService({
-      repoRoot: root,
-      trackerFactory: () => ({
-        applyManagedCommentMutation: async (mutation) => {
-          replies.push(mutation.reply.lines.join("\n"));
-          return {
-            createdChildIssueIdentifiers: [],
-            dependencyCount: 0,
-            replyCommentId: `reply-${replies.length}`,
-            result: "noop",
-            updatedChildIssueIdentifiers: [],
-            updatedParentDescription: false,
-            warnings: [],
-          };
-        },
-        fetchCandidateIssues: async () => [],
-        fetchIssueStatesByIds: async () => new Map(),
-        fetchManagedCommentTriggers: async () => {
-          triggerFetches += 1;
-          return [
-            {
-              ...baseTrigger,
-              commentId: `comment-${triggerFetches}`,
-            },
-          ];
-        },
-        setIssueState: async () => undefined,
-      }),
-      workspaceManagerFactory: (_workflow, issueIdentifier) =>
-        ({
-          cleanup: async () => undefined,
-          createIdleWorkspace: () => ({
-            branchName: "main",
-            controlPath: root,
-            createdNow: true,
-            originPath: root,
-            path: resolve(root, "workspace", "workers", issueIdentifier ?? "supervisor", "repo"),
-            sourceRepoPath: root,
-            workerId: issueIdentifier ?? "supervisor",
-          }),
-          ensureSessionStartState: async () => ({
-            createdNow: true,
-            path: resolve(root, "workspace", "workers"),
-          }),
-          listOccupiedStreams: async () => new Map(),
-          reconcileTerminalIssues: async () => undefined,
-        }) as unknown as never,
-    });
-
-    await service.runOnce();
-    await service.runOnce();
-
-    const focusDoc = await readFile(resolve(root, "io", "goals.md"), "utf8");
-    expect(focusDoc).toContain("# OPE-134: Implement repo-wide focus refresh");
-    expect(focusDoc).toContain("## Objective");
-    expect(focusDoc).toContain("## Current Focus");
-    expect(focusDoc).toContain("## Proof Surfaces");
-    expect(focusDoc).toContain("./agent");
-    expect(replies).toEqual([
-      expect.stringContaining("Updated ./io/goals.md."),
-      expect.stringContaining("./io/goals.md was already up to date."),
-    ]);
-  } finally {
-    await rm(root, { force: true, recursive: true });
-  }
-});
-
-test("AgentService writes the managed focus doc for graph parents with graph proof surfaces", async () => {
-  const root = await mkdtemp(resolve(tmpdir(), "agent-service-focus-"));
-  const replies: string[] = [];
-
-  await mkdir(resolve(root, "graph", "doc"), { recursive: true });
-  await mkdir(resolve(root, "graph", "io"), { recursive: true });
-  await mkdir(resolve(root, "io"), { recursive: true });
-  await writeFile(
-    resolve(root, "io.json"),
-    JSON.stringify(
-      {
-        agent: { maxConcurrentAgents: 1 },
-        modules: {
-          graph: {
-            allowedSharedPaths: ["./io"],
-            docs: ["./graph/io/overview.md", "./graph/io/goals.md", "./graph/doc/overview.md"],
-            path: "./graph",
-          },
-        },
-        tracker: {
-          apiKey: "$LINEAR_API_KEY",
-          kind: "linear",
-          projectSlug: "$LINEAR_PROJECT_SLUG",
-        },
-        workspace: {
-          root: resolve(root, "workspace"),
-        },
-      },
-      null,
-      2,
-    ),
-  );
-  await writeFile(resolve(root, "io.md"), "LOCAL {{ issue.identifier }}\n");
-  await writeFile(
-    resolve(root, "graph", "io", "goals.md"),
-    `# Graph Stream
-
-## Current Focus
-
-- prove managed module streams on graph
-- keep the module contract portable
-`,
-  );
-  await writeFile(resolve(root, "graph", "io", "overview.md"), "# Graph Overview\n");
-  await writeFile(resolve(root, "graph", "doc", "overview.md"), "# Graph Overview\n");
   process.env.LINEAR_API_KEY = "linear-token";
   process.env.LINEAR_PROJECT_SLUG = "io";
 
@@ -1266,14 +1114,15 @@ test("AgentService writes the managed focus doc for graph parents with graph pro
       repoRoot: root,
       trackerFactory: () => ({
         applyManagedCommentMutation: async (mutation) => {
-          replies.push(mutation.reply.lines.join("\n"));
+          parentDescriptions.push(mutation.parentDescription ?? "");
+          childCounts.push(mutation.children.length);
           return {
-            createdChildIssueIdentifiers: [],
-            dependencyCount: 0,
+            createdChildIssueIdentifiers: mutation.children.map((_, index) => `OPE-${index + 200}`),
+            dependencyCount: Math.max(0, mutation.children.length - 1),
             replyCommentId: "reply-1",
             result: "updated",
             updatedChildIssueIdentifiers: [],
-            updatedParentDescription: false,
+            updatedParentDescription: true,
             warnings: [],
           };
         },
@@ -1281,24 +1130,33 @@ test("AgentService writes the managed focus doc for graph parents with graph pro
         fetchIssueStatesByIds: async () => new Map(),
         fetchManagedCommentTriggers: async () => [
           {
-            body: "@io focus",
-            bodyHash: "hash-focus-graph",
-            command: "focus" as const,
+            body: "@io backlog",
+            bodyHash: "hash-backlog",
+            command: "backlog" as const,
             commentId: "comment-1",
             createdAt: "2024-01-02T00:00:00.000Z",
             issue: createIssue({
               description: `## Outcome
 
-- Prove the managed graph stream path.
-- Keep the module contract reusable for the next package.
+- Implement direct parent description refresh.
+- Keep managed write surfaces aligned.
+
+## Scope
+
+- Replace block-based parent writeback.
+- Generate child tasks from the shared stream brief.
+
+## Decisions
+
+- Prefer one shared description over agent-only blocks.
 `,
               hasChildren: true,
               id: "issue-1",
-              identifier: "OPE-135",
-              labels: ["io", "graph"],
+              identifier: "OPE-134",
+              labels: ["io", "agent"],
               priority: 3,
               teamId: "team-1",
-              title: "Prove managed graph stream portability",
+              title: "Implement direct description stream refresh",
             }),
             payload: {
               docs: [],
@@ -1332,12 +1190,116 @@ test("AgentService writes the managed focus doc for graph parents with graph pro
 
     await service.runOnce();
 
-    const focusDoc = await readFile(resolve(root, "io", "goals.md"), "utf8");
-    expect(focusDoc).toContain("# OPE-135: Prove managed graph stream portability");
-    expect(focusDoc).toContain("./graph");
-    expect(focusDoc).toContain("./graph/io/goals.md");
-    expect(focusDoc).toContain("./graph/doc/overview.md");
-    expect(replies).toEqual([expect.stringContaining("Updated ./io/goals.md.")]);
+    expect(parentDescriptions).toHaveLength(1);
+    expect(parentDescriptions[0]).toContain("## Objective");
+    expect(parentDescriptions[0]).toContain("## Work Options");
+    expect(parentDescriptions[0]).toContain("## Decisions");
+    expect(parentDescriptions[0]).toContain("Prefer one shared description over agent-only blocks.");
+    expect(childCounts).toEqual([3]);
+  } finally {
+    await rm(root, { force: true, recursive: true });
+  }
+});
+
+test("AgentService reports removed @io focus commands as blocked parse errors", async () => {
+  const root = await mkdtemp(resolve(tmpdir(), "agent-service-focus-removed-"));
+  const replies: string[] = [];
+
+  await mkdir(resolve(root, "agent", "io"), { recursive: true });
+  await writeFile(
+    resolve(root, "io.json"),
+    JSON.stringify(
+      {
+        agent: { maxConcurrentAgents: 1 },
+        modules: {
+          agent: {
+            allowedSharedPaths: ["./io"],
+            docs: ["./agent/io/goals.md"],
+            path: "./agent",
+          },
+        },
+        tracker: {
+          apiKey: "$LINEAR_API_KEY",
+          kind: "linear",
+          projectSlug: "$LINEAR_PROJECT_SLUG",
+        },
+        workspace: {
+          root: resolve(root, "workspace"),
+        },
+      },
+      null,
+      2,
+    ),
+  );
+  await writeFile(resolve(root, "io.md"), "LOCAL {{ issue.identifier }}\n");
+  await writeFile(resolve(root, "agent", "io", "goals.md"), "# Agent\n");
+  process.env.LINEAR_API_KEY = "linear-token";
+  process.env.LINEAR_PROJECT_SLUG = "io";
+
+  try {
+    const service = new AgentService({
+      repoRoot: root,
+      trackerFactory: () => ({
+        applyManagedCommentMutation: async (mutation) => {
+          replies.push(mutation.reply.lines.join("\n"));
+          expect(mutation.parentDescription).toBeUndefined();
+          expect(mutation.children).toEqual([]);
+          return {
+            createdChildIssueIdentifiers: [],
+            dependencyCount: 0,
+            replyCommentId: "reply-1",
+            result: "blocked",
+            updatedChildIssueIdentifiers: [],
+            updatedParentDescription: false,
+            warnings: [],
+          };
+        },
+        fetchCandidateIssues: async () => [],
+        fetchIssueStatesByIds: async () => new Map(),
+        fetchManagedCommentTriggers: async () => [
+          {
+            body: "@io focus",
+            bodyHash: "hash-focus-removed",
+            commentId: "comment-1",
+            createdAt: "2024-01-02T00:00:00.000Z",
+            error: "Unknown command: focus.",
+            issue: createIssue({
+              hasChildren: true,
+              id: "issue-1",
+              identifier: "OPE-135",
+              labels: ["io", "agent"],
+              teamId: "team-1",
+              title: "Removed focus command",
+            }),
+            updatedAt: "2024-01-02T00:00:00.000Z",
+          },
+        ],
+        setIssueState: async () => undefined,
+      }),
+      workspaceManagerFactory: (_workflow, issueIdentifier) =>
+        ({
+          cleanup: async () => undefined,
+          createIdleWorkspace: () => ({
+            branchName: "main",
+            controlPath: root,
+            createdNow: true,
+            originPath: root,
+            path: resolve(root, "workspace", "workers", issueIdentifier ?? "supervisor", "repo"),
+            sourceRepoPath: root,
+            workerId: issueIdentifier ?? "supervisor",
+          }),
+          ensureSessionStartState: async () => ({
+            createdNow: true,
+            path: resolve(root, "workspace", "workers"),
+          }),
+          listOccupiedStreams: async () => new Map(),
+          reconcileTerminalIssues: async () => undefined,
+        }) as unknown as never,
+    });
+
+    await service.runOnce();
+
+    expect(replies).toEqual([expect.stringContaining("Unknown command: focus.")]);
   } finally {
     await rm(root, { force: true, recursive: true });
   }
@@ -2697,10 +2659,10 @@ A fresh managed parent issue should be transformable into a durable planning bri
 
     await service.start();
 
-    expect(updatedDescription).toContain("<!-- io-managed:backlog-proposal:start -->");
-    expect(updatedDescription).toContain("## Managed Brief");
+    expect(updatedDescription).toContain("## Objective");
+    expect(updatedDescription).toContain("## Work Options");
     expect(updatedDescription).toContain("## Decisions");
-    expect(capturedPrompt).toContain("## Managed Brief");
+    expect(capturedPrompt).toContain("## Work Options");
     expect(capturedPrompt).toContain("Keep human narrowing outside managed sections.");
     expect(capturedPrompt).toContain("You are the IO Backlog Agent.");
   } finally {
@@ -2845,8 +2807,9 @@ Make the managed module stream flow portable on graph.
 
     await service.start();
 
-    expect(updatedDescription).toContain("<!-- io-managed:backlog-proposal:start -->");
-    expect(updatedDescription).toContain("The primary stream is the `graph` module under `./graph`.");
+    expect(updatedDescription).toContain("## Objective");
+    expect(updatedDescription).toContain("## Work Options");
+    expect(updatedDescription).toContain("./graph");
     expect(capturedPrompt).toContain("./graph/doc/overview.md");
     expect(capturedPrompt).toContain("You are the IO Backlog Agent.");
   } finally {

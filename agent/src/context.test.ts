@@ -301,7 +301,6 @@ test("repo backlog context includes managed stream maintenance guidance", async 
     agent: "backlog",
     profile: "backlog",
   });
-  expect(resolved.bundle.docs.map((doc) => doc.id)).toContain("project.focus");
   expect(resolved.bundle.docs.map((doc) => doc.id)).toContain("project.managed-stream-goals");
   expect(resolved.bundle.docs.map((doc) => doc.id)).toContain("project.managed-stream-backlog");
   expect(resolved.bundle.docs.map((doc) => doc.id)).toContain("project.managed-stream-comments");
@@ -313,7 +312,7 @@ test("repo backlog context includes managed stream maintenance guidance", async 
   expect(rendered).toContain("## Operator-Visible Output");
 });
 
-test("repo config allows the canonical managed focus doc as an in-bounds module doc", async () => {
+test("repo config allows shared repo docs in managed issue descriptions without warning", async () => {
   const repoRoot = fileURLToPath(new URL("../..", import.meta.url));
   process.env.LINEAR_API_KEY = "linear-token";
   process.env.LINEAR_PROJECT_SLUG = "io";
@@ -327,7 +326,7 @@ test("repo config allows the canonical managed focus doc as an in-bounds module 
   const issue: AgentIssue = {
     blockedBy: [],
     createdAt: "2024-01-01T00:00:00.000Z",
-    description: "Refresh the stream focus doc at `./io/goals.md`.",
+    description: "Keep the stream description aligned with `./io/goals.md`.",
     hasChildren: true,
     hasParent: false,
     id: "1",
@@ -336,7 +335,7 @@ test("repo config allows the canonical managed focus doc as an in-bounds module 
     priority: 3,
     projectSlug: "io",
     state: "Todo",
-    title: "Managed focus doc refresh",
+    title: "Managed shared-doc refresh",
     updatedAt: "2024-01-01T00:00:00.000Z",
   };
 
@@ -351,7 +350,6 @@ test("repo config allows the canonical managed focus doc as an in-bounds module 
     workflow: workflowResult.value,
   });
 
-  expect(resolved.bundle.docs.map((doc) => doc.id)).toContain("project.focus");
   expect(resolved.warnings).not.toContain(
     "Issue doc reference is outside module scope: ./io/goals.md",
   );
