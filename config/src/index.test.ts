@@ -13,25 +13,22 @@ test("@io/config re-exports the repo root config", () => {
 });
 
 test("@io/config exposes the repo context bundle and routing defaults", () => {
-  expect(config.context?.entrypoint).toBe("./io.md");
+  expect(config.context?.entrypoint).toBe("./io/overview.md");
   expect(config.context?.docs).toEqual({
-    "project.architecture": "./io/topic/architecture.md",
-    "project.focus": "./io/topic/focus.md",
-    "project.managed-stream-comments": "./io/topic/managed-stream-comments.md",
-    "project.managed-stream-backlog": "./io/topic/managed-stream-backlog.md",
-    "project.managed-stream-goals": "./io/topic/goals.md",
-    "project.module-stream-workflow-plan": "./io/topic/module-stream-workflow-plan.md",
-    "project.overview": "./io/topic/project-overview.md",
-    "project.workflow-migration": "./io/topic/workflow-migration.md",
+    "project.focus": "./io/goals.md",
+    "project.managed-stream-comments": "./agent/io/managed-stream-comments.md",
+    "project.managed-stream-backlog": "./agent/io/managed-stream-backlog.md",
+    "project.managed-stream-goals": "./agent/io/managed-stream-goals.md",
+    "project.module-stream-workflow-plan": "./agent/io/module-stream-workflow-plan.md",
+    "project.overview": "./io/overview.md",
   });
   expect(config.context?.profiles?.backlog?.include).toContain("project.focus");
   expect(config.context?.profiles?.backlog?.include).toContain("project.managed-stream-goals");
   expect(config.context?.profiles?.backlog?.include).toContain("project.managed-stream-backlog");
   expect(config.context?.profiles?.backlog?.include).toContain("project.managed-stream-comments");
-  expect(config.context?.profiles?.backlog?.include).toContain("project.workflow-migration");
   expect(config.modules?.agent).toEqual({
-    allowedSharedPaths: ["./io/topic", "./llm/topic"],
-    docs: ["./io/topic/agent.md", "./agent/doc/stream-workflow.md"],
+    allowedSharedPaths: ["./io"],
+    docs: ["./agent/io/overview.md", "./agent/io/goals.md", "./agent/doc/stream-workflow.md"],
     path: "./agent",
   });
   expect(config.issues).toEqual({
@@ -57,7 +54,7 @@ test("@io/config exposes the repo context bundle and routing defaults", () => {
 });
 
 test("repo managed stream backlog doc captures expansion, maintenance, and operator output rules", () => {
-  const path = resolve(repoRoot, "./io/topic/managed-stream-backlog.md");
+  const path = resolve(repoRoot, "./agent/io/managed-stream-backlog.md");
   const content = readFileSync(path, "utf8");
 
   expect(content).toContain("## Stable Parent Brief Payload");
@@ -65,16 +62,18 @@ test("repo managed stream backlog doc captures expansion, maintenance, and opera
   expect(content).toContain("## Stable Child Payload");
   expect(content).toContain("blockedBy");
   expect(content).toContain("top the stream back up to about five planned tasks");
-  expect(content).toContain("Do not destructively rewrite children that are already active or completed.");
+  expect(content).toContain(
+    "Do not destructively rewrite children that are already active or completed.",
+  );
   expect(content).toContain("## Cross-Module Exception");
   expect(content).toContain("## Operator-Visible Output");
 });
 
 test("repo managed stream contract docs lock the label, comment, and workflow shapes", () => {
-  const goals = readFileSync(resolve(repoRoot, "./io/topic/goals.md"), "utf8");
-  const comments = readFileSync(resolve(repoRoot, "./io/topic/managed-stream-comments.md"), "utf8");
+  const goals = readFileSync(resolve(repoRoot, "./agent/io/managed-stream-goals.md"), "utf8");
+  const comments = readFileSync(resolve(repoRoot, "./agent/io/managed-stream-comments.md"), "utf8");
   const workflowPlan = readFileSync(
-    resolve(repoRoot, "./io/topic/module-stream-workflow-plan.md"),
+    resolve(repoRoot, "./agent/io/module-stream-workflow-plan.md"),
     "utf8",
   );
 
@@ -94,31 +93,33 @@ test("repo managed stream contract docs lock the label, comment, and workflow sh
   expect(comments).toContain("dryRun: true");
 
   expect(workflowPlan).toContain("## Stable Contract Sources");
-  expect(workflowPlan).toContain("## Execution Order");
+  expect(workflowPlan).toContain("## Implementation Order");
   expect(workflowPlan).toContain("./managed-stream-backlog.md");
   expect(workflowPlan).toContain("./managed-stream-comments.md");
-  expect(workflowPlan).toContain("../../agent/doc/stream-workflow.md");
+  expect(workflowPlan).toContain("../doc/stream-workflow.md");
 });
 
 test("repo managed stream contract docs capture label, ownership, and comment rules", () => {
-  const goalsPath = resolve(repoRoot, "./io/topic/goals.md");
+  const goalsPath = resolve(repoRoot, "./agent/io/managed-stream-goals.md");
   const goals = readFileSync(goalsPath, "utf8");
   expect(goals).toContain("the issue has the `io` label");
   expect(goals).toContain("exactly one module label that matches a configured module id");
-  expect(goals).toContain("./io/topic/focus.md");
+  expect(goals).toContain("./io/goals.md");
+  expect(goals).toContain("Reserved section ids for later");
   expect(goals).toContain("Human-owned:");
   expect(goals).toContain("Agent-owned:");
 
-  const commentsPath = resolve(repoRoot, "./io/topic/managed-stream-comments.md");
+  const commentsPath = resolve(repoRoot, "./agent/io/managed-stream-comments.md");
   const comments = readFileSync(commentsPath, "utf8");
   expect(comments).toContain("@io focus");
   expect(comments).toContain("@io backlog");
   expect(comments).toContain("@io status");
   expect(comments).toContain("the first non-empty line must start with `@io `");
+  expect(comments).toContain("./io/goals.md");
 
-  const planPath = resolve(repoRoot, "./io/topic/module-stream-workflow-plan.md");
+  const planPath = resolve(repoRoot, "./agent/io/module-stream-workflow-plan.md");
   const plan = readFileSync(planPath, "utf8");
   expect(plan).toContain("## Stable Contract Sources");
-  expect(plan).toContain("## Execution Order");
+  expect(plan).toContain("## Implementation Order");
   expect(plan).toContain("## Out Of Scope For This Slice");
 });

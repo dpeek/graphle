@@ -33,11 +33,10 @@ Always reference built-ins with the `builtin:` prefix:
 Project doc ids remain unprefixed:
 
 - `project.overview`
-- `project.architecture`
 
 Repo-relative paths remain literal paths:
 
-- `./io/context/architecture.md`
+- `./io/schema-rules.md`
 
 ### Issue-body hints
 
@@ -48,8 +47,8 @@ Use an HTML comment block and keep the body YAML-shaped:
 agent: backlog
 profile: backlog
 docs:
-  - project.architecture
-  - ./io/context/schema-rules.md
+  - project.overview
+  - ./io/schema-rules.md
 -->
 ```
 

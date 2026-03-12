@@ -30,8 +30,8 @@ function createWorkflow(root: string): Pick<Workflow, "modules"> {
   return {
     modules: {
       agent: {
-        allowedSharedPaths: [resolve(root, "llm", "topic")],
-        docs: ["./llm/topic/agent.md"],
+        allowedSharedPaths: [resolve(root, "io", "topic")],
+        docs: ["./agent/io/goals.md"],
         id: "agent",
         path: resolve(root, "agent"),
       },
@@ -60,7 +60,7 @@ function createBundle(root: string): ResolvedContextBundle {
         label: "project.overview",
         order: 1,
         overridden: false,
-        path: resolve(root, "llm", "topic", "project-overview.md"),
+        path: resolve(root, "llm", "topic", "overview.md"),
         source: "registered",
       },
       {
@@ -76,11 +76,11 @@ function createBundle(root: string): ResolvedContextBundle {
 - quality of backlog/spec refinement
 - automatic creation of better child-task structure
 `,
-        id: "./llm/topic/agent.md",
-        label: "./llm/topic/agent.md",
+        id: "./agent/io/goals.md",
+        label: "./agent/io/goals.md",
         order: 2,
         overridden: false,
-        path: resolve(root, "agent", "doc", "stream-workflow.md"),
+        path: resolve(root, "agent", "io", "goals.md"),
         source: "repo-path",
       },
     ],

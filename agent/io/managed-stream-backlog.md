@@ -4,9 +4,10 @@ Use this contract when a backlog run is refining an IO-managed parent issue into
 child work for a long-lived stream.
 
 This doc defines the backlog proposal block and child issue payload. Use
-[`./goals.md`](./goals.md) for the parent label contract, focus-doc shape, and
-ownership split, and [`./managed-stream-comments.md`](./managed-stream-comments.md)
-for `@io ...` comment triggers.
+[`./managed-stream-goals.md`](./managed-stream-goals.md) for the parent label
+contract, focus-doc shape, and ownership split, and
+[`./managed-stream-comments.md`](./managed-stream-comments.md) for `@io ...`
+comment triggers.
 
 ## Objective
 

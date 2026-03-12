@@ -11,7 +11,7 @@ import {
   MANAGED_BACKLOG_PROPOSAL_START,
 } from "./backlog-proposal.js";
 
-export const MANAGED_STREAM_FOCUS_DOC_PATH = "./llm/topic/goals.md";
+export const MANAGED_STREAM_FOCUS_DOC_PATH = "./io/goals.md";
 
 type ManagedBacklogOption = {
   alignment: string;

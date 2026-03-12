@@ -57,7 +57,7 @@ export default defineIoConfig({
   agent: { maxTurns: 3 },
   context: {
     docs: {
-      "project.overview": "./io/context/project-overview.md",
+      "project.overview": "./io/context/overview.md",
     },
     profiles: {
       execute: {
@@ -106,7 +106,7 @@ export default defineIoConfig({
     ),
   );
   await writeFile(resolve(root, "io.md"), "IO {{ issue.identifier }}\n");
-  await writeFile(resolve(root, "io", "context", "project-overview.md"), "PROJECT OVERVIEW\n");
+  await writeFile(resolve(root, "io", "context", "overview.md"), "PROJECT OVERVIEW\n");
   await writeFile(
     resolve(root, "WORKFLOW.md"),
     `---
@@ -146,7 +146,7 @@ WORKFLOW {{ issue.identifier }}
       ],
     });
     expect(result.value.context.docs).toEqual({
-      "project.overview": resolve(root, "io", "context", "project-overview.md"),
+      "project.overview": resolve(root, "io", "context", "overview.md"),
     });
     expect(result.value.context.profiles.execute).toEqual({
       include: ["builtin:io.agent.execute.default", "project.overview"],
@@ -518,14 +518,14 @@ test("loadWorkflowFile normalizes modules and routes managed parents from labels
   const root = await mkdtemp(resolve(tmpdir(), "workflow-"));
 
   await mkdir(resolve(root, "agent", "doc"), { recursive: true });
-  await mkdir(resolve(root, "llm", "topic"), { recursive: true });
+  await mkdir(resolve(root, "io"), { recursive: true });
   await writeFile(
     resolve(root, "io.json"),
     JSON.stringify(
       {
         modules: {
           agent: {
-            allowedSharedPaths: ["./llm/topic"],
+            allowedSharedPaths: ["./io"],
             docs: ["./agent/doc/stream-workflow.md"],
             path: "./agent",
           },
@@ -553,7 +553,7 @@ test("loadWorkflowFile normalizes modules and routes managed parents from labels
 
     expect(result.value.modules).toEqual({
       agent: {
-        allowedSharedPaths: [resolve(root, "llm", "topic")],
+        allowedSharedPaths: [resolve(root, "io")],
         docs: ["./agent/doc/stream-workflow.md"],
         id: "agent",
         path: resolve(root, "agent"),

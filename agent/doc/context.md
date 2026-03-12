@@ -3,8 +3,9 @@
 Status: Historical design record. The shipped runtime now defaults to
 `./io.ts` + `./io.md`, keeps `./io.json` as the compatibility config path, and
 keeps `./WORKFLOW.md` only as the legacy fallback. For the current contract,
-start with [`./context-defaults.md`](./context-defaults.md) plus the repo-root
-`io/topic/*.md` docs.
+start with [`./context-defaults.md`](./context-defaults.md), the repo-root
+`io/*.md` docs, and the package-local `*/io/overview.md` plus
+`*/io/goals.md` docs.
 
 ## Purpose
 
@@ -25,14 +26,14 @@ The first-version defaults in this proposal are now settled in `agent/doc/contex
 Today the agent runtime effectively uses two layers:
 
 1. config plus prompt body from `WORKFLOW.md`
-2. a hard-coded prompt override for io-labeled backlog issues via `io/agent/backlog.md`
+2. a hard-coded prompt override for io-labeled backlog issues via `io/backlog.md`
 
 Shared project context is still mostly implicit and path-based:
 
 - `WORKFLOW.md`
-- `io/agent/execute.md`
-- `io/agent/backlog.md`
-- `io/topic/overview.md`
+- `io/execute.md`
+- `io/backlog.md`
+- `io/overview.md`
 
 There is also already an `io.json` file in the repo today for install-oriented configuration. This proposal expands `io.json` into the main structured entrypoint rather than introducing a second config file.
 
@@ -106,11 +107,11 @@ Examples:
 
 Project docs stay in the repo.
 
-Reusable project docs should usually be registered in `io.json`, but repo-relative paths remain valid for issue-linked one-offs and small repos.
+Reusable project docs should usually be registered in `io.ts`, but repo-relative paths remain valid for issue-linked one-offs and small repos.
 
 Suggested default location:
 
-- `./io/topic/**/*.md`
+- `./io/*`
 
 This keeps them near the repo root, avoids the current `io/topic` naming ambiguity, and makes the intent obvious.
 
@@ -147,11 +148,10 @@ This keeps them near the repo root, avoids the current `io/topic` naming ambigui
     "maxTurns": 1
   },
   "context": {
-    "entrypoint": "./io.md",
+    "entrypoint": "./io/overview.md",
     "docs": {
-      "project.overview": "./io/topic/project-overview.md",
-      "project.architecture": "./io/topic/architecture.md"
-    },
+      "project.overview": "./io/overview.md"
+    },io/
     "profiles": {
       "execute": {
         "include": [
@@ -255,8 +255,8 @@ Example shape:
 {
   "context": {
     "overrides": {
-      "builtin:io.agent.execute.default": "./io/topic/custom-execute-agent.md"
-    }
+      "builtin:io.agent.execute.default": "./io/custom-execute-agent.md"
+    }io/
   }
 }
 ```
@@ -381,9 +381,9 @@ First-version shape:
 agent: backlog
 profile: backlog
 docs:
-  - project.architecture
-  - ./io/topic/schema-rules.md
--->
+  - project.overview
+  - ./io/schema-rules.md
+-->io/
 ```
 
 This should be optional and used sparingly.
@@ -401,8 +401,8 @@ Users should be able to paste repo-relative doc paths or stable doc ids into iss
 
 Recommended supported forms:
 
-- repo-relative path: `./io/topic/architecture.md`
-- registered doc id: `project.architecture`
+- repo-relative path: `./io/schema-rules.md`
+- registered doc id: `proio/view`
 - built-in doc id: `builtin:io.agent.backlog.default`
 
 At resolution time:
@@ -421,7 +421,7 @@ Examples of desired UX:
 - `io agent start`
 - `io issue run OPE-48`
 - `io issue run OPE-48 --agent backlog`
-- `io issue run OPE-48 --doc project.architecture`
+- `io issue run OPE-48 --doc project.overview`
 
 The runtime should still apply repo defaults and routing rules, but explicit CLI flags should win for that invocation.
 

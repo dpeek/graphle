@@ -327,7 +327,7 @@ test("repo config allows the canonical managed focus doc as an in-bounds module 
   const issue: AgentIssue = {
     blockedBy: [],
     createdAt: "2024-01-01T00:00:00.000Z",
-    description: "Refresh the stream focus doc at `./io/topic/focus.md`.",
+    description: "Refresh the stream focus doc at `./io/goals.md`.",
     hasChildren: true,
     hasParent: false,
     id: "1",
@@ -353,7 +353,7 @@ test("repo config allows the canonical managed focus doc as an in-bounds module 
 
   expect(resolved.bundle.docs.map((doc) => doc.id)).toContain("project.focus");
   expect(resolved.warnings).not.toContain(
-    "Issue doc reference is outside module scope: ./io/topic/focus.md",
+    "Issue doc reference is outside module scope: ./io/goals.md",
   );
 });
 
@@ -362,18 +362,18 @@ test("resolveIssueContext adds module docs and limits repo-path refs to module s
   const promptPath = resolve(root, "io.md");
   await mkdir(resolve(root, "agent", "doc"), { recursive: true });
   await mkdir(resolve(root, "graph", "doc"), { recursive: true });
-  await mkdir(resolve(root, "llm", "topic"), { recursive: true });
+  await mkdir(resolve(root, "io"), { recursive: true });
   await writeFile(promptPath, "LOCAL {{ selection.agent }} {{ selection.profile }}\n");
   await writeFile(resolve(root, "agent", "doc", "module-default.md"), "MODULE DEFAULT DOC\n");
   await writeFile(resolve(root, "agent", "doc", "linked.md"), "MODULE LINKED DOC\n");
   await writeFile(resolve(root, "graph", "doc", "outside.md"), "OUTSIDE MODULE DOC\n");
-  await writeFile(resolve(root, "llm", "topic", "shared.md"), "SHARED DOC\n");
+  await writeFile(resolve(root, "io", "shared.md"), "SHARED DOC\n");
 
   try {
     const workflow = createWorkflow(root, promptPath);
     workflow.modules = {
       agent: {
-        allowedSharedPaths: [resolve(root, "llm", "topic")],
+        allowedSharedPaths: [resolve(root, "io")],
         docs: ["./agent/doc/module-default.md"],
         id: "agent",
         path: resolve(root, "agent"),
@@ -386,7 +386,7 @@ test("resolveIssueContext adds module docs and limits repo-path refs to module s
         ...createIssue(`Issue refs:
 
 - \`./agent/doc/linked.md\`
-- \`./llm/topic/shared.md\`
+- \`./io/shared.md\`
 - \`./graph/doc/outside.md\`
 `),
         labels: ["io", "agent"],
@@ -404,7 +404,7 @@ test("resolveIssueContext adds module docs and limits repo-path refs to module s
       "context.entrypoint",
       "./agent/doc/module-default.md",
       "./agent/doc/linked.md",
-      "./llm/topic/shared.md",
+      "./io/shared.md",
       "issue.context",
     ]);
     expect(resolvedWithLabels.warnings).toEqual([
@@ -420,20 +420,22 @@ test("resolveIssueContext assembles the graph module bundle and keeps refs withi
   const promptPath = resolve(root, "io.md");
   await mkdir(resolve(root, "agent", "doc"), { recursive: true });
   await mkdir(resolve(root, "graph", "doc"), { recursive: true });
-  await mkdir(resolve(root, "io", "topic"), { recursive: true });
+  await mkdir(resolve(root, "graph", "io"), { recursive: true });
+  await mkdir(resolve(root, "io"), { recursive: true });
   await writeFile(promptPath, "LOCAL {{ selection.agent }} {{ selection.profile }}\n");
-  await writeFile(resolve(root, "io", "topic", "graph.md"), "GRAPH STREAM DOC\n");
+  await writeFile(resolve(root, "graph", "io", "goals.md"), "GRAPH STREAM DOC\n");
   await writeFile(resolve(root, "graph", "doc", "overview.md"), "GRAPH OVERVIEW DOC\n");
   await writeFile(resolve(root, "graph", "doc", "linked.md"), "GRAPH LINKED DOC\n");
-  await writeFile(resolve(root, "io", "topic", "shared.md"), "SHARED DOC\n");
+  await writeFile(resolve(root, "graph", "io", "overview.md"), "GRAPH IO OVERVIEW DOC\n");
+  await writeFile(resolve(root, "io", "shared.md"), "SHARED DOC\n");
   await writeFile(resolve(root, "agent", "doc", "outside.md"), "AGENT OUTSIDE DOC\n");
 
   try {
     const workflow = createWorkflow(root, promptPath);
     workflow.modules = {
       graph: {
-        allowedSharedPaths: [resolve(root, "io", "topic")],
-        docs: ["./io/topic/graph.md", "./graph/doc/overview.md"],
+        allowedSharedPaths: [resolve(root, "io")],
+        docs: ["./graph/io/overview.md", "./graph/io/goals.md", "./graph/doc/overview.md"],
         id: "graph",
         path: resolve(root, "graph"),
       },
@@ -445,7 +447,7 @@ test("resolveIssueContext assembles the graph module bundle and keeps refs withi
         ...createIssue(`Issue refs:
 
 - \`./graph/doc/linked.md\`
-- \`./io/topic/shared.md\`
+- \`./io/shared.md\`
 - \`./agent/doc/outside.md\`
 `),
         hasChildren: true,
@@ -466,10 +468,11 @@ test("resolveIssueContext assembles the graph module bundle and keeps refs withi
       "builtin:io.core.validation",
       "builtin:io.core.git-safety",
       "context.entrypoint",
-      "./io/topic/graph.md",
+      "./graph/io/overview.md",
+      "./graph/io/goals.md",
       "./graph/doc/overview.md",
       "./graph/doc/linked.md",
-      "./io/topic/shared.md",
+      "./io/shared.md",
       "issue.context",
     ]);
     expect(resolved.warnings).toEqual([

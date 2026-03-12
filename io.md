@@ -6,10 +6,7 @@ Purpose:
 
 Read first:
 
-- `./io/topic/overview.md`
-- `./io/topic/project-overview.md`
-- `./io/topic/architecture.md`
-- `./io/topic/workflow-migration.md` when touching repo entrypoints, docs, or examples
+- `./io/overview.md`
 - any docs linked from the issue body
 - only then the affected code
 
@@ -22,7 +19,7 @@ Local constraints:
 
 - keep changes narrow and reviewable across workspaces
 - update docs, examples, and tests together when entrypoint or context behavior changes
-- treat `WORKFLOW.md` as a compatibility fallback; new repo-local guidance belongs in `io.md` and `io/topic/*.md`
+- treat `WORKFLOW.md` as a compatibility fallback; repo-local guidance belongs in `io.md` and `io/overview.md`
 
 Output:
 

@@ -53,8 +53,9 @@ Rules:
 
 ## Repo-Wide Focus Document Shape
 
-Managed streams may maintain one repo-wide focus doc at `./io/topic/focus.md`.
-The doc should stay plain markdown with stable headings.
+Managed streams may maintain one repo-wide focus doc at `./io/goals.md`. The
+doc should stay plain markdown with stable headings and reflect the current
+state of the stream rather than a long-lived roadmap.
 
 Required shape:
 

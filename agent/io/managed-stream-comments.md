@@ -11,7 +11,7 @@ comments on managed parent issues.
 ## Trigger Scope
 
 `@io` comments apply only to managed parent issues that satisfy the label and
-module rules in [`./goals.md`](./goals.md).
+module rules in [`./managed-stream-goals.md`](./managed-stream-goals.md).
 
 Rules:
 
@@ -31,7 +31,7 @@ The first version uses a narrow line-plus-YAML shape:
 ```md
 @io <command>
 docs:
-  - ./llm/topic/goals.md
+  - ./agent/io/goals.md
 dryRun: true
 note: Refresh after the latest scope review
 ```
@@ -59,11 +59,11 @@ Write surface:
 
 ### `@io focus`
 
-Refresh `./io/topic/focus.md` using the repo-wide focus doc shape.
+Refresh `./io/goals.md` using the repo-wide focus doc shape.
 
 Write surface:
 
-- `./io/topic/focus.md`
+- `./io/goals.md`
 
 ### `@io status`
 

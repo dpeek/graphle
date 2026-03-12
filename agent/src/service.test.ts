@@ -282,7 +282,7 @@ test("LinearTrackerAdapter applies managed comment mutations and posts a reply",
       {
         blockedBy: ["OPE-125"],
         description: "Child description",
-        docs: ["./io/topic/goals.md"],
+        docs: ["./io/goals.md"],
         labels: ["agent"],
         priority: 2,
         reference: "managed-child-1",
@@ -341,8 +341,8 @@ test("LinearTrackerAdapter applies managed comment mutations and posts a reply",
   expect(calls.attachmentLinkURL).toEqual([
     {
       issueId: "child-1",
-      title: "./io/topic/goals.md",
-      url: "./io/topic/goals.md",
+      title: "./io/goals.md",
+      url: "./io/goals.md",
     },
   ]);
   expect(calls.createIssueRelation).toEqual([
@@ -459,7 +459,7 @@ test("LinearTrackerAdapter reuses todo children and relinks dependencies without
       {
         blockedBy: [],
         description: "New child description",
-        docs: ["./io/topic/goals.md"],
+        docs: ["./io/goals.md"],
         labels: ["agent"],
         priority: 2,
         reference: "managed-child-1",
@@ -527,8 +527,8 @@ test("LinearTrackerAdapter reuses todo children and relinks dependencies without
   expect(calls.attachmentLinkURL).toEqual([
     {
       issueId: "child-1",
-      title: "./io/topic/goals.md",
-      url: "./io/topic/goals.md",
+      title: "./io/goals.md",
+      url: "./io/goals.md",
     },
   ]);
   expect(calls.update).toEqual([{ description: "New child description", title: "New child title" }]);
@@ -659,7 +659,7 @@ test("AgentService records handled managed comments and skips them on the next p
     updatedAt: "2024-01-02T00:00:00.000Z",
   };
 
-  await mkdir(resolve(root, "llm", "topic"), { recursive: true });
+  await mkdir(resolve(root, "agent", "io"), { recursive: true });
   await writeFile(
     resolve(root, "io.json"),
     JSON.stringify(
@@ -667,8 +667,8 @@ test("AgentService records handled managed comments and skips them on the next p
         agent: { maxConcurrentAgents: 1 },
         modules: {
           agent: {
-            allowedSharedPaths: ["./llm/topic"],
-            docs: ["./llm/topic/agent.md"],
+            allowedSharedPaths: ["./io"],
+            docs: ["./agent/io/goals.md"],
             path: "./agent",
           },
         },
@@ -686,7 +686,7 @@ test("AgentService records handled managed comments and skips them on the next p
     ),
   );
   await writeFile(resolve(root, "io.md"), "LOCAL {{ issue.identifier }}\n");
-  await writeFile(resolve(root, "llm", "topic", "agent.md"), "# Agent\n");
+  await writeFile(resolve(root, "agent", "io", "goals.md"), "# Agent\n");
   process.env.LINEAR_API_KEY = "linear-token";
   process.env.LINEAR_PROJECT_SLUG = "io";
 
@@ -756,8 +756,8 @@ test("AgentService writes the canonical focus doc and treats equivalent focus re
   const replies: string[] = [];
   let triggerFetches = 0;
 
-  await mkdir(resolve(root, "agent"), { recursive: true });
-  await mkdir(resolve(root, "llm", "topic"), { recursive: true });
+  await mkdir(resolve(root, "agent", "io"), { recursive: true });
+  await mkdir(resolve(root, "io"), { recursive: true });
   await writeFile(
     resolve(root, "io.json"),
     JSON.stringify(
@@ -765,8 +765,8 @@ test("AgentService writes the canonical focus doc and treats equivalent focus re
         agent: { maxConcurrentAgents: 1 },
         modules: {
           agent: {
-            allowedSharedPaths: ["./llm/topic"],
-            docs: ["./llm/topic/agent.md"],
+            allowedSharedPaths: ["./io"],
+            docs: ["./agent/io/overview.md", "./agent/io/goals.md"],
             path: "./agent",
           },
         },
@@ -785,7 +785,7 @@ test("AgentService writes the canonical focus doc and treats equivalent focus re
   );
   await writeFile(resolve(root, "io.md"), "LOCAL {{ issue.identifier }}\n");
   await writeFile(
-    resolve(root, "llm", "topic", "agent.md"),
+    resolve(root, "agent", "io", "goals.md"),
     `# Agent Stream
 
 ## Current Focus
@@ -794,6 +794,7 @@ test("AgentService writes the canonical focus doc and treats equivalent focus re
 - keep reruns deterministic
 `,
   );
+  await writeFile(resolve(root, "agent", "io", "overview.md"), "# Agent Overview\n");
   process.env.LINEAR_API_KEY = "linear-token";
   process.env.LINEAR_PROJECT_SLUG = "io";
 
@@ -885,15 +886,15 @@ test("AgentService writes the canonical focus doc and treats equivalent focus re
     await service.runOnce();
     await service.runOnce();
 
-    const focusDoc = await readFile(resolve(root, "llm", "topic", "goals.md"), "utf8");
+    const focusDoc = await readFile(resolve(root, "io", "goals.md"), "utf8");
     expect(focusDoc).toContain("# OPE-134: Implement repo-wide focus refresh");
     expect(focusDoc).toContain("## Objective");
     expect(focusDoc).toContain("## Current Focus");
     expect(focusDoc).toContain("## Proof Surfaces");
     expect(focusDoc).toContain("./agent");
     expect(replies).toEqual([
-      expect.stringContaining("Updated ./llm/topic/goals.md."),
-      expect.stringContaining("./llm/topic/goals.md was already up to date."),
+      expect.stringContaining("Updated ./io/goals.md."),
+      expect.stringContaining("./io/goals.md was already up to date."),
     ]);
   } finally {
     await rm(root, { force: true, recursive: true });
@@ -905,8 +906,8 @@ test("AgentService writes the managed focus doc for graph parents with graph pro
   const replies: string[] = [];
 
   await mkdir(resolve(root, "graph", "doc"), { recursive: true });
-  await mkdir(resolve(root, "io", "topic"), { recursive: true });
-  await mkdir(resolve(root, "llm", "topic"), { recursive: true });
+  await mkdir(resolve(root, "graph", "io"), { recursive: true });
+  await mkdir(resolve(root, "io"), { recursive: true });
   await writeFile(
     resolve(root, "io.json"),
     JSON.stringify(
@@ -914,8 +915,8 @@ test("AgentService writes the managed focus doc for graph parents with graph pro
         agent: { maxConcurrentAgents: 1 },
         modules: {
           graph: {
-            allowedSharedPaths: ["./io/topic", "./llm/topic"],
-            docs: ["./io/topic/graph.md", "./graph/doc/overview.md"],
+            allowedSharedPaths: ["./io"],
+            docs: ["./graph/io/overview.md", "./graph/io/goals.md", "./graph/doc/overview.md"],
             path: "./graph",
           },
         },
@@ -934,7 +935,7 @@ test("AgentService writes the managed focus doc for graph parents with graph pro
   );
   await writeFile(resolve(root, "io.md"), "LOCAL {{ issue.identifier }}\n");
   await writeFile(
-    resolve(root, "io", "topic", "graph.md"),
+    resolve(root, "graph", "io", "goals.md"),
     `# Graph Stream
 
 ## Current Focus
@@ -943,6 +944,7 @@ test("AgentService writes the managed focus doc for graph parents with graph pro
 - keep the module contract portable
 `,
   );
+  await writeFile(resolve(root, "graph", "io", "overview.md"), "# Graph Overview\n");
   await writeFile(resolve(root, "graph", "doc", "overview.md"), "# Graph Overview\n");
   process.env.LINEAR_API_KEY = "linear-token";
   process.env.LINEAR_PROJECT_SLUG = "io";
@@ -1018,12 +1020,12 @@ test("AgentService writes the managed focus doc for graph parents with graph pro
 
     await service.runOnce();
 
-    const focusDoc = await readFile(resolve(root, "llm", "topic", "goals.md"), "utf8");
+    const focusDoc = await readFile(resolve(root, "io", "goals.md"), "utf8");
     expect(focusDoc).toContain("# OPE-135: Prove managed graph stream portability");
     expect(focusDoc).toContain("./graph");
-    expect(focusDoc).toContain("./io/topic/graph.md");
+    expect(focusDoc).toContain("./graph/io/goals.md");
     expect(focusDoc).toContain("./graph/doc/overview.md");
-    expect(replies).toEqual([expect.stringContaining("Updated ./llm/topic/goals.md.")]);
+    expect(replies).toEqual([expect.stringContaining("Updated ./io/goals.md.")]);
   } finally {
     await rm(root, { force: true, recursive: true });
   }
@@ -1202,8 +1204,8 @@ test("resolveIssueRouting routes io-managed parent issues to backlog from module
       }),
       {
         graph: {
-          allowedSharedPaths: ["/tmp/io/topic"],
-          docs: ["./io/topic/graph.md", "./graph/doc/overview.md"],
+          allowedSharedPaths: ["/tmp/io"],
+          docs: ["./graph/io/goals.md", "./graph/doc/overview.md"],
           id: "graph",
           path: "/tmp/graph",
         },
@@ -1758,7 +1760,7 @@ test("AgentService rewrites managed parent backlog issues before running the bac
   let capturedPrompt = "";
   let updatedDescription = "";
 
-  await mkdir(resolve(root, "llm", "topic"), { recursive: true });
+  await mkdir(resolve(root, "agent", "io"), { recursive: true });
   await writeFile(
     resolve(root, "io.json"),
     JSON.stringify(
@@ -1766,8 +1768,8 @@ test("AgentService rewrites managed parent backlog issues before running the bac
         agent: { maxConcurrentAgents: 1 },
         modules: {
           agent: {
-            allowedSharedPaths: ["./llm/topic"],
-            docs: ["./llm/topic/agent.md"],
+            allowedSharedPaths: ["./io"],
+            docs: ["./agent/io/goals.md"],
             path: "./agent",
           },
         },
@@ -1786,7 +1788,7 @@ test("AgentService rewrites managed parent backlog issues before running the bac
   );
   await writeFile(resolve(root, "io.md"), "LOCAL BACKLOG {{ issue.identifier }}\n");
   await writeFile(
-    resolve(root, "llm", "topic", "agent.md"),
+    resolve(root, "agent", "io", "goals.md"),
     `# IO Agent Stream
 
 ## Current Focus
@@ -1909,7 +1911,7 @@ test("AgentService rewrites managed graph parent backlog issues with graph modul
   let updatedDescription = "";
 
   await mkdir(resolve(root, "graph", "doc"), { recursive: true });
-  await mkdir(resolve(root, "io", "topic"), { recursive: true });
+  await mkdir(resolve(root, "graph", "io"), { recursive: true });
   await writeFile(
     resolve(root, "io.json"),
     JSON.stringify(
@@ -1917,8 +1919,8 @@ test("AgentService rewrites managed graph parent backlog issues with graph modul
         agent: { maxConcurrentAgents: 1 },
         modules: {
           graph: {
-            allowedSharedPaths: ["./io/topic"],
-            docs: ["./io/topic/graph.md", "./graph/doc/overview.md"],
+            allowedSharedPaths: ["./io"],
+            docs: ["./graph/io/goals.md", "./graph/doc/overview.md"],
             path: "./graph",
           },
         },
@@ -1937,7 +1939,7 @@ test("AgentService rewrites managed graph parent backlog issues with graph modul
   );
   await writeFile(resolve(root, "io.md"), "LOCAL BACKLOG {{ issue.identifier }}\n");
   await writeFile(
-    resolve(root, "io", "topic", "graph.md"),
+    resolve(root, "graph", "io", "goals.md"),
     `# IO Graph Stream
 
 ## Current Focus
