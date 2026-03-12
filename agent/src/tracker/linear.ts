@@ -24,6 +24,7 @@ const ISSUE_FIELDS = `
   parent {
     id
     identifier
+    state { name }
   }
   children(first: 1) {
     nodes {
@@ -139,7 +140,11 @@ interface CandidateIssueNode {
     nodes?: Array<IssueRelationNode | null> | null;
   } | null;
   labels?: { nodes?: Array<{ name?: string | null } | null> | null } | null;
-  parent?: { id: string; identifier?: string | null } | null;
+  parent?: {
+    id: string;
+    identifier?: string | null;
+    state?: { name?: string | null } | null;
+  } | null;
   priority?: number | null;
   project?: { slugId?: string | null } | null;
   state?: { name?: string | null } | null;
@@ -236,6 +241,7 @@ export function normalizeLinearIssue(node: CandidateIssueNode): AgentIssue {
       .filter((value): value is string => Boolean(value)),
     parentIssueId: node.parent?.id ?? undefined,
     parentIssueIdentifier: node.parent?.identifier?.trim() || undefined,
+    parentIssueState: node.parent?.state?.name?.trim() || undefined,
     priority:
       typeof node.priority === "number" && Number.isInteger(node.priority) ? node.priority : null,
     projectSlug: node.project?.slugId?.trim() || undefined,
