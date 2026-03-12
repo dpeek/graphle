@@ -24,6 +24,8 @@ import {
   validateAuthoritativeGraphWriteResult,
   validateAuthoritativeGraphWriteTransaction,
   validateAuthoritativeTotalSyncPayload,
+  validateIncrementalSyncPayload,
+  validateIncrementalSyncResult,
 } from "./sync";
 
 function createServerGraph() {
@@ -2162,6 +2164,226 @@ describe("authoritative graph writes", () => {
       changes: [third],
     });
     expect(restartedGraph.company.get(companyId).name).toBe("Acme Durable Three");
+  });
+
+  it("wraps incremental pull delivery in the same metadata model as total snapshot bootstrap", () => {
+    const server = createServerGraph();
+    const companyId = server.graph.company.create({
+      name: "Acme Corp",
+      status: app.status.values.active.id,
+      website: new URL("https://acme.com"),
+    });
+    const authority = createAuthoritativeGraphWriteSession(server.store, app, {
+      cursorPrefix: "server:",
+    });
+    const bootstrapPayload = createTotalSyncPayload(server.store, {
+      cursor: authority.getBaseCursor(),
+      freshness: "current",
+    });
+
+    const first = authority.apply(
+      createCompanyNameWriteTransaction(server.store, companyId, "Acme Incremental One", "tx:1"),
+    );
+    const second = authority.apply(
+      createCompanyNameWriteTransaction(server.store, companyId, "Acme Incremental Two", "tx:2"),
+    );
+    const incremental = authority.getIncrementalSyncResult(bootstrapPayload.cursor, {
+      freshness: "stale",
+    });
+
+    expect("fallback" in incremental).toBe(false);
+    if ("fallback" in incremental) {
+      throw new Error("Expected a data-bearing incremental sync payload.");
+    }
+    expect(incremental).toEqual({
+      mode: "incremental",
+      scope: bootstrapPayload.scope,
+      after: bootstrapPayload.cursor,
+      transactions: [first, second],
+      cursor: second.cursor,
+      completeness: bootstrapPayload.completeness,
+      freshness: "stale",
+    });
+
+    const validation = validateIncrementalSyncPayload(incremental);
+
+    expect(validation).toMatchObject({
+      ok: true,
+      phase: "authoritative",
+      event: "reconcile",
+      value: incremental,
+      changedPredicateKeys: [],
+    });
+  });
+
+  it("surfaces unknown cursor, gap, and reset as explicit incremental pull fallbacks", () => {
+    const server = createServerGraph();
+    const companyId = server.graph.company.create({
+      name: "Acme Corp",
+      status: app.status.values.active.id,
+      website: new URL("https://acme.com"),
+    });
+    const authority = createAuthoritativeGraphWriteSession(server.store, app, {
+      cursorPrefix: "server:",
+    });
+    const first = authority.apply(
+      createCompanyNameWriteTransaction(server.store, companyId, "Acme Incremental One", "tx:1"),
+    );
+
+    const unknownCursor = authority.getIncrementalSyncResult("server:unknown");
+    expect(unknownCursor).toEqual({
+      mode: "incremental",
+      scope: { kind: "graph" },
+      after: "server:unknown",
+      transactions: [],
+      cursor: first.cursor,
+      completeness: "complete",
+      freshness: "current",
+      fallback: "unknown-cursor",
+    });
+
+    const gapAuthority = createAuthoritativeGraphWriteSession(server.store, app, {
+      cursorPrefix: "server:",
+      initialSequence: 2,
+    });
+    const gap = gapAuthority.getIncrementalSyncResult("server:1");
+    expect(gap).toEqual({
+      mode: "incremental",
+      scope: { kind: "graph" },
+      after: "server:1",
+      transactions: [],
+      cursor: "server:2",
+      completeness: "complete",
+      freshness: "current",
+      fallback: "gap",
+    });
+
+    const resetAuthority = createAuthoritativeGraphWriteSession(server.store, app, {
+      cursorPrefix: "reset:",
+    });
+    const reset = resetAuthority.getIncrementalSyncResult(first.cursor);
+    expect(reset).toEqual({
+      mode: "incremental",
+      scope: { kind: "graph" },
+      after: first.cursor,
+      transactions: [],
+      cursor: "reset:0",
+      completeness: "complete",
+      freshness: "current",
+      fallback: "reset",
+    });
+
+    expect(validateIncrementalSyncResult(unknownCursor)).toMatchObject({
+      ok: true,
+      phase: "authoritative",
+      event: "reconcile",
+    });
+    expect(validateIncrementalSyncResult(gap)).toMatchObject({
+      ok: true,
+      phase: "authoritative",
+      event: "reconcile",
+    });
+    expect(validateIncrementalSyncResult(reset)).toMatchObject({
+      ok: true,
+      phase: "authoritative",
+      event: "reconcile",
+    });
+  });
+
+  it("rejects malformed incremental pull envelopes through the exported validation surface", () => {
+    const result = validateIncrementalSyncResult({
+      mode: "delta",
+      scope: { kind: "partial" },
+      after: "",
+      transactions: [
+        {
+          txId: "tx:1",
+          cursor: "server:1",
+          replayed: true,
+          transaction: {
+            id: "tx:1",
+            ops: [],
+          },
+        },
+      ],
+      cursor: "server:2",
+      completeness: "incomplete",
+      freshness: "future",
+      fallback: "later",
+    } as unknown as ReturnType<
+      ReturnType<typeof createAuthoritativeGraphWriteSession>["getIncrementalSyncResult"]
+    >);
+
+    expect(result).toMatchObject({
+      ok: false,
+      phase: "authoritative",
+      event: "reconcile",
+      changedPredicateKeys: ["$sync:incremental"],
+    });
+    if (result.ok) throw new Error("Expected malformed incremental sync validation to fail");
+    expect(result.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          source: "runtime",
+          code: "sync.incremental.mode",
+          predicateKey: "$sync:incremental",
+          nodeId: "$sync:incremental",
+        }),
+        expect.objectContaining({
+          source: "runtime",
+          code: "sync.incremental.scope",
+          predicateKey: "$sync:incremental",
+          nodeId: "$sync:incremental",
+        }),
+        expect.objectContaining({
+          source: "runtime",
+          code: "sync.incremental.after.empty",
+          predicateKey: "$sync:incremental",
+          nodeId: "$sync:incremental",
+        }),
+        expect.objectContaining({
+          source: "runtime",
+          code: "sync.incremental.completeness",
+          predicateKey: "$sync:incremental",
+          nodeId: "$sync:incremental",
+        }),
+        expect.objectContaining({
+          source: "runtime",
+          code: "sync.incremental.freshness",
+          predicateKey: "$sync:incremental",
+          nodeId: "$sync:incremental",
+        }),
+        expect.objectContaining({
+          source: "runtime",
+          code: "sync.incremental.transaction.replayed",
+          predicateKey: "$sync:incremental",
+          nodeId: "$sync:incremental",
+        }),
+        expect.objectContaining({
+          source: "runtime",
+          code: "sync.incremental.fallback",
+          predicateKey: "$sync:incremental",
+          nodeId: "$sync:incremental",
+        }),
+        expect.objectContaining({
+          source: "runtime",
+          code: "sync.incremental.fallback.transactions",
+          predicateKey: "$sync:incremental",
+          nodeId: "$sync:incremental",
+        }),
+        expect.objectContaining({
+          source: "runtime",
+          code: "sync.tx.ops.empty",
+          predicateKey: "$sync:incremental",
+          nodeId: "$sync:incremental",
+        }),
+      ]),
+    );
+    expect(
+      formatValidationPath(
+        result.issues.find((issue) => issue.code === "sync.tx.ops.empty")?.path ?? [],
+      ),
+    ).toBe("transactions[0].transaction.ops");
   });
 
   it("rejects invalid write transactions with structured validation results and leaves authority state unchanged", () => {

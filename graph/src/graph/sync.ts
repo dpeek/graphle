@@ -29,6 +29,31 @@ export type TotalSyncPayload = {
   readonly freshness: SyncFreshness
 }
 
+export type IncrementalSyncFallbackReason = "unknown-cursor" | "gap" | "reset"
+
+export type IncrementalSyncPayload = {
+  readonly mode: "incremental"
+  readonly scope: SyncScope
+  readonly after: string
+  readonly transactions: readonly AuthoritativeGraphWriteResult[]
+  readonly cursor: string
+  readonly completeness: "complete"
+  readonly freshness: SyncFreshness
+}
+
+export type IncrementalSyncFallback = {
+  readonly mode: "incremental"
+  readonly scope: SyncScope
+  readonly after: string
+  readonly transactions: readonly []
+  readonly cursor: string
+  readonly completeness: "complete"
+  readonly freshness: SyncFreshness
+  readonly fallback: IncrementalSyncFallbackReason
+}
+
+export type IncrementalSyncResult = IncrementalSyncPayload | IncrementalSyncFallback
+
 export type GraphWriteAssertOperation = {
   readonly op: "assert"
   readonly edge: StoreSnapshot["edges"][number]
@@ -89,6 +114,7 @@ export class GraphSyncWriteError extends Error {
 }
 
 const totalSyncPayloadValidationKey = "$sync:payload"
+const incrementalSyncValidationKey = "$sync:incremental"
 const graphWriteTransactionValidationKey = "$sync:tx"
 const graphWriteResultValidationKey = "$sync:txResult"
 
@@ -117,6 +143,35 @@ function invalidPayloadResult(
     event: "reconcile",
     value: payload,
     changedPredicateKeys: issues.length > 0 ? [totalSyncPayloadValidationKey] : [],
+    issues,
+  }
+}
+
+function createIncrementalSyncValidationIssue(
+  path: readonly string[],
+  code: string,
+  message: string,
+): GraphValidationIssue {
+  return {
+    source: "runtime",
+    code,
+    message,
+    path: Object.freeze([...path]),
+    predicateKey: incrementalSyncValidationKey,
+    nodeId: incrementalSyncValidationKey,
+  }
+}
+
+function invalidIncrementalSyncResult(
+  result: IncrementalSyncResult,
+  issues: readonly GraphValidationIssue[],
+): Extract<GraphValidationResult<IncrementalSyncResult>, { ok: false }> {
+  return {
+    ok: false,
+    phase: "authoritative",
+    event: "reconcile",
+    value: result,
+    changedPredicateKeys: issues.length > 0 ? [incrementalSyncValidationKey] : [],
     issues,
   }
 }
@@ -283,6 +338,22 @@ function cloneTotalSyncPayload(payload: TotalSyncPayload): TotalSyncPayload {
   }
 }
 
+function cloneIncrementalSyncResult(result: IncrementalSyncResult): IncrementalSyncResult {
+  return "fallback" in result
+    ? {
+        ...result,
+        scope: { ...result.scope },
+        transactions: [],
+      }
+    : {
+        ...result,
+        scope: { ...result.scope },
+        transactions: result.transactions.map((transaction) =>
+          cloneAuthoritativeGraphWriteResult(transaction),
+        ),
+      }
+}
+
 function exposeTotalSyncValidationResult(
   result: GraphValidationResult<TotalSyncPayload>,
 ): GraphValidationResult<TotalSyncPayload> {
@@ -297,6 +368,25 @@ function exposeTotalSyncValidationResult(
   return {
     ...result,
     value: cloneTotalSyncPayload(result.value),
+    changedPredicateKeys: [...result.changedPredicateKeys],
+    issues: result.issues.map((issue) => cloneValidationIssue(issue)),
+  }
+}
+
+function exposeIncrementalSyncValidationResult(
+  result: GraphValidationResult<IncrementalSyncResult>,
+): GraphValidationResult<IncrementalSyncResult> {
+  if (result.ok) {
+    return {
+      ...result,
+      value: cloneIncrementalSyncResult(result.value),
+      changedPredicateKeys: [...result.changedPredicateKeys],
+    }
+  }
+
+  return {
+    ...result,
+    value: cloneIncrementalSyncResult(result.value),
     changedPredicateKeys: [...result.changedPredicateKeys],
     issues: result.issues.map((issue) => cloneValidationIssue(issue)),
   }
@@ -1082,6 +1172,318 @@ function validateTotalSyncPayloadShape(payload: TotalSyncPayload): readonly Grap
   return issues
 }
 
+function isIncrementalSyncFallbackReason(value: unknown): value is IncrementalSyncFallbackReason {
+  return value === "unknown-cursor" || value === "gap" || value === "reset"
+}
+
+function prefixIncrementalSyncTransactionIssues(
+  index: number,
+  issues: readonly GraphValidationIssue[],
+): GraphValidationIssue[] {
+  return issues.map((issue) =>
+    createIncrementalSyncValidationIssue(
+      [`transactions[${index}]`, ...issue.path],
+      issue.code,
+      issue.message,
+    ),
+  )
+}
+
+function validateIncrementalSyncPayloadShape(
+  payload: IncrementalSyncPayload,
+  options: {
+    allowFallback: boolean
+  } = {
+    allowFallback: false,
+  },
+): {
+  issues: GraphValidationIssue[]
+  value: IncrementalSyncResult
+} {
+  const issues: GraphValidationIssue[] = []
+  const candidate = payload as Partial<IncrementalSyncResult> & Record<string, unknown>
+  const transactions: AuthoritativeGraphWriteResult[] = []
+  const txIds = new Set<string>()
+  const cursors = new Set<string>()
+
+  if (candidate.mode !== "incremental") {
+    issues.push(
+      createIncrementalSyncValidationIssue(
+        ["mode"],
+        "sync.incremental.mode",
+        'Field "mode" must be "incremental".',
+      ),
+    )
+  }
+
+  if (!isObjectRecord(candidate.scope) || candidate.scope.kind !== "graph") {
+    issues.push(
+      createIncrementalSyncValidationIssue(
+        ["scope", "kind"],
+        "sync.incremental.scope",
+        'Field "scope.kind" must be "graph".',
+      ),
+    )
+  }
+
+  if (typeof candidate.after !== "string") {
+    issues.push(
+      createIncrementalSyncValidationIssue(
+        ["after"],
+        "sync.incremental.after",
+        'Field "after" must be a string.',
+      ),
+    )
+  } else if (candidate.after.length === 0) {
+    issues.push(
+      createIncrementalSyncValidationIssue(
+        ["after"],
+        "sync.incremental.after.empty",
+        'Field "after" must not be empty.',
+      ),
+    )
+  }
+
+  if (typeof candidate.cursor !== "string") {
+    issues.push(
+      createIncrementalSyncValidationIssue(
+        ["cursor"],
+        "sync.incremental.cursor",
+        'Field "cursor" must be a string.',
+      ),
+    )
+  } else if (candidate.cursor.length === 0) {
+    issues.push(
+      createIncrementalSyncValidationIssue(
+        ["cursor"],
+        "sync.incremental.cursor.empty",
+        'Field "cursor" must not be empty.',
+      ),
+    )
+  }
+
+  if (candidate.completeness !== "complete") {
+    issues.push(
+      createIncrementalSyncValidationIssue(
+        ["completeness"],
+        "sync.incremental.completeness",
+        'Field "completeness" must be "complete" for graph-scoped incremental sync.',
+      ),
+    )
+  }
+
+  if (candidate.freshness !== "current" && candidate.freshness !== "stale") {
+    issues.push(
+      createIncrementalSyncValidationIssue(
+        ["freshness"],
+        "sync.incremental.freshness",
+        'Field "freshness" must be "current" or "stale".',
+      ),
+    )
+  }
+
+  if (!Array.isArray(candidate.transactions)) {
+    issues.push(
+      createIncrementalSyncValidationIssue(
+        ["transactions"],
+        "sync.incremental.transactions",
+        'Field "transactions" must be an array.',
+      ),
+    )
+  } else {
+    candidate.transactions.forEach((transaction, index) => {
+      if (isObjectRecord(transaction) && transaction.replayed === true) {
+        issues.push(
+          createIncrementalSyncValidationIssue(
+            [`transactions[${index}]`, "replayed"],
+            "sync.incremental.transaction.replayed",
+            `Field "transactions[${index}].replayed" must be false for incremental pull delivery.`,
+          ),
+        )
+      }
+
+      const prepared = prepareAuthoritativeGraphWriteResult(
+        cloneAuthoritativeGraphWriteResult(
+          isObjectRecord(transaction)
+            ? (transaction as AuthoritativeGraphWriteResult)
+            : {
+                txId: "",
+                cursor: "",
+                replayed: false,
+                transaction: {
+                  id: "",
+                  ops: [],
+                },
+              },
+        ),
+      )
+      if (!prepared.ok) {
+        issues.push(...prefixIncrementalSyncTransactionIssues(index, prepared.result.issues))
+        return
+      }
+
+      const value = cloneAuthoritativeGraphWriteResult(prepared.value)
+
+      if (txIds.has(value.txId)) {
+        issues.push(
+          createIncrementalSyncValidationIssue(
+            [`transactions[${index}]`, "txId"],
+            "sync.incremental.transaction.txId.duplicate",
+            `Field "transactions[${index}].txId" must be unique within the incremental result.`,
+          ),
+        )
+      } else {
+        txIds.add(value.txId)
+      }
+
+      if (cursors.has(value.cursor)) {
+        issues.push(
+          createIncrementalSyncValidationIssue(
+            [`transactions[${index}]`, "cursor"],
+            "sync.incremental.transaction.cursor.duplicate",
+            `Field "transactions[${index}].cursor" must be unique within the incremental result.`,
+          ),
+        )
+      } else {
+        cursors.add(value.cursor)
+      }
+
+      if (typeof candidate.after === "string" && candidate.after.length > 0 && value.cursor === candidate.after) {
+        issues.push(
+          createIncrementalSyncValidationIssue(
+            [`transactions[${index}]`, "cursor"],
+            "sync.incremental.transaction.cursor.after",
+            `Field "transactions[${index}].cursor" must be strictly after "after".`,
+          ),
+        )
+      }
+
+      transactions.push(value)
+    })
+  }
+
+  const after = typeof candidate.after === "string" ? candidate.after : ""
+  const cursor = typeof candidate.cursor === "string" ? candidate.cursor : ""
+  const freshness = candidate.freshness === "stale" ? "stale" : "current"
+  const hasFallback = "fallback" in candidate
+  const fallbackReason = isIncrementalSyncFallbackReason(candidate.fallback)
+    ? candidate.fallback
+    : "unknown-cursor"
+
+  if (!options.allowFallback && hasFallback) {
+    issues.push(
+      createIncrementalSyncValidationIssue(
+        ["fallback"],
+        "sync.incremental.fallback.unexpected",
+        'Field "fallback" is only valid on incremental pull results that require total-sync recovery.',
+      ),
+    )
+  }
+
+  if (options.allowFallback && hasFallback) {
+    if (!isIncrementalSyncFallbackReason(candidate.fallback)) {
+      issues.push(
+        createIncrementalSyncValidationIssue(
+          ["fallback"],
+          "sync.incremental.fallback",
+          'Field "fallback" must be "unknown-cursor", "gap", or "reset".',
+        ),
+      )
+    }
+
+    if (Array.isArray(candidate.transactions) && candidate.transactions.length > 0) {
+      issues.push(
+        createIncrementalSyncValidationIssue(
+          ["transactions"],
+          "sync.incremental.fallback.transactions",
+          'Field "transactions" must be empty when "fallback" is present.',
+        ),
+      )
+    }
+  }
+
+  if (!hasFallback) {
+    if (transactions.length === 0) {
+      if (typeof candidate.after === "string" && typeof candidate.cursor === "string" && candidate.cursor !== candidate.after) {
+        issues.push(
+          createIncrementalSyncValidationIssue(
+            ["cursor"],
+            "sync.incremental.cursor.head",
+            'Field "cursor" must match "after" when "transactions" is empty.',
+          ),
+        )
+      }
+    } else {
+      const tail = transactions[transactions.length - 1]
+      if (typeof candidate.cursor === "string" && tail && tail.cursor !== candidate.cursor) {
+        issues.push(
+          createIncrementalSyncValidationIssue(
+            ["cursor"],
+            "sync.incremental.cursor.tail",
+            'Field "cursor" must match the last delivered transaction cursor.',
+          ),
+        )
+      }
+    }
+  }
+
+  return {
+    issues,
+    value:
+      options.allowFallback && hasFallback
+        ? createIncrementalSyncFallback(fallbackReason, {
+            after,
+            cursor,
+            freshness,
+          })
+        : createIncrementalSyncPayload(transactions, {
+            after,
+            cursor,
+            freshness,
+          }),
+  }
+}
+
+export function validateIncrementalSyncPayload(
+  payload: IncrementalSyncPayload,
+): GraphValidationResult<IncrementalSyncPayload> {
+  const prepared = validateIncrementalSyncPayloadShape(payload)
+  if (prepared.issues.length > 0) {
+    return exposeIncrementalSyncValidationResult(
+      invalidIncrementalSyncResult(prepared.value, prepared.issues),
+    ) as GraphValidationResult<IncrementalSyncPayload>
+  }
+
+  return exposeIncrementalSyncValidationResult({
+    ok: true,
+    phase: "authoritative",
+    event: "reconcile",
+    value: prepared.value,
+    changedPredicateKeys: [],
+  }) as GraphValidationResult<IncrementalSyncPayload>
+}
+
+export function validateIncrementalSyncResult(
+  result: IncrementalSyncResult,
+): GraphValidationResult<IncrementalSyncResult> {
+  const prepared = validateIncrementalSyncPayloadShape(result as IncrementalSyncPayload, {
+    allowFallback: true,
+  })
+  if (prepared.issues.length > 0) {
+    return exposeIncrementalSyncValidationResult(
+      invalidIncrementalSyncResult(prepared.value, prepared.issues),
+    )
+  }
+
+  return exposeIncrementalSyncValidationResult({
+    ok: true,
+    phase: "authoritative",
+    event: "reconcile",
+    value: prepared.value,
+    changedPredicateKeys: [],
+  })
+}
+
 export type SyncState = {
   readonly mode: "total"
   readonly scope: SyncScope
@@ -1133,6 +1535,12 @@ export interface AuthoritativeGraphWriteSession {
   getCursor(): string | undefined
   getBaseCursor(): string
   getChangesAfter(cursor?: string): AuthoritativeGraphChangesAfterResult
+  getIncrementalSyncResult(
+    after?: string,
+    options?: {
+      freshness?: SyncFreshness
+    },
+  ): IncrementalSyncResult
   getHistory(): AuthoritativeGraphWriteHistory
 }
 
@@ -1226,6 +1634,76 @@ export function createAuthoritativeGraphWriteResultValidator<
     const validation = validateAuthoritativeGraphWriteResult(result, store, namespace)
     if (!validation.ok) throw new GraphValidationError(validation)
   }
+}
+
+export function createIncrementalSyncPayload(
+  transactions: readonly AuthoritativeGraphWriteResult[],
+  options: {
+    after: string
+    cursor?: string
+    freshness?: SyncFreshness
+  },
+): IncrementalSyncPayload {
+  return {
+    mode: "incremental",
+    scope: graphSyncScope,
+    after: options.after,
+    transactions: transactions.map((transaction) => cloneAuthoritativeGraphWriteResult(transaction)),
+    cursor: options.cursor ?? transactions[transactions.length - 1]?.cursor ?? options.after,
+    completeness: "complete",
+    freshness: options.freshness ?? "current",
+  }
+}
+
+export function createIncrementalSyncFallback(
+  fallback: IncrementalSyncFallbackReason,
+  options: {
+    after: string
+    cursor: string
+    freshness?: SyncFreshness
+  },
+): IncrementalSyncFallback {
+  return {
+    mode: "incremental",
+    scope: graphSyncScope,
+    after: options.after,
+    transactions: [],
+    cursor: options.cursor,
+    completeness: "complete",
+    freshness: options.freshness ?? "current",
+    fallback,
+  }
+}
+
+function parseAuthoritativeGraphCursor(
+  cursor: string,
+):
+  | {
+      prefix: string
+      sequence: number
+    }
+  | null {
+  const match = /^(.*?)(\d+)$/.exec(cursor)
+  if (!match) return null
+
+  return {
+    prefix: match[1] ?? "",
+    sequence: Number.parseInt(match[2] ?? "", 10),
+  }
+}
+
+function classifyIncrementalSyncFallbackReason(
+  cursor: string,
+  options: {
+    cursorPrefix: string
+    baseSequence: number
+  },
+): IncrementalSyncFallbackReason {
+  const parsed = parseAuthoritativeGraphCursor(cursor)
+  if (!parsed) return "unknown-cursor"
+  if (parsed.prefix !== options.cursorPrefix) return "reset"
+  if (parsed.sequence < options.baseSequence) return "gap"
+  return "unknown-cursor"
 }
 
 function buildAuthoritativeGraphWriteReplayResult(
@@ -1332,6 +1810,34 @@ export function createAuthoritativeGraphWriteSession<
     }
   }
 
+  function getIncrementalSyncResult(
+    after = baseCursor(),
+    options: {
+      freshness?: SyncFreshness
+    } = {},
+  ): IncrementalSyncResult {
+    const changes = getChangesAfter(after)
+    if (changes.kind === "changes") {
+      return createIncrementalSyncPayload(changes.changes, {
+        after,
+        cursor: changes.cursor,
+        freshness: options.freshness,
+      })
+    }
+
+    return createIncrementalSyncFallback(
+      classifyIncrementalSyncFallbackReason(after, {
+        cursorPrefix,
+        baseSequence,
+      }),
+      {
+        after,
+        cursor: changes.cursor,
+        freshness: options.freshness,
+      },
+    )
+  }
+
   const history = options.history ?? []
   history.forEach((result, index) => {
     const prepared = prepareAuthoritativeGraphWriteResult(result)
@@ -1432,6 +1938,7 @@ export function createAuthoritativeGraphWriteSession<
     apply,
     getBaseCursor: baseCursor,
     getChangesAfter,
+    getIncrementalSyncResult,
     getCursor: currentCursor,
     getHistory,
   }

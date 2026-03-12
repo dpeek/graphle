@@ -118,10 +118,20 @@ path:
   - `getChangesAfter(cursor)` returns ordered accepted write results after a
     known cursor, or `{ kind: "reset" }` when callers must recover by full
     snapshot
+  - `getIncrementalSyncResult(after, { freshness })` lifts that retained
+    history into one transport envelope that either delivers ordered
+    transactions or an explicit total-sync fallback
   - `getHistory()` returns the accepted-write log state needed to persist and
     later rehydrate the same monotonic cursor progression
 - direct non-throwing checks can use
   `validateAuthoritativeGraphWriteTransaction(tx, store, namespace)`
+- incremental pull contracts now sit beside total snapshots:
+  - `IncrementalSyncPayload = { mode: "incremental", scope, after, transactions, cursor, completeness, freshness }`
+  - `IncrementalSyncResult = IncrementalSyncPayload | { ...IncrementalSyncPayload, transactions: [], fallback }`
+  - `fallback` is one of `"unknown-cursor"`, `"gap"`, or `"reset"`
+  - `validateIncrementalSyncPayload(...)` checks data-bearing envelopes
+  - `validateIncrementalSyncResult(...)` checks both data-bearing and
+    total-sync-fallback variants
 
 ## Read-Write Proof Contract
 
@@ -188,8 +198,9 @@ Failure handling is still intentionally conservative.
   history as one consistency boundary. If retained history is unavailable or
   malformed after restart, the authority keeps the snapshot and resets history,
   so callers must recover from that new snapshot cursor instead of replay.
-- There is not yet a rollback protocol, cursor-based incremental pull, or
-  query-scoped repair path.
+- There is now a stable cursor-based incremental pull envelope, but there is
+  not yet session/client apply logic for pulled tx batches, a rollback
+  protocol, or a query-scoped repair path.
 
 So the durable v1 rule is:
 
@@ -235,8 +246,9 @@ The compatibility path is:
    scopes
 3. allow `completeness: "incomplete"` once a client holds only part of the
    graph
-4. add incremental delivery beside the same local store contract, first as
-   refreshed total snapshots, then as patches or tx streams
+4. add incremental delivery beside the same local store contract, starting
+   with authoritative tx pull envelopes and later widening to patches or other
+   streams
 5. keep predicate-slot subscriptions and typed local reads unchanged, so sync
    evolution happens around the store boundary instead of replacing the UI/query
    model
@@ -245,6 +257,18 @@ What does change later is where completeness is tracked. With whole-graph total
 sync, completeness is one global state value. With partial sync, completeness
 must become scope-aware and query-aware, but the same metadata words and store
 update path still apply.
+
+For the current whole-graph contract, those metadata words coexist as follows:
+
+- total bootstrap and recovery still use `mode: "total"` plus `snapshot`
+- incremental delivery switches only `mode` to `"incremental"` and replaces
+  `snapshot` with `after` plus ordered `transactions`
+- `scope` remains `{ kind: "graph" }` for both shapes
+- `cursor` still names the authoritative head after the delivered snapshot or
+  transaction batch
+- `completeness: "complete"` still means the authority scope is the whole
+  graph; fallback results do not overload completeness to signal history loss
+- `freshness` keeps the same meaning for both total and incremental responses
 
 ## Next Concrete Work Areas
 
@@ -314,7 +338,7 @@ Out of scope:
 - multi-backend persistence adapters
 - query-scoped replication storage
 
-### 2. Define one incremental pull envelope beside total snapshots
+### 2. Landed: incremental pull envelope beside total snapshots
 
 Goal:
 ship one stable response shape for ordered authoritative tx delivery after a
