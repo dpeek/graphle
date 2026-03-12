@@ -109,6 +109,134 @@ test("normalizeLinearIssue lowercases labels and fills defaults", () => {
   expect(issue.teamId).toBeUndefined();
 });
 
+test("normalizeLinearIssue leaves parent stream fields empty for standalone issues", () => {
+  const issue = normalizeLinearIssue({
+    children: {
+      nodes: [],
+    },
+    createdAt: "2024-01-01T00:00:00.000Z",
+    description: "Standalone stream",
+    id: "10",
+    identifier: "OPE-147",
+    inverseRelations: {
+      nodes: [],
+    },
+    labels: { nodes: [{ name: "io" }, { name: "agent" }] },
+    parent: {
+      id: "   ",
+      identifier: "OPE-147",
+      state: { name: "In Review" },
+    },
+    priority: 0,
+    project: { slugId: "io" },
+    state: { name: "In Review" },
+    team: { id: "team-1" },
+    title: "Current Approach Stream",
+    updatedAt: "2024-01-01T00:00:00.000Z",
+  });
+
+  expect(issue.hasParent).toBe(false);
+  expect(issue.parentIssueId).toBeUndefined();
+  expect(issue.parentIssueIdentifier).toBeUndefined();
+  expect(issue.parentIssueState).toBeUndefined();
+  expect(issue.teamId).toBe("team-1");
+});
+
+test("LinearTrackerAdapter fetches parent stream state for child issue candidates", async () => {
+  const originalFetch = globalThis.fetch;
+  let requestBody: { query?: string; variables?: Record<string, unknown> } | undefined;
+  globalThis.fetch = mock(async (_input, init) => {
+    requestBody = JSON.parse(String(init?.body ?? "{}")) as typeof requestBody;
+
+    return new Response(
+      JSON.stringify({
+        data: {
+          issues: {
+            nodes: [
+              {
+                children: { nodes: [] },
+                createdAt: "2024-01-02T00:00:00.000Z",
+                description: "Child execution issue",
+                id: "child-1",
+                identifier: "OPE-149",
+                inverseRelations: { nodes: [] },
+                labels: { nodes: [{ name: "agent" }] },
+                parent: {
+                  id: "parent-1",
+                  identifier: "OPE-147",
+                  state: { name: "In Review" },
+                },
+                priority: 0,
+                project: { slugId: "io" },
+                state: { name: "Todo" },
+                team: { id: "team-1" },
+                title: "Teach candidate issues to carry parent stream state",
+                updatedAt: "2024-01-02T00:00:00.000Z",
+              },
+              {
+                children: { nodes: [{ id: "child-1" }] },
+                createdAt: "2024-01-01T00:00:00.000Z",
+                description: "Managed parent",
+                id: "parent-1",
+                identifier: "OPE-147",
+                inverseRelations: { nodes: [] },
+                labels: { nodes: [{ name: "io" }, { name: "agent" }] },
+                parent: null,
+                priority: 0,
+                project: { slugId: "io" },
+                state: { name: "In Review" },
+                team: { id: "team-1" },
+                title: "Current Approach Stream",
+                updatedAt: "2024-01-01T00:00:00.000Z",
+              },
+            ],
+            pageInfo: {
+              endCursor: null,
+              hasNextPage: false,
+            },
+          },
+        },
+      }),
+      { status: 200 },
+    );
+  }) as unknown as typeof fetch;
+
+  try {
+    const tracker = new LinearTrackerAdapter({
+      activeStates: ["Todo", "In Review"],
+      apiKey: "token",
+      endpoint: "https://linear.invalid/graphql",
+      kind: "linear",
+      projectSlug: "io",
+      terminalStates: ["Done"],
+    });
+
+    const issues = await tracker.fetchCandidateIssues();
+
+    expect(requestBody?.query).toContain("parent {");
+    expect(requestBody?.query).toContain("identifier");
+    expect(requestBody?.query).toContain("state { name }");
+    expect(issues).toHaveLength(2);
+    expect(issues[0]).toMatchObject({
+      hasParent: true,
+      identifier: "OPE-149",
+      parentIssueId: "parent-1",
+      parentIssueIdentifier: "OPE-147",
+      parentIssueState: "In Review",
+    });
+    expect(issues[1]).toMatchObject({
+      hasChildren: true,
+      hasParent: false,
+      identifier: "OPE-147",
+    });
+    expect(issues[1]?.parentIssueId).toBeUndefined();
+    expect(issues[1]?.parentIssueIdentifier).toBeUndefined();
+    expect(issues[1]?.parentIssueState).toBeUndefined();
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("LinearTrackerAdapter fetches top-level managed comment triggers on managed parents", async () => {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = mock(

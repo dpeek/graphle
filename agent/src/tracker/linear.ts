@@ -214,6 +214,7 @@ function isDoneState(state?: string | null) {
 }
 
 export function normalizeLinearIssue(node: CandidateIssueNode): AgentIssue {
+  const parentIssueId = node.parent?.id?.trim();
   return {
     blockedBy: (node.inverseRelations?.nodes ?? [])
       .filter((relation): relation is IssueRelationNode => Boolean(relation))
@@ -233,15 +234,15 @@ export function normalizeLinearIssue(node: CandidateIssueNode): AgentIssue {
     createdAt: node.createdAt,
     description: node.description ?? "",
     hasChildren: (node.children?.nodes ?? []).some((child) => Boolean(child?.id)),
-    hasParent: Boolean(node.parent?.id),
+    hasParent: Boolean(parentIssueId),
     id: node.id,
     identifier: node.identifier,
     labels: (node.labels?.nodes ?? [])
       .map((label) => label?.name?.trim().toLowerCase())
       .filter((value): value is string => Boolean(value)),
-    parentIssueId: node.parent?.id ?? undefined,
-    parentIssueIdentifier: node.parent?.identifier?.trim() || undefined,
-    parentIssueState: node.parent?.state?.name?.trim() || undefined,
+    parentIssueId: parentIssueId || undefined,
+    parentIssueIdentifier: parentIssueId ? node.parent?.identifier?.trim() || undefined : undefined,
+    parentIssueState: parentIssueId ? node.parent?.state?.name?.trim() || undefined : undefined,
     priority:
       typeof node.priority === "number" && Number.isInteger(node.priority) ? node.priority : null,
     projectSlug: node.project?.slugId?.trim() || undefined,
