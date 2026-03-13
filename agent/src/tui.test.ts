@@ -625,6 +625,93 @@ test("AgentTuiRetainedReader supplements partial events.log with retained workfl
   }
 });
 
+test("AgentTuiRetainedReader inserts retained commit context before a partial completed lifecycle", async () => {
+  const root = await mkdtemp(resolve(tmpdir(), "tui-retained-partial-completed-"));
+  const runtimePath = resolve(root, "issues", "ope-174");
+  await mkdir(runtimePath, { recursive: true });
+
+  const commitSha = "abc1234def567890abc1234def567890abc1234";
+  const worker = createWorkerSession({
+    branchName: "io/ope-174",
+    id: "worker:OPE-174:1",
+    issue: {
+      id: "issue-174",
+      identifier: "OPE-174",
+      title: "Ship workflow-aware TUI behavior",
+    },
+    title: "Ship workflow-aware TUI behavior",
+    workerId: "OPE-174",
+    workspacePath: "/repo/.io/tree/ope-174",
+  });
+  const issueState = createIssueState(runtimePath, {
+    branchName: "io/ope-174",
+    controlPath: "/repo/.io/control",
+    issueId: "issue-174",
+    issueIdentifier: "OPE-174",
+    issueTitle: "Ship workflow-aware TUI behavior",
+    landedAt: "2026-03-10T06:00:02.000Z",
+    landedCommitSha: commitSha,
+    originPath: "/repo",
+    status: "completed",
+    streamIssueId: "issue-174",
+    streamIssueIdentifier: "OPE-174",
+    updatedAt: "2026-03-10T06:00:00.000Z",
+    workerId: "OPE-174",
+    worktreePath: "/repo/.io/tree/ope-174",
+  });
+  await writeFile(
+    resolve(runtimePath, "events.log"),
+    [
+      JSON.stringify({
+        code: "thread-started",
+        format: "line",
+        sequence: 1,
+        session: worker,
+        text: "Session started",
+        timestamp: "2026-03-10T06:00:01.000Z",
+        type: "status",
+      }),
+      JSON.stringify({
+        phase: "completed",
+        sequence: 2,
+        session: worker,
+        timestamp: "2026-03-10T06:00:02.000Z",
+        type: "session",
+      }),
+    ].join("\n") + "\n",
+  );
+
+  try {
+    const reader = new AgentTuiRetainedReader({
+      issueState,
+      repoRoot: "/repo",
+    });
+    const store = createAgentTuiStore();
+    for (const event of await reader.readInitialEvents("replay")) {
+      store.observe(event);
+    }
+
+    const snapshot = store.getSnapshot();
+    const body = snapshot.sessions[1]?.body ?? "";
+    const commitIndex = body.indexOf(`OPE-174: committed ${commitSha} on io/ope-174`);
+    const completedIndex = body.indexOf("Session completed | io/ope-174 | /repo/.io/tree/ope-174");
+
+    expect(snapshot.sessions[1]?.status).toMatchObject({
+      code: "issue-committed",
+      text: `OPE-174: committed ${commitSha} on io/ope-174`,
+    });
+    expect(snapshot.sessions[1]?.lastSequence).toBe(2);
+    expect(commitIndex).toBeGreaterThan(-1);
+    expect(completedIndex).toBeGreaterThan(commitIndex);
+    expect(snapshot.sessions[1]?.eventHistory.map((entry) => entry.summary).slice(-2)).toEqual([
+      `issue-committed: OPE-174: committed ${commitSha} on io/ope-174`,
+      "Session completed | io/ope-174 | /repo/.io/tree/ope-174",
+    ]);
+  } finally {
+    await rm(root, { force: true, recursive: true });
+  }
+});
+
 test("AgentTuiRetainedReader reconstructs blocker context from runtime files when logs are missing", async () => {
   const root = await mkdtemp(resolve(tmpdir(), "tui-retained-runtime-only-"));
   const runtimePath = resolve(root, "issues", "ope-188");
@@ -682,6 +769,97 @@ test("AgentTuiRetainedReader reconstructs blocker context from runtime files whe
       "Session failed | io/ope-174 | /repo/.io/tree/ope-188: Blocked on OPE-187 finalization",
     );
     expect(frame).toContain("Attach OPE-188 from runtime files");
+  } finally {
+    await rm(root, { force: true, recursive: true });
+  }
+});
+
+test("AgentTuiRetainedReader inserts retained blocker context before a partial failed lifecycle", async () => {
+  const root = await mkdtemp(resolve(tmpdir(), "tui-retained-partial-failed-"));
+  const runtimePath = resolve(root, "issues", "ope-188");
+  await mkdir(runtimePath, { recursive: true });
+
+  const worker = createWorkerSession({
+    branchName: "io/ope-174",
+    id: "worker:OPE-188:1",
+    issue: {
+      id: "issue-188",
+      identifier: "OPE-188",
+      title: "Prove workflow-aware TUI behavior with regression coverage",
+    },
+    title: "Prove workflow-aware TUI behavior with regression coverage",
+    workerId: "OPE-188",
+    workspacePath: "/repo/.io/tree/ope-188",
+  });
+  const issueState = createIssueState(runtimePath, {
+    branchName: "io/ope-174",
+    controlPath: "/repo/.io/control",
+    issueId: "issue-188",
+    issueIdentifier: "OPE-188",
+    issueTitle: "Prove workflow-aware TUI behavior with regression coverage",
+    originPath: "/repo",
+    parentIssueId: "issue-174",
+    parentIssueIdentifier: "OPE-174",
+    status: "blocked",
+    streamIssueId: "issue-174",
+    streamIssueIdentifier: "OPE-174",
+    updatedAt: "2026-03-10T05:00:00.000Z",
+    workerId: "OPE-188",
+    worktreePath: "/repo/.io/tree/ope-188",
+  });
+  await writeFile(
+    resolve(runtimePath, "events.log"),
+    [
+      JSON.stringify({
+        code: "thread-started",
+        format: "line",
+        sequence: 1,
+        session: worker,
+        text: "Session started",
+        timestamp: "2026-03-10T05:00:01.000Z",
+        type: "status",
+      }),
+      JSON.stringify({
+        data: {
+          reason: "Blocked on OPE-187 finalization",
+        },
+        phase: "failed",
+        sequence: 2,
+        session: worker,
+        timestamp: "2026-03-10T05:00:02.000Z",
+        type: "session",
+      }),
+    ].join("\n") + "\n",
+  );
+
+  try {
+    const reader = new AgentTuiRetainedReader({
+      issueState,
+      repoRoot: "/repo",
+    });
+    const store = createAgentTuiStore();
+    for (const event of await reader.readInitialEvents("attach")) {
+      store.observe(event);
+    }
+
+    const snapshot = store.getSnapshot();
+    const body = snapshot.sessions[1]?.body ?? "";
+    const blockedIndex = body.indexOf("OPE-188: blocked");
+    const failedIndex = body.indexOf(
+      "Session failed | io/ope-174 | /repo/.io/tree/ope-188: Blocked on OPE-187 finalization",
+    );
+
+    expect(snapshot.sessions[1]?.status).toMatchObject({
+      code: "issue-blocked",
+      text: "OPE-188: blocked",
+    });
+    expect(snapshot.sessions[1]?.lastSequence).toBe(2);
+    expect(blockedIndex).toBeGreaterThan(-1);
+    expect(failedIndex).toBeGreaterThan(blockedIndex);
+    expect(snapshot.sessions[1]?.eventHistory.map((entry) => entry.summary).slice(-2)).toEqual([
+      "issue-blocked: OPE-188: blocked",
+      "Session failed | io/ope-174 | /repo/.io/tree/ope-188: Blocked on OPE-187 finalization",
+    ]);
   } finally {
     await rm(root, { force: true, recursive: true });
   }

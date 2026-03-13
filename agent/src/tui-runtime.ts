@@ -26,6 +26,8 @@ type RetainedOutputSummary = {
 };
 
 type RetainedRuntimeContext = {
+  beforeTerminal: AgentSessionEvent[];
+  beforeTerminalIndex?: number;
   leading: AgentSessionEvent[];
   trailing: AgentSessionEvent[];
 };
@@ -97,6 +99,14 @@ function toRuntimePhase(issueState: IssueRuntimeState): AgentSessionPhase {
 
 function toSyntheticTimestamp(baseTime: number, sequence: number) {
   return new Date(baseTime + sequence).toISOString();
+}
+
+function toAnchoredTimestamp(timestamp: string, offsetMs = 1) {
+  const parsedTime = Date.parse(timestamp);
+  if (!Number.isFinite(parsedTime)) {
+    return timestamp;
+  }
+  return new Date(parsedTime - offsetMs).toISOString();
 }
 
 function describeSource(source: AgentTuiRetainedSource) {
@@ -244,7 +254,13 @@ export class AgentTuiRetainedReader {
     }
     const events = this.#buildPrelude(mode);
     events.push(...runtimeContext.leading);
-    events.push(...retainedEvents);
+    if (runtimeContext.beforeTerminal.length && runtimeContext.beforeTerminalIndex !== undefined) {
+      events.push(...retainedEvents.slice(0, runtimeContext.beforeTerminalIndex));
+      events.push(...runtimeContext.beforeTerminal);
+      events.push(...retainedEvents.slice(runtimeContext.beforeTerminalIndex));
+    } else {
+      events.push(...retainedEvents);
+    }
     events.push(...runtimeContext.trailing);
     if (!retainedEvents.length && !isTerminalIssueStatus(this.issueState.status)) {
       events.push(
@@ -377,6 +393,25 @@ export class AgentTuiRetainedReader {
       : this.#buildLifecycleEvent(this.#workerSession, phase, eventData);
   }
 
+  #buildAnchoredStatusEvent(
+    anchor: AgentSessionEvent,
+    session: AgentSessionRef,
+    code: AgentStatusCode,
+    text: string,
+    data?: Record<string, unknown>,
+  ): AgentStatusEvent {
+    return {
+      code,
+      data,
+      format: "line",
+      sequence: anchor.sequence - 0.001,
+      session,
+      text,
+      timestamp: toAnchoredTimestamp(anchor.timestamp),
+      type: "status",
+    };
+  }
+
   #buildWorkflowDetailEvent(text: string, sequenceKind: "prelude" | "runtime" = "prelude") {
     return sequenceKind === "runtime"
       ? this.#buildRuntimeStatusEvent(this.supervisorSession, "ready", text)
@@ -384,18 +419,32 @@ export class AgentTuiRetainedReader {
   }
 
   async #buildRuntimeContextEvents(retainedEvents: AgentSessionEvent[]) {
+    const beforeTerminal: AgentSessionEvent[] = [];
     const leading: AgentSessionEvent[] = [];
     const trailing: AgentSessionEvent[] = [];
+    let beforeTerminalIndex: number | undefined;
+    let completedPhaseEvent: AgentSessionLifecycleEvent | undefined;
+    let completedPhaseIndex: number | undefined;
+    let failedPhaseEvent: AgentSessionLifecycleEvent | undefined;
+    let failedPhaseIndex: number | undefined;
     const phases = new Set<AgentSessionPhase>();
     let hasBlockedStatus = false;
     let hasCommittedStatus = false;
 
-    for (const event of retainedEvents) {
+    for (const [index, event] of retainedEvents.entries()) {
       if (event.session.id !== this.#workerSession.id) {
         continue;
       }
       if (event.type === "session") {
         phases.add(event.phase);
+        if (event.phase === "completed" && completedPhaseEvent === undefined) {
+          completedPhaseEvent = event;
+          completedPhaseIndex = index;
+        }
+        if (event.phase === "failed" && failedPhaseEvent === undefined) {
+          failedPhaseEvent = event;
+          failedPhaseIndex = index;
+        }
         continue;
       }
       if (event.type !== "status") {
@@ -425,17 +474,32 @@ export class AgentTuiRetainedReader {
 
     if (terminalPhase === "completed") {
       if (!hasCommittedStatus && commitSha) {
-        trailing.push(
-          this.#buildRuntimeStatusEvent(
-            this.#workerSession,
-            "issue-committed",
-            `${this.issueState.issueIdentifier}: committed ${commitSha} on ${this.issueState.branchName}`,
-            {
-              branchName: this.issueState.branchName,
-              commitSha,
-            },
-          ),
-        );
+        const eventText = `${this.issueState.issueIdentifier}: committed ${commitSha} on ${this.issueState.branchName}`;
+        const eventData = {
+          branchName: this.issueState.branchName,
+          commitSha,
+        };
+        if (completedPhaseEvent && completedPhaseIndex !== undefined) {
+          beforeTerminal.push(
+            this.#buildAnchoredStatusEvent(
+              completedPhaseEvent,
+              this.#workerSession,
+              "issue-committed",
+              eventText,
+              eventData,
+            ),
+          );
+          beforeTerminalIndex = completedPhaseIndex;
+        } else {
+          trailing.push(
+            this.#buildRuntimeStatusEvent(
+              this.#workerSession,
+              "issue-committed",
+              eventText,
+              eventData,
+            ),
+          );
+        }
       }
       if (!phases.has("completed")) {
         const data = commitSha ? { commitSha } : undefined;
@@ -445,13 +509,26 @@ export class AgentTuiRetainedReader {
 
     if (terminalPhase === "failed") {
       if (!hasBlockedStatus) {
-        trailing.push(
-          this.#buildStatusEvent(
-            this.#workerSession,
-            "issue-blocked",
-            `${this.issueState.issueIdentifier}: blocked`,
-          ),
-        );
+        const eventText = `${this.issueState.issueIdentifier}: blocked`;
+        if (failedPhaseEvent && failedPhaseIndex !== undefined) {
+          beforeTerminal.push(
+            this.#buildAnchoredStatusEvent(
+              failedPhaseEvent,
+              this.#workerSession,
+              "issue-blocked",
+              eventText,
+            ),
+          );
+          beforeTerminalIndex = failedPhaseIndex;
+        } else {
+          trailing.push(
+            this.#buildRuntimeStatusEvent(
+              this.#workerSession,
+              "issue-blocked",
+              eventText,
+            ),
+          );
+        }
       }
       if (!phases.has("failed")) {
         const reason = this.#resolveFailureReason(outputSummary);
@@ -501,6 +578,8 @@ export class AgentTuiRetainedReader {
     }
 
     return {
+      beforeTerminal,
+      beforeTerminalIndex,
       leading,
       trailing,
     } satisfies RetainedRuntimeContext;
