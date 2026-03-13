@@ -382,7 +382,10 @@ test("AgentTuiRetainedReader keeps workflow blocker context visible in attach mo
       "worker:OPE-188:1",
     ]);
     expect(snapshot.sessions[0]?.body).toContain("Attach OPE-188 from events.log");
-    expect(snapshot.sessions[0]?.body).toContain("blocked | io/ope-174 | /repo/.io/tree/ope-188");
+    expect(snapshot.sessions[0]?.body).toContain("workflow: stream OPE-174 / task OPE-188");
+    expect(snapshot.sessions[0]?.body).toContain(
+      "runtime state: blocked; worktree preserved on io/ope-174",
+    );
     expect(snapshot.sessions[1]?.status).toMatchObject({
       code: "issue-blocked",
       text: "OPE-188: blocked",
@@ -463,11 +466,12 @@ test("AgentTuiRetainedReader describes interrupted retained work as resumable", 
     }
 
     const snapshot = store.getSnapshot();
+    expect(snapshot.sessions[1]?.phase).toBe("stopped");
     expect(snapshot.sessions[0]?.body).toContain("workflow: stream OPE-67\n");
     expect(snapshot.sessions[0]?.body).toContain(
       "runtime state: interrupted; worktree preserved to resume on ope-67\n",
     );
-    expect(snapshot.sessions[1]?.body).toContain("Session completed");
+    expect(snapshot.sessions[1]?.body).toContain("Session stopped");
   } finally {
     await rm(root, { force: true, recursive: true });
   }
@@ -521,7 +525,9 @@ test("AgentTuiRetainedReader keeps finalized workflow context visible in replay 
       "worker:OPE-174:retained",
     ]);
     expect(snapshot.sessions[0]?.body).toContain("Replay OPE-174 from codex.stdout.jsonl");
-    expect(snapshot.sessions[0]?.body).toContain("finalized | io/ope-174 | /repo/.io/tree/ope-174");
+    expect(snapshot.sessions[0]?.body).toContain("workflow: stream OPE-174");
+    expect(snapshot.sessions[0]?.body).toContain("runtime state: finalized in Done");
+    expect(snapshot.sessions[0]?.body).toContain("finalized: Done");
     expect(snapshot.sessions[1]?.session.branchName).toBe("io/ope-174");
     expect(snapshot.sessions[1]?.phase).toBe("completed");
     expect(snapshot.sessions[1]?.body).toContain("Session completed | io/ope-174 | /repo/.io/tree/ope-174");
