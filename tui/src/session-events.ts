@@ -38,6 +38,7 @@ export type AgentSessionPhase =
 export type AgentStatusCode =
   | "ready"
   | "idle"
+  | "workflow-diagnostic"
   | "issue-assigned"
   | "issue-blocked"
   | "issue-committed"

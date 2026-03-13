@@ -22,7 +22,7 @@ import type {
   Workflow,
 } from "./types.js";
 import { loadWorkflowFile, renderPrompt, toWorkspaceKey } from "./workflow.js";
-import { WorkspaceManager } from "./workspace.js";
+import { WorkspaceManager, type IssueRuntimeState } from "./workspace.js";
 
 type IssueRunner = {
   run: (options: {
@@ -130,6 +130,87 @@ function isResumableRunError(error: unknown) {
 
 const MAX_RUN_ATTEMPTS_PER_SUPERVISOR_CYCLE = 2;
 
+function hasSeparateFeature(
+  issue: Pick<AgentIssue, "parentIssueIdentifier" | "streamIssueIdentifier">,
+) {
+  return Boolean(
+    issue.parentIssueIdentifier &&
+      issue.streamIssueIdentifier &&
+      issue.parentIssueIdentifier !== issue.streamIssueIdentifier,
+  );
+}
+
+function formatWorkflowScope(
+  issue:
+    | Pick<AgentIssue, "hasParent" | "identifier" | "parentIssueIdentifier" | "streamIssueIdentifier">
+    | Pick<IssueRuntimeState, "issueIdentifier" | "parentIssueIdentifier" | "streamIssueIdentifier">,
+) {
+  const issueIdentifier = "issueIdentifier" in issue ? issue.issueIdentifier : issue.identifier;
+  const hasParent = "hasParent" in issue ? issue.hasParent : Boolean(issue.parentIssueIdentifier);
+  const streamIssueIdentifier =
+    issue.streamIssueIdentifier ?? issue.parentIssueIdentifier ?? issueIdentifier;
+  const featureIssueIdentifier =
+    issue.parentIssueIdentifier && hasSeparateFeature(issue)
+      ? issue.parentIssueIdentifier
+      : undefined;
+  const parts = [`stream ${streamIssueIdentifier}`];
+  if (featureIssueIdentifier) {
+    parts.push(`feature ${featureIssueIdentifier}`);
+  }
+  if (hasParent) {
+    parts.push(`task ${issueIdentifier}`);
+  }
+  return parts.join(" / ");
+}
+
+function formatDiagnosticList(values: string[], limit = 3) {
+  const ordered = [...values].sort((left, right) => left.localeCompare(right));
+  if (ordered.length <= limit) {
+    return ordered.join("; ");
+  }
+  return `${ordered.slice(0, limit).join("; ")}; (+${ordered.length - limit} more)`;
+}
+
+function formatRetainedIssueLine(issue: IssueRuntimeState) {
+  return `${formatWorkflowScope(issue)} on ${issue.branchName}`;
+}
+
+function formatDependencyBlockedIssueLine(issue: AgentIssue) {
+  return `${formatWorkflowScope(issue)} blocked by ${issue.blockedBy.join(", ")}`;
+}
+
+function formatRunnableIssueLine(issue: AgentIssue) {
+  return formatWorkflowScope(issue);
+}
+
+function formatCount(count: number, label: string) {
+  return `${count} ${label}`;
+}
+
+function formatExecutionReleaseIssueLine(issue: AgentIssue) {
+  const waitingOn: string[] = [];
+  if (issue.parentIssueIdentifier && issue.parentIssueState && !isInProgressState(issue.parentIssueState)) {
+    const parentLabel = hasSeparateFeature(issue) ? "feature" : "stream";
+    waitingOn.push(`${parentLabel} ${issue.parentIssueIdentifier} is ${issue.parentIssueState}`);
+  }
+  if (issue.streamIssueIdentifier && issue.streamIssueState && !isInProgressState(issue.streamIssueState)) {
+    waitingOn.push(`stream ${issue.streamIssueIdentifier} is ${issue.streamIssueState}`);
+  }
+  if (!waitingOn.length) {
+    return formatWorkflowScope(issue);
+  }
+  return `${formatWorkflowScope(issue)} (${waitingOn.join("; ")})`;
+}
+
+function formatOccupiedIssueLine(
+  issue: AgentIssue,
+  activeIssueIdentifier: string,
+  activeIssueState?: IssueRuntimeState,
+) {
+  const status = activeIssueState?.status ?? "active";
+  return `${formatWorkflowScope(issue)} held by ${activeIssueIdentifier} [${status}]`;
+}
+
 export class AgentService {
   readonly #log: Logger;
   readonly #once: boolean;
@@ -224,33 +305,30 @@ export class AgentService {
         activeWorkflow.tracker.terminalStates,
       );
       const occupiedStreams = await workspaceManager.listOccupiedStreams();
+      const retainedIssues = await this.#listRetainedIssues(workspaceManager);
       const issues = await tracker.fetchCandidateIssues();
       const maxConcurrentAgents = Math.max(1, activeWorkflow.agent.maxConcurrentAgents);
       const availableSlots = Math.max(0, maxConcurrentAgents - this.#activeRuns.size);
+      const launchableIssues = this.#selectLaunchableIssues(
+        activeWorkflow,
+        issues,
+        occupiedStreams,
+      );
+      this.#publishWorkflowDiagnosticLines(
+        this.#buildWorkflowDiagnosticLines({
+          availableSlots,
+          issues,
+          launchableIssues,
+          occupiedStreams,
+          retainedIssues,
+        }),
+      );
       if (availableSlots === 0) {
         return [];
       }
-      const scheduledIssues = pickCandidateIssues(
-        issues.filter((issue) => this.#shouldAutoScheduleIssue(activeWorkflow, issue)),
-        issues.length,
-        occupiedStreams,
-      )
-        .filter((issue) => !this.#activeRuns.has(issue.identifier))
-        .filter((issue) => !this.#activeStreamKeys.has(getStreamKey(issue)))
-        .filter((issue) => {
-          const activeIssueIdentifier = occupiedStreams.get(getStreamKey(issue));
-          return !activeIssueIdentifier || activeIssueIdentifier === issue.identifier;
-        })
-        .slice(0, availableSlots);
+      const scheduledIssues = launchableIssues.slice(0, availableSlots);
       if (!scheduledIssues.length) {
         this.#log.info("tick.idle");
-        this.#sessionEvents.publish({
-          code: "idle",
-          format: "line",
-          session: this.#supervisorSession,
-          text: "No issues",
-          type: "status",
-        });
         return [];
       }
       const runs = scheduledIssues.map((issue, index) =>
@@ -315,6 +393,137 @@ export class AgentService {
       return true;
     }
     return resolveIssueRouting(workflow.issues, issue, workflow.modules).agent === "backlog";
+  }
+
+  #selectLaunchableIssues(
+    workflow: Workflow,
+    issues: AgentIssue[],
+    occupiedStreams: Map<string, string>,
+  ) {
+    return pickCandidateIssues(
+      issues.filter((issue) => this.#shouldAutoScheduleIssue(workflow, issue)),
+      issues.length,
+      occupiedStreams,
+    )
+      .filter((issue) => !this.#activeRuns.has(issue.identifier))
+      .filter((issue) => !this.#activeStreamKeys.has(getStreamKey(issue)))
+      .filter((issue) => {
+        const activeIssueIdentifier = occupiedStreams.get(getStreamKey(issue));
+        return !activeIssueIdentifier || activeIssueIdentifier === issue.identifier;
+      });
+  }
+
+  #buildWorkflowDiagnosticLines(options: {
+    availableSlots: number;
+    issues: AgentIssue[];
+    launchableIssues: AgentIssue[];
+    occupiedStreams: Map<string, string>;
+    retainedIssues: IssueRuntimeState[];
+  }) {
+    const retainedByIdentifier = new Map(
+      options.retainedIssues.map((issue) => [issue.issueIdentifier, issue] as const),
+    );
+    const activeIssues = options.retainedIssues
+      .filter((issue) => issue.status === "running")
+      .map((issue) => formatRetainedIssueLine(issue));
+    const blockedIssues = options.retainedIssues
+      .filter((issue) => issue.status === "blocked")
+      .map((issue) => formatRetainedIssueLine(issue));
+    const interruptedIssues = options.retainedIssues
+      .filter((issue) => issue.status === "interrupted")
+      .map((issue) => formatRetainedIssueLine(issue));
+    const pendingFinalizationIssues = options.retainedIssues
+      .filter((issue) => issue.status === "completed")
+      .map((issue) => formatRetainedIssueLine(issue));
+    const runnableIssues = options.launchableIssues
+      .slice(0, options.availableSlots)
+      .map((issue) => formatRunnableIssueLine(issue));
+    const waitingForSlotIssues = options.launchableIssues
+      .slice(options.availableSlots)
+      .map((issue) => formatRunnableIssueLine(issue));
+    const launchableIssueIdentifiers = new Set(
+      options.launchableIssues.map((issue) => issue.identifier),
+    );
+    const executionCandidates = options.issues.filter((issue) => issue.hasParent || !issue.hasChildren);
+    const blockedByDependency: string[] = [];
+    const waitingForRelease: string[] = [];
+    const occupied: string[] = [];
+
+    for (const issue of executionCandidates) {
+      if (launchableIssueIdentifiers.has(issue.identifier)) {
+        continue;
+      }
+      if (issue.blockedBy.length) {
+        blockedByDependency.push(formatDependencyBlockedIssueLine(issue));
+        continue;
+      }
+      if (issue.hasParent && !isExecutionReleased(issue)) {
+        waitingForRelease.push(formatExecutionReleaseIssueLine(issue));
+        continue;
+      }
+      const activeIssueIdentifier = options.occupiedStreams.get(getStreamKey(issue));
+      if (activeIssueIdentifier && activeIssueIdentifier !== issue.identifier) {
+        occupied.push(
+          formatOccupiedIssueLine(
+            issue,
+            activeIssueIdentifier,
+            retainedByIdentifier.get(activeIssueIdentifier),
+          ),
+        );
+      }
+    }
+
+    const summaryParts = [
+      activeIssues.length ? formatCount(activeIssues.length, "active") : undefined,
+      blockedIssues.length ? formatCount(blockedIssues.length, "blocked") : undefined,
+      interruptedIssues.length ? formatCount(interruptedIssues.length, "interrupted") : undefined,
+      pendingFinalizationIssues.length
+        ? formatCount(pendingFinalizationIssues.length, "waiting on finalization")
+        : undefined,
+      options.launchableIssues.length
+        ? formatCount(options.launchableIssues.length, "runnable")
+        : undefined,
+      blockedByDependency.length
+        ? formatCount(blockedByDependency.length, "blocked by dependency")
+        : undefined,
+      waitingForRelease.length
+        ? formatCount(waitingForRelease.length, "waiting for workflow release")
+        : undefined,
+      occupied.length ? formatCount(occupied.length, "occupied") : undefined,
+      waitingForSlotIssues.length
+        ? formatCount(waitingForSlotIssues.length, "waiting for agent slot")
+        : undefined,
+    ].filter((part): part is string => Boolean(part));
+
+    const lines = [summaryParts.length ? `Workflow: ${summaryParts.join(", ")}` : "Workflow: idle"];
+    if (activeIssues.length) {
+      lines.push(`Active: ${formatDiagnosticList(activeIssues)}`);
+    }
+    if (blockedIssues.length) {
+      lines.push(`Preserved blocked: ${formatDiagnosticList(blockedIssues)}`);
+    }
+    if (interruptedIssues.length) {
+      lines.push(`Preserved interrupted: ${formatDiagnosticList(interruptedIssues)}`);
+    }
+    if (pendingFinalizationIssues.length) {
+      lines.push(`Waiting on finalization: ${formatDiagnosticList(pendingFinalizationIssues)}`);
+    }
+    if (runnableIssues.length) {
+      lines.push(`Runnable now: ${formatDiagnosticList(runnableIssues)}`);
+    }
+    if (waitingForSlotIssues.length) {
+      lines.push(`Waiting for agent slot: ${formatDiagnosticList(waitingForSlotIssues)}`);
+    }
+    if (blockedByDependency.length) {
+      lines.push(`Blocked by dependency: ${formatDiagnosticList(blockedByDependency)}`);
+    }
+    if (waitingForRelease.length) {
+      lines.push(`Waiting for workflow release: ${formatDiagnosticList(waitingForRelease)}`);
+    }
+    if (occupied.length) {
+      lines.push(`Occupied: ${formatDiagnosticList(occupied)}`);
+    }
+    return lines;
   }
 
   async #runIssue(
@@ -638,6 +847,13 @@ export class AgentService {
     await appendFile(path, text);
   }
 
+  async #listRetainedIssues(workspaceManager: WorkspaceManager) {
+    const runtimeManager = workspaceManager as WorkspaceManager & {
+      listRetainedIssues?: () => Promise<IssueRuntimeState[]>;
+    };
+    return (await runtimeManager.listRetainedIssues?.()) ?? [];
+  }
+
   #formatWorkspaceLabel(path: string) {
     if (!this.#repoRoot) {
       return path;
@@ -647,6 +863,18 @@ export class AgentService {
       return this.#repoRoot;
     }
     return relativePath.startsWith(".") ? relativePath : `./${relativePath}`;
+  }
+
+  #publishWorkflowDiagnosticLines(lines: string[]) {
+    for (const text of lines) {
+      this.#sessionEvents.publish({
+        code: "workflow-diagnostic",
+        format: "line",
+        session: this.#supervisorSession,
+        text,
+        type: "status",
+      });
+    }
   }
 
   #publishSupervisorIssueLine(

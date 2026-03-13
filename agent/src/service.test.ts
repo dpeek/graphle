@@ -1619,7 +1619,7 @@ test("AgentService eagerly creates worker checkout on start", async () => {
 
     await service.start();
     expect(writes.some((entry) => entry.includes("IO is supervising"))).toBe(true);
-    expect(writes.some((entry) => entry.includes("No issues"))).toBe(true);
+    expect(writes.some((entry) => entry.includes("Workflow: idle"))).toBe(true);
   } finally {
     globalThis.fetch = originalFetch;
     process.stdout.write = originalWrite;
@@ -1882,6 +1882,15 @@ test("AgentService publishes supervisor and worker session events", async () => 
           event.type === "status" && event.code === "ready" && event.session.id === "supervisor",
       ),
     ).toBe(true);
+    expect(
+      events.some(
+        (event) =>
+          event.type === "status" &&
+          event.code === "workflow-diagnostic" &&
+          event.session.id === "supervisor" &&
+          event.text === "Workflow: 1 runnable",
+      ),
+    ).toBe(true);
 
     const scheduledWorker = events.find(
       (event) =>
@@ -1912,6 +1921,268 @@ test("AgentService publishes supervisor and worker session events", async () => 
     ).toBe(true);
   } finally {
     globalThis.fetch = originalFetch;
+    await rm(root, { force: true, recursive: true });
+  }
+});
+
+test("AgentService surfaces workflow diagnostics for retained and skipped task states", async () => {
+  const root = await mkdtemp(resolve(tmpdir(), "agent-service-diagnostics-"));
+  const workspacePath = resolve(root, "workspace", "workers", "OPE-79", "repo");
+  const events: AgentSessionEvent[] = [];
+
+  await writeIoTsConfig(root, {
+    agent: { maxConcurrentAgents: 1 },
+    tracker: {
+      apiKey: "$LINEAR_API_KEY",
+      kind: "linear",
+      projectSlug: "$LINEAR_PROJECT_SLUG",
+    },
+    workspace: {
+      root: resolve(root, "workspace"),
+    },
+  });
+  await writeFile(resolve(root, "io.md"), "Issue {{ issue.identifier }}\n");
+  process.env.LINEAR_API_KEY = "linear-token";
+  process.env.LINEAR_PROJECT_SLUG = "project-slug";
+
+  try {
+    const runnableIssue = createIssue({
+      hasParent: true,
+      id: "runnable-1",
+      identifier: "OPE-79",
+      parentIssueId: "feature-172",
+      parentIssueIdentifier: "OPE-172",
+      parentIssueState: "In Progress",
+      priority: 0,
+      streamIssueId: "stream-121",
+      streamIssueIdentifier: "OPE-121",
+      streamIssueState: "In Progress",
+      title: "Runnable task",
+    });
+    const occupiedIssue = createIssue({
+      hasParent: true,
+      id: "occupied-1",
+      identifier: "OPE-78",
+      parentIssueId: "feature-167",
+      parentIssueIdentifier: "OPE-167",
+      parentIssueState: "In Progress",
+      priority: 1,
+      streamIssueId: "stream-121",
+      streamIssueIdentifier: "OPE-121",
+      streamIssueState: "In Progress",
+      title: "Occupied task",
+    });
+    const blockedByDependencyIssue = createIssue({
+      blockedBy: ["OPE-170"],
+      hasParent: true,
+      id: "blocked-1",
+      identifier: "OPE-77",
+      parentIssueId: "feature-169",
+      parentIssueIdentifier: "OPE-169",
+      parentIssueState: "In Progress",
+      priority: 2,
+      streamIssueId: "stream-121",
+      streamIssueIdentifier: "OPE-121",
+      streamIssueState: "In Progress",
+      title: "Blocked task",
+    });
+    const waitingForReleaseIssue = createIssue({
+      hasParent: true,
+      id: "waiting-1",
+      identifier: "OPE-76",
+      parentIssueId: "feature-168",
+      parentIssueIdentifier: "OPE-168",
+      parentIssueState: "In Review",
+      priority: 3,
+      streamIssueId: "stream-121",
+      streamIssueIdentifier: "OPE-121",
+      streamIssueState: "In Progress",
+      title: "Waiting task",
+    });
+
+    const service = new AgentService({
+      once: true,
+      repoRoot: root,
+      runnerFactory: () => ({
+        run: async ({ issue, prompt, workspace }) => ({
+          issue,
+          prompt,
+          stderr: [],
+          stdout: [],
+          success: true,
+          workspace,
+        }),
+      }),
+      trackerFactory: () => ({
+        fetchCandidateIssues: async () => [
+          occupiedIssue,
+          blockedByDependencyIssue,
+          waitingForReleaseIssue,
+          runnableIssue,
+        ],
+        fetchIssueStatesByIds: async () => new Map(),
+        setIssueState: async () => undefined,
+      }),
+      stdoutEvents: false,
+      workspaceManagerFactory: (_workflow, issueIdentifier) =>
+        ({
+          cleanup: async () => undefined,
+          complete: async () => ({ commitSha: "a".repeat(40) }),
+          createIdleWorkspace: () => ({
+            branchName: "main",
+            controlPath: root,
+            createdNow: true,
+            originPath: root,
+            path: resolve(root, "workspace", "workers", issueIdentifier ?? "supervisor", "repo"),
+            sourceRepoPath: root,
+            workerId: issueIdentifier ?? "supervisor",
+          }),
+          ensureCheckout: async () => ({
+            createdNow: true,
+            path: workspacePath,
+          }),
+          ensureSessionStartState: async () => ({
+            createdNow: true,
+            path: resolve(root, "workspace", "workers"),
+          }),
+          listOccupiedStreams: async () => new Map([["ope-167", "OPE-71"]]),
+          listRetainedIssues: async () => [
+            {
+              branchName: "io/ope-167",
+              controlPath: root,
+              issueId: "running-1",
+              issueIdentifier: "OPE-71",
+              issueTitle: "Running task",
+              originPath: root,
+              outputPath: resolve(root, "workspace", "runtime", "OPE-71", "output.log"),
+              parentIssueId: "feature-167",
+              parentIssueIdentifier: "OPE-167",
+              runtimePath: resolve(root, "workspace", "runtime", "OPE-71"),
+              status: "running",
+              streamIssueId: "stream-121",
+              streamIssueIdentifier: "OPE-121",
+              streamRuntimePath: resolve(root, "workspace", "stream", "ope-167.json"),
+              updatedAt: "2024-01-01T00:00:00.000Z",
+              workerId: "OPE-71",
+              worktreePath: resolve(root, "workspace", "tree", "ope-71"),
+            },
+            {
+              branchName: "io/ope-168",
+              controlPath: root,
+              issueId: "interrupted-1",
+              issueIdentifier: "OPE-72",
+              issueTitle: "Interrupted task",
+              originPath: root,
+              outputPath: resolve(root, "workspace", "runtime", "OPE-72", "output.log"),
+              parentIssueId: "feature-168",
+              parentIssueIdentifier: "OPE-168",
+              runtimePath: resolve(root, "workspace", "runtime", "OPE-72"),
+              status: "interrupted",
+              streamIssueId: "stream-121",
+              streamIssueIdentifier: "OPE-121",
+              streamRuntimePath: resolve(root, "workspace", "stream", "ope-168.json"),
+              updatedAt: "2024-01-01T00:00:01.000Z",
+              workerId: "OPE-72",
+              worktreePath: resolve(root, "workspace", "tree", "ope-72"),
+            },
+            {
+              branchName: "io/ope-169",
+              controlPath: root,
+              issueId: "blocked-1",
+              issueIdentifier: "OPE-73",
+              issueTitle: "Blocked task",
+              originPath: root,
+              outputPath: resolve(root, "workspace", "runtime", "OPE-73", "output.log"),
+              parentIssueId: "feature-169",
+              parentIssueIdentifier: "OPE-169",
+              runtimePath: resolve(root, "workspace", "runtime", "OPE-73"),
+              status: "blocked",
+              streamIssueId: "stream-121",
+              streamIssueIdentifier: "OPE-121",
+              streamRuntimePath: resolve(root, "workspace", "stream", "ope-169.json"),
+              updatedAt: "2024-01-01T00:00:02.000Z",
+              workerId: "OPE-73",
+              worktreePath: resolve(root, "workspace", "tree", "ope-73"),
+            },
+            {
+              branchName: "io/ope-170",
+              controlPath: root,
+              issueId: "completed-1",
+              issueIdentifier: "OPE-74",
+              issueTitle: "Completed task",
+              originPath: root,
+              outputPath: resolve(root, "workspace", "runtime", "OPE-74", "output.log"),
+              parentIssueId: "feature-170",
+              parentIssueIdentifier: "OPE-170",
+              runtimePath: resolve(root, "workspace", "runtime", "OPE-74"),
+              status: "completed",
+              streamIssueId: "stream-121",
+              streamIssueIdentifier: "OPE-121",
+              streamRuntimePath: resolve(root, "workspace", "stream", "ope-170.json"),
+              updatedAt: "2024-01-01T00:00:03.000Z",
+              workerId: "OPE-74",
+              worktreePath: resolve(root, "workspace", "tree", "ope-74"),
+            },
+          ],
+          markBlocked: async () => undefined,
+          markInterrupted: async () => undefined,
+          prepare: async () => ({
+            branchName: "io/ope-172",
+            controlPath: root,
+            createdNow: true,
+            originPath: root,
+            path: workspacePath,
+            sourceRepoPath: root,
+            workerId: "OPE-79",
+          }),
+          reconcileTerminalIssues: async () => undefined,
+          runAfterRunHook: async () => undefined,
+          runBeforeRunHook: async () => undefined,
+        }) as unknown as never,
+    });
+    service.observeSessionEvents((event) => {
+      events.push(event);
+    });
+
+    await service.start();
+
+    const diagnosticLines = events
+      .filter(
+        (event) =>
+          event.type === "status" &&
+          event.code === "workflow-diagnostic" &&
+          event.session.id === "supervisor",
+      )
+      .map((event) => event.text);
+
+    expect(diagnosticLines).toContain(
+      "Workflow: 1 active, 1 blocked, 1 interrupted, 1 waiting on finalization, 1 runnable, 1 blocked by dependency, 1 waiting for workflow release, 1 occupied",
+    );
+    expect(diagnosticLines).toContain(
+      "Active: stream OPE-121 / feature OPE-167 / task OPE-71 on io/ope-167",
+    );
+    expect(diagnosticLines).toContain(
+      "Preserved blocked: stream OPE-121 / feature OPE-169 / task OPE-73 on io/ope-169",
+    );
+    expect(diagnosticLines).toContain(
+      "Preserved interrupted: stream OPE-121 / feature OPE-168 / task OPE-72 on io/ope-168",
+    );
+    expect(diagnosticLines).toContain(
+      "Waiting on finalization: stream OPE-121 / feature OPE-170 / task OPE-74 on io/ope-170",
+    );
+    expect(diagnosticLines).toContain(
+      "Runnable now: stream OPE-121 / feature OPE-172 / task OPE-79",
+    );
+    expect(diagnosticLines).toContain(
+      "Blocked by dependency: stream OPE-121 / feature OPE-169 / task OPE-77 blocked by OPE-170",
+    );
+    expect(diagnosticLines).toContain(
+      "Waiting for workflow release: stream OPE-121 / feature OPE-168 / task OPE-76 (feature OPE-168 is In Review)",
+    );
+    expect(diagnosticLines).toContain(
+      "Occupied: stream OPE-121 / feature OPE-167 / task OPE-78 held by OPE-71 [running]",
+    );
+  } finally {
     await rm(root, { force: true, recursive: true });
   }
 });

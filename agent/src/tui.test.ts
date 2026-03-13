@@ -183,7 +183,10 @@ test("AgentTuiStore keeps supervisor first and records status plus raw output", 
 test("renderAgentTuiFrame lays out supervisor and worker columns", () => {
   const sessions = [
     createSnapshotColumn({
-      body: "Session started | /Users/dpeek/code/io\nIO is supervising /Users/dpeek/code/io\nNo issues\n",
+      body:
+        "Session started | /Users/dpeek/code/io\n" +
+        "IO is supervising /Users/dpeek/code/io\n" +
+        "Workflow: idle\n",
       firstSequence: 1,
       lastSequence: 3,
       phase: "started",
@@ -212,7 +215,7 @@ test("renderAgentTuiFrame lays out supervisor and worker columns", () => {
   const [firstLine] = frame.split("\n");
   expect(firstLine).toContain("/Users/dpeek/code/io");
   expect(firstLine).toContain("OPE-67");
-  expect(frame).toContain("No issues");
+  expect(frame).toContain("Workflow: idle");
   expect(frame).toContain('jsonl: {"method":"thread/started"}');
 });
 
@@ -278,6 +281,8 @@ test("AgentTuiRetainedReader reconstructs events.log into supervisor and worker 
       "worker:OPE-67:1",
     ]);
     expect(snapshot.sessions[0]?.body).toContain("Attach OPE-67 from events.log\n");
+    expect(snapshot.sessions[0]?.body).toContain("workflow: stream OPE-67\n");
+    expect(snapshot.sessions[0]?.body).toContain("runtime state: active on ope-67\n");
     expect(snapshot.sessions[1]?.body).toContain("Session scheduled | ope-67");
     expect(snapshot.sessions[1]?.body).toContain("Tool: spawned.run [running]");
     expect(snapshot.sessions[1]?.body).toContain("args:\n  mode: helper");
@@ -320,8 +325,40 @@ test("AgentTuiRetainedReader falls back to codex.stdout.jsonl for replay", async
       "worker:OPE-67:retained",
     ]);
     expect(snapshot.sessions[0]?.body).toContain("Replay OPE-67 from codex.stdout.jsonl\n");
+    expect(snapshot.sessions[0]?.body).toContain("workflow: stream OPE-67\n");
+    expect(snapshot.sessions[0]?.body).toContain("runtime state: waiting on finalization on ope-67\n");
     expect(snapshot.sessions[1]?.phase).toBe("completed");
-  expect(snapshot.sessions[1]?.body).toContain("Session completed");
+    expect(snapshot.sessions[1]?.body).toContain("Session completed");
+  } finally {
+    await rm(root, { force: true, recursive: true });
+  }
+});
+
+test("AgentTuiRetainedReader describes interrupted retained work as resumable", async () => {
+  const root = await mkdtemp(resolve(tmpdir(), "tui-retained-interrupted-"));
+  const runtimePath = resolve(root, "issues", "ope-67");
+  await mkdir(runtimePath, { recursive: true });
+
+  const issueState = createIssueState(runtimePath, {
+    status: "interrupted",
+    updatedAt: "2026-03-10T03:30:00.000Z",
+  });
+
+  try {
+    const reader = new AgentTuiRetainedReader({
+      issueState,
+      repoRoot: "/Users/dpeek/code/io",
+    });
+    const store = createAgentTuiStore();
+    for (const event of await reader.readInitialEvents("attach")) {
+      store.observe(event);
+    }
+
+    const snapshot = store.getSnapshot();
+    expect(snapshot.sessions[0]?.body).toContain("workflow: stream OPE-67\n");
+    expect(snapshot.sessions[0]?.body).toContain(
+      "runtime state: interrupted; worktree preserved to resume on ope-67\n",
+    );
   } finally {
     await rm(root, { force: true, recursive: true });
   }

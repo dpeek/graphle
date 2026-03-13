@@ -439,6 +439,10 @@ export class CheckoutManager {
     return occupiedStreams;
   }
 
+  async listRetainedIssues() {
+    return (await this.#listIssueStates()).filter((issue) => issue.status !== "finalized");
+  }
+
   async reconcileTerminalIssues(tracker: IssueStateTracker, terminalStates: string[]) {
     const retainedIssues: IssueRuntimeState[] = [];
     for (const issue of await this.#listIssueStates()) {

@@ -100,6 +100,43 @@ function capitalizeMode(mode: AgentTuiRetainedMode) {
   return mode === "attach" ? "Attach" : "Replay";
 }
 
+function formatRetainedWorkflowScope(issue: IssueRuntimeState) {
+  const streamIssueIdentifier =
+    issue.streamIssueIdentifier ?? issue.parentIssueIdentifier ?? issue.issueIdentifier;
+  const featureIssueIdentifier =
+    issue.parentIssueIdentifier &&
+    issue.streamIssueIdentifier &&
+    issue.parentIssueIdentifier !== issue.streamIssueIdentifier
+      ? issue.parentIssueIdentifier
+      : undefined;
+  const parts = [`stream ${streamIssueIdentifier}`];
+  if (featureIssueIdentifier) {
+    parts.push(`feature ${featureIssueIdentifier}`);
+  }
+  if (issue.parentIssueIdentifier) {
+    parts.push(`task ${issue.issueIdentifier}`);
+  }
+  return parts.join(" / ");
+}
+
+function describeRetainedRuntimeState(issue: IssueRuntimeState) {
+  switch (issue.status) {
+    case "blocked":
+      return `runtime state: blocked; worktree preserved on ${issue.branchName}`;
+    case "completed":
+      return `runtime state: waiting on finalization on ${issue.branchName}`;
+    case "finalized":
+      return issue.finalizedLinearState
+        ? `runtime state: finalized in ${issue.finalizedLinearState}`
+        : "runtime state: finalized";
+    case "interrupted":
+      return `runtime state: interrupted; worktree preserved to resume on ${issue.branchName}`;
+    case "running":
+    default:
+      return `runtime state: active on ${issue.branchName}`;
+  }
+}
+
 class AppendOnlyLineReader {
   readonly path: string;
   #offset = 0;
@@ -210,9 +247,6 @@ export class AgentTuiRetainedReader {
 
   #buildPrelude(mode: AgentTuiRetainedMode): AgentSessionEvent[] {
     const issue = this.issueState;
-    const summary = [issue.status, issue.branchName, issue.worktreePath]
-      .filter(Boolean)
-      .join(" | ");
     return [
       this.#buildLifecycleEvent(this.supervisorSession, "started", {
         workspacePath: this.supervisorSession.workspacePath,
@@ -222,7 +256,21 @@ export class AgentTuiRetainedReader {
         "ready",
         `${capitalizeMode(mode)} ${issue.issueIdentifier} from ${describeSource(this.#source)}`,
       ),
-      this.#buildStatusEvent(this.supervisorSession, "ready", summary),
+      this.#buildStatusEvent(
+        this.supervisorSession,
+        "workflow-diagnostic",
+        `workflow: ${formatRetainedWorkflowScope(issue)}`,
+      ),
+      this.#buildStatusEvent(
+        this.supervisorSession,
+        "workflow-diagnostic",
+        describeRetainedRuntimeState(issue),
+      ),
+      this.#buildStatusEvent(
+        this.supervisorSession,
+        "workflow-diagnostic",
+        `workspace: ${issue.worktreePath}`,
+      ),
       this.#buildStatusEvent(this.supervisorSession, "ready", `runtime: ${issue.runtimePath}`),
     ];
   }
