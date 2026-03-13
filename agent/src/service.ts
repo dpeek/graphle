@@ -716,8 +716,9 @@ export class AgentService {
     try {
       completion = await workspaceManager.complete(workspace, issue);
     } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
       await workspaceManager.markBlocked(workspace, issue);
-      await this.#appendIssueOutput(workspace.outputPath, `${issue.identifier}: blocked\n`);
+      await this.#appendIssueOutput(workspace.outputPath, `${issue.identifier}: blocked: ${reason}\n`);
       this.#sessionEvents.publish({
         code: "issue-blocked",
         format: "line",
@@ -725,9 +726,10 @@ export class AgentService {
         text: `${issue.identifier}: blocked`,
         type: "status",
       });
+      this.#publishSupervisorIssueLine("issue-blocked", issue, `Blocked: ${reason}`, session, workspace);
       this.#sessionEvents.publish({
         data: {
-          reason: error instanceof Error ? error.message : String(error),
+          reason,
         },
         phase: "failed",
         session,
@@ -737,7 +739,7 @@ export class AgentService {
     }
     await this.#appendIssueOutput(
       workspace.outputPath,
-      `${issue.identifier}: committed ${completion.commitSha} on ${workspace.branchName}\n`,
+      `${issue.identifier}: landed ${completion.commitSha} on ${workspace.branchName}\n`,
     );
     this.#sessionEvents.publish({
       code: "issue-committed",
@@ -747,7 +749,7 @@ export class AgentService {
       },
       format: "line",
       session,
-      text: `${issue.identifier}: committed ${completion.commitSha} on ${workspace.branchName}`,
+      text: `${issue.identifier}: landed ${completion.commitSha} on ${workspace.branchName}`,
       type: "status",
     });
     this.#sessionEvents.publish({

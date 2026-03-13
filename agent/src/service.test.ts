@@ -1106,6 +1106,94 @@ test("AgentService marks task issues Done after landing on the feature branch", 
   }
 });
 
+test("AgentService blocks task issues when execution-owned landing fails", async () => {
+  const root = await mkdtemp(resolve(tmpdir(), "agent-service-"));
+  const workspacePath = resolve(root, "workspace", "workers", "OPE-58", "repo");
+  const events: string[] = [];
+  const transitions: string[] = [];
+
+  await writeServiceTestRepo(root);
+
+  try {
+    const issue = createTaskIssue({
+      id: "task-1",
+      identifier: "OPE-58",
+      priority: 0,
+      title: "Task issue",
+    });
+    const service = new AgentService({
+      once: true,
+      repoRoot: root,
+      runnerFactory: () => ({
+        run: async ({ issue, prompt, workspace }) => ({
+          issue,
+          prompt,
+          stderr: [],
+          stdout: [],
+          success: true,
+          workspace,
+        }),
+      }),
+      trackerFactory: () => ({
+        fetchCandidateIssues: async () => [issue],
+        fetchIssueStatesByIds: async () => new Map(),
+        setIssueState: async (issueId, stateName) => {
+          transitions.push(`${issueId}:${stateName}`);
+        },
+      }),
+      workspaceManagerFactory: (_workflow, issueIdentifier) =>
+        ({
+          cleanup: async () => undefined,
+          complete: async () => {
+            throw new Error("task_landing_rebase_failed:OPE-58:io/ope-167:conflict");
+          },
+          createIdleWorkspace: () => ({
+            branchName: "main",
+            controlPath: root,
+            createdNow: true,
+            originPath: root,
+            path: resolve(root, "workspace", "workers", issueIdentifier ?? "supervisor", "repo"),
+            sourceRepoPath: root,
+            workerId: issueIdentifier ?? "supervisor",
+          }),
+          ensureCheckout: async () => ({
+            createdNow: true,
+            path: workspacePath,
+          }),
+          ensureSessionStartState: async () => ({
+            createdNow: true,
+            path: resolve(root, "workspace", "workers"),
+          }),
+          listOccupiedStreams: async () => new Map(),
+          markBlocked: async () => {
+            events.push("blocked");
+          },
+          markInterrupted: async () => undefined,
+          prepare: async () => ({
+            branchName: "io/ope-167",
+            controlPath: root,
+            createdNow: true,
+            originPath: root,
+            path: workspacePath,
+            sourceRepoPath: root,
+            streamIssueId: "feature-1",
+            streamIssueIdentifier: "OPE-167",
+            workerId: "OPE-58",
+          }),
+          reconcileTerminalIssues: async () => undefined,
+          runAfterRunHook: async () => undefined,
+          runBeforeRunHook: async () => undefined,
+        }) as unknown as never,
+    });
+
+    await service.start();
+    expect(events).toEqual(["blocked"]);
+    expect(transitions).toEqual(["task-1:In Progress"]);
+  } finally {
+    await rm(root, { force: true, recursive: true });
+  }
+});
+
 test("AgentService proves the OPE-121 workflow by running only the leaf task", async () => {
   const root = await mkdtemp(resolve(tmpdir(), "agent-service-"));
   const workspacePath = resolve(root, "workspace", "workers", "OPE-172", "repo");

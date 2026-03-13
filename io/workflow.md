@@ -40,8 +40,8 @@ The agent/runtime owns:
 
 - selecting released leaf issues for execution
 - moving runnable tasks from `Todo` to `In Progress` when execution starts
-- committing successful task work and landing that commit on the parent feature
-  branch
+- committing successful task work, rebasing it onto the current parent feature
+  branch head, and merging it before the task is marked `Done`
 - marking successful tasks `Done`
 - preserving blocked or interrupted task worktrees and runtime state instead of
   discarding them
@@ -54,8 +54,8 @@ The agent/runtime owns:
   stream are explicitly `In Progress`.
 - The supervisor only picks released task issues. Top-level stream issues,
   feature issues, and other non-task leaves are not auto-run.
-- A successful task run lands its commit and moves the task to `Done`
-  automatically.
+- A successful task run rebases and merges its work onto the current parent
+  branch, then moves the task to `Done` automatically.
 
 ## Branch And Finalization Contract
 
@@ -63,6 +63,9 @@ The agent/runtime owns:
   immediate parent branch.
 - In the preferred workflow, that immediate parent is the feature, so
   successful task runs accumulate on `io/<feature-issue-key>`.
+- Supervisor-side reconciliation after a task run is limited to stale-state
+  cleanup, retained-worktree cleanup, and leftover branch deletion; it does not
+  land task work onto feature branches.
 - Parallel feature work is allowed inside one stream. The current scheduler only
   serializes work within the same feature branch.
 - When a feature moves to `Done`, the runtime finalizes it by squashing the

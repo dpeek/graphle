@@ -26,11 +26,12 @@
 The preferred workflow is three levels: streams are maintained interactively,
 features own integration-sized branches under a stream, and the supervisor
 auto-runs released leaf tasks. Current code already gates task execution on the
-right parent states, lands successful task commits on the feature branch, and
-reconciles `Done` features by squashing them back onto the stream branch while
-preserving recoverable branch state on conflicts. `../../io/workflow.md`
-remains the user-facing contract for when humans choose to release a feature or
-stream.
+right parent states, rebases and merges successful task work onto the feature
+branch during the execution path, and reconciles `Done` features by squashing
+them back onto the stream branch while preserving recoverable branch state on
+conflicts. Supervisor-side follow-up after a task run is limited to cleanup and
+stale-state reconciliation. `../../io/workflow.md` remains the user-facing
+contract for when humans choose to release a feature or stream.
 
 ## Future Work Suggestions
 

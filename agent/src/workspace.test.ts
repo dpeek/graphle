@@ -411,6 +411,96 @@ test("WorkspaceManager uses the parent feature branch with stream ancestry for t
   }
 });
 
+test("WorkspaceManager rebases task work onto the latest parent feature branch before landing", async () => {
+  const root = await mkdtemp(resolve(tmpdir(), "agent-workspace-"));
+  const runtimeRoot = resolve(root, "runtime");
+  try {
+    const { repoRoot } = await createSourceRepo(root);
+    const manager = new WorkspaceManager({
+      hooks,
+      repoRoot,
+      rootDir: runtimeRoot,
+      workerId: "worker-1",
+    });
+    const childIssue = issue("OPE-13", "Implement child", {
+      hasParent: true,
+      id: "child-1",
+      parentIssueId: "feature-1",
+      parentIssueIdentifier: "OPE-12",
+      streamIssueId: "stream-1",
+      streamIssueIdentifier: "OPE-1",
+    });
+    const workspace = await manager.prepare(childIssue);
+
+    await run(["git", "checkout", "io/ope-12"], repoRoot);
+    await writeFile(resolve(repoRoot, "feature.txt"), "feature branch advance\n");
+    const featureCommitSha = await commitAll(repoRoot, "advance feature branch");
+    await run(["git", "checkout", "main"], repoRoot);
+
+    await writeFile(join(workspace.path, "task.txt"), "task change\n");
+    const completion = await manager.complete(workspace, childIssue);
+
+    expect(await run(["git", "show", "io/ope-12:feature.txt"], repoRoot)).toBe(
+      "feature branch advance",
+    );
+    expect(await run(["git", "show", "io/ope-12:task.txt"], repoRoot)).toBe("task change");
+    expect(await run(["git", "rev-parse", `${completion.commitSha}^`], repoRoot)).toBe(
+      featureCommitSha,
+    );
+    expect(await run(["git", "rev-parse", "HEAD"], workspace.path)).toBe(completion.commitSha);
+    expect(await readIssueRuntimeState(runtimeRoot, "OPE-13")).toMatchObject({
+      commitSha: completion.commitSha,
+      landedCommitSha: completion.commitSha,
+      issueIdentifier: "OPE-13",
+      status: "completed",
+    });
+  } finally {
+    await rm(root, { force: true, recursive: true });
+  }
+});
+
+test("WorkspaceManager preserves task worktree state when landing rebase conflicts", async () => {
+  const root = await mkdtemp(resolve(tmpdir(), "agent-workspace-"));
+  const runtimeRoot = resolve(root, "runtime");
+  try {
+    const { repoRoot } = await createSourceRepo(root);
+    const manager = new WorkspaceManager({
+      hooks,
+      repoRoot,
+      rootDir: runtimeRoot,
+      workerId: "worker-1",
+    });
+    const childIssue = issue("OPE-13", "Implement child", {
+      hasParent: true,
+      id: "child-1",
+      parentIssueId: "feature-1",
+      parentIssueIdentifier: "OPE-12",
+      streamIssueId: "stream-1",
+      streamIssueIdentifier: "OPE-1",
+    });
+    const workspace = await manager.prepare(childIssue);
+
+    await writeFile(join(workspace.path, "README.md"), "task side\n");
+    await run(["git", "checkout", "io/ope-12"], repoRoot);
+    await writeFile(resolve(repoRoot, "README.md"), "feature side\n");
+    const featureCommitSha = await commitAll(repoRoot, "advance feature branch");
+    await run(["git", "checkout", "main"], repoRoot);
+
+    await expect(manager.complete(workspace, childIssue)).rejects.toThrow("task_landing_rebase_failed");
+
+    expect(await run(["git", "rev-parse", "io/ope-12"], repoRoot)).toBe(featureCommitSha);
+    expect(await run(["git", "status", "--short"], workspace.path)).toContain("UU README.md");
+    expect(existsSync(workspace.path)).toBe(true);
+    expect(await readIssueRuntimeState(runtimeRoot, "OPE-13")).toMatchObject({
+      issueIdentifier: "OPE-13",
+      status: "running",
+      worktreePath: workspace.path,
+    });
+  } finally {
+    await rm(root, { force: true, recursive: true });
+  }
+});
+
 test("WorkspaceManager keeps child finalization separate from stream completion state", async () => {
   const root = await mkdtemp(resolve(tmpdir(), "agent-workspace-"));
   const runtimeRoot = resolve(root, "runtime");

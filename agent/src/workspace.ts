@@ -19,6 +19,11 @@ type WorkerStatus = "blocked" | "idle" | "interrupted" | "running";
 
 type IssueRuntimeStatus = "blocked" | "completed" | "finalized" | "interrupted" | "running";
 
+type TaskLandingResult = {
+  landedCommitSha: string;
+  taskCommitSha: string;
+};
+
 type ControlRepo = {
   createdNow: boolean;
   path: string;
@@ -357,14 +362,14 @@ export class CheckoutManager {
   }
 
   async complete(workspace: PreparedWorkspace, issue: AgentIssue) {
-    const commitSha = await this.#commit(workspace, issue);
-    const landedCommitSha = await this.#landCommitOnStreamBranch(workspace, commitSha);
+    const taskCommitSha = await this.#commit(workspace, issue);
+    const landing = await this.#landTaskCommitOnBranch(workspace, issue, taskCommitSha);
     const landedAt = new Date().toISOString();
 
     await this.#writeIssueState(workspace, issue, "completed", {
-      commitSha,
+      commitSha: landing.taskCommitSha,
       landedAt,
-      landedCommitSha,
+      landedCommitSha: landing.landedCommitSha,
     });
     await this.#upsertStreamState(
       {
@@ -386,12 +391,12 @@ export class CheckoutManager {
       },
       {
         activeIssue: issue.hasParent ? { id: issue.id, identifier: issue.identifier } : null,
-        latestLandedCommitSha: landedCommitSha,
+        latestLandedCommitSha: landing.landedCommitSha,
         status: "active",
       },
     );
     await this.#writeState(workspace, "idle");
-    return { commitSha: landedCommitSha };
+    return { commitSha: landing.landedCommitSha };
   }
 
   async markBlocked(workspace: PreparedWorkspace, issue: AgentIssue) {
@@ -1332,19 +1337,144 @@ export class CheckoutManager {
     throw new Error(result.stderr.trim() || result.stdout.trim() || `${command.join(" ")} failed`);
   }
 
-  async #landCommitOnStreamBranch(workspace: PreparedWorkspace, commitSha: string) {
-    const branchHead = await this.#revParse(workspace.controlPath, workspace.branchName);
-    if (branchHead === commitSha) {
-      return branchHead;
+  async #landTaskCommitOnBranch(
+    workspace: PreparedWorkspace,
+    issue: Pick<AgentIssue, "identifier">,
+    commitSha: string,
+  ): Promise<TaskLandingResult> {
+    let taskCommitSha = commitSha;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const branchHead = await this.#revParse(workspace.controlPath, workspace.branchName);
+      if (branchHead === taskCommitSha) {
+        return { landedCommitSha: branchHead, taskCommitSha };
+      }
+      if (await this.#isAncestor(workspace.controlPath, branchHead, taskCommitSha)) {
+        const landedCommitSha = await this.#mergeTaskCommitIntoBranch(
+          workspace,
+          issue,
+          taskCommitSha,
+          branchHead,
+        );
+        return { landedCommitSha, taskCommitSha };
+      }
+      if (await this.#isAncestor(workspace.controlPath, taskCommitSha, branchHead)) {
+        this.#reportIssueProgress(
+          {
+            branchName: workspace.branchName,
+            issueIdentifier: issue.identifier,
+          },
+          `task work already covered by ${workspace.branchName} at ${branchHead}`,
+        );
+        return { landedCommitSha: branchHead, taskCommitSha };
+      }
+      taskCommitSha = await this.#rebaseTaskCommitOntoBranch(workspace, issue);
     }
-    if (!(await this.#isAncestor(workspace.controlPath, branchHead, commitSha))) {
-      throw new Error(`stream_branch_diverged:${workspace.branchName}`);
+    throw new Error(`task_landing_did_not_converge:${issue.identifier}:${workspace.branchName}`);
+  }
+
+  async #rebaseTaskCommitOntoBranch(
+    workspace: PreparedWorkspace,
+    issue: Pick<AgentIssue, "identifier">,
+  ) {
+    this.#reportIssueProgress(
+      {
+        branchName: workspace.branchName,
+        issueIdentifier: issue.identifier,
+      },
+      `rebasing task work onto ${workspace.branchName}`,
+    );
+    const result = await this.#runCommand(
+      ["git", "rebase", workspace.branchName],
+      workspace.path,
+      this.#hooks.timeoutMs,
+    );
+    if (result.exitCode !== 0) {
+      this.#reportIssueProgress(
+        {
+          branchName: workspace.branchName,
+          issueIdentifier: issue.identifier,
+        },
+        `preserving ${workspace.path}; task landing rebase onto ${workspace.branchName} failed`,
+      );
+      throw new Error(
+        `task_landing_rebase_failed:${issue.identifier}:${workspace.branchName}:${result.stderr.trim() || result.stdout.trim() || "git rebase failed"}`,
+      );
     }
+    const rebasedCommitSha = await this.#revParseHead(workspace.path);
+    this.#reportIssueProgress(
+      {
+        branchName: workspace.branchName,
+        issueIdentifier: issue.identifier,
+      },
+      `rebased task work onto ${workspace.branchName} as ${rebasedCommitSha}`,
+    );
+    return rebasedCommitSha;
+  }
+
+  async #mergeTaskCommitIntoBranch(
+    workspace: PreparedWorkspace,
+    issue: Pick<AgentIssue, "identifier">,
+    taskCommitSha: string,
+    branchHead: string,
+  ) {
+    const landingRoot = resolve(this.getWorkerRoot(), "task-landing");
+    const landingPath = resolve(landingRoot, toWorkspaceKey(issue.identifier));
+    const landingBranch = `io-land-${toWorkspaceKey(issue.identifier)}`;
+
+    await mkdir(landingRoot, { recursive: true });
+    await rm(landingPath, { force: true, recursive: true });
+    await this.#runOrThrow(["git", "worktree", "prune"], workspace.controlPath);
+    await this.#runCommand(
+      ["git", "branch", "-D", landingBranch],
+      workspace.controlPath,
+      this.#hooks.timeoutMs,
+    );
     await this.#runOrThrow(
-      ["git", "update-ref", `refs/heads/${workspace.branchName}`, commitSha, branchHead],
+      ["git", "worktree", "add", "--detach", landingPath, branchHead],
       workspace.controlPath,
     );
-    return await this.#revParse(workspace.controlPath, workspace.branchName);
+    try {
+      this.#reportIssueProgress(
+        {
+          branchName: workspace.branchName,
+          issueIdentifier: issue.identifier,
+        },
+        `merging task work into ${workspace.branchName}`,
+      );
+      await this.#runOrThrow(["git", "switch", "-c", landingBranch], landingPath);
+      await this.#runOrThrow(["git", "merge", "--ff-only", taskCommitSha], landingPath);
+      const landedCommitSha = await this.#revParseHead(landingPath);
+      await this.#runOrThrow(
+        ["git", "update-ref", `refs/heads/${workspace.branchName}`, landedCommitSha, branchHead],
+        workspace.controlPath,
+      );
+      this.#reportIssueProgress(
+        {
+          branchName: workspace.branchName,
+          issueIdentifier: issue.identifier,
+        },
+        `landed task work on ${workspace.branchName} as ${landedCommitSha}`,
+      );
+      return landedCommitSha;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(
+        `task_landing_merge_failed:${issue.identifier}:${workspace.branchName}:${message}`,
+      );
+    } finally {
+      if (existsSync(landingPath)) {
+        await this.#runCommand(
+          ["git", "worktree", "remove", "--force", landingPath],
+          workspace.controlPath,
+          this.#hooks.timeoutMs,
+        );
+      }
+      await this.#runCommand(
+        ["git", "branch", "-D", landingBranch],
+        workspace.controlPath,
+        this.#hooks.timeoutMs,
+      );
+    }
   }
 
   async #ensureIssueCommitSha(issue: IssueRuntimeState, preferWorktree = false) {
