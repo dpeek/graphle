@@ -3,6 +3,7 @@ import { core, type EntityRef } from "@io/graph";
 import { app } from "../graph/app.js";
 import { PredicateFieldEditor, PredicateFieldView } from "./bindings.js";
 import { usePredicateField } from "./predicate.js";
+import { hrefForAppRoute } from "./routes.js";
 import { useAppRuntime } from "./runtime.js";
 
 type PersonRef = EntityRef<typeof app.person, typeof app & typeof core>;
@@ -61,18 +62,21 @@ export function RelationshipProofSurface({ person }: { person: PersonRef }) {
                 </p>
               </div>
               <div className="flex gap-2 text-xs text-slate-500 dark:text-slate-400">
-                <a className="rounded-full border border-current/20 px-3 py-1" href="/">
+                <a
+                  className="rounded-full border border-current/20 px-3 py-1"
+                  href={hrefForAppRoute("company")}
+                >
                   Company
                 </a>
                 <a
                   className="rounded-full border border-current/20 px-3 py-1"
-                  href="?surface=explorer"
+                  href={hrefForAppRoute("explorer")}
                 >
                   Explorer
                 </a>
                 <a
                   className="rounded-full border border-current/20 px-3 py-1"
-                  href="?surface=outliner"
+                  href={hrefForAppRoute("outliner")}
                 >
                   Outliner
                 </a>

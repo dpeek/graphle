@@ -7,8 +7,8 @@ import {
   bootstrap,
   createStore,
   createTypeClient,
-  edgeId,
   core,
+  edgeId,
   type AuthoritativeGraphWriteHistory,
   type AuthoritativeGraphWriteResult,
   type GraphWriteTransaction,
@@ -19,7 +19,7 @@ import {
 
 import { createAppAuthority } from "./authority.js";
 import { app } from "./graph/app.js";
-import { handleSyncRequest } from "./server-app.js";
+import { createAppServerRoutes, handleSyncRequest } from "./server-app.js";
 
 const tempDirs: string[] = [];
 
@@ -27,6 +27,7 @@ type PersistedAuthorityState = {
   readonly version: 1;
   readonly snapshot: StoreSnapshot;
   readonly writeHistory: AuthoritativeGraphWriteHistory;
+  readonly secretValues?: Record<string, string>;
 };
 
 async function createTempSnapshotPath(): Promise<string> {
@@ -298,5 +299,87 @@ describe("app authority", () => {
     expect(payload.scope).toEqual({ kind: "graph" });
     expect(payload.cursor.startsWith("authority:")).toBe(true);
     expect(validation.ok).toBe(true);
+  });
+
+  it("stores env-var plaintext only in authority state while syncing opaque metadata", async () => {
+    const snapshotPath = await createTempSnapshotPath();
+    const authority = await createAppAuthority({ snapshotPath });
+
+    const created = await authority.saveEnvVar({
+      name: "OPENAI_API_KEY",
+      description: "Primary model credential",
+      secretValue: "sk-live-first",
+    });
+    const createdEnvVar = authority.graph.envVar.get(created.envVarId);
+    if (!createdEnvVar?.secret) throw new Error("Expected created env var to reference a secret.");
+
+    const createdSecret = authority.graph.secretRef.get(createdEnvVar.secret);
+    const payload = authority.createSyncPayload();
+    const persistedAfterCreate = await readPersistedAuthorityState(snapshotPath);
+
+    expect(created.created).toBe(true);
+    expect(created.rotated).toBe(true);
+    expect(created.secretVersion).toBe(1);
+    expect(createdEnvVar.name).toBe("OPENAI_API_KEY");
+    expect(createdEnvVar.description).toBe("Primary model credential");
+    expect(createdSecret?.version).toBe(1);
+    expect(JSON.stringify(payload)).not.toContain("sk-live-first");
+    expect(persistedAfterCreate.secretValues?.[createdEnvVar.secret]).toBe("sk-live-first");
+
+    const rotated = await authority.saveEnvVar({
+      id: created.envVarId,
+      name: "OPENAI_API_KEY",
+      description: "Rotated model credential",
+      secretValue: "sk-live-second",
+    });
+    const persistedAfterRotate = await readPersistedAuthorityState(snapshotPath);
+    const restarted = await createAppAuthority({ snapshotPath });
+    const restartedEnvVar = restarted.graph.envVar.get(created.envVarId);
+    if (!restartedEnvVar?.secret)
+      throw new Error("Expected restarted env var to reference a secret.");
+
+    expect(rotated.created).toBe(false);
+    expect(rotated.rotated).toBe(true);
+    expect(rotated.secretVersion).toBe(2);
+    expect(restarted.graph.secretRef.get(restartedEnvVar.secret)?.version).toBe(2);
+    expect(restarted.graph.envVar.get(created.envVarId).description).toBe(
+      "Rotated model credential",
+    );
+    expect(JSON.stringify(restarted.createSyncPayload())).not.toContain("sk-live-second");
+    expect(persistedAfterRotate.secretValues?.[restartedEnvVar.secret]).toBe("sk-live-second");
+  });
+
+  it("accepts env-var mutations through the server route and syncs the opaque graph state", async () => {
+    const snapshotPath = await createTempSnapshotPath();
+    const authority = await createAppAuthority({ snapshotPath });
+    const routes = createAppServerRoutes(authority);
+
+    const response = await routes["/api/env-vars"](
+      new Request("http://app.local/api/env-vars", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          name: "SLACK_BOT_TOKEN",
+          description: "Notifications integration",
+          secretValue: "xapp-secret",
+        }),
+      }),
+    );
+    const payload = (await response.json()) as {
+      readonly envVarId: string;
+      readonly created: boolean;
+      readonly rotated: boolean;
+      readonly secretVersion?: number;
+    };
+    const envVar = authority.graph.envVar.get(payload.envVarId);
+
+    expect(response.status).toBe(201);
+    expect(payload.created).toBe(true);
+    expect(payload.rotated).toBe(true);
+    expect(payload.secretVersion).toBe(1);
+    expect(envVar?.name).toBe("SLACK_BOT_TOKEN");
+    expect(JSON.stringify(authority.createSyncPayload())).not.toContain("xapp-secret");
   });
 });

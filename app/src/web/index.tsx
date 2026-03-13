@@ -3,20 +3,22 @@ import { createRoot } from "react-dom/client";
 
 import { CompanyQueryProofPage } from "./company-query-proof.js";
 import { CompanyProofPage } from "./company-proof.js";
+import { EnvVarSettingsPage } from "./env-vars.js";
 import { Explorer } from "./explorer.js";
 import { Outliner } from "./outliner.js";
 import { RelationshipProofPage } from "./relationship-proof.js";
+import { resolveAppRoute } from "./routes.js";
 import { AppRuntimeBootstrap } from "./runtime.js";
 
 function resolveSurface() {
-  const params = new URLSearchParams(window.location.search);
-  const surface = params.get("surface");
+  const route = resolveAppRoute(window.location);
 
-  if (surface === "company") return <CompanyProofPage />;
-  if (surface === "explorer") return <Explorer />;
-  if (surface === "outliner") return <Outliner />;
-  if (surface === "query") return <CompanyQueryProofPage />;
-  if (surface === "relationships") return <RelationshipProofPage />;
+  if (route === "company") return <CompanyProofPage />;
+  if (route === "explorer") return <Explorer />;
+  if (route === "outliner") return <Outliner />;
+  if (route === "query") return <CompanyQueryProofPage />;
+  if (route === "relationships") return <RelationshipProofPage />;
+  if (route === "envVars") return <EnvVarSettingsPage />;
   return <CompanyProofPage />;
 }
 

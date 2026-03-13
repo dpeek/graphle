@@ -2,6 +2,7 @@ import {
   addressFields,
   booleanTypeModule,
   core,
+  dateTypeModule,
   defineNamespace,
   defineReferenceField,
   defineType,
@@ -144,4 +145,59 @@ export const block = defineType({
   },
 });
 
-export const app = defineNamespace(ids, { company, person, status, block });
+export const secretRef = defineType({
+  values: { key: "app:secretRef", name: "Secret Reference" },
+  fields: {
+    ...core.node.fields,
+    version: numberTypeModule.field({
+      cardinality: "one",
+      meta: {
+        label: "Secret version",
+      },
+    }),
+    lastRotatedAt: dateTypeModule.field({
+      cardinality: "one?",
+      meta: {
+        label: "Last rotated",
+      },
+    }),
+  },
+});
+
+export const envVar = defineType({
+  values: { key: "app:envVar", name: "Environment Variable" },
+  fields: {
+    ...core.node.fields,
+    name: stringTypeModule.field({
+      cardinality: "one",
+      validate: ({ value }) => {
+        if (typeof value !== "string" || value.trim().length === 0) {
+          return {
+            code: "string.blank",
+            message: "Environment variable names must not be blank.",
+          };
+        }
+        if (!/^[A-Z][A-Z0-9_]*$/.test(value)) {
+          return {
+            code: "envVar.name.invalid",
+            message:
+              "Environment variable names must start with a letter and use only uppercase letters, numbers, and underscores.",
+          };
+        }
+        return undefined;
+      },
+      meta: {
+        label: "Variable name",
+      },
+    }),
+    secret: defineReferenceField({
+      range: secretRef,
+      cardinality: "one?",
+      meta: {
+        label: "Secret reference",
+      },
+    }),
+  },
+});
+
+export const app = defineNamespace(ids, { company, person, status, block, secretRef, envVar });

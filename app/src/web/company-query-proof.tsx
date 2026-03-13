@@ -11,6 +11,7 @@ import {
   type WebFilterOperatorResolution,
 } from "./bindings.js";
 import { formatPredicateValue } from "./predicate.js";
+import { hrefForAppRoute } from "./routes.js";
 import { useAppRuntime } from "./runtime.js";
 
 type CompanyRef = EntityRef<typeof app.company, typeof app & typeof core>;
@@ -261,19 +262,19 @@ export function CompanyQueryProofSurface({
               <div className="flex gap-2 text-xs text-stone-500">
                 <a
                   className="rounded-full border border-current/20 px-3 py-1"
-                  href="?surface=query"
+                  href={hrefForAppRoute("query")}
                 >
                   Query
                 </a>
                 <a
                   className="rounded-full border border-current/20 px-3 py-1"
-                  href="?surface=company"
+                  href={hrefForAppRoute("company")}
                 >
                   Company proof
                 </a>
                 <a
                   className="rounded-full border border-current/20 px-3 py-1"
-                  href="?surface=explorer"
+                  href={hrefForAppRoute("explorer")}
                 >
                   Explorer
                 </a>

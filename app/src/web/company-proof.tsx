@@ -8,6 +8,7 @@ import {
   getPredicateEntityReferenceSelection,
   usePredicateField,
 } from "./predicate.js";
+import { hrefForAppRoute } from "./routes.js";
 import { useAppRuntime } from "./runtime.js";
 
 type CompanyRef = EntityRef<typeof app.company, typeof app & typeof core>;
@@ -459,27 +460,33 @@ export function CompanyProofSurface({
               <div className="flex gap-2 text-xs text-slate-500 dark:text-slate-400">
                 <a
                   className="rounded-full border border-current/20 px-3 py-1"
-                  href="?surface=query"
+                  href={hrefForAppRoute("query")}
                 >
                   Query proof
                 </a>
                 <a
                   className="rounded-full border border-current/20 px-3 py-1"
-                  href="?surface=relationships"
+                  href={hrefForAppRoute("relationships")}
                 >
                   Relationship focus
                 </a>
                 <a
                   className="rounded-full border border-current/20 px-3 py-1"
-                  href="?surface=explorer"
+                  href={hrefForAppRoute("explorer")}
                 >
                   Explorer
                 </a>
                 <a
                   className="rounded-full border border-current/20 px-3 py-1"
-                  href="?surface=outliner"
+                  href={hrefForAppRoute("outliner")}
                 >
                   Outliner
+                </a>
+                <a
+                  className="rounded-full border border-current/20 px-3 py-1"
+                  href={hrefForAppRoute("envVars")}
+                >
+                  Env vars
                 </a>
               </div>
             </div>

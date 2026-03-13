@@ -6,7 +6,8 @@
 schema, runtime bootstrap, and web UI proofs built on top of `graph`.
 `@io/app` stays limited to app-owned schema/runtime contracts, with the app
 consuming graph-owned authoritative persistence rather than owning reusable
-engine and type-module APIs.
+engine and type-module APIs. The first operator-facing env-var route also lives
+here.
 
 ## Docs
 
@@ -21,9 +22,10 @@ engine and type-module APIs.
 ## Layout
 
 - `../src/index.ts`: app-owned package exports
-- `../src/index.ts`: app-owned package exports
 - `../src/graph/`: app-specific schema, runtime bootstrap, example data, client proofs
 - `../src/authority.ts`: app proof composition around `@io/graph` persisted authority helpers, including bootstrap, seed data, and snapshot-path resolution
 - `../src/server-app.ts`, `../src/server.ts`: thin HTTP proof transport over graph-owned sync and persistence surfaces
-- `../src/web/`: resolver, bindings, explorer, proof screens, browser runtime
+- `../src/web/`: resolver, bindings, explorer, proof screens, operator settings,
+  browser runtime
+- `../src/config.ts`: app runtime configuration
 - `../src/**/*.test.ts*`: proof and regression coverage
