@@ -106,7 +106,7 @@ Feature completion target contract:
 - commit subject: `OPE-XXX Feature title`
 - commit body: concise list of completed tasks
 - then rebase the feature branch onto the stream branch, merge it into the stream branch, and clean leftover branch state
-- current implementation gap: task commits already land on the feature branch, but automated feature-to-stream finalization is still being tightened
+- if finalization conflicts, preserve the feature branch state so reconciliation can retry cleanly
 
 Output style:
 

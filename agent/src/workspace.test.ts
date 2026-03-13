@@ -347,7 +347,7 @@ test("WorkspaceManager skips already finalized terminal issues", async () => {
   }
 });
 
-test("WorkspaceManager uses the parent stream branch for child issues", async () => {
+test("WorkspaceManager uses the parent feature branch with stream ancestry for task issues", async () => {
   const root = await mkdtemp(resolve(tmpdir(), "agent-workspace-"));
   const runtimeRoot = resolve(root, "runtime");
   try {
@@ -361,13 +361,19 @@ test("WorkspaceManager uses the parent stream branch for child issues", async ()
     const childIssue = issue("OPE-13", "Implement child", {
       hasParent: true,
       id: "child-1",
-      parentIssueId: "parent-1",
+      parentIssueId: "feature-1",
       parentIssueIdentifier: "OPE-12",
+      streamIssueId: "stream-1",
+      streamIssueIdentifier: "OPE-1",
     });
     const workspace = await manager.prepare(childIssue);
 
     expect(workspace.branchName).toBe("io/ope-12");
     expect(workspace.path).toBe(resolve(runtimeRoot, "tree", "ope-13"));
+    expect(await run(["git", "branch", "--list", "io/ope-1"], repoRoot)).toContain("io/ope-1");
+    expect(await run(["git", "merge-base", "io/ope-1", "io/ope-12"], repoRoot)).toBe(
+      await run(["git", "rev-parse", "io/ope-1"], repoRoot),
+    );
 
     await writeFile(join(workspace.path, "child.txt"), "child change\n");
     const completion = await manager.complete(workspace, childIssue);
@@ -380,7 +386,7 @@ test("WorkspaceManager uses the parent stream branch for child issues", async ()
       landedCommitSha: completion.commitSha,
       parentIssueIdentifier: "OPE-12",
       status: "completed",
-      streamIssueIdentifier: "OPE-12",
+      streamIssueIdentifier: "OPE-1",
     });
     expect(Array.from(await manager.listOccupiedStreams())).toEqual([["ope-12", "OPE-13"]]);
 
@@ -420,20 +426,21 @@ test("WorkspaceManager keeps child finalization separate from stream completion 
     const childIssue = issue("OPE-13", "Implement child", {
       hasParent: true,
       id: "child-1",
-      parentIssueId: "parent-1",
+      parentIssueId: "feature-1",
       parentIssueIdentifier: "OPE-12",
+      streamIssueId: "stream-1",
+      streamIssueIdentifier: "OPE-1",
     });
     const workspace = await manager.prepare(childIssue);
 
-    const runningStreamState = JSON.parse(
-      await readFile(streamStatePath, "utf8"),
-    ) as {
+    const runningStreamState = JSON.parse(await readFile(streamStatePath, "utf8")) as {
       activeIssueId?: string;
       activeIssueIdentifier?: string;
       branchName: string;
       latestLandedCommitSha?: string;
       parentIssueIdentifier: string;
       status: string;
+      streamIssueIdentifier?: string;
       worktreeRoot: string;
     };
     expect(runningStreamState).toMatchObject({
@@ -442,23 +449,24 @@ test("WorkspaceManager keeps child finalization separate from stream completion 
       branchName: "io/ope-12",
       parentIssueIdentifier: "OPE-12",
       status: "active",
+      streamIssueIdentifier: "OPE-1",
       worktreeRoot: resolve(runtimeRoot, "tree"),
     });
 
     await writeFile(join(workspace.path, "child.txt"), "child change\n");
     const completion = await manager.complete(workspace, childIssue);
 
-    const completedStreamState = JSON.parse(
-      await readFile(streamStatePath, "utf8"),
-    ) as {
+    const completedStreamState = JSON.parse(await readFile(streamStatePath, "utf8")) as {
       activeIssueIdentifier?: string;
       latestLandedCommitSha?: string;
       status: string;
+      streamIssueIdentifier?: string;
     };
     expect(completedStreamState).toMatchObject({
       activeIssueIdentifier: "OPE-13",
       latestLandedCommitSha: completion.commitSha,
       status: "active",
+      streamIssueIdentifier: "OPE-1",
     });
 
     await manager.reconcileTerminalIssues(
@@ -468,17 +476,17 @@ test("WorkspaceManager keeps child finalization separate from stream completion 
       ["Done"],
     );
 
-    const finalizedStreamState = JSON.parse(
-      await readFile(streamStatePath, "utf8"),
-    ) as {
+    const finalizedStreamState = JSON.parse(await readFile(streamStatePath, "utf8")) as {
       activeIssueId?: string;
       activeIssueIdentifier?: string;
       latestLandedCommitSha?: string;
       status: string;
+      streamIssueIdentifier?: string;
     };
     expect(finalizedStreamState).toMatchObject({
       latestLandedCommitSha: completion.commitSha,
       status: "active",
+      streamIssueIdentifier: "OPE-1",
     });
     expect(finalizedStreamState.activeIssueId).toBeUndefined();
     expect(finalizedStreamState.activeIssueIdentifier).toBeUndefined();
@@ -541,6 +549,154 @@ test("WorkspaceManager squashes a completed feature branch back into the stream 
   }
 });
 
+test("WorkspaceManager squashes a done feature branch onto its stream branch and cleans up", async () => {
+  const root = await mkdtemp(resolve(tmpdir(), "agent-workspace-"));
+  const runtimeRoot = resolve(root, "runtime");
+  const featureStatePath = resolve(runtimeRoot, "stream", "ope-167.json");
+  try {
+    const { repoRoot } = await createSourceRepo(root);
+    const manager = new WorkspaceManager({
+      hooks,
+      repoRoot,
+      rootDir: runtimeRoot,
+      workerId: "worker-1",
+    });
+    const taskIssue = issue("OPE-171", "Land task work", {
+      hasParent: true,
+      id: "task-171",
+      parentIssueId: "feature-167",
+      parentIssueIdentifier: "OPE-167",
+      streamIssueId: "stream-121",
+      streamIssueIdentifier: "OPE-121",
+    });
+    const workspace = await manager.prepare(taskIssue);
+
+    await writeFile(join(workspace.path, "feature.txt"), "feature change\n");
+    await manager.complete(workspace, taskIssue);
+
+    await manager.reconcileTerminalIssues(
+      {
+        fetchIssueStatesByIds: async (issueIds) =>
+          new Map(issueIds.map((issueId) => [issueId, "Done"] as const)),
+        fetchIssuesByIds: async () =>
+          new Map([
+            [
+              "feature-167",
+              issue("OPE-167", "Tighten feature finalization", {
+                hasChildren: true,
+                hasParent: true,
+                id: "feature-167",
+                parentIssueId: "stream-121",
+                parentIssueIdentifier: "OPE-121",
+                state: "Done",
+                streamIssueId: "stream-121",
+                streamIssueIdentifier: "OPE-121",
+              }),
+            ],
+          ]),
+      },
+      ["Done"],
+    );
+
+    const streamHead = await run(["git", "rev-parse", "io/ope-121"], repoRoot);
+    expect(await run(["git", "show", "io/ope-121:feature.txt"], repoRoot)).toBe("feature change");
+    expect(await run(["git", "branch", "--list", "io/ope-167"], repoRoot)).toBe("");
+    expect(await readIssueRuntimeState(runtimeRoot, "OPE-171")).toMatchObject({
+      finalizedLinearState: "Done",
+      issueIdentifier: "OPE-171",
+      status: "finalized",
+    });
+    expect(JSON.parse(await readFile(featureStatePath, "utf8"))).toMatchObject({
+      branchName: "io/ope-167",
+      latestLandedCommitSha: streamHead,
+      parentIssueIdentifier: "OPE-167",
+      status: "completed",
+      streamIssueIdentifier: "OPE-121",
+    });
+    expect(await run(["git", "log", "--format=%s%n%b", "-1", "io/ope-121"], repoRoot)).toContain(
+      "OPE-167 Tighten feature finalization",
+    );
+    expect(await run(["git", "log", "--format=%s%n%b", "-1", "io/ope-121"], repoRoot)).toContain(
+      "- OPE-171 Land task work",
+    );
+  } finally {
+    await rm(root, { force: true, recursive: true });
+  }
+});
+
+test("WorkspaceManager preserves feature branch state when stream finalization conflicts", async () => {
+  const root = await mkdtemp(resolve(tmpdir(), "agent-workspace-"));
+  const runtimeRoot = resolve(root, "runtime");
+  const featureStatePath = resolve(runtimeRoot, "stream", "ope-167.json");
+  try {
+    const { repoRoot } = await createSourceRepo(root);
+    const manager = new WorkspaceManager({
+      hooks,
+      repoRoot,
+      rootDir: runtimeRoot,
+      workerId: "worker-1",
+    });
+    const taskIssue = issue("OPE-171", "Land task work", {
+      hasParent: true,
+      id: "task-171",
+      parentIssueId: "feature-167",
+      parentIssueIdentifier: "OPE-167",
+      streamIssueId: "stream-121",
+      streamIssueIdentifier: "OPE-121",
+    });
+    const workspace = await manager.prepare(taskIssue);
+
+    await writeFile(join(workspace.path, "README.md"), "feature side\n");
+    await manager.complete(workspace, taskIssue);
+
+    await run(["git", "checkout", "io/ope-121"], repoRoot);
+    await writeFile(resolve(repoRoot, "README.md"), "stream side\n");
+    await commitAll(repoRoot, "advance stream");
+    await run(["git", "checkout", "main"], repoRoot);
+
+    await expect(
+      manager.reconcileTerminalIssues(
+        {
+          fetchIssueStatesByIds: async (issueIds) =>
+            new Map(issueIds.map((issueId) => [issueId, "Done"] as const)),
+          fetchIssuesByIds: async () =>
+            new Map([
+              [
+                "feature-167",
+                issue("OPE-167", "Tighten feature finalization", {
+                  hasChildren: true,
+                  hasParent: true,
+                  id: "feature-167",
+                  parentIssueId: "stream-121",
+                  parentIssueIdentifier: "OPE-121",
+                  state: "Done",
+                  streamIssueId: "stream-121",
+                  streamIssueIdentifier: "OPE-121",
+                }),
+              ],
+            ]),
+        },
+        ["Done"],
+      ),
+    ).resolves.toBeUndefined();
+
+    expect(await run(["git", "show", "io/ope-121:README.md"], repoRoot)).toBe("stream side");
+    expect(await run(["git", "branch", "--list", "io/ope-167"], repoRoot)).toContain("io/ope-167");
+    expect(await readIssueRuntimeState(runtimeRoot, "OPE-171")).toMatchObject({
+      finalizedLinearState: "Done",
+      issueIdentifier: "OPE-171",
+      status: "finalized",
+    });
+    expect(JSON.parse(await readFile(featureStatePath, "utf8"))).toMatchObject({
+      branchName: "io/ope-167",
+      parentIssueIdentifier: "OPE-167",
+      status: "active",
+      streamIssueIdentifier: "OPE-121",
+    });
+  } finally {
+    await rm(root, { force: true, recursive: true });
+  }
+});
 test("WorkspaceManager keeps interrupted issues resumable on their own stream", async () => {
   const root = await mkdtemp(resolve(tmpdir(), "agent-workspace-"));
   const runtimeRoot = resolve(root, "runtime");

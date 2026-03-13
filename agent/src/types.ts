@@ -180,6 +180,8 @@ export interface PreparedWorkspace {
   baseIssueId?: string;
   baseIssueIdentifier?: string;
   branchName: string;
+  branchOwnerIssueId?: string;
+  branchOwnerIssueIdentifier?: string;
   controlPath: string;
   createdNow: boolean;
   issueRuntimePath?: string;
@@ -218,6 +220,8 @@ export interface StreamRuntimeState {
   parentIssueIdentifier: string;
   parentIssueTitle?: string;
   status: "active" | "completed";
+  streamIssueId?: string;
+  streamIssueIdentifier?: string;
   updatedAt: string;
   worktreeRoot: string;
 }
@@ -245,5 +249,6 @@ export interface IssueRunResult {
 export interface IssueTracker {
   fetchCandidateIssues: () => Promise<AgentIssue[]>;
   fetchIssueStatesByIds: (issueIds: string[]) => Promise<Map<string, string>>;
+  fetchIssuesByIds?: (issueIds: string[]) => Promise<Map<string, AgentIssue>>;
   setIssueState: (issueId: string, stateName: string) => Promise<void>;
 }

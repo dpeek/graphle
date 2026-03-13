@@ -26,10 +26,11 @@
 The preferred workflow is three levels: streams are maintained interactively,
 features own integration-sized branches under a stream, and the supervisor
 auto-runs released leaf tasks. Current code already gates task execution on the
-right parent states and lands successful task commits on the feature branch.
-Feature-to-stream finalization is still being tightened, so `../../io/workflow.md`
-is the user-facing contract for that boundary rather than a description of a
-fully completed runtime path.
+right parent states, lands successful task commits on the feature branch, and
+reconciles `Done` features by squashing them back onto the stream branch while
+preserving recoverable branch state on conflicts. `../../io/workflow.md`
+remains the user-facing contract for when humans choose to release a feature or
+stream.
 
 ## Future Work Suggestions
 

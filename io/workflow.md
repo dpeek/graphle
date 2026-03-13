@@ -4,8 +4,7 @@
 
 This is the primary user-facing contract for the current `io` Linear workflow.
 It defines the preferred `Stream -> Feature -> Task` shape and the current
-automation boundary. When runtime behavior is still being tightened, the gap is
-called out explicitly below.
+automation boundary.
 
 ## Issue Model
 
@@ -66,9 +65,13 @@ The agent/runtime owns:
   successful task runs accumulate on `io/<feature-issue-key>`.
 - Parallel feature work is allowed inside one stream. The current scheduler only
   serializes work within the same feature branch.
-- Target feature completion behavior: when a feature moves to `Done`, the
-  feature branch should be squashed, rebased onto the stream branch, and merged
-  back into the stream.
+- When a feature moves to `Done`, the runtime finalizes it by squashing the
+  feature branch onto the current stream branch head as one commit with subject
+  `OPE-XXX Feature title` and a concise completed-task body, then cleaning up
+  the local feature branch state.
+- If feature finalization conflicts or cannot update the stream branch cleanly,
+  the runtime preserves the retained branch state so reconciliation can be
+  retried without operator guesswork.
 - Target stream completion behavior: once the stream branch contains the
   accepted feature work, it should land on `main`.
 
@@ -77,12 +80,9 @@ The agent/runtime owns:
 - Top-level issues with `io` plus exactly one configured module label still fall
   back to backlog routing for retained comment workflows, but the supervisor
   does not auto-run them.
-- Task landing onto the feature branch is implemented today, but automated
-  feature-branch squashing, rebasing, and merge into the stream branch is still
-  being tightened.
 - The runtime still uses some legacy "stream" naming in internal state files
   for the current branch owner, even when that branch is actually a feature
   branch in the preferred workflow.
-- Automatic finalization of a top-level retained branch into `main` exists
-  today; the full preferred feature-to-stream-to-main chain is not yet
-  end-to-end.
+- Automatic finalization of a top-level retained stream branch into `main`
+  exists today, but stream-to-main release still remains a separate boundary
+  from feature-to-stream reconciliation.
