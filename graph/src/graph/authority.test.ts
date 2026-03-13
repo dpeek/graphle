@@ -6,9 +6,9 @@ import { bootstrap } from "./bootstrap"
 import {
   createJsonPersistedAuthoritativeGraph,
   createPersistedAuthoritativeGraph,
-  type LoadedPersistedAuthoritativeGraphState,
   type PersistedAuthoritativeGraphState,
   type PersistedAuthoritativeGraphStorage,
+  type PersistedAuthoritativeGraphStorageLoadResult,
 } from "./authority"
 import { createTypeClient } from "./client"
 import { core } from "./core"
@@ -101,7 +101,7 @@ function createMemoryStorage() {
   let failNextSave = false
 
   const storage: PersistedAuthoritativeGraphStorage = {
-    async load(): Promise<LoadedPersistedAuthoritativeGraphState | null> {
+    async load(): Promise<PersistedAuthoritativeGraphStorageLoadResult | null> {
       if (!current) return null
       return {
         snapshot: cloneJson(current.snapshot),

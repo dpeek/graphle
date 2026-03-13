@@ -17,26 +17,47 @@ import {
   validateAuthoritativeTotalSyncPayload,
 } from "./sync"
 
+export const persistedAuthoritativeGraphStateVersion = 1 as const
+
+export type PersistedAuthoritativeGraphStateVersion =
+  typeof persistedAuthoritativeGraphStateVersion
+
 export type PersistedAuthoritativeGraphState = {
-  readonly version: 1
+  readonly version: PersistedAuthoritativeGraphStateVersion
   readonly snapshot: StoreSnapshot
   readonly writeHistory: AuthoritativeGraphWriteHistory
 }
 
-export type LoadedPersistedAuthoritativeGraphState = {
+export type PersistedAuthoritativeGraphStorageLoadResult = {
   readonly snapshot: StoreSnapshot
   readonly writeHistory?: AuthoritativeGraphWriteHistory
   readonly needsRewrite: boolean
 }
 
+export type PersistedAuthoritativeGraphSeed<T extends Record<string, AnyTypeOutput>> = (
+  graph: NamespaceClient<T>,
+) => void | Promise<void>
+
+export type PersistedAuthoritativeGraphCursorPrefixFactory = () => string
+
 export interface PersistedAuthoritativeGraphStorage {
-  load(): Promise<LoadedPersistedAuthoritativeGraphState | null>
+  load(): Promise<PersistedAuthoritativeGraphStorageLoadResult | null>
   save(state: PersistedAuthoritativeGraphState): Promise<void>
 }
 
-export type PersistedAuthoritativeGraph<
-  T extends Record<string, AnyTypeOutput>,
-> = {
+export type JsonPersistedAuthoritativeGraphOptions<T extends Record<string, AnyTypeOutput>> = {
+  readonly path: string
+  readonly seed?: PersistedAuthoritativeGraphSeed<T>
+  readonly createCursorPrefix?: PersistedAuthoritativeGraphCursorPrefixFactory
+}
+
+export type PersistedAuthoritativeGraphOptions<T extends Record<string, AnyTypeOutput>> = {
+  readonly storage: PersistedAuthoritativeGraphStorage
+  readonly seed?: PersistedAuthoritativeGraphSeed<T>
+  readonly createCursorPrefix?: PersistedAuthoritativeGraphCursorPrefixFactory
+}
+
+export type PersistedAuthoritativeGraph<T extends Record<string, AnyTypeOutput>> = {
   readonly store: Store
   readonly graph: NamespaceClient<T>
   createSyncPayload(
@@ -94,7 +115,9 @@ function validatePersistedSnapshot(
   throw new Error(`Invalid persisted authority snapshot in "${source}": ${messages.join(" | ")}`)
 }
 
-function readPersistedWriteHistory(rawHistory: unknown): AuthoritativeGraphWriteHistory | undefined {
+function readPersistedWriteHistory(
+  rawHistory: unknown,
+): AuthoritativeGraphWriteHistory | undefined {
   if (!isObjectRecord(rawHistory)) return undefined
   const cursorPrefix = rawHistory.cursorPrefix
   const baseSequence = rawHistory.baseSequence
@@ -117,13 +140,21 @@ export function createJsonPersistedAuthoritativeGraphStorage<
   path: string,
   namespace: T,
 ): PersistedAuthoritativeGraphStorage {
-  async function load(): Promise<LoadedPersistedAuthoritativeGraphState | null> {
+  async function load(): Promise<PersistedAuthoritativeGraphStorageLoadResult | null> {
     try {
       const rawSnapshot = await readFile(path, "utf8")
       const parsed = JSON.parse(rawSnapshot) as unknown
 
-      if (isObjectRecord(parsed) && parsed.version === 1 && "snapshot" in parsed) {
-        const snapshot = validatePersistedSnapshot(parsed.snapshot as StoreSnapshot, path, namespace)
+      if (
+        isObjectRecord(parsed) &&
+        parsed.version === persistedAuthoritativeGraphStateVersion &&
+        "snapshot" in parsed
+      ) {
+        const snapshot = validatePersistedSnapshot(
+          parsed.snapshot as StoreSnapshot,
+          path,
+          namespace,
+        )
         const writeHistory = readPersistedWriteHistory(parsed.writeHistory)
         return {
           snapshot,
@@ -167,11 +198,7 @@ export async function createJsonPersistedAuthoritativeGraph<
 >(
   store: Store,
   namespace: T,
-  options: {
-    path: string
-    seed?: (graph: NamespaceClient<T>) => void | Promise<void>
-    createCursorPrefix?: () => string
-  },
+  options: JsonPersistedAuthoritativeGraphOptions<T>,
 ): Promise<PersistedAuthoritativeGraph<T>> {
   return createPersistedAuthoritativeGraph(store, namespace, {
     storage: createJsonPersistedAuthoritativeGraphStorage(options.path, namespace),
@@ -185,11 +212,7 @@ export async function createPersistedAuthoritativeGraph<
 >(
   store: Store,
   namespace: T,
-  options: {
-    storage: PersistedAuthoritativeGraphStorage
-    seed?: (graph: NamespaceClient<T>) => void | Promise<void>
-    createCursorPrefix?: () => string
-  },
+  options: PersistedAuthoritativeGraphOptions<T>,
 ): Promise<PersistedAuthoritativeGraph<T>> {
   const graph = createTypeClient(store, namespace)
   const createCursorPrefix =
@@ -209,7 +232,7 @@ export async function createPersistedAuthoritativeGraph<
 
   async function saveCurrentState(): Promise<void> {
     await options.storage.save({
-      version: 1,
+      version: persistedAuthoritativeGraphStateVersion,
       snapshot: store.snapshot(),
       writeHistory: writes.getHistory(),
     })
