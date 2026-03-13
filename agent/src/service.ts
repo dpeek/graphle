@@ -101,13 +101,15 @@ function getStreamKey(issue: AgentIssue) {
 }
 
 function isAutoRunnableTask(issue: AgentIssue) {
-  return issue.hasParent &&
+  return (
+    issue.hasParent &&
     !issue.hasChildren &&
     Boolean(issue.parentIssueIdentifier) &&
     Boolean(issue.grandparentIssueIdentifier) &&
     normalizeState(issue.state) === "todo" &&
     normalizeState(issue.parentIssueState) === "in progress" &&
-    normalizeState(issue.grandparentIssueState) === "in progress";
+    normalizeState(issue.grandparentIssueState) === "in progress"
+  );
 }
 
 function normalizeState(state?: string) {
@@ -120,6 +122,8 @@ function isResumableRunError(error: unknown) {
   }
   return ["response_timeout", "stall_timeout", "turn_timeout"].includes(error.message);
 }
+
+const MAX_RUN_ATTEMPTS_PER_SUPERVISOR_CYCLE = 2;
 
 export class AgentService {
   readonly #log: Logger;
@@ -336,8 +340,7 @@ export class AgentService {
       workspace.outputPath,
       `${issue.identifier}: Starting agent in ${workspaceLabel}\n`,
     );
-    let beforeRunCompleted = false;
-    let result: IssueRunResult;
+    let result: IssueRunResult | undefined;
     try {
       const resolvedContext = await resolveIssueContext({
         baseSelection: resolveIssueRouting(workflow.issues, issue, workflow.modules),
@@ -367,30 +370,54 @@ export class AgentService {
           resolvedContext.warnings.map((warning) => `warning: ${warning}\n`).join(""),
         );
       }
-      const prompt = renderPrompt(renderContextBundle(resolvedContext.bundle), {
-        attempt: 1,
-        issue: resolvedContext.issue,
-        selection: resolvedContext.selection,
-        worker: { count: maxConcurrentAgents, id: issue.identifier, index: runIndex },
-        workspace,
-      });
       const runner =
         this.#runnerFactory?.(workflow) ??
         new CodexAppServerRunner(workflow.codex, this.#log, {
           sessionEvents: this.#sessionEvents,
         });
       await tracker.setIssueState(issue.id, "In Progress");
-      await workspaceManager.runBeforeRunHook(workspace.path);
-      beforeRunCompleted = true;
-      result = await runner.run({ issue, prompt, session, workspace });
-      result.resolvedContext = resolvedContext.bundle;
-      if (resolvedContext.warnings.length) {
-        result.warnings = [...resolvedContext.warnings];
+      for (let attempt = 1; attempt <= MAX_RUN_ATTEMPTS_PER_SUPERVISOR_CYCLE; attempt += 1) {
+        let beforeRunCompleted = false;
+        try {
+          const prompt = renderPrompt(renderContextBundle(resolvedContext.bundle), {
+            attempt,
+            issue: resolvedContext.issue,
+            selection: resolvedContext.selection,
+            worker: { count: maxConcurrentAgents, id: issue.identifier, index: runIndex },
+            workspace,
+          });
+          await workspaceManager.runBeforeRunHook(workspace.path);
+          beforeRunCompleted = true;
+          result = await runner.run({ issue, prompt, session, workspace });
+          result.resolvedContext = resolvedContext.bundle;
+          if (resolvedContext.warnings.length) {
+            result.warnings = [...resolvedContext.warnings];
+          }
+          break;
+        } catch (error) {
+          if (beforeRunCompleted) {
+            await workspaceManager.runAfterRunHook(workspace.path);
+          }
+          if (isResumableRunError(error) && attempt < MAX_RUN_ATTEMPTS_PER_SUPERVISOR_CYCLE) {
+            const reason = error instanceof Error ? error.message : String(error);
+            const nextAttempt = attempt + 1;
+            await this.#appendIssueOutput(
+              workspace.outputPath,
+              `${issue.identifier}: retrying after ${reason} (attempt ${nextAttempt}/${MAX_RUN_ATTEMPTS_PER_SUPERVISOR_CYCLE})\n`,
+            );
+            this.#publishSupervisorIssueLine(
+              "issue-assigned",
+              issue,
+              `Retrying after ${reason} (attempt ${nextAttempt}/${MAX_RUN_ATTEMPTS_PER_SUPERVISOR_CYCLE})`,
+              session,
+              workspace,
+            );
+            continue;
+          }
+          throw error;
+        }
       }
     } catch (error) {
-      if (beforeRunCompleted) {
-        await workspaceManager.runAfterRunHook(workspace.path);
-      }
       const reason = error instanceof Error ? error.message : String(error);
       if (isResumableRunError(error)) {
         await workspaceManager.markInterrupted(workspace, issue);
@@ -432,6 +459,9 @@ export class AgentService {
       throw error;
     }
 
+    if (!result) {
+      throw new Error("issue_run_missing_result");
+    }
     await workspaceManager.runAfterRunHook(workspace.path);
     if (!result.success) {
       await workspaceManager.markBlocked(workspace, issue);

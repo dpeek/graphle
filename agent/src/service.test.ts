@@ -922,6 +922,7 @@ test("AgentService preserves timed out runs as interrupted", async () => {
   const root = await mkdtemp(resolve(tmpdir(), "agent-service-"));
   const workspacePath = resolve(root, "workspace", "workers", "OPE-66", "repo");
   const events: string[] = [];
+  let attempts = 0;
 
   await writeIoTsConfig(root, {
     agent: { maxConcurrentAgents: 1 },
@@ -956,6 +957,7 @@ test("AgentService preserves timed out runs as interrupted", async () => {
       repoRoot: root,
       runnerFactory: () => ({
         run: async () => {
+          attempts += 1;
           throw new Error("response_timeout");
         },
       }),
@@ -1013,7 +1015,127 @@ test("AgentService preserves timed out runs as interrupted", async () => {
     });
 
     await service.start();
+    expect(attempts).toBe(2);
     expect(events).toEqual(["interrupted"]);
+  } finally {
+    await rm(root, { force: true, recursive: true });
+  }
+});
+
+test("AgentService retries timed out runs once per supervisor cycle", async () => {
+  const root = await mkdtemp(resolve(tmpdir(), "agent-service-"));
+  const workspacePath = resolve(root, "workspace", "workers", "OPE-66", "repo");
+  const events: string[] = [];
+  const prompts: string[] = [];
+  const transitions: string[] = [];
+  let attempts = 0;
+
+  await writeIoTsConfig(root, {
+    agent: { maxConcurrentAgents: 1 },
+    tracker: {
+      apiKey: "$LINEAR_API_KEY",
+      kind: "linear",
+      projectSlug: "$LINEAR_PROJECT_SLUG",
+    },
+    workspace: {
+      root: resolve(root, "workspace"),
+    },
+  });
+  await writeFile(resolve(root, "io.md"), "Issue {{ issue.identifier }}\n");
+  process.env.LINEAR_API_KEY = "linear-token";
+  process.env.LINEAR_PROJECT_SLUG = "project-slug";
+
+  try {
+    const issue = createIssue({
+      id: "1",
+      identifier: "OPE-66",
+      priority: 0,
+      title: "Resume interrupted issue",
+    });
+    const service = new AgentService({
+      once: true,
+      repoRoot: root,
+      runnerFactory: () => ({
+        run: async ({ issue, prompt, workspace }) => {
+          attempts += 1;
+          prompts.push(prompt);
+          if (attempts === 1) {
+            throw new Error("response_timeout");
+          }
+          return {
+            issue,
+            prompt,
+            stderr: [],
+            stdout: [],
+            success: true,
+            workspace,
+          };
+        },
+      }),
+      trackerFactory: () => ({
+        fetchCandidateIssues: async () => [issue],
+        fetchIssueStatesByIds: async () => new Map(),
+        setIssueState: async (issueId, stateName) => {
+          transitions.push(`${issueId}:${stateName}`);
+        },
+      }),
+      workspaceManagerFactory: (_workflow, issueIdentifier) =>
+        ({
+          cleanup: async () => undefined,
+          complete: async () => {
+            events.push("complete");
+            return { commitSha: "a".repeat(40) };
+          },
+          createIdleWorkspace: () => ({
+            branchName: "main",
+            controlPath: root,
+            createdNow: true,
+            originPath: root,
+            path: resolve(root, "workspace", "workers", issueIdentifier ?? "supervisor", "repo"),
+            sourceRepoPath: root,
+            workerId: issueIdentifier ?? "supervisor",
+          }),
+          ensureCheckout: async () => ({
+            createdNow: true,
+            path: workspacePath,
+          }),
+          ensureSessionStartState: async () => ({
+            createdNow: true,
+            path: resolve(root, "workspace", "workers"),
+          }),
+          listOccupiedStreams: async () => new Map(),
+          markBlocked: async () => {
+            events.push("blocked");
+          },
+          markInterrupted: async () => {
+            events.push("interrupted");
+          },
+          prepare: async () => ({
+            branchName: "io/ope-66",
+            controlPath: root,
+            createdNow: true,
+            originPath: root,
+            path: workspacePath,
+            sourceRepoPath: root,
+            workerId: "OPE-66",
+          }),
+          reconcileTerminalIssues: async () => undefined,
+          runAfterRunHook: async () => {
+            events.push("after");
+          },
+          runBeforeRunHook: async () => {
+            events.push("before");
+          },
+        }) as unknown as never,
+    });
+
+    await service.start();
+    expect(attempts).toBe(2);
+    expect(prompts).toHaveLength(2);
+    expect(prompts[0]).toContain("- Attempt: 1");
+    expect(prompts[1]).toContain("- Attempt: 2");
+    expect(transitions).toEqual(["1:In Progress", "1:In Review"]);
+    expect(events).toEqual(["before", "after", "before", "after", "complete"]);
   } finally {
     await rm(root, { force: true, recursive: true });
   }
