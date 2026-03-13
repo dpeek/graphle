@@ -36,6 +36,7 @@ Incremental payloads carry:
 ### Authoritative side
 
 - `createAuthoritativeGraphWriteSession(store, namespace)`
+- `createJsonPersistedAuthoritativeGraph(store, namespace, { path, ... })`
 - `createPersistedAuthoritativeGraph(store, namespace, { storage, ... })`
 - `createJsonPersistedAuthoritativeGraphStorage(path, namespace)`
 - `apply(transaction)`

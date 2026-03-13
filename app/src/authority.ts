@@ -2,8 +2,7 @@ import { isAbsolute, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import {
-  createJsonPersistedAuthoritativeGraphStorage,
-  createPersistedAuthoritativeGraph,
+  createJsonPersistedAuthoritativeGraph,
   type PersistedAuthoritativeGraph,
 } from "@io/graph";
 
@@ -43,8 +42,8 @@ export async function createAppAuthority(
   bootstrap(store, core);
   bootstrap(store, app);
 
-  const authority = await createPersistedAuthoritativeGraph(store, app, {
-    storage: createJsonPersistedAuthoritativeGraphStorage(snapshotPath, app),
+  const authority = await createJsonPersistedAuthoritativeGraph(store, app, {
+    path: snapshotPath,
     seed(graph) {
       seedExampleGraph(graph);
     },

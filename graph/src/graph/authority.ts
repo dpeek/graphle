@@ -162,6 +162,24 @@ export function createJsonPersistedAuthoritativeGraphStorage<
   }
 }
 
+export async function createJsonPersistedAuthoritativeGraph<
+  const T extends Record<string, AnyTypeOutput>,
+>(
+  store: Store,
+  namespace: T,
+  options: {
+    path: string
+    seed?: (graph: NamespaceClient<T>) => void | Promise<void>
+    createCursorPrefix?: () => string
+  },
+): Promise<PersistedAuthoritativeGraph<T>> {
+  return createPersistedAuthoritativeGraph(store, namespace, {
+    storage: createJsonPersistedAuthoritativeGraphStorage(options.path, namespace),
+    seed: options.seed,
+    createCursorPrefix: options.createCursorPrefix,
+  })
+}
+
 export async function createPersistedAuthoritativeGraph<
   const T extends Record<string, AnyTypeOutput>,
 >(

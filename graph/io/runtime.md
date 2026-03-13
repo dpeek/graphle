@@ -55,6 +55,7 @@ The current implementation keeps ids stable per key and treats rename as an expl
 
 - `PersistedAuthoritativeGraphStorage` defines the load/save contract for durable state
 - `createJsonPersistedAuthoritativeGraphStorage(path, namespace)` provides the shipped JSON-backed adapter
+- `createJsonPersistedAuthoritativeGraph(store, namespace, { path, seed?, createCursorPrefix? })` composes the shipped JSON adapter with the persisted authority runtime
 - `createPersistedAuthoritativeGraph(store, namespace, { storage, seed?, createCursorPrefix? })` composes seeding, reload, save, and authoritative write replay
 - persisted state stores a validated `snapshot` plus retained `writeHistory`
 - legacy snapshot-only files are rewritten into the current versioned state shape

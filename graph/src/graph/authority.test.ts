@@ -4,7 +4,7 @@ import { tmpdir } from "node:os"
 import { dirname, join } from "node:path"
 import { bootstrap } from "./bootstrap"
 import {
-  createJsonPersistedAuthoritativeGraphStorage,
+  createJsonPersistedAuthoritativeGraph,
   createPersistedAuthoritativeGraph,
   type LoadedPersistedAuthoritativeGraphState,
   type PersistedAuthoritativeGraphState,
@@ -86,8 +86,8 @@ async function createJsonAuthority(
   bootstrap(store, core)
   bootstrap(store, testGraph)
 
-  return createPersistedAuthoritativeGraph(store, testGraph, {
-    storage: createJsonPersistedAuthoritativeGraphStorage(snapshotPath, testGraph),
+  return createJsonPersistedAuthoritativeGraph(store, testGraph, {
+    path: snapshotPath,
     seed(graph) {
       if (!options.seedName) return
       graph.item.create({ name: options.seedName })
