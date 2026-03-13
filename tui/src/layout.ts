@@ -79,6 +79,10 @@ function capitalize(text: string) {
   return `${text[0]!.toUpperCase()}${text.slice(1)}`;
 }
 
+function truncateSha(sha: string) {
+  return sha.slice(0, 7);
+}
+
 function resolveIssueLabel(
   column: AgentTuiColumnSnapshot,
   columnsById: Map<string, AgentTuiColumnSnapshot>,
@@ -134,6 +138,19 @@ function resolveInheritedWorkflow(
 }
 
 function formatColumnStateLabel(column: AgentTuiColumnSnapshot) {
+  switch (column.session.runtime?.state) {
+    case "blocked":
+      return "blocked";
+    case "finalized":
+      return "finalized";
+    case "interrupted":
+      return "interrupted";
+    case "pending-finalization":
+      return "waiting on finalization";
+    case "running":
+      return "running";
+  }
+
   switch (column.status?.code) {
     case "approval-required":
     case "waiting-on-user-input":
@@ -226,6 +243,27 @@ function buildColumnMetadataLines(
   if (context.branchName) {
     lines.push(`branch: ${context.branchName}`);
   }
+  const blockerReason = column.session.runtime?.blocker?.reason;
+  if (blockerReason) {
+    lines.push(
+      `${context.stateLabel === "interrupted" ? "interrupted" : "blocked"}: ${blockerReason}`,
+    );
+  }
+  const finalization = column.session.runtime?.finalization;
+  if (finalization?.state === "pending") {
+    lines.push(
+      finalization.commitSha
+        ? `finalization: pending ${truncateSha(finalization.commitSha)}`
+        : "finalization: pending",
+    );
+  }
+  if (finalization?.state === "finalized") {
+    lines.push(
+      finalization.linearState
+        ? `finalized: ${finalization.linearState}`
+        : "finalized",
+    );
+  }
   const streamLabel = formatWorkflowIssueLabel(context.stream);
   if (streamLabel) {
     lines.push(`stream: ${streamLabel}`);
@@ -296,7 +334,13 @@ function formatContent(
   return `${metadataLines.join("\n")}\n\n${transcript}`;
 }
 
-function findWorkflowSummaryLine(column: AgentTuiColumnSnapshot | undefined) {
+function findWorkflowSummaryLine(
+  snapshot: AgentTuiSnapshot,
+  column: AgentTuiColumnSnapshot | undefined,
+) {
+  if (snapshot.workflowDiagnostics?.summaryText) {
+    return snapshot.workflowDiagnostics.summaryText;
+  }
   if (!column) {
     return undefined;
   }
@@ -345,6 +389,7 @@ function buildSelectedSummaryLine(
 }
 
 function buildRootSummaryLines(
+  snapshot: AgentTuiSnapshot,
   columns: AgentTuiColumnSnapshot[],
   columnsById: Map<string, AgentTuiColumnSnapshot>,
   selectedColumnId: string | undefined,
@@ -352,7 +397,7 @@ function buildRootSummaryLines(
   const supervisor = columns.find((column) => column.session.kind === "supervisor");
   const selectedColumn = selectedColumnId ? columnsById.get(selectedColumnId) : columns[0];
   return [
-    findWorkflowSummaryLine(supervisor),
+    findWorkflowSummaryLine(snapshot, supervisor),
     buildSelectedSummaryLine(selectedColumn, columnsById),
   ].filter((line): line is string => Boolean(line));
 }
@@ -395,7 +440,7 @@ export function buildAgentTuiRootComponentModel(
       }),
     })),
     selectedColumnId,
-    summaryLines: buildRootSummaryLines(columns, columnsById, selectedColumnId),
+    summaryLines: buildRootSummaryLines(snapshot, columns, columnsById, selectedColumnId),
   };
 }
 

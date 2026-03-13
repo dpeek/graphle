@@ -360,6 +360,39 @@ test("buildAgentTuiRootComponentModel keeps workflow stream, task, blocker, and 
   });
   store.observe({
     code: "workflow-diagnostic",
+    data: {
+      workflowDiagnostics: {
+        counts: {
+          blocked: 1,
+          "pending-finalization": 1,
+        },
+        items: {
+          blocked: [
+            {
+              branchName: "io/ope-174",
+              current: {
+                id: "issue-188",
+                identifier: "OPE-188",
+                title: "Prove workflow-aware TUI behavior with regression coverage",
+              },
+              workflow: blockedTask.workflow ?? {},
+            },
+          ],
+          "pending-finalization": [
+            {
+              branchName: "io/ope-174",
+              current: {
+                id: "issue-174",
+                identifier: "OPE-174",
+                title: "Ship workflow-aware TUI behavior",
+              },
+              workflow: streamWorker.workflow ?? {},
+            },
+          ],
+        },
+        summaryText: "Workflow: 1 blocked, 1 waiting on finalization",
+      },
+    },
     format: "line",
     sequence: 2,
     session: supervisor,
@@ -393,7 +426,16 @@ test("buildAgentTuiRootComponentModel keeps workflow stream, task, blocker, and 
     },
     phase: "completed",
     sequence: 5,
-    session: streamWorker,
+    session: {
+      ...streamWorker,
+      runtime: {
+        finalization: {
+          commitSha,
+          state: "pending",
+        },
+        state: "pending-finalization",
+      },
+    },
     timestamp: "2026-03-10T02:04:03.000Z",
     type: "session",
   });
@@ -419,7 +461,16 @@ test("buildAgentTuiRootComponentModel keeps workflow stream, task, blocker, and 
     },
     phase: "failed",
     sequence: 8,
-    session: blockedTask,
+    session: {
+      ...blockedTask,
+      runtime: {
+        blocker: {
+          kind: "blocked",
+          reason: "Blocked on OPE-187 finalization",
+        },
+        state: "blocked",
+      },
+    },
     timestamp: "2026-03-10T02:04:06.000Z",
     type: "session",
   });
@@ -438,13 +489,34 @@ test("buildAgentTuiRootComponentModel keeps workflow stream, task, blocker, and 
     "worker:OPE-188:1",
     "worker:OPE-174:1",
   ]);
+  expect(snapshot.workflowDiagnostics).toMatchObject({
+    counts: {
+      blocked: 1,
+      "pending-finalization": 1,
+    },
+    summaryText: "Workflow: 1 blocked, 1 waiting on finalization",
+  });
   expect(streamColumn?.status).toMatchObject({
     code: "issue-committed",
     text: `OPE-174: committed ${commitSha} on io/ope-174`,
   });
+  expect(streamColumn?.session.runtime).toMatchObject({
+    finalization: {
+      commitSha,
+      state: "pending",
+    },
+    state: "pending-finalization",
+  });
   expect(blockedColumn?.status).toMatchObject({
     code: "issue-blocked",
     text: "OPE-188: blocked",
+  });
+  expect(blockedColumn?.session.runtime).toMatchObject({
+    blocker: {
+      kind: "blocked",
+      reason: "Blocked on OPE-187 finalization",
+    },
+    state: "blocked",
   });
   expect(model.summaryLines).toEqual([
     "Workflow: 1 blocked, 1 waiting on finalization",
@@ -458,6 +530,7 @@ test("buildAgentTuiRootComponentModel keeps workflow stream, task, blocker, and 
   );
   expect(streamContent).toContain("state: waiting on finalization");
   expect(streamContent).toContain("branch: io/ope-174");
+  expect(streamContent).toContain("finalization: pending abc1234");
   expect(streamContent).toContain("stream: OPE-121 Run the workflow-aware agent rollout");
   expect(streamContent).toContain("feature: OPE-174 Ship workflow-aware TUI behavior");
   expect(streamContent).toContain("Session scheduled | io/ope-174 | /repo/.io/tree/ope-174");
@@ -465,6 +538,7 @@ test("buildAgentTuiRootComponentModel keeps workflow stream, task, blocker, and 
   expect(streamContent).toContain("Session completed | commit abc1234 | io/ope-174 | /repo/.io/tree/ope-174");
   expect(blockedContent).toContain("state: blocked");
   expect(blockedContent).toContain("branch: io/ope-174");
+  expect(blockedContent).toContain("blocked: Blocked on OPE-187 finalization");
   expect(blockedContent).toContain("stream: OPE-121 Run the workflow-aware agent rollout");
   expect(blockedContent).toContain("feature: OPE-174 Ship workflow-aware TUI behavior");
   expect(blockedContent).toContain(

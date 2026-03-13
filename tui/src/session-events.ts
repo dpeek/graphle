@@ -27,6 +27,67 @@ export interface AgentSessionWorkflowRef {
   task?: AgentSessionWorkflowIssueRef;
 }
 
+export type AgentSessionRuntimeState =
+  | "blocked"
+  | "finalized"
+  | "interrupted"
+  | "pending-finalization"
+  | "running";
+
+export interface AgentSessionBlockerRef {
+  kind?: "blocked" | "interrupted";
+  reason?: string;
+}
+
+export interface AgentSessionFinalizationRef {
+  commitSha?: string;
+  finalizedAt?: string;
+  landedAt?: string;
+  linearState?: string;
+  state: "finalized" | "pending";
+}
+
+export interface AgentSessionRuntimeRef {
+  blocker?: AgentSessionBlockerRef;
+  finalization?: AgentSessionFinalizationRef;
+  state?: AgentSessionRuntimeState;
+}
+
+export type AgentWorkflowDiagnosticCategory =
+  | "active"
+  | "blocked"
+  | "blocked-by-dependency"
+  | "interrupted"
+  | "occupied"
+  | "pending-finalization"
+  | "runnable"
+  | "waiting-for-agent-slot"
+  | "waiting-for-workflow-release";
+
+export interface AgentWorkflowDiagnosticHeldByRef {
+  identifier: string;
+  status?: string;
+}
+
+export interface AgentWorkflowDiagnosticIssue {
+  blockedBy?: string[];
+  branchName?: string;
+  current: AgentSessionWorkflowIssueRef;
+  heldBy?: AgentWorkflowDiagnosticHeldByRef;
+  waitingOn?: string[];
+  workflow: AgentSessionWorkflowRef;
+}
+
+export interface AgentWorkflowDiagnostics {
+  counts?: Partial<Record<AgentWorkflowDiagnosticCategory, number>>;
+  items?: Partial<Record<AgentWorkflowDiagnosticCategory, AgentWorkflowDiagnosticIssue[]>>;
+  summaryText?: string;
+}
+
+export interface AgentSessionEventData extends Record<string, unknown> {
+  workflowDiagnostics?: AgentWorkflowDiagnostics;
+}
+
 export interface AgentSessionRef {
   branchName?: string;
   id: string;
@@ -34,6 +95,7 @@ export interface AgentSessionRef {
   kind: AgentSessionKind;
   parentSessionId?: string;
   rootSessionId: string;
+  runtime?: AgentSessionRuntimeRef;
   threadId?: string;
   title: string;
   turnId?: string;
@@ -81,14 +143,14 @@ interface AgentSessionEventBase {
 }
 
 export interface AgentSessionLifecycleEvent extends AgentSessionEventBase {
-  data?: Record<string, unknown>;
+  data?: AgentSessionEventData;
   phase: AgentSessionPhase;
   type: "session";
 }
 
 export interface AgentStatusEvent extends AgentSessionEventBase {
   code: AgentStatusCode;
-  data?: Record<string, unknown>;
+  data?: AgentSessionEventData;
   format: AgentStatusFormat;
   itemId?: string;
   text?: string;

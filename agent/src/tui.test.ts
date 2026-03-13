@@ -404,6 +404,13 @@ test("AgentTuiRetainedReader keeps workflow blocker context visible in attach mo
       code: "issue-blocked",
       text: "OPE-188: blocked",
     });
+    expect(snapshot.sessions[1]?.session.runtime).toMatchObject({
+      blocker: {
+        kind: "blocked",
+        reason: "Blocked on OPE-187 finalization",
+      },
+      state: "blocked",
+    });
     expect(snapshot.sessions[1]?.body).toContain("Session scheduled | io/ope-174 | /repo/.io/tree/ope-188");
     expect(snapshot.sessions[1]?.body).toContain("OPE-188: blocked");
     expect(snapshot.sessions[1]?.body).toContain(
@@ -481,6 +488,12 @@ test("AgentTuiRetainedReader describes interrupted retained work as resumable", 
 
     const snapshot = store.getSnapshot();
     expect(snapshot.sessions[1]?.phase).toBe("stopped");
+    expect(snapshot.sessions[1]?.session.runtime).toMatchObject({
+      blocker: {
+        kind: "interrupted",
+      },
+      state: "interrupted",
+    });
     expect(snapshot.sessions[0]?.body).toContain("workflow: stream OPE-67\n");
     expect(snapshot.sessions[0]?.body).toContain(
       "runtime state: interrupted; worktree preserved to resume on ope-67\n",
@@ -543,6 +556,13 @@ test("AgentTuiRetainedReader keeps finalized workflow context visible in replay 
     expect(snapshot.sessions[0]?.body).toContain("runtime state: finalized in Done");
     expect(snapshot.sessions[0]?.body).toContain("finalized: Done");
     expect(snapshot.sessions[1]?.session.branchName).toBe("io/ope-174");
+    expect(snapshot.sessions[1]?.session.runtime).toMatchObject({
+      finalization: {
+        linearState: "Done",
+        state: "finalized",
+      },
+      state: "finalized",
+    });
     expect(snapshot.sessions[1]?.phase).toBe("completed");
     expect(snapshot.sessions[1]?.body).toContain("Session completed | io/ope-174 | /repo/.io/tree/ope-174");
     expect(frame).toContain("Replay OPE-174 from codex.stdout.jsonl");
@@ -782,6 +802,13 @@ test("AgentTuiRetainedReader reconstructs blocker context from runtime files whe
     expect(snapshot.sessions[1]?.status).toMatchObject({
       code: "issue-blocked",
       text: "OPE-188: blocked",
+    });
+    expect(snapshot.sessions[1]?.session.runtime).toMatchObject({
+      blocker: {
+        kind: "blocked",
+        reason: "Blocked on OPE-187 finalization",
+      },
+      state: "blocked",
     });
     expect(snapshot.sessions[1]?.body).toContain("Session scheduled | io/ope-174 | /repo/.io/tree/ope-188");
     expect(snapshot.sessions[1]?.body).toContain("OPE-188: blocked");

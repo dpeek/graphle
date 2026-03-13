@@ -52,11 +52,13 @@ export interface IssueRuntimeState {
   baseBranchName?: string;
   baseIssueId?: string;
   baseIssueIdentifier?: string;
+  blockedReason?: string;
   branchName: string;
   commitSha?: string;
   controlPath: string;
   finalizedAt?: string;
   finalizedLinearState?: string;
+  interruptedReason?: string;
   issueId: string;
   issueIdentifier: string;
   issueTitle: string;
@@ -399,8 +401,10 @@ export class CheckoutManager {
     return { commitSha: landing.landedCommitSha };
   }
 
-  async markBlocked(workspace: PreparedWorkspace, issue: AgentIssue) {
-    await this.#writeIssueState(workspace, issue, "blocked");
+  async markBlocked(workspace: PreparedWorkspace, issue: AgentIssue, reason?: string) {
+    await this.#writeIssueState(workspace, issue, "blocked", {
+      blockedReason: reason,
+    });
     await this.#upsertStreamState(
       {
         baseBranchName: workspace.baseBranchName,
@@ -427,8 +431,10 @@ export class CheckoutManager {
     await this.#writeState(workspace, "blocked", issue);
   }
 
-  async markInterrupted(workspace: PreparedWorkspace, issue: AgentIssue) {
-    await this.#writeIssueState(workspace, issue, "interrupted");
+  async markInterrupted(workspace: PreparedWorkspace, issue: AgentIssue, reason?: string) {
+    await this.#writeIssueState(workspace, issue, "interrupted", {
+      interruptedReason: reason,
+    });
     await this.#upsertStreamState(
       {
         baseBranchName: workspace.baseBranchName,
@@ -1561,7 +1567,13 @@ export class CheckoutManager {
     workspace: PreparedWorkspace,
     issue: AgentIssue,
     status: IssueRuntimeStatus,
-    options: { commitSha?: string; landedAt?: string; landedCommitSha?: string } = {},
+    options: {
+      blockedReason?: string;
+      commitSha?: string;
+      interruptedReason?: string;
+      landedAt?: string;
+      landedCommitSha?: string;
+    } = {},
   ) {
     const streamIssue = resolveWorkflowStreamIssue(issue);
     const branchOwnerIssue = resolveBranchOwnerIssue(issue);
@@ -1573,11 +1585,13 @@ export class CheckoutManager {
       baseBranchName: workspace.baseBranchName,
       baseIssueId: workspace.baseIssueId,
       baseIssueIdentifier: workspace.baseIssueIdentifier,
+      blockedReason: options.blockedReason,
       branchName: workspace.branchName,
       commitSha: options.commitSha,
       controlPath: workspace.controlPath,
       finalizedAt: undefined,
       finalizedLinearState: undefined,
+      interruptedReason: options.interruptedReason,
       issueId: issue.id,
       issueIdentifier: issue.identifier,
       issueTitle: issue.title,
@@ -1609,6 +1623,8 @@ export class CheckoutManager {
         | "commitSha"
         | "finalizedAt"
         | "finalizedLinearState"
+        | "blockedReason"
+        | "interruptedReason"
         | "landedAt"
         | "landedCommitSha"
         | "status"

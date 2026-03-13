@@ -4,8 +4,10 @@ import type {
   AgentSessionIssueRef,
   AgentSessionPhase,
   AgentSessionRef,
+  AgentSessionRuntimeRef,
   AgentSessionWorkflowIssueRef,
   AgentSessionWorkflowRef,
+  AgentWorkflowDiagnostics,
 } from "./session-events.js";
 import {
   appendBlocksForEvent,
@@ -84,6 +86,7 @@ export interface AgentTuiSnapshot {
   columns: AgentTuiColumnSnapshot[];
   sessions: AgentTuiSessionSnapshot[];
   updatedAt?: string;
+  workflowDiagnostics?: AgentWorkflowDiagnostics;
 }
 
 export interface AgentTuiStore {
@@ -105,8 +108,35 @@ function isTerminalPhase(phase: AgentSessionPhase | "pending") {
 function isRetainedTerminalWorker(state: AgentTuiInternalColumnState) {
   return (
     state.session.kind === "worker" &&
-    (state.phase === "completed" || state.phase === "failed")
+    (state.phase === "completed" || state.phase === "failed" || state.phase === "stopped")
   );
+}
+
+function mergeRuntimeRef(
+  current: AgentSessionRuntimeRef | undefined,
+  next: AgentSessionRuntimeRef | undefined,
+): AgentSessionRuntimeRef | undefined {
+  if (!current && !next) {
+    return undefined;
+  }
+  return {
+    ...current,
+    ...next,
+    blocker:
+      current?.blocker || next?.blocker
+        ? {
+            ...current?.blocker,
+            ...next?.blocker,
+          }
+        : undefined,
+    finalization:
+      current?.finalization || next?.finalization
+        ? {
+            ...current?.finalization,
+            ...next?.finalization,
+          }
+        : undefined,
+  };
 }
 
 function mergeSessionRef(current: AgentSessionRef, next: AgentSessionRef): AgentSessionRef {
@@ -147,6 +177,7 @@ function mergeSessionRef(current: AgentSessionRef, next: AgentSessionRef): Agent
     ...current,
     ...next,
     issue,
+    runtime: mergeRuntimeRef(current.runtime, next.runtime),
     workflow,
   };
 }
@@ -277,6 +308,7 @@ export function createAgentTuiStore(options: AgentTuiStoreOptions = {}): AgentTu
   const retainTerminalSessions = options.retainTerminalSessions ?? true;
   const sessions = new Map<string, AgentTuiInternalColumnState>();
   let updatedAt: string | undefined;
+  let workflowDiagnostics: AgentWorkflowDiagnostics | undefined;
 
   const deleteSessionTree = (sessionId: string) => {
     const childIds = Array.from(sessions.values())
@@ -343,6 +375,7 @@ export function createAgentTuiStore(options: AgentTuiStoreOptions = {}): AgentTu
         columns,
         sessions: columns,
         updatedAt,
+        workflowDiagnostics,
       };
     },
     observe(event) {
@@ -372,6 +405,9 @@ export function createAgentTuiStore(options: AgentTuiStoreOptions = {}): AgentTu
           state.status = summary;
         }
       } else if (event.type === "status" && event.format !== "close") {
+        if (event.code === "workflow-diagnostic" && event.data?.workflowDiagnostics) {
+          workflowDiagnostics = event.data.workflowDiagnostics;
+        }
         switch (event.code) {
           case "agent-message-delta":
           case "agent-message-completed":

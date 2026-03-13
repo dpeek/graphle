@@ -10,6 +10,7 @@ import type {
   AgentSessionLifecycleEvent,
   AgentSessionPhase,
   AgentSessionRef,
+  AgentSessionRuntimeRef,
   AgentSessionWorkflowIssueRef,
   AgentSessionWorkflowRef,
   AgentStatusCode,
@@ -74,11 +75,39 @@ function mergeWorkflowRef(
   };
 }
 
+function mergeRuntimeRef(
+  current: AgentSessionRuntimeRef | undefined,
+  next: AgentSessionRuntimeRef | undefined,
+): AgentSessionRuntimeRef | undefined {
+  if (!current && !next) {
+    return undefined;
+  }
+  return {
+    ...current,
+    ...next,
+    blocker:
+      current?.blocker || next?.blocker
+        ? {
+            ...current?.blocker,
+            ...next?.blocker,
+          }
+        : undefined,
+    finalization:
+      current?.finalization || next?.finalization
+        ? {
+            ...current?.finalization,
+            ...next?.finalization,
+          }
+        : undefined,
+  };
+}
+
 function mergeSessionRef(current: AgentSessionRef, next: AgentSessionRef): AgentSessionRef {
   return {
     ...current,
     ...next,
     issue: mergeIssueRef(current.issue, next.issue),
+    runtime: mergeRuntimeRef(current.runtime, next.runtime),
     workflow: mergeWorkflowRef(current.workflow, next.workflow),
   };
 }
@@ -134,9 +163,75 @@ function createFallbackWorkerSession(issueState: IssueRuntimeState): AgentSessio
     rootSessionId: "supervisor",
     title: issueState.issueTitle,
     workerId: issueState.workerId,
+    runtime: createRetainedRuntimeRef(issueState),
     workflow,
     workspacePath: issueState.worktreePath,
   };
+}
+
+function createRetainedRuntimeRef(
+  issueState: IssueRuntimeState,
+  options: {
+    blockedReason?: string;
+    commitSha?: string;
+    interruptedReason?: string;
+  } = {},
+): AgentSessionRuntimeRef | undefined {
+  const commitSha = options.commitSha ?? issueState.landedCommitSha ?? issueState.commitSha;
+  switch (issueState.status) {
+    case "blocked":
+      return {
+        blocker:
+          issueState.blockedReason || options.blockedReason
+            ? {
+                kind: "blocked",
+                reason: options.blockedReason ?? issueState.blockedReason,
+              }
+            : {
+                kind: "blocked",
+              },
+        state: "blocked",
+      };
+    case "completed":
+      return {
+        finalization: {
+          commitSha,
+          landedAt: issueState.landedAt,
+          state: "pending",
+        },
+        state: "pending-finalization",
+      };
+    case "finalized":
+      return {
+        finalization: {
+          commitSha,
+          finalizedAt: issueState.finalizedAt,
+          landedAt: issueState.landedAt,
+          linearState: issueState.finalizedLinearState,
+          state: "finalized",
+        },
+        state: "finalized",
+      };
+    case "interrupted":
+      return {
+        blocker:
+          issueState.interruptedReason || options.interruptedReason
+            ? {
+                kind: "interrupted",
+                reason: options.interruptedReason ?? issueState.interruptedReason,
+              }
+            : {
+                kind: "interrupted",
+              },
+        state: "interrupted",
+      };
+    case "running":
+      return {
+        state: "running",
+      };
+    default:
+      return undefined;
+  }
 }
 
 function toRuntimePhase(issueState: IssueRuntimeState): AgentSessionPhase {
@@ -518,6 +613,14 @@ export class AgentTuiRetainedReader {
     const outputSummary = await this.#readOutputSummary();
     const commitSha = this.#resolveCommitSha(outputSummary);
     const terminalPhase = toRuntimePhase(this.issueState);
+    this.#workerSession = mergeSessionRef(this.#workerSession, {
+      ...this.#workerSession,
+      runtime: createRetainedRuntimeRef(this.issueState, {
+        blockedReason: outputSummary?.blockedReason,
+        commitSha,
+        interruptedReason: outputSummary?.interruptedReason,
+      }),
+    });
 
     if (!phases.has("scheduled")) {
       leading.push(this.#buildWorkerPhaseEvent("scheduled"));
@@ -701,7 +804,66 @@ export class AgentTuiRetainedReader {
   }
 
   #resolveFailureReason(outputSummary: RetainedOutputSummary | undefined) {
-    return outputSummary?.blockedReason;
+    return this.issueState.blockedReason ?? outputSummary?.blockedReason;
+  }
+
+  #runtimeFromEvent(event: AgentSessionEvent): AgentSessionRuntimeRef | undefined {
+    if (event.type === "session") {
+      const reason = typeof event.data?.reason === "string" ? event.data.reason : undefined;
+      const commitSha = typeof event.data?.commitSha === "string" ? event.data.commitSha : undefined;
+      switch (event.phase) {
+        case "completed":
+          return {
+            finalization: {
+              commitSha,
+              state: this.issueState.status === "finalized" ? "finalized" : "pending",
+            },
+            state: this.issueState.status === "finalized" ? "finalized" : "pending-finalization",
+          };
+        case "failed":
+          return {
+            blocker: {
+              kind: this.issueState.status === "interrupted" ? "interrupted" : "blocked",
+              reason,
+            },
+            state: this.issueState.status === "interrupted" ? "interrupted" : "blocked",
+          };
+        case "stopped":
+          return {
+            blocker: {
+              kind: "interrupted",
+              reason,
+            },
+            state: "interrupted",
+          };
+      }
+      return undefined;
+    }
+
+    if (event.type !== "status") {
+      return undefined;
+    }
+
+    switch (event.code) {
+      case "issue-blocked":
+        return {
+          blocker: {
+            kind: this.issueState.status === "interrupted" ? "interrupted" : "blocked",
+            reason: typeof event.data?.reason === "string" ? event.data.reason : undefined,
+          },
+          state: this.issueState.status === "interrupted" ? "interrupted" : "blocked",
+        };
+      case "issue-committed":
+        return {
+          finalization: {
+            commitSha: typeof event.data?.commitSha === "string" ? event.data.commitSha : undefined,
+            state: this.issueState.status === "finalized" ? "finalized" : "pending",
+          },
+          state: this.issueState.status === "finalized" ? "finalized" : "pending-finalization",
+        };
+      default:
+        return undefined;
+    }
   }
   #coerceWorkerSession(next: AgentSessionRef) {
     const merged = mergeSessionRef(this.#workerSession, next);
@@ -758,7 +920,15 @@ export class AgentTuiRetainedReader {
           events.push(parsed);
           continue;
         }
-        const session = this.#coerceWorkerSession(parsed.session);
+        const runtime = this.#runtimeFromEvent(parsed);
+        const session = this.#coerceWorkerSession(
+          runtime
+            ? {
+                ...parsed.session,
+                runtime: mergeRuntimeRef(parsed.session.runtime, runtime),
+              }
+            : parsed.session,
+        );
         events.push({
           ...parsed,
           session,

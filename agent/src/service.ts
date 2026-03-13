@@ -12,6 +12,9 @@ import {
   type AgentSessionEventBus,
   type AgentSessionEventObserver,
   type AgentSessionRef,
+  type AgentSessionRuntimeRef,
+  type AgentWorkflowDiagnosticIssue,
+  type AgentWorkflowDiagnostics,
 } from "./session-events.js";
 import { LinearTrackerAdapter } from "./tracker/linear.js";
 import type {
@@ -98,6 +101,10 @@ function scoreState(state: string) {
 
 function getStreamKey(issue: AgentIssue) {
   return toWorkspaceKey(issue.parentIssueIdentifier ?? issue.identifier);
+}
+
+function toBranchName(issueIdentifier: string) {
+  return `io/${toWorkspaceKey(issueIdentifier)}`;
 }
 
 function normalizeState(state?: string) {
@@ -293,6 +300,143 @@ function createSessionWorkflow(issue: AgentIssue): AgentSessionRef["workflow"] {
   };
 }
 
+function createRuntimeSessionWorkflow(issue: IssueRuntimeState): AgentSessionRef["workflow"] {
+  const current = createWorkflowIssueRef({
+    id: issue.issueId,
+    identifier: issue.issueIdentifier,
+    title: issue.issueTitle,
+  });
+  const stream = createWorkflowIssueRef({
+    id: issue.streamIssueId,
+    identifier: issue.streamIssueIdentifier,
+  });
+
+  if (
+    issue.parentIssueIdentifier &&
+    issue.streamIssueIdentifier &&
+    issue.parentIssueIdentifier !== issue.streamIssueIdentifier
+  ) {
+    return {
+      feature: createWorkflowIssueRef({
+        id: issue.parentIssueId,
+        identifier: issue.parentIssueIdentifier,
+      }),
+      stream,
+      task: current,
+    };
+  }
+
+  if (issue.parentIssueIdentifier && issue.parentIssueIdentifier !== issue.issueIdentifier) {
+    return {
+      feature: current,
+      stream,
+    };
+  }
+
+  return {
+    stream: current ?? stream,
+  };
+}
+
+function createSessionRuntime(runtime: AgentSessionRuntimeRef): AgentSessionRuntimeRef {
+  return runtime;
+}
+
+function withSessionRuntime(
+  session: AgentSessionRef,
+  runtime: AgentSessionRuntimeRef,
+): AgentSessionRef {
+  return {
+    ...session,
+    runtime: {
+      ...session.runtime,
+      ...runtime,
+      blocker:
+        session.runtime?.blocker || runtime.blocker
+          ? {
+              ...session.runtime?.blocker,
+              ...runtime.blocker,
+            }
+          : undefined,
+      finalization:
+        session.runtime?.finalization || runtime.finalization
+          ? {
+              ...session.runtime?.finalization,
+              ...runtime.finalization,
+            }
+          : undefined,
+    },
+  };
+}
+
+function createWorkflowDiagnosticIssue(
+  current: AgentWorkflowDiagnosticIssue["current"],
+  workflow: AgentSessionRef["workflow"],
+  options: {
+    blockedBy?: string[];
+    branchName?: string;
+    heldBy?: AgentWorkflowDiagnosticIssue["heldBy"];
+    waitingOn?: string[];
+  } = {},
+): AgentWorkflowDiagnosticIssue {
+  return {
+    blockedBy: options.blockedBy?.length ? options.blockedBy : undefined,
+    branchName: options.branchName,
+    current,
+    heldBy: options.heldBy,
+    waitingOn: options.waitingOn?.length ? options.waitingOn : undefined,
+    workflow: workflow ?? {},
+  };
+}
+
+function createWorkflowDiagnosticIssueFromIssue(
+  issue: AgentIssue,
+  options: {
+    blockedBy?: string[];
+    heldBy?: AgentWorkflowDiagnosticIssue["heldBy"];
+    waitingOn?: string[];
+  } = {},
+) {
+  return createWorkflowDiagnosticIssue(
+    createWorkflowIssueRef({
+      id: issue.id,
+      identifier: issue.identifier,
+      state: issue.state,
+      title: issue.title,
+    })!,
+    createSessionWorkflow(issue),
+    {
+      blockedBy: options.blockedBy,
+      branchName: toBranchName(
+        issue.parentIssueIdentifier && hasSeparateFeature(issue)
+          ? issue.parentIssueIdentifier
+          : issue.identifier,
+      ),
+      heldBy: options.heldBy,
+      waitingOn: options.waitingOn,
+    },
+  );
+}
+
+function createWorkflowDiagnosticIssueFromRuntime(issue: IssueRuntimeState) {
+  return createWorkflowDiagnosticIssue(
+    createWorkflowIssueRef({
+      id: issue.issueId,
+      identifier: issue.issueIdentifier,
+      title: issue.issueTitle,
+    })!,
+    createRuntimeSessionWorkflow(issue),
+    {
+      branchName: issue.branchName,
+    },
+  );
+}
+
+type WorkflowDiagnosticLine = {
+  text: string;
+  workflowDiagnostics?: AgentWorkflowDiagnostics;
+};
+
 export class AgentService {
   readonly #log: Logger;
   readonly #once: boolean;
@@ -483,59 +627,92 @@ export class AgentService {
     launchableIssues: AgentIssue[];
     occupiedStreams: Map<string, string>;
     retainedIssues: IssueRuntimeState[];
-  }) {
+  }): WorkflowDiagnosticLine[] {
     const retainedByIdentifier = new Map(
       options.retainedIssues.map((issue) => [issue.issueIdentifier, issue] as const),
     );
-    const activeIssues = options.retainedIssues
-      .filter((issue) => issue.status === "running")
-      .map((issue) => formatRetainedIssueLine(issue));
-    const blockedIssues = options.retainedIssues
-      .filter((issue) => issue.status === "blocked")
-      .map((issue) => formatRetainedIssueLine(issue));
-    const interruptedIssues = options.retainedIssues
-      .filter((issue) => issue.status === "interrupted")
-      .map((issue) => formatRetainedIssueLine(issue));
-    const pendingFinalizationIssues = options.retainedIssues
-      .filter((issue) => issue.status === "completed")
-      .map((issue) => formatRetainedIssueLine(issue));
-    const runnableIssues = options.launchableIssues
-      .slice(0, options.availableSlots)
-      .map((issue) => formatRunnableIssueLine(issue));
-    const waitingForSlotIssues = options.launchableIssues
-      .slice(options.availableSlots)
-      .map((issue) => formatRunnableIssueLine(issue));
+    const activeIssueStates = options.retainedIssues.filter((issue) => issue.status === "running");
+    const blockedIssueStates = options.retainedIssues.filter((issue) => issue.status === "blocked");
+    const interruptedIssueStates = options.retainedIssues.filter(
+      (issue) => issue.status === "interrupted",
+    );
+    const pendingFinalizationIssueStates = options.retainedIssues.filter(
+      (issue) => issue.status === "completed",
+    );
+    const runnableIssues = options.launchableIssues.slice(0, options.availableSlots);
+    const waitingForSlotIssues = options.launchableIssues.slice(options.availableSlots);
     const launchableIssueIdentifiers = new Set(
       options.launchableIssues.map((issue) => issue.identifier),
     );
     const executionCandidates = options.issues.filter((issue) => isTaskIssue(issue));
-    const blockedByDependency: string[] = [];
-    const waitingForRelease: string[] = [];
-    const occupied: string[] = [];
+    const blockedByDependency: AgentIssue[] = [];
+    const waitingForRelease = new Map<string, string[]>();
+    const occupied = new Map<
+      string,
+      {
+        activeIssueIdentifier: string;
+        activeIssueState?: IssueRuntimeState;
+        issue: AgentIssue;
+      }
+    >();
 
     for (const issue of executionCandidates) {
       if (launchableIssueIdentifiers.has(issue.identifier)) {
         continue;
       }
       if (issue.blockedBy.length) {
-        blockedByDependency.push(formatDependencyBlockedIssueLine(issue));
+        blockedByDependency.push(issue);
         continue;
       }
       if (issue.hasParent && !isExecutionReleased(issue)) {
-        waitingForRelease.push(formatExecutionReleaseIssueLine(issue));
+        const waitingOn: string[] = [];
+        if (issue.parentIssueIdentifier && !isInProgressState(issue.parentIssueState)) {
+          const parentLabel = hasSeparateFeature(issue) ? "feature" : "stream";
+          waitingOn.push(
+            issue.parentIssueState
+              ? `${parentLabel} ${issue.parentIssueIdentifier} is ${issue.parentIssueState}`
+              : `${parentLabel} ${issue.parentIssueIdentifier} state is unknown`,
+          );
+        }
+        if (issue.streamIssueIdentifier && !isInProgressState(issue.streamIssueState)) {
+          waitingOn.push(
+            issue.streamIssueState
+              ? `stream ${issue.streamIssueIdentifier} is ${issue.streamIssueState}`
+              : `stream ${issue.streamIssueIdentifier} state is unknown`,
+          );
+        }
+        waitingForRelease.set(issue.identifier, waitingOn);
         continue;
       }
       const activeIssueIdentifier = options.occupiedStreams.get(getStreamKey(issue));
       if (activeIssueIdentifier && activeIssueIdentifier !== issue.identifier) {
-        occupied.push(
-          formatOccupiedIssueLine(
-            issue,
-            activeIssueIdentifier,
-            retainedByIdentifier.get(activeIssueIdentifier),
-          ),
-        );
+        occupied.set(issue.identifier, {
+          activeIssueIdentifier,
+          activeIssueState: retainedByIdentifier.get(activeIssueIdentifier),
+          issue,
+        });
       }
     }
+
+    const activeIssues = activeIssueStates.map((issue) => formatRetainedIssueLine(issue));
+    const blockedIssues = blockedIssueStates.map((issue) => formatRetainedIssueLine(issue));
+    const interruptedIssues = interruptedIssueStates.map((issue) => formatRetainedIssueLine(issue));
+    const pendingFinalizationIssues = pendingFinalizationIssueStates.map((issue) =>
+      formatRetainedIssueLine(issue),
+    );
+    const runnableIssueLines = runnableIssues.map((issue) => formatRunnableIssueLine(issue));
+    const waitingForSlotIssueLines = waitingForSlotIssues.map((issue) => formatRunnableIssueLine(issue));
+    const blockedByDependencyLines = blockedByDependency.map((issue) =>
+      formatDependencyBlockedIssueLine(issue),
+    );
+    const waitingForReleaseLines = Array.from(waitingForRelease.entries()).map(([identifier]) =>
+      formatExecutionReleaseIssueLine(
+        executionCandidates.find((candidate) => candidate.identifier === identifier)!,
+      ),
+    );
+    const occupiedLines = Array.from(occupied.values()).map((entry) =>
+      formatOccupiedIssueLine(entry.issue, entry.activeIssueIdentifier, entry.activeIssueState),
+    );
 
     const summaryParts = [
       activeIssues.length ? formatCount(activeIssues.length, "active") : undefined,
@@ -547,45 +724,107 @@ export class AgentService {
       options.launchableIssues.length
         ? formatCount(options.launchableIssues.length, "runnable")
         : undefined,
-      blockedByDependency.length
+      blockedByDependencyLines.length
         ? formatCount(blockedByDependency.length, "blocked by dependency")
         : undefined,
-      waitingForRelease.length
-        ? formatCount(waitingForRelease.length, "waiting for workflow release")
+      waitingForReleaseLines.length
+        ? formatCount(waitingForReleaseLines.length, "waiting for workflow release")
         : undefined,
-      occupied.length ? formatCount(occupied.length, "occupied") : undefined,
-      waitingForSlotIssues.length
-        ? formatCount(waitingForSlotIssues.length, "waiting for agent slot")
+      occupiedLines.length ? formatCount(occupiedLines.length, "occupied") : undefined,
+      waitingForSlotIssueLines.length
+        ? formatCount(waitingForSlotIssueLines.length, "waiting for agent slot")
         : undefined,
     ].filter((part): part is string => Boolean(part));
 
-    const lines = [summaryParts.length ? `Workflow: ${summaryParts.join(", ")}` : "Workflow: idle"];
+    const summaryText = summaryParts.length ? `Workflow: ${summaryParts.join(", ")}` : "Workflow: idle";
+    const diagnostics: AgentWorkflowDiagnostics = {
+      counts: {
+        active: activeIssueStates.length || undefined,
+        blocked: blockedIssueStates.length || undefined,
+        "blocked-by-dependency": blockedByDependency.length || undefined,
+        interrupted: interruptedIssueStates.length || undefined,
+        occupied: occupied.size || undefined,
+        "pending-finalization": pendingFinalizationIssueStates.length || undefined,
+        runnable: options.launchableIssues.length || undefined,
+        "waiting-for-agent-slot": waitingForSlotIssues.length || undefined,
+        "waiting-for-workflow-release": waitingForRelease.size || undefined,
+      },
+      items: {
+        active: activeIssueStates.map((issue) => createWorkflowDiagnosticIssueFromRuntime(issue)),
+        blocked: blockedIssueStates.map((issue) => createWorkflowDiagnosticIssueFromRuntime(issue)),
+        "blocked-by-dependency": blockedByDependency.map((issue) =>
+          createWorkflowDiagnosticIssueFromIssue(issue, {
+            blockedBy: issue.blockedBy,
+          }),
+        ),
+        interrupted: interruptedIssueStates.map((issue) =>
+          createWorkflowDiagnosticIssueFromRuntime(issue),
+        ),
+        occupied: Array.from(occupied.values()).map((entry) =>
+          createWorkflowDiagnosticIssueFromIssue(entry.issue, {
+            heldBy: {
+              identifier: entry.activeIssueIdentifier,
+              status: entry.activeIssueState?.status,
+            },
+          }),
+        ),
+        "pending-finalization": pendingFinalizationIssueStates.map((issue) =>
+          createWorkflowDiagnosticIssueFromRuntime(issue),
+        ),
+        runnable: options.launchableIssues.map((issue) => createWorkflowDiagnosticIssueFromIssue(issue)),
+        "waiting-for-agent-slot": waitingForSlotIssues.map((issue) =>
+          createWorkflowDiagnosticIssueFromIssue(issue),
+        ),
+        "waiting-for-workflow-release": Array.from(waitingForRelease.entries()).map(
+          ([identifier, waitingOn]) =>
+            createWorkflowDiagnosticIssueFromIssue(
+              executionCandidates.find((candidate) => candidate.identifier === identifier)!,
+              { waitingOn },
+            ),
+        ),
+      },
+      summaryText,
+    };
+    const lines: WorkflowDiagnosticLine[] = [
+      {
+        text: summaryText,
+        workflowDiagnostics: diagnostics,
+      },
+    ];
     if (activeIssues.length) {
-      lines.push(`Active: ${formatDiagnosticList(activeIssues)}`);
+      lines.push({ text: `Active: ${formatDiagnosticList(activeIssues)}` });
     }
     if (blockedIssues.length) {
-      lines.push(`Preserved blocked: ${formatDiagnosticList(blockedIssues)}`);
+      lines.push({ text: `Preserved blocked: ${formatDiagnosticList(blockedIssues)}` });
     }
     if (interruptedIssues.length) {
-      lines.push(`Preserved interrupted: ${formatDiagnosticList(interruptedIssues)}`);
+      lines.push({ text: `Preserved interrupted: ${formatDiagnosticList(interruptedIssues)}` });
     }
     if (pendingFinalizationIssues.length) {
-      lines.push(`Waiting on finalization: ${formatDiagnosticList(pendingFinalizationIssues)}`);
+      lines.push({
+        text: `Waiting on finalization: ${formatDiagnosticList(pendingFinalizationIssues)}`,
+      });
     }
-    if (runnableIssues.length) {
-      lines.push(`Runnable now: ${formatDiagnosticList(runnableIssues)}`);
+    if (runnableIssueLines.length) {
+      lines.push({ text: `Runnable now: ${formatDiagnosticList(runnableIssueLines)}` });
     }
-    if (waitingForSlotIssues.length) {
-      lines.push(`Waiting for agent slot: ${formatDiagnosticList(waitingForSlotIssues)}`);
+    if (waitingForSlotIssueLines.length) {
+      lines.push({
+        text: `Waiting for agent slot: ${formatDiagnosticList(waitingForSlotIssueLines)}`,
+      });
     }
-    if (blockedByDependency.length) {
-      lines.push(`Blocked by dependency: ${formatDiagnosticList(blockedByDependency)}`);
+    if (blockedByDependencyLines.length) {
+      lines.push({
+        text: `Blocked by dependency: ${formatDiagnosticList(blockedByDependencyLines)}`,
+      });
     }
-    if (waitingForRelease.length) {
-      lines.push(`Waiting for workflow release: ${formatDiagnosticList(waitingForRelease)}`);
+    if (waitingForReleaseLines.length) {
+      lines.push({
+        text: `Waiting for workflow release: ${formatDiagnosticList(waitingForReleaseLines)}`,
+      });
     }
-    if (occupied.length) {
-      lines.push(`Occupied: ${formatDiagnosticList(occupied)}`);
+    if (occupiedLines.length) {
+      lines.push({ text: `Occupied: ${formatDiagnosticList(occupiedLines)}` });
     }
     return lines;
   }
@@ -711,25 +950,55 @@ export class AgentService {
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
       if (isResumableRunError(error)) {
-        await workspaceManager.markInterrupted(workspace, issue);
+        const interruptedSession = withSessionRuntime(
+          session,
+          createSessionRuntime({
+            blocker: {
+              kind: "interrupted",
+              reason,
+            },
+            state: "interrupted",
+          }),
+        );
+        await workspaceManager.markInterrupted(workspace, issue, reason);
         await this.#appendIssueOutput(workspace.outputPath, `${issue.identifier}: interrupted\n`);
         this.#publishSupervisorIssueLine(
           "issue-blocked",
           issue,
           `Interrupted: ${reason}`,
-          session,
+          interruptedSession,
           workspace,
         );
+        this.#sessionEvents.publish({
+          data: { reason },
+          phase: "stopped",
+          session: interruptedSession,
+          type: "session",
+        });
       } else {
-        await workspaceManager.markBlocked(workspace, issue);
+        const blockedSession = withSessionRuntime(
+          session,
+          createSessionRuntime({
+            blocker: {
+              kind: "blocked",
+              reason,
+            },
+            state: "blocked",
+          }),
+        );
+        await workspaceManager.markBlocked(workspace, issue, reason);
         await this.#appendIssueOutput(
           workspace.outputPath,
           `${issue.identifier}: blocked: ${reason}\n`,
         );
         this.#sessionEvents.publish({
           code: "issue-blocked",
+          data: {
+            branchName: workspace.branchName,
+            reason,
+          },
           format: "line",
-          session,
+          session: blockedSession,
           text: `${issue.identifier}: blocked`,
           type: "status",
         });
@@ -737,16 +1006,16 @@ export class AgentService {
           "issue-blocked",
           issue,
           `Blocked: ${reason}`,
-          session,
+          blockedSession,
           workspace,
         );
+        this.#sessionEvents.publish({
+          data: { reason },
+          phase: "failed",
+          session: blockedSession,
+          type: "session",
+        });
       }
-      this.#sessionEvents.publish({
-        data: { reason },
-        phase: "failed",
-        session,
-        type: "session",
-      });
       throw error;
     }
 
@@ -755,18 +1024,27 @@ export class AgentService {
     }
     await workspaceManager.runAfterRunHook(workspace.path);
     if (!result.success) {
+      const blockedSession = withSessionRuntime(
+        session,
+        createSessionRuntime({
+          blocker: {
+            kind: "blocked",
+          },
+          state: "blocked",
+        }),
+      );
       await workspaceManager.markBlocked(workspace, issue);
       await this.#appendIssueOutput(workspace.outputPath, `${issue.identifier}: blocked\n`);
       this.#sessionEvents.publish({
         code: "issue-blocked",
         format: "line",
-        session,
+        session: blockedSession,
         text: `${issue.identifier}: blocked`,
         type: "status",
       });
       this.#sessionEvents.publish({
         phase: "failed",
-        session,
+        session: blockedSession,
         type: "session",
       });
       this.#log.info("issue.checkout.preserved", {
@@ -782,26 +1060,56 @@ export class AgentService {
       completion = await workspaceManager.complete(workspace, issue);
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
-      await workspaceManager.markBlocked(workspace, issue);
+      const blockedSession = withSessionRuntime(
+        session,
+        createSessionRuntime({
+          blocker: {
+            kind: "blocked",
+            reason,
+          },
+          state: "blocked",
+        }),
+      );
+      await workspaceManager.markBlocked(workspace, issue, reason);
       await this.#appendIssueOutput(workspace.outputPath, `${issue.identifier}: blocked: ${reason}\n`);
       this.#sessionEvents.publish({
         code: "issue-blocked",
+        data: {
+          branchName: workspace.branchName,
+          reason,
+        },
         format: "line",
-        session,
+        session: blockedSession,
         text: `${issue.identifier}: blocked`,
         type: "status",
       });
-      this.#publishSupervisorIssueLine("issue-blocked", issue, `Blocked: ${reason}`, session, workspace);
+      this.#publishSupervisorIssueLine(
+        "issue-blocked",
+        issue,
+        `Blocked: ${reason}`,
+        blockedSession,
+        workspace,
+      );
       this.#sessionEvents.publish({
         data: {
           reason,
         },
         phase: "failed",
-        session,
+        session: blockedSession,
         type: "session",
       });
       throw error;
     }
+    const completedSession = withSessionRuntime(
+      session,
+      createSessionRuntime({
+        finalization: {
+          commitSha: completion.commitSha,
+          state: "pending",
+        },
+        state: "pending-finalization",
+      }),
+    );
     await this.#appendIssueOutput(
       workspace.outputPath,
       `${issue.identifier}: landed ${completion.commitSha} on ${workspace.branchName}\n`,
@@ -813,7 +1121,7 @@ export class AgentService {
         commitSha: completion.commitSha,
       },
       format: "line",
-      session,
+      session: completedSession,
       text: `${issue.identifier}: landed ${completion.commitSha} on ${workspace.branchName}`,
       type: "status",
     });
@@ -822,7 +1130,7 @@ export class AgentService {
         commitSha: completion.commitSha,
       },
       phase: "completed",
-      session,
+      session: completedSession,
       type: "session",
     });
     this.#log.info("issue.completed", {
@@ -928,13 +1236,16 @@ export class AgentService {
     return relativePath.startsWith(".") ? relativePath : `./${relativePath}`;
   }
 
-  #publishWorkflowDiagnosticLines(lines: string[]) {
-    for (const text of lines) {
+  #publishWorkflowDiagnosticLines(lines: WorkflowDiagnosticLine[]) {
+    for (const line of lines) {
       this.#sessionEvents.publish({
         code: "workflow-diagnostic",
+        data: line.workflowDiagnostics
+          ? { workflowDiagnostics: line.workflowDiagnostics }
+          : undefined,
         format: "line",
         session: this.#supervisorSession,
-        text,
+        text: line.text,
         type: "status",
       });
     }

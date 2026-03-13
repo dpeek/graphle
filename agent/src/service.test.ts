@@ -1487,6 +1487,7 @@ test("AgentService preserves timed out runs as interrupted", async () => {
   const root = await mkdtemp(resolve(tmpdir(), "agent-service-"));
   const workspacePath = resolve(root, "workspace", "workers", "OPE-66", "repo");
   const events: string[] = [];
+  const sessionEvents: AgentSessionEvent[] = [];
   let attempts = 0;
 
   await writeIoTsConfig(root, {
@@ -1578,10 +1579,23 @@ test("AgentService preserves timed out runs as interrupted", async () => {
           runBeforeRunHook: async () => undefined,
         }) as unknown as never,
     });
+    service.observeSessionEvents((event) => {
+      sessionEvents.push(event);
+    });
 
     await service.start();
     expect(attempts).toBe(2);
     expect(events).toEqual(["interrupted"]);
+    expect(
+      sessionEvents.some(
+        (event) =>
+          event.type === "session" &&
+          event.phase === "stopped" &&
+          event.session.issue?.identifier === "OPE-66" &&
+          event.session.runtime?.state === "interrupted" &&
+          event.session.runtime?.blocker?.reason === "response_timeout",
+      ),
+    ).toBe(true);
   } finally {
     await rm(root, { force: true, recursive: true });
   }
@@ -2059,6 +2073,29 @@ test("AgentService publishes supervisor and worker session events", async () => 
           event.text === "Workflow: 1 runnable",
       ),
     ).toBe(true);
+    const workflowSummaryEvent = events.find(
+      (event) =>
+        event.type === "status" &&
+        event.code === "workflow-diagnostic" &&
+        event.session.id === "supervisor" &&
+        event.text === "Workflow: 1 runnable",
+    );
+    expect(workflowSummaryEvent?.data?.workflowDiagnostics).toMatchObject({
+      counts: {
+        runnable: 1,
+      },
+      items: {
+        runnable: [
+          {
+            branchName: "io/ope-167",
+            current: {
+              identifier: "OPE-54",
+            },
+          },
+        ],
+      },
+      summaryText: "Workflow: 1 runnable",
+    });
 
     const scheduledWorker = events.find(
       (event) =>
@@ -2106,6 +2143,19 @@ test("AgentService publishes supervisor and worker session events", async () => 
           event.session.issue?.identifier === "OPE-54",
       ),
     ).toBe(true);
+    const committedEvent = events.find(
+      (event) =>
+        event.type === "status" &&
+        event.code === "issue-committed" &&
+        event.session.issue?.identifier === "OPE-54",
+    );
+    expect(committedEvent?.session.runtime).toMatchObject({
+      finalization: {
+        commitSha: "a".repeat(40),
+        state: "pending",
+      },
+      state: "pending-finalization",
+    });
   } finally {
     globalThis.fetch = originalFetch;
     await rm(root, { force: true, recursive: true });
@@ -2341,6 +2391,13 @@ test("AgentService surfaces workflow diagnostics for retained and skipped task s
           event.session.id === "supervisor",
       )
       .map((event) => event.text);
+    const workflowSummaryEvent = events.find(
+      (event) =>
+        event.type === "status" &&
+        event.code === "workflow-diagnostic" &&
+        event.session.id === "supervisor" &&
+        event.text?.startsWith("Workflow:"),
+    );
 
     expect(diagnosticLines).toContain(
       "Workflow: 1 active, 1 blocked, 1 interrupted, 1 waiting on finalization, 1 runnable, 1 blocked by dependency, 1 waiting for workflow release, 1 occupied",
@@ -2369,6 +2426,57 @@ test("AgentService surfaces workflow diagnostics for retained and skipped task s
     expect(diagnosticLines).toContain(
       "Occupied: stream OPE-121 / feature OPE-167 / task OPE-78 held by OPE-71 [running]",
     );
+    expect(workflowSummaryEvent?.data?.workflowDiagnostics).toMatchObject({
+      counts: {
+        active: 1,
+        blocked: 1,
+        "blocked-by-dependency": 1,
+        interrupted: 1,
+        occupied: 1,
+        "pending-finalization": 1,
+        runnable: 1,
+        "waiting-for-workflow-release": 1,
+      },
+      items: {
+        active: [
+          {
+            branchName: "io/ope-167",
+            current: {
+              identifier: "OPE-71",
+            },
+          },
+        ],
+        "blocked-by-dependency": [
+          {
+            blockedBy: ["OPE-170"],
+            current: {
+              identifier: "OPE-77",
+            },
+          },
+        ],
+        occupied: [
+          {
+            current: {
+              identifier: "OPE-78",
+            },
+            heldBy: {
+              identifier: "OPE-71",
+              status: "running",
+            },
+          },
+        ],
+        "waiting-for-workflow-release": [
+          {
+            current: {
+              identifier: "OPE-76",
+            },
+            waitingOn: ["feature OPE-168 is In Review"],
+          },
+        ],
+      },
+      summaryText:
+        "Workflow: 1 active, 1 blocked, 1 interrupted, 1 waiting on finalization, 1 runnable, 1 blocked by dependency, 1 waiting for workflow release, 1 occupied",
+    });
   } finally {
     await rm(root, { force: true, recursive: true });
   }
