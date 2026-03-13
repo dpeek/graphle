@@ -6,7 +6,11 @@ import type { AgentSessionRef } from "./session-events.js";
 import { createAgentTuiStore } from "./store.js";
 import { createAgentTui } from "./tui.js";
 
-function createSupervisorSession(): AgentSessionRef {
+type SessionRefOverrides = Omit<Partial<AgentSessionRef>, "issue"> & {
+  issue?: Partial<NonNullable<AgentSessionRef["issue"]>>;
+};
+
+function createSupervisorSession(overrides: SessionRefOverrides = {}): AgentSessionRef {
   return {
     id: "supervisor",
     kind: "supervisor",
@@ -14,28 +18,32 @@ function createSupervisorSession(): AgentSessionRef {
     title: "Supervisor",
     workerId: "supervisor",
     workspacePath: "/Users/dpeek/code/io",
+    ...overrides,
   };
 }
 
-function createWorkerSession(): AgentSessionRef {
+function createWorkerSession(overrides: SessionRefOverrides = {}): AgentSessionRef {
+  const { issue: issueOverrides, ...sessionOverrides } = overrides;
+  const baseIssue = {
+    id: "issue-68",
+    identifier: "OPE-68",
+    title: "Run plan",
+  };
   return {
     branchName: "ope-68",
     id: "worker:OPE-68:1",
-    issue: {
-      id: "issue-68",
-      identifier: "OPE-68",
-      title: "Run plan",
-    },
     kind: "worker",
     parentSessionId: "supervisor",
     rootSessionId: "supervisor",
     title: "Run plan",
     workerId: "OPE-68",
     workspacePath: "/Users/dpeek/code/io/.io/tree/ope-68",
+    ...sessionOverrides,
+    issue: issueOverrides ? { ...baseIssue, ...issueOverrides } : baseIssue,
   };
 }
 
-function createChildSession(): AgentSessionRef {
+function createChildSession(overrides: SessionRefOverrides = {}): AgentSessionRef {
   return {
     id: "child:OPE-68:1",
     kind: "child",
@@ -44,6 +52,7 @@ function createChildSession(): AgentSessionRef {
     title: "Helper",
     workerId: "OPE-68",
     workspacePath: "/Users/dpeek/code/io/.io/tree/ope-68",
+    ...overrides,
   };
 }
 
@@ -176,6 +185,133 @@ test("AgentTuiStore prunes completed non-supervisor sessions when retention is d
     selectedColumnId: supervisor.id,
   }).columns[0]?.content;
   expect(supervisorContent).toContain("Session started | /Users/dpeek/code/io");
+});
+
+test("buildAgentTuiRootComponentModel keeps workflow stream, task, blocker, and finalization context inspectable", () => {
+  const store = createAgentTuiStore();
+  const supervisor = createSupervisorSession({ workspacePath: "/repo" });
+  const streamWorker = createWorkerSession({
+    branchName: "io/ope-174",
+    id: "worker:OPE-174:1",
+    issue: {
+      id: "issue-174",
+      identifier: "OPE-174",
+      title: "Ship workflow-aware TUI behavior",
+    },
+    title: "Ship workflow-aware TUI behavior",
+    workerId: "OPE-174",
+    workspacePath: "/repo/.io/tree/ope-174",
+  });
+  const blockedTask = createWorkerSession({
+    branchName: "io/ope-174",
+    id: "worker:OPE-188:1",
+    issue: {
+      id: "issue-188",
+      identifier: "OPE-188",
+      title: "Prove workflow-aware TUI behavior with regression coverage",
+    },
+    title: "Prove workflow-aware TUI behavior with regression coverage",
+    workerId: "OPE-188",
+    workspacePath: "/repo/.io/tree/ope-188",
+  });
+  const commitSha = "abc1234def567890abc1234def567890abc1234";
+
+  store.observe({
+    phase: "started",
+    sequence: 1,
+    session: supervisor,
+    timestamp: "2026-03-10T02:04:00.000Z",
+    type: "session",
+  });
+  store.observe({
+    phase: "scheduled",
+    sequence: 2,
+    session: streamWorker,
+    timestamp: "2026-03-10T02:04:01.000Z",
+    type: "session",
+  });
+  store.observe({
+    code: "issue-committed",
+    data: {
+      branchName: streamWorker.branchName,
+      commitSha,
+    },
+    format: "line",
+    sequence: 3,
+    session: streamWorker,
+    text: `OPE-174: committed ${commitSha} on ${streamWorker.branchName}`,
+    timestamp: "2026-03-10T02:04:02.000Z",
+    type: "status",
+  });
+  store.observe({
+    data: {
+      commitSha,
+    },
+    phase: "completed",
+    sequence: 4,
+    session: streamWorker,
+    timestamp: "2026-03-10T02:04:03.000Z",
+    type: "session",
+  });
+  store.observe({
+    phase: "scheduled",
+    sequence: 5,
+    session: blockedTask,
+    timestamp: "2026-03-10T02:04:04.000Z",
+    type: "session",
+  });
+  store.observe({
+    code: "issue-blocked",
+    format: "line",
+    sequence: 6,
+    session: blockedTask,
+    text: "OPE-188: blocked",
+    timestamp: "2026-03-10T02:04:05.000Z",
+    type: "status",
+  });
+  store.observe({
+    data: {
+      reason: "Blocked on OPE-187 finalization",
+    },
+    phase: "failed",
+    sequence: 7,
+    session: blockedTask,
+    timestamp: "2026-03-10T02:04:06.000Z",
+    type: "session",
+  });
+
+  const snapshot = store.getSnapshot();
+  const model = buildAgentTuiRootComponentModel(snapshot, {
+    selectedColumnId: blockedTask.id,
+  });
+  const streamColumn = snapshot.columns.find((column) => column.session.id === streamWorker.id);
+  const blockedColumn = snapshot.columns.find((column) => column.session.id === blockedTask.id);
+  const streamContent = model.columns.find((column) => column.id === streamWorker.id)?.content ?? "";
+  const blockedContent = model.columns.find((column) => column.id === blockedTask.id)?.content ?? "";
+
+  expect(snapshot.columns.map((column) => column.session.id)).toEqual([
+    "supervisor",
+    "worker:OPE-174:1",
+    "worker:OPE-188:1",
+  ]);
+  expect(streamColumn?.status).toMatchObject({
+    code: "issue-committed",
+    text: `OPE-174: committed ${commitSha} on io/ope-174`,
+  });
+  expect(blockedColumn?.status).toMatchObject({
+    code: "issue-blocked",
+    text: "OPE-188: blocked",
+  });
+  expect(model.columns.find((column) => column.id === streamWorker.id)?.title).toBe("OPE-174");
+  expect(model.columns.find((column) => column.id === blockedTask.id)?.title).toBe("OPE-188");
+  expect(streamContent).toContain("Session scheduled | io/ope-174 | /repo/.io/tree/ope-174");
+  expect(streamContent).toContain(`OPE-174: committed ${commitSha} on io/ope-174`);
+  expect(streamContent).toContain("Session completed | commit abc1234 | io/ope-174 | /repo/.io/tree/ope-174");
+  expect(blockedContent).toContain("Session scheduled | io/ope-174 | /repo/.io/tree/ope-188");
+  expect(blockedContent).toContain("OPE-188: blocked");
+  expect(blockedContent).toContain(
+    "Session failed | io/ope-174 | /repo/.io/tree/ope-188: Blocked on OPE-187 finalization",
+  );
 });
 
 test("buildAgentTuiRootComponentModel renders a single human-readable block stream", () => {
