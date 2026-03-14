@@ -12,6 +12,7 @@ here.
 ## Docs
 
 - `./package-surface.md`
+- `./experiments.md`
 - `./env-vars.md`
 - `../../graph/io/overview.md`
 - `../../graph/io/architecture.md`
@@ -23,10 +24,11 @@ here.
 ## Layout
 
 - `../src/index.ts`: app-owned package exports
-- `../src/graph/`: app-specific schema, runtime bootstrap, example data, client proofs
+- `../src/experiments/`: experiment-local schema, seed, and route registration
+- `../src/graph/`: app namespace composition, runtime bootstrap, example data, client proofs
 - `../src/authority.ts`: app proof composition around `@io/graph` persisted authority helpers, including bootstrap, seed data, and snapshot-path resolution
 - `../src/server-app.ts`, `../src/server.ts`: thin HTTP proof transport over graph-owned sync and persistence surfaces
-- `../src/web/`: resolver, bindings, explorer, proof screens, operator settings,
+- `../src/web/`: shared shell/runtime, resolver, bindings, explorer, proof screens, operator settings,
   browser runtime
 - `../src/config.ts`: app runtime configuration
 - `../src/**/*.test.ts*`: proof and regression coverage
