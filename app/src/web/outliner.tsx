@@ -54,7 +54,9 @@ function snapshotNodes(graph: OutlineGraph): StoredOutlineNode[] {
     .sort((a, b) => a.order - b.order);
 }
 
-function childrenByParent(nodes: StoredOutlineNode[]): Map<string | undefined, StoredOutlineNode[]> {
+function childrenByParent(
+  nodes: StoredOutlineNode[],
+): Map<string | undefined, StoredOutlineNode[]> {
   const map = new Map<string | undefined, StoredOutlineNode[]>();
   for (const node of nodes) {
     const list = map.get(node.parentId) ?? [];
@@ -197,11 +199,7 @@ function ensureSeedOutline(graph: OutlineGraph): void {
   });
 }
 
-export function Outliner({
-  runtime,
-}: {
-  runtime?: Pick<AppRuntime, "graph">;
-}) {
+export function Outliner({ runtime }: { runtime?: Pick<AppRuntime, "graph"> }) {
   const { graph } = runtime ?? useAppRuntime();
   const containerRef = useRef<HTMLElement | null>(null);
   const [nodes, setNodes] = useState<OutlineNode[]>([]);
@@ -526,7 +524,8 @@ export function Outliner({
   }
 
   return (
-    <main
+    <section
+      data-outliner-root=""
       ref={containerRef}
       tabIndex={0}
       className="mx-auto flex h-full max-w-4xl flex-col gap-3 p-4"
@@ -535,7 +534,8 @@ export function Outliner({
       <header className="flex items-center justify-between border-b border-slate-800 pb-2">
         <h1 className="text-sm font-semibold tracking-wide text-slate-300 uppercase">Outline</h1>
         <span className="text-xs text-slate-500">
-          {busy ? "saving..." : `${nodes.length} nodes`} • {mode === "edit" ? "Edit mode" : "Command mode"}
+          {busy ? "saving..." : `${nodes.length} nodes`} •{" "}
+          {mode === "edit" ? "Edit mode" : "Command mode"}
         </span>
       </header>
 
@@ -609,6 +609,6 @@ export function Outliner({
           {error}
         </div>
       ) : null}
-    </main>
+    </section>
   );
 }

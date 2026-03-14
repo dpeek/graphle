@@ -8,7 +8,6 @@ import {
   getPredicateEntityReferenceSelection,
   usePredicateField,
 } from "./predicate.js";
-import { hrefForAppRoute } from "./routes.js";
 import { useAppRuntime } from "./runtime.js";
 
 type CompanyRef = EntityRef<typeof app.company, typeof app & typeof core>;
@@ -439,68 +438,32 @@ export function CompanyProofSurface({
   const store = storeRef.current;
 
   return (
-    <main className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(56,189,248,0.18),_transparent_32%),linear-gradient(180deg,_#f8fafc_0%,_#e2e8f0_100%)] px-4 py-8 text-slate-950 dark:bg-[radial-gradient(circle_at_top_left,_rgba(34,211,238,0.18),_transparent_28%),linear-gradient(180deg,_#020617_0%,_#0f172a_100%)] dark:text-slate-50">
-      <div className="mx-auto grid max-w-6xl gap-6 lg:grid-cols-[minmax(0,1.35fr)_320px]">
-        <section className="overflow-hidden rounded-[2rem] border border-white/70 bg-white/85 shadow-2xl shadow-slate-900/10 backdrop-blur dark:border-slate-800 dark:bg-slate-950/70">
-          <div className="border-b border-slate-200/80 px-6 py-5 dark:border-slate-800">
-            <p className="text-xs tracking-[0.24em] text-cyan-700 uppercase dark:text-cyan-300">
-              Schema-driven Milestone 4 proof
+    <div className="mx-auto grid max-w-6xl gap-6 lg:grid-cols-[minmax(0,1.35fr)_320px]">
+      <section className="overflow-hidden rounded-[2rem] border border-white/70 bg-white/85 shadow-2xl shadow-slate-900/10 backdrop-blur dark:border-slate-800 dark:bg-slate-950/70">
+        <div className="border-b border-slate-200/80 px-6 py-5 dark:border-slate-800">
+          <p className="text-xs tracking-[0.24em] text-cyan-700 uppercase dark:text-cyan-300">
+            Schema-driven Milestone 4 proof
+          </p>
+          <div className="mt-3">
+            <h2 className="text-2xl font-semibold tracking-tight">
+              Address, tags, and relationships
+            </h2>
+            <p className="mt-1 max-w-2xl text-sm text-slate-600 dark:text-slate-300">
+              One focused surface combines direct company fields, nested <code>address</code>{" "}
+              leaves, unordered <code>tags</code>, and reference-aware <code>person.worksAt</code>{" "}
+              editing through typed predicate refs.
             </p>
-            <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <h1 className="text-2xl font-semibold tracking-tight">
-                  Address, tags, and relationships
-                </h1>
-                <p className="mt-1 max-w-2xl text-sm text-slate-600 dark:text-slate-300">
-                  One focused surface combines direct company fields, nested <code>address</code>{" "}
-                  leaves, unordered <code>tags</code>, and reference-aware{" "}
-                  <code>person.worksAt</code> editing through typed predicate refs.
-                </p>
-              </div>
-              <div className="flex gap-2 text-xs text-slate-500 dark:text-slate-400">
-                <a
-                  className="rounded-full border border-current/20 px-3 py-1"
-                  href={hrefForAppRoute("query")}
-                >
-                  Query proof
-                </a>
-                <a
-                  className="rounded-full border border-current/20 px-3 py-1"
-                  href={hrefForAppRoute("relationships")}
-                >
-                  Relationship focus
-                </a>
-                <a
-                  className="rounded-full border border-current/20 px-3 py-1"
-                  href={hrefForAppRoute("explorer")}
-                >
-                  Explorer
-                </a>
-                <a
-                  className="rounded-full border border-current/20 px-3 py-1"
-                  href={hrefForAppRoute("outliner")}
-                >
-                  Outliner
-                </a>
-                <a
-                  className="rounded-full border border-current/20 px-3 py-1"
-                  href={hrefForAppRoute("envVars")}
-                >
-                  Env vars
-                </a>
-              </div>
-            </div>
           </div>
-          <CompanyProofFields sections={sections} store={store} />
-        </section>
-        <CompanyProofInstrumentation
-          company={company}
-          fields={fields}
-          person={person}
-          store={store}
-        />
-      </div>
-    </main>
+        </div>
+        <CompanyProofFields sections={sections} store={store} />
+      </section>
+      <CompanyProofInstrumentation
+        company={company}
+        fields={fields}
+        person={person}
+        store={store}
+      />
+    </div>
   );
 }
 
@@ -515,18 +478,18 @@ export function CompanyProofPage() {
 
   if (!companySnapshot || !personSnapshot) {
     return (
-      <main
-        className="flex min-h-screen items-center justify-center bg-slate-950 px-6 text-slate-100"
+      <div
+        className="flex min-h-[28rem] items-center justify-center px-6 text-slate-100"
         data-company-proof="missing-demo-data"
       >
-        <div className="w-full max-w-md rounded-[1.75rem] border border-white/10 bg-white/5 p-6">
+        <div className="w-full max-w-md rounded-[1.75rem] border border-slate-900/20 bg-slate-950 p-6">
           <p className="text-xs tracking-[0.24em] text-cyan-300 uppercase">Company proof</p>
           <h1 className="mt-3 text-2xl font-semibold">Missing demo entities</h1>
           <p className="mt-2 text-sm text-slate-300">
             The synced graph does not include the company/person records this proof expects.
           </p>
         </div>
-      </main>
+      </div>
     );
   }
 

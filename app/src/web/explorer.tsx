@@ -1734,7 +1734,7 @@ export function Explorer({ runtime }: { runtime?: ExplorerRuntime }) {
   }
 
   return (
-    <main className="grid min-h-screen grid-cols-[280px_340px_1fr] gap-4 bg-[radial-gradient(circle_at_top_left,_rgba(34,211,238,0.12),_transparent_24%),linear-gradient(180deg,_#020617_0%,_#0f172a_100%)] p-4 text-slate-100">
+    <div className="grid gap-4 text-slate-100 xl:grid-cols-[280px_minmax(0,1fr)] 2xl:grid-cols-[280px_340px_minmax(0,1fr)]">
       <div className="space-y-4">
         <Section title="Explorer">
           <div className="space-y-3">
@@ -1953,7 +1953,7 @@ export function Explorer({ runtime }: { runtime?: ExplorerRuntime }) {
           />
         ) : null}
       </div>
-    </main>
+    </div>
   );
 }
 export function ExplorerSurface({ graph, store, sync }: ExplorerSurfaceRuntime) {

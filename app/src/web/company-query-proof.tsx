@@ -11,7 +11,6 @@ import {
   type WebFilterOperatorResolution,
 } from "./bindings.js";
 import { formatPredicateValue } from "./predicate.js";
-import { hrefForAppRoute } from "./routes.js";
 import { useAppRuntime } from "./runtime.js";
 
 type CompanyRef = EntityRef<typeof app.company, typeof app & typeof core>;
@@ -243,172 +242,148 @@ export function CompanyQueryProofSurface({
   const loweredQuery = JSON.stringify(runtime.query, null, 2);
 
   return (
-    <main className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(245,158,11,0.18),_transparent_28%),radial-gradient(circle_at_bottom_right,_rgba(16,185,129,0.16),_transparent_34%),linear-gradient(180deg,_#fafaf9_0%,_#e7e5e4_100%)] px-4 py-8 text-stone-950">
-      <div className="mx-auto grid max-w-6xl gap-6 lg:grid-cols-[minmax(0,1.25fr)_340px]">
-        <section className="overflow-hidden rounded-[2rem] border border-white/80 bg-white/85 shadow-2xl shadow-stone-900/10 backdrop-blur">
-          <div className="border-b border-stone-200/80 px-6 py-5">
-            <p className="text-xs tracking-[0.24em] text-emerald-700 uppercase">
-              Schema-driven Milestone 5 proof
+    <div className="mx-auto grid max-w-6xl gap-6 lg:grid-cols-[minmax(0,1.25fr)_340px]">
+      <section className="overflow-hidden rounded-[2rem] border border-white/80 bg-white/85 shadow-2xl shadow-stone-900/10 backdrop-blur">
+        <div className="border-b border-stone-200/80 px-6 py-5">
+          <p className="text-xs tracking-[0.24em] text-emerald-700 uppercase">
+            Schema-driven Milestone 5 proof
+          </p>
+          <div className="mt-3">
+            <h1 className="text-2xl font-semibold tracking-tight">Company query builder</h1>
+            <p className="mt-1 max-w-2xl text-sm text-stone-600">
+              Filter rows resolve directly from <code>company.fields.*</code> predicate refs, reuse
+              the generic filter resolver, and lower into one small runtime query plan for the demo
+              list below.
             </p>
-            <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <h1 className="text-2xl font-semibold tracking-tight">Company query builder</h1>
-                <p className="mt-1 max-w-2xl text-sm text-stone-600">
-                  Filter rows resolve directly from <code>company.fields.*</code> predicate refs,
-                  reuse the generic filter resolver, and lower into one small runtime query plan for
-                  the demo list below.
-                </p>
-              </div>
-              <div className="flex gap-2 text-xs text-stone-500">
-                <a
-                  className="rounded-full border border-current/20 px-3 py-1"
-                  href={hrefForAppRoute("query")}
-                >
-                  Query
-                </a>
-                <a
-                  className="rounded-full border border-current/20 px-3 py-1"
-                  href={hrefForAppRoute("company")}
-                >
-                  Company proof
-                </a>
-                <a
-                  className="rounded-full border border-current/20 px-3 py-1"
-                  href={hrefForAppRoute("explorer")}
-                >
-                  Explorer
-                </a>
-              </div>
-            </div>
           </div>
-          <div className="grid gap-6 px-6 py-6">
-            <section className="grid gap-4">
-              {rows.map((row) => {
-                const currentState = getRowState(row, rowState);
-                return (
-                  <QueryFilterRow
-                    key={row.id}
-                    onOperandChange={(operand) => {
-                      setRowState((current) => {
-                        const nextState = getRowState(row, current);
-                        return {
-                          ...current,
-                          [row.id]: {
-                            ...nextState,
-                            operand,
-                          },
-                        };
-                      });
-                    }}
-                    onOperatorChange={(operatorKey) => {
-                      setRowState((current) => ({
+        </div>
+        <div className="grid gap-6 px-6 py-6">
+          <section className="grid gap-4">
+            {rows.map((row) => {
+              const currentState = getRowState(row, rowState);
+              return (
+                <QueryFilterRow
+                  key={row.id}
+                  onOperandChange={(operand) => {
+                    setRowState((current) => {
+                      const nextState = getRowState(row, current);
+                      return {
                         ...current,
                         [row.id]: {
-                          operatorKey,
-                          operand: undefined,
+                          ...nextState,
+                          operand,
                         },
-                      }));
-                    }}
-                    row={row}
-                    state={currentState}
-                  />
-                );
-              })}
-            </section>
-            <section className="grid gap-4 rounded-[1.6rem] border border-stone-200 bg-stone-50/85 p-5">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <h2 className="text-lg font-semibold tracking-tight">Matching companies</h2>
-                  <p className="text-sm text-stone-600">
-                    Active clauses:{" "}
-                    <span data-company-query-clause-count="">{runtime.query.clauses.length}</span>
-                  </p>
-                </div>
-                <div
-                  className="rounded-full bg-stone-900 px-3 py-1 text-xs tracking-[0.2em] text-stone-50 uppercase"
-                  data-company-query-match-count=""
-                >
-                  {matches.length} matches
-                </div>
+                      };
+                    });
+                  }}
+                  onOperatorChange={(operatorKey) => {
+                    setRowState((current) => ({
+                      ...current,
+                      [row.id]: {
+                        operatorKey,
+                        operand: undefined,
+                      },
+                    }));
+                  }}
+                  row={row}
+                  state={currentState}
+                />
+              );
+            })}
+          </section>
+          <section className="grid gap-4 rounded-[1.6rem] border border-stone-200 bg-stone-50/85 p-5">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-semibold tracking-tight">Matching companies</h2>
+                <p className="text-sm text-stone-600">
+                  Active clauses:{" "}
+                  <span data-company-query-clause-count="">{runtime.query.clauses.length}</span>
+                </p>
               </div>
-              <div className="grid gap-3 md:grid-cols-2">
-                {matches.length ? (
-                  matches.map((company) => {
-                    const summary = renderCompanySummary(company);
-                    return (
-                      <article
-                        className="grid gap-3 rounded-[1.25rem] border border-stone-200 bg-white p-4"
-                        data-company-query-match={company.id}
-                        key={company.id}
-                      >
+              <div
+                className="rounded-full bg-stone-900 px-3 py-1 text-xs tracking-[0.2em] text-stone-50 uppercase"
+                data-company-query-match-count=""
+              >
+                {matches.length} matches
+              </div>
+            </div>
+            <div className="grid gap-3 md:grid-cols-2">
+              {matches.length ? (
+                matches.map((company) => {
+                  const summary = renderCompanySummary(company);
+                  return (
+                    <article
+                      className="grid gap-3 rounded-[1.25rem] border border-stone-200 bg-white p-4"
+                      data-company-query-match={company.id}
+                      key={company.id}
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <h3 className="text-base font-semibold text-stone-950">{summary.name}</h3>
+                        <span className="rounded-full bg-emerald-100 px-2 py-1 text-xs text-emerald-800">
+                          {summary.status}
+                        </span>
+                      </div>
+                      <div className="grid gap-2 text-sm text-stone-600">
                         <div className="flex items-center justify-between gap-3">
-                          <h3 className="text-base font-semibold text-stone-950">{summary.name}</h3>
-                          <span className="rounded-full bg-emerald-100 px-2 py-1 text-xs text-emerald-800">
-                            {summary.status}
-                          </span>
+                          <span>Founded</span>
+                          <span>{summary.foundedYear}</span>
                         </div>
-                        <div className="grid gap-2 text-sm text-stone-600">
-                          <div className="flex items-center justify-between gap-3">
-                            <span>Founded</span>
-                            <span>{summary.foundedYear}</span>
-                          </div>
-                          <div className="flex items-center justify-between gap-3">
-                            <span>Website</span>
-                            <a className="text-emerald-700" href={summary.website}>
-                              {summary.website}
-                            </a>
-                          </div>
-                          <div className="flex items-center justify-between gap-3">
-                            <span>Id</span>
-                            <code className="text-xs text-stone-500">{company.id}</code>
-                          </div>
+                        <div className="flex items-center justify-between gap-3">
+                          <span>Website</span>
+                          <a className="text-emerald-700" href={summary.website}>
+                            {summary.website}
+                          </a>
                         </div>
-                      </article>
-                    );
-                  })
-                ) : (
-                  <div
-                    className="rounded-[1.25rem] border border-dashed border-stone-300 bg-white/80 p-6 text-sm text-stone-500 md:col-span-2"
-                    data-company-query-empty=""
-                  >
-                    No companies match the active filter plan.
-                  </div>
-                )}
-              </div>
-            </section>
-          </div>
-        </section>
-        <aside className="space-y-4 rounded-[2rem] border border-stone-900/10 bg-stone-950 px-5 py-4 text-stone-100 shadow-xl shadow-stone-900/15">
-          <div className="space-y-1">
-            <p className="text-xs tracking-[0.24em] text-amber-300 uppercase">Lowered query</p>
-            <p className="text-sm text-stone-300">
-              The demo compiles active filter rows into one <code>AND</code> plan keyed by predicate
-              id and operator contract.
-            </p>
-          </div>
-          <pre
-            className="overflow-x-auto rounded-[1.5rem] border border-white/10 bg-white/5 p-4 text-xs text-stone-200"
-            data-company-query-json=""
-          >
-            {loweredQuery}
-          </pre>
-          <div className="grid gap-3 rounded-[1.5rem] border border-white/10 bg-white/5 p-4 text-sm">
-            <div className="flex items-center justify-between gap-3">
-              <span className="text-stone-300">entity type</span>
-              <code>{runtime.query.entityTypeKey}</code>
+                        <div className="flex items-center justify-between gap-3">
+                          <span>Id</span>
+                          <code className="text-xs text-stone-500">{company.id}</code>
+                        </div>
+                      </div>
+                    </article>
+                  );
+                })
+              ) : (
+                <div
+                  className="rounded-[1.25rem] border border-dashed border-stone-300 bg-white/80 p-6 text-sm text-stone-500 md:col-span-2"
+                  data-company-query-empty=""
+                >
+                  No companies match the active filter plan.
+                </div>
+              )}
             </div>
-            <div className="flex items-center justify-between gap-3">
-              <span className="text-stone-300">combinator</span>
-              <code>{runtime.query.combinator}</code>
-            </div>
-            <div className="flex items-center justify-between gap-3">
-              <span className="text-stone-300">sample ref</span>
-              <code>{querySource.id}</code>
-            </div>
+          </section>
+        </div>
+      </section>
+      <aside className="space-y-4 rounded-[2rem] border border-stone-900/10 bg-stone-950 px-5 py-4 text-stone-100 shadow-xl shadow-stone-900/15">
+        <div className="space-y-1">
+          <p className="text-xs tracking-[0.24em] text-amber-300 uppercase">Lowered query</p>
+          <p className="text-sm text-stone-300">
+            The demo compiles active filter rows into one <code>AND</code> plan keyed by predicate
+            id and operator contract.
+          </p>
+        </div>
+        <pre
+          className="overflow-x-auto rounded-[1.5rem] border border-white/10 bg-white/5 p-4 text-xs text-stone-200"
+          data-company-query-json=""
+        >
+          {loweredQuery}
+        </pre>
+        <div className="grid gap-3 rounded-[1.5rem] border border-white/10 bg-white/5 p-4 text-sm">
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-stone-300">entity type</span>
+            <code>{runtime.query.entityTypeKey}</code>
           </div>
-        </aside>
-      </div>
-    </main>
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-stone-300">combinator</span>
+            <code>{runtime.query.combinator}</code>
+          </div>
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-stone-300">sample ref</span>
+            <code>{querySource.id}</code>
+          </div>
+        </div>
+      </aside>
+    </div>
   );
 }
 
@@ -420,18 +395,18 @@ export function CompanyQueryProofPage() {
 
   if (!querySourceSnapshot || companySnapshots.length === 0) {
     return (
-      <main
-        className="flex min-h-screen items-center justify-center bg-stone-950 px-6 text-stone-50"
+      <div
+        className="flex min-h-[28rem] items-center justify-center px-6 text-stone-50"
         data-company-query="missing-demo-data"
       >
-        <div className="w-full max-w-md rounded-[1.75rem] border border-white/10 bg-white/5 p-6">
+        <div className="w-full max-w-md rounded-[1.75rem] border border-stone-900/10 bg-stone-950 p-6">
           <p className="text-xs tracking-[0.24em] text-amber-300 uppercase">Query proof</p>
           <h1 className="mt-3 text-2xl font-semibold">Missing company records</h1>
           <p className="mt-2 text-sm text-stone-300">
             The synced graph does not have company entities to drive this query proof.
           </p>
         </div>
-      </main>
+      </div>
     );
   }
 

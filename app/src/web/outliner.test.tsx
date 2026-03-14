@@ -1,12 +1,13 @@
 import { describe, expect, it } from "bun:test";
+
 import { act, create, type ReactTestInstance } from "react-test-renderer";
 
 import { createExampleRuntime } from "../graph/runtime.js";
-
 import { Outliner } from "./outliner.js";
 
-(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT =
-  true;
+(
+  globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
+).IS_REACT_ACT_ENVIRONMENT = true;
 
 function collectText(node: ReactTestInstance): string {
   return node.children
@@ -27,7 +28,7 @@ describe("outliner", () => {
     expect(collectText(renderer!.root)).toContain("Untitled");
     expect(collectText(renderer!.root)).not.toContain('Validation failed for "parent"');
 
-    const main = renderer!.root.findByType("main");
+    const main = renderer!.root.findByProps({ "data-outliner-root": "" });
     await act(async () => {
       main.props.onKeyDownCapture({
         altKey: false,

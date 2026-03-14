@@ -3,7 +3,6 @@ import { core, type EntityRef } from "@io/graph";
 import { app } from "../graph/app.js";
 import { PredicateFieldEditor, PredicateFieldView } from "./bindings.js";
 import { usePredicateField } from "./predicate.js";
-import { hrefForAppRoute } from "./routes.js";
 import { useAppRuntime } from "./runtime.js";
 
 type PersonRef = EntityRef<typeof app.person, typeof app & typeof core>;
@@ -46,71 +45,47 @@ function RelationshipProofSidebar({ person }: { person: PersonRef }) {
 
 export function RelationshipProofSurface({ person }: { person: PersonRef }) {
   return (
-    <main className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(14,165,233,0.18),_transparent_32%),linear-gradient(180deg,_#f8fafc_0%,_#dbeafe_100%)] px-4 py-8 text-slate-950 dark:bg-[radial-gradient(circle_at_top_left,_rgba(34,211,238,0.18),_transparent_28%),linear-gradient(180deg,_#020617_0%,_#0f172a_100%)] dark:text-slate-50">
-      <div className="mx-auto grid max-w-6xl gap-6 lg:grid-cols-[minmax(0,1.35fr)_320px]">
-        <section className="overflow-hidden rounded-[2rem] border border-white/70 bg-white/85 shadow-2xl shadow-slate-900/10 backdrop-blur dark:border-slate-800 dark:bg-slate-950/70">
-          <div className="border-b border-slate-200/80 px-6 py-5 dark:border-slate-800">
-            <p className="text-xs tracking-[0.24em] text-cyan-700 uppercase dark:text-cyan-300">
-              Entity-reference proof
+    <div className="mx-auto grid max-w-6xl gap-6 lg:grid-cols-[minmax(0,1.35fr)_320px]">
+      <section className="overflow-hidden rounded-[2rem] border border-white/70 bg-white/85 shadow-2xl shadow-slate-900/10 backdrop-blur dark:border-slate-800 dark:bg-slate-950/70">
+        <div className="border-b border-slate-200/80 px-6 py-5 dark:border-slate-800">
+          <p className="text-xs tracking-[0.24em] text-cyan-700 uppercase dark:text-cyan-300">
+            Entity-reference proof
+          </p>
+          <div className="mt-3">
+            <h1 className="text-2xl font-semibold tracking-tight">Person relationships</h1>
+            <p className="mt-1 max-w-2xl text-sm text-slate-600 dark:text-slate-300">
+              <code>person.worksAt</code> stays reference-aware: it links existing companies by
+              entity id instead of rendering like an embedded object editor.
             </p>
-            <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <h1 className="text-2xl font-semibold tracking-tight">Person relationships</h1>
-                <p className="mt-1 max-w-2xl text-sm text-slate-600 dark:text-slate-300">
-                  <code>person.worksAt</code> stays reference-aware: it links existing companies by
-                  entity id instead of rendering like an embedded object editor.
-                </p>
-              </div>
-              <div className="flex gap-2 text-xs text-slate-500 dark:text-slate-400">
-                <a
-                  className="rounded-full border border-current/20 px-3 py-1"
-                  href={hrefForAppRoute("company")}
-                >
-                  Company
-                </a>
-                <a
-                  className="rounded-full border border-current/20 px-3 py-1"
-                  href={hrefForAppRoute("explorer")}
-                >
-                  Explorer
-                </a>
-                <a
-                  className="rounded-full border border-current/20 px-3 py-1"
-                  href={hrefForAppRoute("outliner")}
-                >
-                  Outliner
-                </a>
-              </div>
+          </div>
+        </div>
+        <div className="grid gap-4 px-6 py-6 md:grid-cols-2">
+          <section className="grid gap-3 rounded-[1.5rem] border border-slate-200/80 bg-slate-50/90 p-4 dark:border-slate-800 dark:bg-slate-900/50">
+            <div>
+              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                Current linked companies
+              </p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                View output stays on relationship identities and company labels.
+              </p>
             </div>
-          </div>
-          <div className="grid gap-4 px-6 py-6 md:grid-cols-2">
-            <section className="grid gap-3 rounded-[1.5rem] border border-slate-200/80 bg-slate-50/90 p-4 dark:border-slate-800 dark:bg-slate-900/50">
-              <div>
-                <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                  Current linked companies
-                </p>
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                  View output stays on relationship identities and company labels.
-                </p>
-              </div>
-              <PredicateFieldView predicate={person.fields.worksAt} />
-            </section>
-            <section className="grid gap-3 rounded-[1.5rem] border border-slate-200/80 bg-slate-50/90 p-4 dark:border-slate-800 dark:bg-slate-900/50">
-              <div>
-                <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                  Edit related companies
-                </p>
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Select and remove existing companies. Inline creation stays out of scope here.
-                </p>
-              </div>
-              <PredicateFieldEditor predicate={person.fields.worksAt} />
-            </section>
-          </div>
-        </section>
-        <RelationshipProofSidebar person={person} />
-      </div>
-    </main>
+            <PredicateFieldView predicate={person.fields.worksAt} />
+          </section>
+          <section className="grid gap-3 rounded-[1.5rem] border border-slate-200/80 bg-slate-50/90 p-4 dark:border-slate-800 dark:bg-slate-900/50">
+            <div>
+              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                Edit related companies
+              </p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Select and remove existing companies. Inline creation stays out of scope here.
+              </p>
+            </div>
+            <PredicateFieldEditor predicate={person.fields.worksAt} />
+          </section>
+        </div>
+      </section>
+      <RelationshipProofSidebar person={person} />
+    </div>
   );
 }
 
@@ -122,18 +97,18 @@ export function RelationshipProofPage() {
 
   if (!personSnapshot) {
     return (
-      <main
-        className="flex min-h-screen items-center justify-center bg-slate-950 px-6 text-slate-100"
+      <div
+        className="flex min-h-[28rem] items-center justify-center px-6 text-slate-100"
         data-relationship-proof="missing-demo-data"
       >
-        <div className="w-full max-w-md rounded-[1.75rem] border border-white/10 bg-white/5 p-6">
+        <div className="w-full max-w-md rounded-[1.75rem] border border-slate-900/20 bg-slate-950 p-6">
           <p className="text-xs tracking-[0.24em] text-cyan-300 uppercase">Relationship proof</p>
           <h1 className="mt-3 text-2xl font-semibold">Missing person records</h1>
           <p className="mt-2 text-sm text-slate-300">
             The synced graph does not include a person entity for this relationship demo.
           </p>
         </div>
-      </main>
+      </div>
     );
   }
 
