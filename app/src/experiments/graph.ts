@@ -1,16 +1,18 @@
 import type { NamespaceClient } from "@io/graph";
 
+import { companyExperimentGraph } from "./company/graph.js";
 import {
   collectExperimentSchema,
   seedRegisteredExperiments,
   type RegisteredExperimentSeedResult,
 } from "./contracts.js";
-import { companyExperimentGraph } from "./company/graph.js";
 import { envVarsExperimentGraph } from "./env-vars/graph.js";
 import { outlinerExperimentGraph } from "./outliner/graph.js";
+import { workspaceExperimentGraph } from "./workspace/graph.js";
 
 export const appExperimentGraphs = [
   companyExperimentGraph,
+  workspaceExperimentGraph,
   outlinerExperimentGraph,
   envVarsExperimentGraph,
 ] as const;

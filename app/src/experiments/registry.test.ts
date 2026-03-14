@@ -1,5 +1,6 @@
-import { bootstrap, createStore, createTypeClient, core } from "@io/graph";
 import { describe, expect, it } from "bun:test";
+
+import { bootstrap, createStore, createTypeClient, core } from "@io/graph";
 
 import { app } from "../graph/app.js";
 import { appExperimentGraphs, appGraphDefinitions, seedRegisteredAppExperiments } from "./graph.js";
@@ -23,10 +24,17 @@ describe("app experiment registries", () => {
       "person",
       "secretRef",
       "status",
+      "workflowStatus",
+      "workflowStatusCategory",
+      "workspace",
+      "workspaceIssue",
+      "workspaceLabel",
+      "workspaceProject",
     ]);
     expect(app.company.values.key).toBe(appGraphDefinitions.company.values.key);
     expect(app.block.values.key).toBe(appGraphDefinitions.block.values.key);
     expect(app.envVar.values.key).toBe(appGraphDefinitions.envVar.values.key);
+    expect(app.workspace.values.key).toBe(appGraphDefinitions.workspace.values.key);
   });
 
   it("runs registered experiment seed hooks through the shared example runtime", () => {
@@ -40,6 +48,7 @@ describe("app experiment registries", () => {
     expect(graph.company.get(seeded.acme).name).toBe("Acme Corp");
     expect(graph.person.get(seeded.alice).name).toBe("Alice");
     expect(graph.block.get(seeded.rootBlock).text).toBe("Untitled");
+    expect(graph.workspace.get(seeded.ioWorkspace).name).toBe("IO Planning Workspace");
   });
 
   it("collects unique route keys and paths from experiment web registrations", () => {

@@ -10,5 +10,11 @@ test("@io/app exports only the app-owned proof surface", () => {
     "createExampleRuntime",
     "person",
     "status",
+    "workflowStatus",
+    "workflowStatusCategory",
+    "workspace",
+    "workspaceIssue",
+    "workspaceLabel",
+    "workspaceProject",
   ]);
 });
