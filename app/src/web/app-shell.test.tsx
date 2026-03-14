@@ -44,11 +44,22 @@ function clickNavLink(node: ReactTestInstance): void {
 }
 
 describe("app shell", () => {
-  it("canonicalizes legacy surface URLs onto shared route paths", async () => {
+  it("canonicalizes the legacy env-var surface URL onto the route path", async () => {
     const { browser, renderer } = await renderShell("/?surface=env-vars&mode=demo#details");
 
     expect(browser.url()).toBe("/settings/env-vars?mode=demo#details");
     expect(renderer.root.findByProps({ "data-app-shell-route": "envVars" })).toBeDefined();
+
+    act(() => {
+      renderer.unmount();
+    });
+  });
+
+  it("strips stale surface params from explicit proof routes", async () => {
+    const { browser, renderer } = await renderShell("/query?surface=query&mode=demo#details");
+
+    expect(browser.url()).toBe("/query?mode=demo#details");
+    expect(renderer.root.findByProps({ "data-app-shell-route": "query" })).toBeDefined();
 
     act(() => {
       renderer.unmount();

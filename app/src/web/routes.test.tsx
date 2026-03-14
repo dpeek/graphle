@@ -8,8 +8,16 @@ describe("app routes", () => {
     expect(hrefForAppRoute("envVars")).toBe("/settings/env-vars");
   });
 
-  it("keeps the legacy query-param surface alias for env vars", () => {
+  it("keeps the legacy env-var surface alias from the root route", () => {
     expect(resolveAppRoute({ pathname: "/", search: "?surface=env-vars" })).toBe("envVars");
+  });
+
+  it("stops resolving proof surfaces from the legacy surface query param", () => {
+    expect(resolveAppRoute({ pathname: "/", search: "?surface=query" })).toBe("company");
+  });
+
+  it("prefers explicit route paths over legacy surface params", () => {
+    expect(resolveAppRoute({ pathname: "/query", search: "?surface=env-vars" })).toBe("query");
   });
 
   it("falls back to the pathname when an unknown legacy surface alias is present", () => {

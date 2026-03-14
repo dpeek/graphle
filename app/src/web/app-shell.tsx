@@ -4,7 +4,6 @@ import {
   appRouteGroups,
   appRoutes,
   getAppRoute,
-  getLegacyAppRoute,
   hrefForAppRoute,
   resolveAppRoute,
   type AppRouteDefinition,
@@ -63,6 +62,10 @@ const windowAppBrowser: AppBrowser = {
   },
 };
 
+function hasSurfaceParam(search: string): boolean {
+  return new URLSearchParams(search).has("surface");
+}
+
 function buildCanonicalAppUrl(location: AppLocationSnapshot, route: AppRouteKey): string {
   const params = new URLSearchParams(location.search);
   params.delete("surface");
@@ -120,7 +123,7 @@ export function AppShell({ browser = windowAppBrowser }: { browser?: AppBrowser 
   const Screen = route.component;
 
   useEffect(() => {
-    if (!getLegacyAppRoute(location.search)) return;
+    if (!hasSurfaceParam(location.search)) return;
     const canonicalUrl = buildCanonicalAppUrl(location, routeKey);
     const currentUrl = `${location.pathname}${location.search}${location.hash}`;
     if (canonicalUrl === currentUrl) return;

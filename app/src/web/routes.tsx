@@ -125,11 +125,6 @@ const routeByKey = new Map<AppRouteKey, AppRouteDefinition>(
 const routeByPath = new Map<string, AppRouteKey>(appRoutes.map((route) => [route.path, route.key]));
 
 const legacySurfaceToRoute: Record<string, AppRouteKey> = {
-  company: "company",
-  query: "query",
-  relationships: "relationships",
-  explorer: "explorer",
-  outliner: "outliner",
   "env-vars": "envVars",
 };
 
@@ -159,9 +154,12 @@ export function resolveAppRoute(input: {
   readonly pathname: string;
   readonly search?: string;
 }): AppRouteKey {
+  const pathname = normalizePathname(input.pathname);
+  const pathnameRoute = routeByPath.get(pathname);
+  if (pathnameRoute && pathname !== "/") return pathnameRoute;
+
   const legacyRoute = getLegacyAppRoute(input.search);
   if (legacyRoute) return legacyRoute;
 
-  const pathname = normalizePathname(input.pathname);
-  return routeByPath.get(pathname) ?? "company";
+  return pathnameRoute ?? "company";
 }
