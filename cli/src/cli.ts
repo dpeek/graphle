@@ -3,6 +3,7 @@
 import { runAgentCli } from "@io/agent";
 import { configurePackage, createPackage } from "./create.js";
 import { install } from "./install.js";
+import { runTask } from "./task.js";
 import { setExludeFiles } from "./vscode.js";
 
 async function run([cmd, ...args]: string[]) {
@@ -19,6 +20,8 @@ async function run([cmd, ...args]: string[]) {
       return setExludeFiles(false);
     case "install":
       return install(args);
+    case "task":
+      return runTask(args);
   }
 }
 
