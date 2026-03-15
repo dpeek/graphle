@@ -3,15 +3,17 @@ import {
   type GraphMutationValidationResult,
   type PredicateRef,
 } from "@io/graph";
+import {
+  performValidatedMutation,
+  usePersistedMutationCallbacks,
+  usePredicateField,
+} from "@io/graph/react";
+import { PredicateFieldEditor } from "@io/graph/react-dom";
 import { useEffect, useState, type ReactNode } from "react";
 
-import { PredicateFieldEditor } from "./bindings.js";
-import { performValidatedMutation } from "./mutation-validation.js";
-import { usePredicateField } from "./predicate.js";
 import {
   type AppRuntime,
   useAppRuntime,
-  usePersistedMutationCallbacks,
 } from "./runtime.js";
 
 type WorkspaceRouteRuntime = Pick<AppRuntime, "graph" | "sync">;

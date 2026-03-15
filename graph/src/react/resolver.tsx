@@ -1,10 +1,6 @@
-import type { AnyTypeOutput, EdgeOutput, PredicateRef } from "@io/graph";
+import type { AnyTypeOutput, EdgeOutput, PredicateRef } from "../index.js";
 import type { ComponentType, ReactNode } from "react";
 
-import {
-  genericWebFieldEditorCapabilities,
-  genericWebFieldViewCapabilities,
-} from "./generic-fields.js";
 import { getPredicateDisplayKind, getPredicateEditorKind } from "./predicate.js";
 
 export type PredicateFieldProps<
@@ -140,13 +136,10 @@ export function createWebFieldResolver(input?: {
   };
 }
 
-export const defaultWebFieldResolver = createWebFieldResolver({
-  view: genericWebFieldViewCapabilities,
-  editor: genericWebFieldEditorCapabilities,
-});
+export const defaultWebFieldResolver = createWebFieldResolver();
 
 function UnsupportedField({ kind, reason }: UnsupportedFieldFallbackProps): ReactNode {
-  return <span data-web-field-status="unsupported">{kind ? `${reason}:${kind}` : reason}</span>;
+  return kind ? `${reason}:${kind}` : reason;
 }
 
 export function PredicateFieldView<

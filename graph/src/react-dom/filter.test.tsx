@@ -1,11 +1,12 @@
 import { describe, expect, it } from "bun:test";
 
-import { core, defineType } from "@io/graph";
+import { core, defineType } from "../index.js";
+import { lowerWebFilterClause } from "../react/index.js";
 import { act, create } from "react-test-renderer";
 
-import { app } from "../graph/app.js";
-import { statusTypeModule } from "../type/status/index.js";
-import { FilterOperandEditor, defaultWebFilterResolver, lowerWebFilterClause } from "./bindings.js";
+import { app } from "../../../app/src/graph/app.js";
+import { statusTypeModule } from "../../../app/src/type/status/index.js";
+import { FilterOperandEditor, defaultWebFilterResolver } from "./index.js";
 
 (
   globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }

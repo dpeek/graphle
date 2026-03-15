@@ -8,22 +8,20 @@ import {
   core,
   fieldGroupPath,
   type FieldGroupRef,
-} from "@io/graph";
+} from "../index.js";
+import {
+  GraphMutationRuntimeProvider,
+  createWebFieldResolver,
+  usePredicateField,
+  type PredicateFieldEditorCapability,
+  type PredicateFieldProps,
+  type PredicateFieldViewCapability,
+} from "../react/index.js";
 import { Fragment, Profiler } from "react";
 import { act, create } from "react-test-renderer";
 
-import { app } from "../graph/app.js";
-import {
-  PredicateFieldEditor,
-  PredicateFieldView,
-  createWebFieldResolver,
-  usePredicateField,
-} from "./bindings.js";
-import type {
-  PredicateFieldEditorCapability,
-  PredicateFieldProps,
-  PredicateFieldViewCapability,
-} from "./resolver.js";
+import { app } from "../../../app/src/graph/app.js";
+import { PredicateFieldEditor, PredicateFieldView } from "./index.js";
 
 (
   globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
@@ -250,6 +248,45 @@ describe("web predicate bindings", () => {
         }),
       ],
     });
+
+    act(() => {
+      renderer?.unmount();
+    });
+  });
+
+  it("flushes pending synced mutations after default DOM editors succeed", async () => {
+    const { graph, companyId } = setupGraph();
+    const companyRef = graph.company.ref(companyId);
+    let flushCalls = 0;
+
+    let renderer: ReturnType<typeof create> | undefined;
+    await act(async () => {
+      renderer = create(
+        <GraphMutationRuntimeProvider
+          runtime={{
+            sync: {
+              flush: async () => {
+                flushCalls += 1;
+                return [];
+              },
+              getPendingTransactions: () => [{}],
+            },
+          }}
+        >
+          <PredicateFieldEditor predicate={companyRef.fields.name} />
+        </GraphMutationRuntimeProvider>,
+      );
+    });
+
+    const input = renderer?.root.findByProps({ "data-web-field-kind": "text" });
+
+    await act(async () => {
+      input?.props.onChange({ target: { value: "Acme Labs" } });
+      await Promise.resolve();
+    });
+
+    expect(companyRef.fields.name.get()).toBe("Acme Labs");
+    expect(flushCalls).toBe(1);
 
     act(() => {
       renderer?.unmount();

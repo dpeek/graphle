@@ -88,12 +88,14 @@ The main recommendation of this document is:
 - field metadata and filter semantics already live in `graph` through
   `TypeModuleMeta`, `TypeModuleFilter`, and `defineReferenceField(...)`
   - Reference: `../graph/src/graph/type-module.ts`
-- the current field resolver stack is reusable, but it lives in `app`
-  - `../app/src/web/predicate.ts`
-  - `../app/src/web/resolver.tsx`
-  - `../app/src/web/generic-fields.tsx`
-  - `../app/src/web/filter.tsx`
-  - `../app/src/web/generic-filter-editors.tsx`
+- the current field resolver stack is reusable and already split across graph
+  adapter subpaths
+  - `../graph/src/react/predicate.ts`
+  - `../graph/src/react/resolver.tsx`
+  - `../graph/src/react/filter.tsx`
+  - `../graph/src/react-dom/fields.tsx`
+  - `../graph/src/react-dom/filter-editors.tsx`
+  - app proof routes consume those DOM widgets from `@io/graph/react-dom`
 - the strongest current workflow proof is the workspace surface, but it is still
   a route-owned screen
   - `../app/src/web/workspace.tsx`
@@ -499,10 +501,10 @@ That model matches the current source better than either extreme:
 
 The current source already shows the host split:
 
-- `../app/src/web/predicate.ts` and `../app/src/web/resolver.tsx` are mostly
-  host-neutral React logic
-- `../app/src/web/generic-fields.tsx` and
-  `../app/src/web/generic-filter-editors.tsx` are DOM-specific
+- `../graph/src/react/predicate.ts`, `../graph/src/react/resolver.tsx`, and
+  `../graph/src/react/filter.tsx` are host-neutral React logic
+- `../graph/src/react-dom/fields.tsx` and
+  `../graph/src/react-dom/filter-editors.tsx` are DOM-specific
 
 So the right split is not:
 
@@ -605,26 +607,25 @@ References:
 
 - `../graph/src/graph/type-module.ts`
 - `../graph/src/graph/web-policy.ts`
-- `../app/src/web/predicate.ts`
+- `../graph/src/react/predicate.ts`
 
 The field model should remain:
 
 - schema owns semantic kinds
 - adapter chooses a capability for that kind
 
-### Move current reusable field logic into graph adapter subpaths
+### Current reusable field logic in graph adapter subpaths
 
-Move these files into the `graph` workspace, split by host:
+These files now live in the `graph` workspace, split by host:
 
-- move `../app/src/web/predicate.ts` to `graph/src/react/predicate.ts`
-- move `../app/src/web/resolver.tsx` to `graph/src/react/resolver.tsx`
-- move `../app/src/web/bindings.ts` to `graph/src/react/bindings.ts`
-- move `../app/src/web/mutation-validation.ts` to `graph/src/react/`
-- move host-neutral parts of `../app/src/web/filter.tsx` to
-  `graph/src/react/filter.tsx`
-- move `../app/src/web/generic-fields.tsx` to `graph/src/react-dom/fields.tsx`
-- move `../app/src/web/generic-filter-editors.tsx` to
-  `graph/src/react-dom/filter-editors.tsx`
+- `../graph/src/react/predicate.ts`
+- `../graph/src/react/resolver.tsx`
+- `../graph/src/react/bindings.ts`
+- `../graph/src/react/mutation-validation.ts`
+- `../graph/src/react/filter.tsx`
+- `../graph/src/react-dom/fields.tsx`
+- `../graph/src/react-dom/filter-editors.tsx`
+- app proof routes consume the DOM widgets from `@io/graph/react-dom`
 
 ### Per-type renderer placement
 
@@ -982,7 +983,7 @@ Good reuse:
 
 Not directly reusable:
 
-- DOM editors and viewers from the current `generic-fields.tsx`
+- DOM editors and viewers from `../graph/src/react-dom/fields.tsx`
 - browser-specific input assumptions
 
 This is why the adapter model needs both:
@@ -1035,23 +1036,18 @@ Expected result:
 
 Goal:
 
-- move reusable React binding and DOM widget code out of `app`
+- keep reusable React binding and DOM widget code out of `app`
 - preserve behavior
 - avoid changing the core engine contract
 
 Steps:
 
-1. Add `./react`, `./react-dom`, and `./react-opentui` exports to
+1. Keep `./react`, `./react-dom`, and `./react-opentui` exports on
    `graph/package.json`.
-2. Create:
-   - `graph/src/react/`
-   - `graph/src/react-dom/`
-   - `graph/src/react-opentui/`
-3. Move host-neutral files from `app/src/web/` into `graph/src/react/`.
-4. Move DOM-specific files into `graph/src/react-dom/`.
-5. Update `app` imports to consume the new graph adapter subpaths.
-6. Move or duplicate the relevant tests so the adapter code is tested in the
-   `graph` workspace.
+2. Keep host-neutral files under `graph/src/react/`.
+3. Keep DOM-specific files under `graph/src/react-dom/`.
+4. Keep app imports consuming the graph adapter subpaths.
+5. Keep the relevant tests in the `graph` workspace.
 
 Expected result:
 

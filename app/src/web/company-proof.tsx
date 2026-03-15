@@ -1,13 +1,13 @@
 import { core, fieldGroupPath, type EntityRef, type PredicateRef } from "@io/graph";
-import { Profiler, useLayoutEffect, useRef, useSyncExternalStore } from "react";
-
-import { app } from "../graph/app.js";
-import { PredicateFieldEditor } from "./bindings.js";
 import {
   getPredicateEntityReferencePolicy,
   getPredicateEntityReferenceSelection,
   usePredicateField,
-} from "./predicate.js";
+} from "@io/graph/react";
+import { PredicateFieldEditor } from "@io/graph/react-dom";
+import { Profiler, useLayoutEffect, useRef, useSyncExternalStore } from "react";
+
+import { app } from "../graph/app.js";
 import { useAppRuntime } from "./runtime.js";
 
 type CompanyRef = EntityRef<typeof app.company, typeof app & typeof core>;

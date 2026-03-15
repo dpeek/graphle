@@ -1,16 +1,15 @@
 import { core, type EntityRef, type PredicateRef } from "@io/graph";
-import { useState } from "react";
-
-import { app } from "../graph/app.js";
 import {
-  FilterOperandEditor,
   compileWebFilterQuery,
-  defaultWebFilterResolver,
+  formatPredicateValue,
   type ActiveWebFilterClause,
   type WebFieldFilterResolution,
   type WebFilterOperatorResolution,
-} from "./bindings.js";
-import { formatPredicateValue } from "./predicate.js";
+} from "@io/graph/react";
+import { FilterOperandEditor, defaultWebFilterResolver } from "@io/graph/react-dom";
+import { useState } from "react";
+
+import { app } from "../graph/app.js";
 import { useAppRuntime } from "./runtime.js";
 
 type CompanyRef = EntityRef<typeof app.company, typeof app & typeof core>;

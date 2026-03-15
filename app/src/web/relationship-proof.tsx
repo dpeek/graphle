@@ -1,8 +1,8 @@
 import { core, type EntityRef } from "@io/graph";
+import { usePredicateField } from "@io/graph/react";
+import { PredicateFieldEditor, PredicateFieldView } from "@io/graph/react-dom";
 
 import { app } from "../graph/app.js";
-import { PredicateFieldEditor, PredicateFieldView } from "./bindings.js";
-import { usePredicateField } from "./predicate.js";
 import { useAppRuntime } from "./runtime.js";
 
 type PersonRef = EntityRef<typeof app.person, typeof app & typeof core>;

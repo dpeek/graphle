@@ -4,7 +4,7 @@ import type {
   FilterOperandProps,
   WebFilterEnumOption,
   WebFilterOperandEditorCapability,
-} from "./filter.js";
+} from "../react/filter.js";
 
 type AnyOperandProps = FilterOperandProps<any, any, any>;
 

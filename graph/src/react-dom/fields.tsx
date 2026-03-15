@@ -3,14 +3,7 @@ import {
   isEnumType,
   type GraphMutationValidationResult,
   type PredicateRef,
-} from "@io/graph";
-import { useEffect, useRef, useState } from "react";
-
-import {
-  performValidatedMutation,
-  type MutationCallbacks,
-  type MutationValidation,
-} from "./mutation-validation.js";
+} from "../index.js";
 import {
   formatPredicateEditorValue,
   formatPredicateValue,
@@ -23,14 +16,16 @@ import {
   getPredicateEntityReferenceOptions,
   getPredicateEntityReferenceSelection,
   getPredicateEnumOptions,
+  performValidatedMutation,
   usePredicateField,
-} from "./predicate.js";
-import type {
-  PredicateFieldEditorCapability,
-  PredicateFieldProps,
-  PredicateFieldViewCapability,
-} from "./resolver.js";
-import { usePersistedMutationCallbacks } from "./runtime.js";
+  type MutationCallbacks,
+  type MutationValidation,
+  type PredicateFieldEditorCapability,
+  type PredicateFieldProps,
+  type PredicateFieldViewCapability,
+  usePersistedMutationCallbacks,
+} from "../react/index.js";
+import { useEffect, useRef, useState } from "react";
 
 type AnyPredicate = PredicateRef<any, any>;
 type AnyFieldProps = PredicateFieldProps<any, any>;

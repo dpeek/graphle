@@ -16,6 +16,13 @@ import {
   typeId,
 } from "@io/graph";
 import {
+  formatPredicateValue,
+  performValidatedMutation,
+  usePersistedMutationCallbacks,
+  usePredicateField,
+} from "@io/graph/react";
+import { PredicateFieldEditor, defaultWebFieldResolver } from "@io/graph/react-dom";
+import {
   createContext,
   useContext,
   useDeferredValue,
@@ -28,13 +35,9 @@ import {
 } from "react";
 
 import { app } from "../graph/app.js";
-import { PredicateFieldEditor, formatPredicateValue, usePredicateField } from "./bindings.js";
-import { performValidatedMutation } from "./mutation-validation.js";
-import { defaultWebFieldResolver } from "./resolver.js";
 import {
   type AppRuntime,
   useAppRuntime,
-  usePersistedMutationCallbacks,
 } from "./runtime.js";
 
 const explorerNamespace = { ...core, ...app };

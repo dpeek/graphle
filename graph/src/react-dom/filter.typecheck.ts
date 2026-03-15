@@ -1,8 +1,9 @@
-import { core, defineType } from "@io/graph";
+import { core, defineType } from "../index.js";
+import type { FilterOperandEditorProps } from "../react/index.js";
 
-import { app } from "../graph/app.js";
-import { statusTypeModule } from "../type/status/index.js";
-import { defaultWebFilterResolver, type FilterOperandEditorProps } from "./bindings.js";
+import { app } from "../../../app/src/graph/app.js";
+import { statusTypeModule } from "../../../app/src/type/status/index.js";
+import { defaultWebFilterResolver } from "./index.js";
 
 const defs = { ...core, ...app };
 

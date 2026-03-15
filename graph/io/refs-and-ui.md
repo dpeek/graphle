@@ -40,7 +40,7 @@ The engine already exposes enough surface for UI work to build on:
 - structured validation results suitable for inline field errors
 - relationship-field helper metadata in `../src/graph/web-policy.ts`
 
-What the engine does not currently ship:
+What the root engine entry does not currently ship:
 
 - React hooks
 - renderer resolution
@@ -48,7 +48,18 @@ What the engine does not currently ship:
 - TUI adapters
 - async option loading or relationship search infrastructure
 
-Those remain app-level or roadmap concerns.
+Adapter subpaths now exist at `@io/graph/react`, `@io/graph/react-dom`, and
+`@io/graph/react-opentui`.
+
+Today `@io/graph/react` ships the host-neutral layer:
+
+- predicate hooks and field metadata helpers
+- mutation validation helpers
+- field resolver and binding primitives that require host-supplied capabilities
+
+The root `@io/graph` export remains free of React and host-specific adapters.
+DOM and OpenTUI widget capabilities still belong on their host-specific
+subpaths rather than the root or the host-neutral React entry.
 
 ## Current Delineation
 

@@ -5,19 +5,17 @@ import {
   type SyncPayload,
   type SyncedTypeClient,
 } from "@io/graph";
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { GraphMutationRuntimeProvider } from "@io/graph/react";
+import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 
 import { app } from "../graph/app.js";
-import type { MutationCallbacks } from "./mutation-validation.js";
 
 const syncUrl = "/api/sync";
 const transactionUrl = "/api/tx";
 
 export type AppRuntime = SyncedTypeClient<typeof app>;
-type PersistableRuntime = Pick<AppRuntime, "sync">;
 
 const runtimeCache = new Map<string, Promise<AppRuntime>>();
-const pendingMutationFlushes = new WeakMap<object, Promise<void>>();
 
 const AppRuntimeContext = createContext<AppRuntime | null>(null);
 
@@ -113,44 +111,6 @@ export function useAppRuntime(): AppRuntime {
     throw new Error("App runtime is not available outside the synced runtime provider.");
   }
   return runtime;
-}
-
-export function persistRuntimeChanges(runtime: PersistableRuntime): Promise<void> {
-  const sync = runtime.sync;
-  const current = pendingMutationFlushes.get(sync) ?? Promise.resolve();
-  const queued = current.catch(() => undefined).then(async () => {
-    if (sync.getPendingTransactions().length === 0) return;
-    await sync.flush();
-  });
-  const tracked = queued.finally(() => {
-    if (pendingMutationFlushes.get(sync) === tracked) {
-      pendingMutationFlushes.delete(sync);
-    }
-  });
-  pendingMutationFlushes.set(sync, tracked);
-  return tracked;
-}
-
-export function usePersistedMutationCallbacks(
-  callbacks: MutationCallbacks = {},
-  runtime?: PersistableRuntime | null,
-): MutationCallbacks {
-  const contextRuntime = useOptionalAppRuntime();
-  const resolvedRuntime = runtime ?? contextRuntime;
-
-  return useMemo(
-    () => ({
-      onMutationError: callbacks.onMutationError,
-      onMutationSuccess: () => {
-        callbacks.onMutationSuccess?.();
-        if (!resolvedRuntime) return;
-        void persistRuntimeChanges(resolvedRuntime).catch((error) => {
-          callbacks.onMutationError?.(error);
-        });
-      },
-    }),
-    [callbacks.onMutationError, callbacks.onMutationSuccess, resolvedRuntime],
-  );
 }
 
 type AppBootstrapProps = {
@@ -254,7 +214,9 @@ export function AppRuntimeBootstrap({
 
   return (
     <AppRuntimeContext.Provider value={state.runtime}>
-      {renderApp?.() ?? null}
+      <GraphMutationRuntimeProvider runtime={state.runtime}>
+        {renderApp?.() ?? null}
+      </GraphMutationRuntimeProvider>
     </AppRuntimeContext.Provider>
   );
 }

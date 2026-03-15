@@ -6,10 +6,8 @@ import {
   type ResolvedAnyTypeOutput,
   type TypeFilterOperator,
   typeId,
-} from "@io/graph";
+} from "../index.js";
 import type { ComponentType, ReactNode } from "react";
-
-import { genericWebFilterOperandEditorCapabilities } from "./generic-filter-editors.js";
 
 type FieldFilterContract = {
   defaultOperator: string;
@@ -504,9 +502,7 @@ export function createWebFilterResolver(input?: {
   };
 }
 
-export const defaultWebFilterResolver = createWebFilterResolver({
-  operandEditors: genericWebFilterOperandEditorCapabilities,
-});
+export const defaultWebFilterResolver = createWebFilterResolver();
 
 export function lowerWebFilterClause<
   T extends EdgeOutput,
@@ -591,7 +587,7 @@ function UnsupportedFilterOperand({
   kind,
   reason,
 }: UnsupportedFilterOperandFallbackProps): ReactNode {
-  return <span data-web-filter-status="unsupported">{kind ? `${reason}:${kind}` : reason}</span>;
+  return kind ? `${reason}:${kind}` : reason;
 }
 
 export function FilterOperandEditor<

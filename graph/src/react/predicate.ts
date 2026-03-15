@@ -11,7 +11,7 @@ import {
   type PredicateRangeTypeOf,
   type PredicateRef,
   type PredicateValueOf,
-} from "@io/graph";
+} from "../index.js";
 import { useMemo, useRef, useSyncExternalStore } from "react";
 
 export type PredicateFieldMeta<T extends EdgeOutput> = T extends { meta: infer Meta }
