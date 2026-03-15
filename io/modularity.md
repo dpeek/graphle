@@ -600,13 +600,12 @@ The current system already does this well:
 - `TypeModuleMeta` defines display/editor kinds and formatting
 - `TypeModuleFilter` defines typed filtering behavior
 - collection semantics are already encoded in field metadata
-- reference policies are encoded through `defineReferenceField(...)` and
-  `../graph/src/graph/web-policy.ts`
+- reference policies are encoded through `defineReferenceField(...)` and the
+  root reference-policy helpers
 
 References:
 
 - `../graph/src/graph/type-module.ts`
-- `../graph/src/graph/web-policy.ts`
 - `../graph/src/react/predicate.ts`
 
 The field model should remain:
@@ -646,7 +645,7 @@ Use:
 Object-level rendering should not start as one giant JSX surface. It should
 start as a pure view spec that captures reusable semantics.
 
-Suggested shape:
+Current root contract:
 
 ```ts
 export type ObjectViewSpec = {
@@ -736,9 +735,9 @@ graph/src/workflow/
   membership/
 ```
 
-### Workflow spec shape
+### Current workflow contract
 
-Suggested root contract:
+Current root contract:
 
 ```ts
 export type WorkflowSpec = {
@@ -768,7 +767,7 @@ The direction in `../graph/io/authority.md` is correct: command authoring should
 stay close to the subject type, but authoritative execution must still cross an
 explicit boundary.
 
-Suggested command shape:
+Current command shape:
 
 ```ts
 export type GraphCommandSpec = {
@@ -994,18 +993,13 @@ This is why the adapter model needs both:
 The two hosts can share graph logic and React orchestration without pretending
 they share widgets.
 
-## Naming Cleanup
+## Reference-Policy Naming
 
-The current file `../graph/src/graph/web-policy.ts` encodes reference selection
-policy, not actually web rendering. Once the adapter split lands, the name will
-be misleading.
+This helper surface should be described as reference policy rather than web
+policy because it encodes reference selection rules, not DOM rendering.
 
-Recommended rename:
-
-- from `web-policy.ts`
-- to `reference-policy.ts`
-
-or another name that describes data-level policy rather than web behavior.
+Keep the docs and package-boundary language in terms of root `@io/graph`
+reference-policy helpers.
 
 ## Clear Implementation Plan
 
@@ -1072,17 +1066,18 @@ Expected result:
 - each experiment becomes easy to find and reason about
 - `app` still owns app composition while experiments own their route surfaces
 
-## Phase 4: Add Object View, Workflow, And Command Contracts
+## Phase 4: Stabilize Object View, Workflow, And Command Contracts
 
 Goal:
 
-- create reusable authoring units above raw type definitions
+- make the new reusable authoring units concrete above raw type definitions
 
 Steps:
 
-1. Add root-level `ObjectViewSpec`, `WorkflowSpec`, and `GraphCommandSpec`.
+1. Keep root-level `ObjectViewSpec`, `WorkflowSpec`, and `GraphCommandSpec`.
 2. Keep them declarative and host-independent.
-3. Rename `web-policy.ts` to a more accurate data/policy name.
+3. Keep the helper surface documented as reference policy rather than web
+   policy, and clean up any legacy implementation naming separately.
 4. Document these contracts in graph docs next to
    `../graph/io/type-modules.md` and `../graph/io/refs-and-ui.md`.
 

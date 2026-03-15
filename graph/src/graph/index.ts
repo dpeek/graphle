@@ -1,6 +1,7 @@
 export * from "./authority";
 export * from "./bootstrap";
 export * from "./client";
+export * from "./contracts";
 export * from "./core";
 export * from "./id";
 export * from "./identity";
@@ -8,4 +9,4 @@ export * from "./schema";
 export * from "./store";
 export * from "./sync";
 export * from "./type-module";
-export * from "./web-policy";
+export * from "./reference-policy";

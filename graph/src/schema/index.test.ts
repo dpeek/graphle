@@ -1,6 +1,13 @@
 import { describe, expect, it } from "bun:test";
 
 import { core } from "../graph/index.js";
+import {
+  probeContractGraph,
+  probeContractItem,
+  probeContractObjectView,
+  probeContractWorkflow,
+  probeSaveContractItemCommand,
+} from "../graph/contracts.probe.js";
 import * as schemaExports from "./index.js";
 import {
   envVar,
@@ -122,6 +129,19 @@ describe("schema entry surfaces", () => {
     expect(schemaExports.envVar).toBe(envVar);
     expect(schemaExports.block).toBe(block);
     expect(schemaExports.workspace).toBe(workspace);
+  });
+
+  it("keeps contract probes root-safe without polluting the canonical schema tree", () => {
+    expect(probeContractGraph.contractItem.values.key).toBe(probeContractItem.values.key);
+    expect(typeof probeContractGraph.contractItem.values.id).toBe("string");
+    expect(String(probeContractItem.fields.parent.range)).toBe(resolvedTypeId(probeContractItem));
+    expect(String(probeContractItem.fields.relatedItems.range)).toBe(resolvedTypeId(probeContractItem));
+    expect(probeContractObjectView.entity).toBe(probeContractGraph.contractItem.values.key);
+    expect(probeContractWorkflow.subjects).toEqual([probeContractGraph.contractItem.values.key]);
+    expect(probeContractWorkflow.commands).toEqual([probeSaveContractItemCommand.key]);
+    expect("probeContractItem" in schemaExports).toBe(false);
+    expect("probeContractObjectView" in schemaExports).toBe(false);
+    expect("probeContractWorkflow" in schemaExports).toBe(false);
   });
 
   it("keeps migrated built-ins aligned with legacy compatibility paths", () => {

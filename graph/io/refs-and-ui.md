@@ -38,15 +38,22 @@ The engine already exposes enough surface for UI work to build on:
 - field metadata and filter contracts from type modules
 - predicate-local subscriptions
 - structured validation results suitable for inline field errors
-- relationship-field helper metadata in `../src/graph/web-policy.ts`
+- host-independent `ObjectViewSpec`, `WorkflowSpec`, and `GraphCommandSpec`
+  contracts for schema-adjacent layout, workflow, and command metadata
+- root-exported reference-policy helpers such as
+  `existingEntityReferenceField(...)` and
+  `existingEntityReferenceFieldMeta(...)`
 
 What the root engine entry does not currently ship:
 
-- React hooks
-- renderer resolution
-- generated forms
-- TUI adapters
+- React hooks or components
+- host capability registries or default DOM widgets
+- generated forms or object/workflow screens
+- route registration or shell composition
+- authoritative command implementations
 - async option loading or relationship search infrastructure
+
+## Current Adapter Split
 
 Adapter subpaths now exist at `@io/graph/react`, `@io/graph/react-dom`, and
 `@io/graph/react-opentui`.
@@ -55,7 +62,53 @@ Today `@io/graph/react` ships the host-neutral layer:
 
 - predicate hooks and field metadata helpers
 - mutation validation helpers
-- field resolver and binding primitives that require host-supplied capabilities
+- reference-policy readers such as `getPredicateEntityReferencePolicy(...)`
+- field and filter resolver primitives that still require host-supplied
+  capabilities
+
+Despite the current `Web` naming on some resolver helpers, this package is the
+host-neutral React layer. It depends on graph refs and metadata, not DOM tags
+or browser-specific input behavior.
+
+`@io/graph/react-dom` ships DOM defaults on top of that layer:
+
+- default field view and editor capabilities
+- default filter operand editors and filter resolvers
+- browser fallback rendering around `PredicateFieldView` and
+  `PredicateFieldEditor`
+
+`@io/graph/react-opentui` is the reserved terminal-specific adapter boundary.
+The subpath exists today, but it does not ship widget capabilities yet.
+
+## How The Contracts Cross The Boundary
+
+- `ObjectViewSpec`, `WorkflowSpec`, and `GraphCommandSpec` stay on the root
+  `@io/graph` surface as pure data contracts.
+- `@io/graph/react` may read those root-safe contracts and type-module
+  metadata, but it should not introduce DOM tags, route registration, or
+  authoritative command execution.
+- `@io/graph/react-dom` may provide HTML widgets, browser fallbacks, and DOM
+  capability registries on top of the host-neutral React layer.
+- `app` owns route registration, shell chrome, experiment selection, transport,
+  and the authoritative implementations behind `GraphCommandSpec`.
+
+## Reference-Policy Flow
+
+The current reference-policy helpers are intentionally narrow:
+
+- `existingEntityReferenceField(...)` builds a reference field with
+  `meta.reference`
+- `existingEntityReferenceFieldMeta(...)` encodes the existing-entity-only
+  selection policy
+
+`@io/graph/react` reads that policy through
+`getPredicateEntityReferencePolicy(...)` and uses it to infer the default
+entity-reference display and editor kinds. `@io/graph/react-dom` then supplies
+the default list and checklist widgets for those kinds.
+
+That keeps reference-selection semantics in the graph authoring layer while
+leaving host widgets and route-level relationship search UX in adapter or app
+code.
 
 The root `@io/graph` export remains free of React and host-specific adapters.
 DOM and OpenTUI widget capabilities still belong on their host-specific
@@ -70,14 +123,16 @@ subpaths rather than the root or the host-neutral React entry.
 - predicate-local invalidation
 - cardinality-aware field mutation
 - metadata/filter authoring primitives
+- root-safe object-view, workflow, and command contracts
+- narrow reference-policy helpers for entity-reference fields
 
 ### Still roadmap or app proof work
 
-- generic field renderers and editors
+- generic object or workflow renderers over `ObjectViewSpec` and `WorkflowSpec`
 - schema-driven form composition
 - richer relationship policies beyond existing-only selection
 - full collection UX conventions for every `many` field shape
-- web and TUI adapter packages
+- OpenTUI widget capabilities
 
 ## Future Work Suggestions
 

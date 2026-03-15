@@ -135,22 +135,6 @@
         "oxlint": "^1.50.0",
       },
     },
-    "tsx": {
-      "name": "@io/tsx",
-      "version": "1.0.0",
-      "bin": {
-        "tsx": "./src/cli.ts",
-      },
-      "devDependencies": {
-        "@io/lib": "workspace:",
-        "@types/bun": "^1.3.9",
-        "@types/node": "^25.3.2",
-        "@typescript/native-preview": "^7.0.0-dev.20260226.1",
-        "bun": "1.3.9",
-        "oxfmt": "^0.35.0",
-        "oxlint": "^1.50.0",
-      },
-    },
     "tui": {
       "name": "@io/tui",
       "version": "0.0.0",
@@ -397,8 +381,6 @@
     "@io/graph": ["@io/graph@workspace:graph"],
 
     "@io/lib": ["@io/lib@workspace:lib"],
-
-    "@io/tsx": ["@io/tsx@workspace:tsx"],
 
     "@io/tui": ["@io/tui@workspace:tui"],
 

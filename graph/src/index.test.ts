@@ -1,5 +1,12 @@
 import { describe, expect, it } from "bun:test";
 
+import {
+  probeContractItem,
+  probeContractObjectView,
+  probeContractWorkflow,
+  probeSaveContractItemCommand,
+} from "./graph/contracts.probe.js";
+
 type GraphPackageJson = {
   exports: Record<string, string>;
 };
@@ -76,5 +83,50 @@ describe("@io/graph adapter entry surfaces", () => {
       "lowerWebFilterQuery",
     ]);
     expect(Object.keys(reactOpentuiExports)).toEqual([]);
+  });
+
+  it("supports root-safe contract authoring from the package root without exposing host widgets", async () => {
+    const rootExports = await import("./index.js");
+
+    expect(rootExports).toMatchObject({
+      core: expect.any(Object),
+      createIdMap: expect.any(Function),
+      defineNamespace: expect.any(Function),
+      defineReferenceField: expect.any(Function),
+      defineType: expect.any(Function),
+      existingEntityReferenceField: expect.any(Function),
+      existingEntityReferenceFieldMeta: expect.any(Function),
+      stringTypeModule: expect.any(Object),
+    });
+    expect(Object.keys(rootExports)).not.toContain("FilterOperandEditor");
+    expect(Object.keys(rootExports)).not.toContain("PredicateFieldView");
+
+    expect(probeContractItem.kind).toBe("entity");
+    expect(probeContractObjectView.entity).toBe(probeContractItem.values.key);
+    expect(probeContractObjectView.commands).toEqual([probeSaveContractItemCommand.key]);
+    expect(probeContractWorkflow.subjects).toEqual([probeContractItem.values.key]);
+    expect(probeContractWorkflow.steps).toEqual([
+      {
+        key: "review",
+        title: "Review details",
+        objectView: probeContractObjectView.key,
+      },
+      {
+        key: "save",
+        title: "Save item",
+        command: probeSaveContractItemCommand.key,
+      },
+    ]);
+    expect(probeSaveContractItemCommand).toMatchObject({
+      subject: probeContractItem.values.key,
+      execution: "optimisticVerify",
+      policy: {
+        capabilities: ["probe.contract.write"],
+        touchesPredicates: [
+          probeContractItem.fields.name.key,
+          probeContractItem.fields.summary.key,
+        ],
+      },
+    });
   });
 });

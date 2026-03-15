@@ -30,8 +30,8 @@ Everything graph-engine related should come from `@io/graph` instead:
 
 - schema/bootstrap/client/store/sync primitives
 - `core`
-- type-module authoring helpers
-- relationship/web-policy helpers
+- root-safe `ObjectViewSpec`, `WorkflowSpec`, and `GraphCommandSpec` contracts
+- type-module authoring and reference-policy helpers
 - built-in scalar, enum, and address/country modules
 
 ## Inventory
@@ -56,7 +56,6 @@ Everything graph-engine related should come from `@io/graph` instead:
 | `app/src/graph/store.ts`        | graph-owned passthrough | Removed. Import from `@io/graph`.                                             |
 | `app/src/graph/sync.ts`         | graph-owned passthrough | Removed. Import from `@io/graph`.                                             |
 | `app/src/graph/type-module.ts`  | compatibility-only      | Removed. Import from `@io/graph`.                                             |
-| `app/src/graph/web-policy.ts`   | compatibility-only      | Removed. Import from `@io/graph`.                                             |
 
 ### `app/src/type/*`
 

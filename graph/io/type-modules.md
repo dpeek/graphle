@@ -2,11 +2,14 @@
 
 ## Purpose
 
-This document is the entry point for agents working on scalar or enum families, field metadata, or filter contracts.
+This document is the entry point for agents working on scalar or enum families,
+field metadata and filter contracts, or the root-safe object-view, workflow,
+and command contracts that live beside graph-owned types.
 
 ## Current Contract
 
-`../src/graph/type-module.ts` already defines a real type-module authoring surface for scalar and enum families.
+`../src/graph/type-module.ts` already defines a real type-module authoring
+surface for scalar and enum families.
 
 Current exported building blocks:
 
@@ -15,7 +18,70 @@ Current exported building blocks:
 - `defineReferenceField(...)`
 - `TypeModuleMeta`
 - `TypeModuleFilter`
+- `ObjectViewSpec`
+- `WorkflowSpec`
+- `GraphCommandSpec`
 - field-level metadata and filter override types
+
+The host-independent object-view, workflow, and command contracts live in
+`../src/graph/contracts.ts` and are exported from the root `@io/graph`
+surface.
+
+## Root-Safe Authoring Contracts
+
+The newer contract symbols are current package surface, not proposal text.
+`../src/graph/contracts.typecheck.ts` shows the intended usage in real code.
+
+### `ObjectViewSpec`
+
+Use `ObjectViewSpec` for reusable, host-independent object presentation
+metadata that belongs with one type or a very small slice of related types.
+
+Current fields:
+
+- `key` and `entity` identify the view and its subject type
+- `titleField` and `subtitleField` point at summary predicates when helpful
+- `sections` groups reusable field layout metadata
+- `related` lists reusable related-entity presentations such as `list`,
+  `table`, or `board`
+- `commands` advertises command keys the view can surface
+
+This contract stays pure data. React composition, DOM layout, route ownership,
+and browser event handling stay out of it.
+
+### `WorkflowSpec`
+
+Use `WorkflowSpec` for reusable, declarative multi-step flows that reference
+object-view keys and command keys without turning the graph root into a route
+layer.
+
+Current fields:
+
+- `key`, `label`, and `description`
+- `subjects` for the type keys the workflow applies to
+- `steps`, where each step may reference an `objectView` key or a `command`
+  key
+- `commands` for any workflow-level command affordances
+
+Type-local workflows can live beside a type. Cross-type workflows can live in a
+small graph-owned workflow module, but the contract itself stays root-safe.
+
+### `GraphCommandSpec`
+
+Use `GraphCommandSpec<Input, Output>` for a durable command descriptor that
+captures execution mode, I/O shape, and policy without embedding the
+authoritative implementation.
+
+Current fields:
+
+- `key`, `label`, and optional `subject`
+- `execution`: `localOnly`, `optimisticVerify`, or `serverOnly`
+- `input` and `output`
+- optional `policy.capabilities`
+- optional `policy.touchesPredicates`
+
+The descriptor belongs in `@io/graph`. The authoritative implementation,
+transport wiring, and route ownership still belong in `app`.
 
 ## Current Authoring Shape
 
@@ -106,23 +172,32 @@ This is real engine code, not just a design sketch.
 
 ## Current Limits
 
-- there is no `web.tsx` or `tui.tsx` module contract in `graph` today
-- renderer/editor resolution is not implemented in this package
-- entity-reference fields use `defineReferenceField(...)` and helper policies, not a richer module family yet
-- richer entity-level layout and composition metadata is still mostly roadmap
+- there is no required per-type `react.tsx`, `react-dom.tsx`, or
+  `react-opentui.tsx` contract in `graph` today
+- renderer and editor resolution do not live on the root `@io/graph` surface;
+  current resolver primitives live on `@io/graph/react`, and default DOM
+  capabilities live on `@io/graph/react-dom`
+- entity-reference fields still use `defineReferenceField(...)` plus narrow
+  reference-policy helpers rather than a richer module family
+- richer entity-level layout and composition beyond pure specs is still mostly
+  roadmap
 
-## Reference-Field Helpers
+## Reference-Policy Helpers
 
-`../src/graph/web-policy.ts` already provides a narrow current helper for relationship authoring:
+`@io/graph` already exports a narrow helper surface for relationship authoring:
 
 - `existingEntityReferenceField(...)`
 - `existingEntityReferenceFieldMeta(...)`
 
-Today that helper only encodes an existing-entity-only selection policy. It is a thin field-authoring convenience, not a full UI adapter layer.
+Today those helpers only encode an existing-entity-only selection policy. They
+attach `meta.reference` data that `@io/graph/react` can read to infer the
+default entity-reference display and editor kinds. They are thin field-authoring
+conveniences, not route code, DOM widgets, or a full relationship-search layer.
 
 ## Roadmap
 
-- expand the current metadata/filter contract into fuller renderer/editor adapter resolution
+- expand the current metadata, view, workflow, and command contracts into fuller
+  adapter resolution
 - add stronger conventions for richer domain modules such as address-like structures
 - decide how much entity-level layout metadata belongs beside schema definitions
 - keep runtime-safe authoring code separate from platform adapters if those land later

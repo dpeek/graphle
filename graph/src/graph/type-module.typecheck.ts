@@ -1,9 +1,9 @@
 import { booleanTypeModule } from "../type/boolean/index.js";
 import { defineDefaultEnumTypeModule } from "../type/enum-module.js";
 import { stringTypeModule } from "../type/string/index.js";
+import { existingEntityReferenceField } from "./reference-policy.js";
 import { defineEnum, defineScalar, defineType } from "./schema.js";
 import { defineReferenceField, defineScalarModule } from "./type-module.js";
-import { existingEntityReferenceField } from "./web-policy.js";
 
 const probeStringType = defineScalar({
   values: { key: "probe:string", name: "Probe String" },
