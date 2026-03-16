@@ -10,7 +10,7 @@ import {
 } from "./config.js";
 
 test("loadIoConfig prefers io.ts and resolves env-backed values", async () => {
-  const root = await mkdtemp(resolve(process.cwd(), ".io-config-"));
+  const root = await mkdtemp(resolve(process.cwd(), "tmp/workspace-config-"));
   process.env.LINEAR_API_KEY = "linear-token";
   process.env.LINEAR_PROJECT_SLUG = "project-slug";
 

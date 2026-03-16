@@ -9,4 +9,11 @@ import type { ReasoningItem } from "./ReasoningItem";
 import type { UserMessageItem } from "./UserMessageItem";
 import type { WebSearchItem } from "./WebSearchItem";
 
-export type TurnItem = { "type": "UserMessage" } & UserMessageItem | { "type": "AgentMessage" } & AgentMessageItem | { "type": "Plan" } & PlanItem | { "type": "Reasoning" } & ReasoningItem | { "type": "WebSearch" } & WebSearchItem | { "type": "ImageGeneration" } & ImageGenerationItem | { "type": "ContextCompaction" } & ContextCompactionItem;
+export type TurnItem =
+  | ({ type: "UserMessage" } & UserMessageItem)
+  | ({ type: "AgentMessage" } & AgentMessageItem)
+  | ({ type: "Plan" } & PlanItem)
+  | ({ type: "Reasoning" } & ReasoningItem)
+  | ({ type: "WebSearch" } & WebSearchItem)
+  | ({ type: "ImageGeneration" } & ImageGenerationItem)
+  | ({ type: "ContextCompaction" } & ContextCompactionItem);

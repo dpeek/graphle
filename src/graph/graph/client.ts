@@ -200,10 +200,8 @@ type PredicateRangeEntityTypeOf<
   T extends EdgeOutput,
   Defs extends Record<string, AnyTypeOutput> = CoreDefs,
 > = Extract<NonNullable<PredicateRangeTypeOf<T, Defs>>, TypeOutput>;
-type PredicateItemOf<
-  T extends EdgeOutput,
-  Defs extends Record<string, AnyTypeOutput> = CoreDefs,
-> = PredicateValueOf<T, Defs> extends (infer Item)[] ? Item : never;
+type PredicateItemOf<T extends EdgeOutput, Defs extends Record<string, AnyTypeOutput> = CoreDefs> =
+  PredicateValueOf<T, Defs> extends (infer Item)[] ? Item : never;
 type PredicateSetValueOf<
   T extends EdgeOutput,
   Defs extends Record<string, AnyTypeOutput> = CoreDefs,
@@ -299,7 +297,11 @@ type QuerySelectionNode<Node, Defs extends Record<string, AnyTypeOutput>> = Node
     ? FieldQuerySelection<Node, Defs>
     : never;
 
-type QueryResultNode<Node, Selection, Defs extends Record<string, AnyTypeOutput>> = Node extends EdgeOutput
+type QueryResultNode<
+  Node,
+  Selection,
+  Defs extends Record<string, AnyTypeOutput>,
+> = Node extends EdgeOutput
   ? QueryEdgeResult<Node, Selection, Defs>
   : Node extends FieldsTree
     ? QueryFieldResult<Node, Extract<Selection, FieldQuerySelection<Node, Defs>>, Defs>
@@ -326,7 +328,10 @@ type QueryEdgeResult<
   : Selection extends true
     ? PredicateValueOf<T, Defs>
     : Selection extends {
-          select: infer Nested extends TypeQuerySelection<PredicateRangeEntityTypeOf<T, Defs>, Defs>;
+          select: infer Nested extends TypeQuerySelection<
+            PredicateRangeEntityTypeOf<T, Defs>,
+            Defs
+          >;
         }
       ? QueryCardinality<
           T["cardinality"],
@@ -365,19 +370,22 @@ export type TypeQueryResult<
   T extends TypeOutput,
   Selection,
   Defs extends Record<string, AnyTypeOutput> = CoreDefs,
-> = Selection extends TypeQuerySelection<T, Defs>
-  ? QueryFieldResult<T["fields"], Selection, Defs> & (Selection extends { id: true } ? { id: string } : {})
-  : never;
+> =
+  Selection extends TypeQuerySelection<T, Defs>
+    ? QueryFieldResult<T["fields"], Selection, Defs> &
+        (Selection extends { id: true } ? { id: string } : {})
+    : never;
 
 export type TypeQueryResponse<
   T extends TypeOutput,
   Query,
   Defs extends Record<string, AnyTypeOutput> = CoreDefs,
-> = Query extends TypeQuerySpec<T, Defs, infer Selection>
-  ? Query["where"] extends { id: string }
-    ? TypeQueryResult<T, Selection, Defs> | undefined
-    : TypeQueryResult<T, Selection, Defs>[]
-  : never;
+> =
+  Query extends TypeQuerySpec<T, Defs, infer Selection>
+    ? Query["where"] extends { id: string }
+      ? TypeQueryResult<T, Selection, Defs> | undefined
+      : TypeQueryResult<T, Selection, Defs>[]
+    : never;
 
 type EntityLookup<Defs extends Record<string, AnyTypeOutput>> = {
   resolve<T extends TypeOutput>(typeDef: T, id: string): EntityRef<T, Defs>;
@@ -741,7 +749,13 @@ function normalizeRequestedManyValues(
   enumValuesByRange: Map<string, Set<string>>,
 ): EncodedPredicateValue[] {
   const requested = values.map((value) => {
-    const encoded = encodeForRange(value, predicate.range, scalarByKey, typeByKey, enumValuesByRange);
+    const encoded = encodeForRange(
+      value,
+      predicate.range,
+      scalarByKey,
+      typeByKey,
+      enumValuesByRange,
+    );
     return {
       encoded,
       decoded: decodeForRange(encoded, predicate.range, scalarByKey, typeByKey),
@@ -818,7 +832,13 @@ function collectionItemPassesValidation(
   enumValuesByRange: Map<string, Set<string>>,
 ): boolean {
   try {
-    const encoded = encodeForRange(value, predicate.range, scalarByKey, typeByKey, enumValuesByRange);
+    const encoded = encodeForRange(
+      value,
+      predicate.range,
+      scalarByKey,
+      typeByKey,
+      enumValuesByRange,
+    );
     const decoded = decodeForRange(encoded, predicate.range, scalarByKey, typeByKey);
     const issues: GraphValidationIssue[] = [];
     const entry: FlatPredicateEntry = {
@@ -1006,8 +1026,7 @@ function validateEnumValue(
   const fieldPath = formatValidationPath([...entry.path, entry.field]);
   const enumName = rangeType?.values.name ?? rangeType?.values.key ?? entry.predicate.range;
   const expectsMany = entry.predicate.cardinality === "many";
-  const values =
-    expectsMany && Array.isArray(value) ? value : [value];
+  const values = expectsMany && Array.isArray(value) ? value : [value];
 
   if (values.some((item) => typeof item !== "string")) {
     appendValidationIssues(issues, "type", entry, nodeId, {
@@ -1117,9 +1136,7 @@ function validateEntityReferenceValue(
   }
 
   const nodeTypePredicateId = edgeId(core.node.fields.type as EdgeOutput);
-  const targetTypeIds = new Set(
-    store.facts(value, nodeTypePredicateId).map((edge) => edge.o),
-  );
+  const targetTypeIds = new Set(store.facts(value, nodeTypePredicateId).map((edge) => edge.o));
 
   if (targetTypeIds.size === 0) {
     appendRuntimeValidationIssue(
@@ -1144,7 +1161,9 @@ function validateEntityReferenceValue(
 }
 
 function isManagedNodeTypeEntry(entry: FlatPredicateEntry): boolean {
-  return entry.path.length === 0 && entry.predicate.key === (core.node.fields.type as EdgeOutput).key;
+  return (
+    entry.path.length === 0 && entry.predicate.key === (core.node.fields.type as EdgeOutput).key
+  );
 }
 
 function createNodeTypeValidationEntry(): FlatPredicateEntry {
@@ -1187,9 +1206,7 @@ function validateNodeTypeState(
   const typeEntry = createNodeTypeValidationEntry();
 
   if (!hasCurrentTypeFact) {
-    const hasStructuredFacts = store
-      .facts(nodeId)
-      .some((edge) => edge.p !== keyPredicateId);
+    const hasStructuredFacts = store.facts(nodeId).some((edge) => edge.p !== keyPredicateId);
     if (hasStructuredFacts) {
       appendRuntimeValidationIssue(
         issues,
@@ -1203,9 +1220,7 @@ function validateNodeTypeState(
   }
 
   for (const typeValue of uniqueEncodedPredicateValues(
-    store
-      .facts(nodeId, nodeTypePredicateId)
-      .map((edge) => ({ encoded: edge.o, decoded: edge.o })),
+    store.facts(nodeId, nodeTypePredicateId).map((edge) => ({ encoded: edge.o, decoded: edge.o })),
   )) {
     validateEntityReferenceValue(issues, typeEntry, nodeId, typeValue.decoded, store, typeByKey);
   }
@@ -1363,7 +1378,9 @@ function normalizeMutationValue(
         typeByKey,
         enumValuesByRange,
       );
-      const planned = planManyValues(current, requested, entry.predicate).map((value) => value.decoded);
+      const planned = planManyValues(current, requested, entry.predicate).map(
+        (value) => value.decoded,
+      );
 
       for (const value of planned) {
         validateScalarValue(
@@ -1690,11 +1707,7 @@ function prepareMutationInput<T extends TypeOutput>(
     if (event === "update" && !hasExplicitValue) continue;
     const nextValue = getNestedValue(input, entry.path, entry.field);
 
-    if (
-      event === "create" &&
-      !hasExplicitValue &&
-      isManagedNodeTypeEntry(entry)
-    ) {
+    if (event === "create" && !hasExplicitValue && isManagedNodeTypeEntry(entry)) {
       continue;
     }
 
@@ -1883,9 +1896,7 @@ function validateEntityState<T extends TypeOutput>(
   const issues: GraphValidationIssue[] = [];
   const entries = flattenPredicates(typeDef.fields);
   const changedPredicateKeys =
-    phase === "authoritative"
-      ? new Set(entries.map((entry) => entry.predicate.key))
-      : undefined;
+    phase === "authoritative" ? new Set(entries.map((entry) => entry.predicate.key)) : undefined;
 
   for (const entry of entries) {
     if (isManagedNodeTypeEntry(entry)) continue;
@@ -1926,16 +1937,7 @@ function validateEntityState<T extends TypeOutput>(
     for (const fact of facts) {
       try {
         const decoded = decodeForRange(fact.o, entry.predicate.range, scalarByKey, typeByKey);
-        if (
-          !validateEnumValue(
-            issues,
-            entry,
-            id,
-            decoded,
-            typeByKey,
-            enumValuesByRange,
-          )
-        ) {
+        if (!validateEnumValue(issues, entry, id, decoded, typeByKey, enumValuesByRange)) {
           hasDecodeError = true;
           continue;
         }
@@ -2173,7 +2175,9 @@ function createPredicateRef<T extends EdgeOutput, Defs extends Record<string, An
   };
 
   if (field.cardinality === "many") {
-    const collection = { kind: getPredicateCollectionKind(field) } satisfies PredicateCollectionSemantics;
+    const collection = {
+      kind: getPredicateCollectionKind(field),
+    } satisfies PredicateCollectionSemantics;
     return {
       ...base,
       collection,
@@ -2502,10 +2506,7 @@ function validateUpdateEntity<T extends TypeOutput>(
   return validateSimulatedLocalMutation(validationStore, namespace, now, prepared);
 }
 
-function prepareDeleteEntity<
-  T extends TypeOutput,
-  Defs extends Record<string, AnyTypeOutput>,
->(
+function prepareDeleteEntity<T extends TypeOutput, Defs extends Record<string, AnyTypeOutput>>(
   store: Store,
   id: string,
   typeDef: T,
@@ -2568,7 +2569,9 @@ type TypeHandle<T extends TypeOutput, Defs extends Record<string, AnyTypeOutput>
   validateDelete(id: string): GraphDeleteValidationResult;
   delete(id: string): void;
   list(): EntityOfType<T, Defs>[];
-  query<const Query extends TypeQuerySpec<T, Defs>>(query: Query): Promise<TypeQueryResponse<T, Query, Defs>>;
+  query<const Query extends TypeQuerySpec<T, Defs>>(
+    query: Query,
+  ): Promise<TypeQueryResponse<T, Query, Defs>>;
   ref(id: string): EntityRef<T, Defs>;
   node(id: string): EntityRef<T, Defs>;
 };
@@ -2685,13 +2688,7 @@ export function validateGraphStore<const T extends Record<string, AnyTypeOutput>
   }
 
   return issues.length > 0
-    ? invalidResult(
-        phase,
-        event,
-        undefined,
-        collectIssuePredicateKeys(issues),
-        issues,
-      )
+    ? invalidResult(phase, event, undefined, collectIssuePredicateKeys(issues), issues)
     : validResult(phase, event, undefined, new Set<string>());
 }
 
@@ -2772,7 +2769,10 @@ export function createTypeClient<const T extends Record<string, AnyTypeOutput>>(
           const nested = readPredicateValue(store, subjectId, edge, scalarByKey, typeByKey, {
             strictRequired: true,
           });
-          const nestedSelection = selected.select as TypeQuerySelection<typeof rangeType, AllDefs<T>>;
+          const nestedSelection = selected.select as TypeQuerySelection<
+            typeof rangeType,
+            AllDefs<T>
+          >;
 
           if (edge.cardinality === "many") {
             out[fieldName] = (nested as string[]).map((entityId) => {
@@ -2802,7 +2802,9 @@ export function createTypeClient<const T extends Record<string, AnyTypeOutput>>(
       if (!isTree(field)) throw new Error(`Unknown selected field "${fieldName}"`);
       const fieldTree = field as unknown as FieldsOutput;
       if (!selected || typeof selected !== "object" || Array.isArray(selected)) {
-        throw new Error(`Field group "${fieldTreeKey(fieldTree)}" requires a nested selection object`);
+        throw new Error(
+          `Field group "${fieldTreeKey(fieldTree)}" requires a nested selection object`,
+        );
       }
       out[fieldName] = projectQueryFields(
         subjectId,
@@ -2904,7 +2906,12 @@ export function createTypeClient<const T extends Record<string, AnyTypeOutput>>(
           },
           async query(query: unknown) {
             const spec = query as TypeQuerySpec<any, AllDefs<T>>;
-            if (!spec || typeof spec !== "object" || !spec.select || typeof spec.select !== "object") {
+            if (
+              !spec ||
+              typeof spec !== "object" ||
+              !spec.select ||
+              typeof spec.select !== "object"
+            ) {
               throw new Error("Query spec must include a selection object");
             }
             if (spec.where?.id !== undefined && spec.where.ids !== undefined) {

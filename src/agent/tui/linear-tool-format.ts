@@ -135,10 +135,7 @@ function pickFirstValue(records: readonly Record<string, unknown>[], keys: reado
   return undefined;
 }
 
-function buildDetailLines(
-  records: readonly Record<string, unknown>[],
-  keys: readonly string[],
-) {
+function buildDetailLines(records: readonly Record<string, unknown>[], keys: readonly string[]) {
   const lines: string[] = [];
   const seenLabels = new Set<string>();
 

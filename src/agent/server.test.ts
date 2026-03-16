@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 
-import type { AgentSessionEvent, AgentSessionRef } from "./tui/index.js";
 import { isCompletedRetainedSessionEvent, isTerminalSessionPhase } from "./server.js";
+import type { AgentSessionEvent, AgentSessionRef } from "./tui/index.js";
 
 function createWorkerSession(id = "worker:OPE-68:1"): AgentSessionRef {
   return {

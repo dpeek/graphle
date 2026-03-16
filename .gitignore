@@ -1,7 +1,8 @@
 out
 .DS_Store
 node_modules
-.io
+tmp/workspace
 .env
 out
 tmp
+.gitnexus

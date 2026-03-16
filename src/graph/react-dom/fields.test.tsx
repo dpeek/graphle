@@ -1,6 +1,8 @@
 import { describe, expect, it } from "bun:test";
-import { fireEvent, render } from "@testing-library/react";
+
 import { app } from "@io/core/app";
+import { fireEvent, render } from "@testing-library/react";
+import { Fragment, Profiler, act } from "react";
 
 import {
   GraphValidationError,
@@ -19,8 +21,6 @@ import {
   type PredicateFieldProps,
   type PredicateFieldViewCapability,
 } from "../react/index.js";
-import { Fragment, Profiler, act } from "react";
-
 import { getAllByData, getReactProps, getRequiredElement } from "../test-dom.js";
 import { PredicateFieldEditor, PredicateFieldView } from "./index.js";
 
@@ -109,7 +109,10 @@ describe("web predicate bindings", () => {
       <PredicateFieldView predicate={nameRef} resolver={resolver} />,
     );
 
-    const span = getRequiredElement(container.querySelector("span"), "Expected rendered text view.");
+    const span = getRequiredElement(
+      container.querySelector("span"),
+      "Expected rendered text view.",
+    );
     expect(span.textContent).toBe("Acme");
 
     unmount();
@@ -142,7 +145,10 @@ describe("web predicate bindings", () => {
       <PredicateFieldEditor predicate={nameRef} resolver={resolver} />,
     );
 
-    const button = getRequiredElement(container.querySelector("button"), "Expected text editor button.");
+    const button = getRequiredElement(
+      container.querySelector("button"),
+      "Expected text editor button.",
+    );
     expect(button.textContent).toBe("Acme");
 
     fireEvent.click(button);
@@ -342,10 +348,9 @@ describe("web predicate bindings", () => {
     });
 
     expect(renders).toEqual({ container: 1, name: 2, website: 2 });
-    expect(Array.from(container.querySelectorAll("span")).map((node) => node.textContent ?? "")).toEqual([
-      "Acme 2",
-      "https://acme-2.com/",
-    ]);
+    expect(
+      Array.from(container.querySelectorAll("span")).map((node) => node.textContent ?? ""),
+    ).toEqual(["Acme 2", "https://acme-2.com/"]);
 
     unmount();
   });
@@ -400,9 +405,9 @@ describe("web predicate bindings", () => {
     });
 
     expect(renders).toEqual({ section: 1, line1: 1, postalCode: 2 });
-    expect(Array.from(container.querySelectorAll("span")).map((node) => node.textContent ?? "")).toContain(
-      "3000",
-    );
+    expect(
+      Array.from(container.querySelectorAll("span")).map((node) => node.textContent ?? ""),
+    ).toContain("3000");
 
     unmount();
   });
@@ -516,7 +521,10 @@ describe("web predicate bindings", () => {
       <PredicateFieldEditor predicate={companyRef.fields.contactEmail} />,
     );
 
-    const input = getRequiredElement(container.querySelector<HTMLInputElement>("input"), "Expected email input.");
+    const input = getRequiredElement(
+      container.querySelector<HTMLInputElement>("input"),
+      "Expected email input.",
+    );
     expect(input.type).toBe("email");
 
     act(() => {
@@ -567,9 +575,11 @@ describe("web predicate bindings", () => {
     expect(checkbox.checked).toBe(true);
 
     act(() => {
-      getReactProps<{ onChange(event: { target: { checked: boolean } }): void }>(checkbox).onChange({
-        target: { checked: false },
-      });
+      getReactProps<{ onChange(event: { target: { checked: boolean } }): void }>(checkbox).onChange(
+        {
+          target: { checked: false },
+        },
+      );
     });
 
     expect(blockRef.fields.collapsed.get()).toBe(false);
@@ -653,13 +663,17 @@ describe("web predicate bindings", () => {
       </Fragment>,
     );
 
-    expect(getAllByData(container, "data-web-reference-id").map((node) => node.dataset.webReferenceId ?? "")).toEqual([
-      companyId,
-    ]);
-    expect(Array.from(container.querySelectorAll("code")).map((node) => node.textContent ?? "")).toContain(
-      companyId,
-    );
-    expect(Array.from(container.querySelectorAll("span")).some((node) => node.textContent === "Acme")).toBe(true);
+    expect(
+      getAllByData(container, "data-web-reference-id").map(
+        (node) => node.dataset.webReferenceId ?? "",
+      ),
+    ).toEqual([companyId]);
+    expect(
+      Array.from(container.querySelectorAll("code")).map((node) => node.textContent ?? ""),
+    ).toContain(companyId);
+    expect(
+      Array.from(container.querySelectorAll("span")).some((node) => node.textContent === "Acme"),
+    ).toBe(true);
 
     const secondCompanyToggle = getRequiredElement(
       container.querySelector<HTMLInputElement>(
@@ -730,9 +744,11 @@ describe("web predicate bindings", () => {
 
     const checkbox = getInputByKind(container, "checkbox");
     act(() => {
-      getReactProps<{ onChange(event: { target: { checked: boolean } }): void }>(checkbox).onChange({
-        target: { checked: false },
-      });
+      getReactProps<{ onChange(event: { target: { checked: boolean } }): void }>(checkbox).onChange(
+        {
+          target: { checked: false },
+        },
+      );
     });
 
     expect(blockRef.fields.collapsed.get()).toBe(false);
@@ -783,7 +799,7 @@ describe("web predicate bindings", () => {
     });
 
     expect(renders).toEqual({ container: 1, name: 2, website: 2 });
-    expect((container.querySelector("a")?.textContent ?? "")).toBe("https://acme-2.com/");
+    expect(container.querySelector("a")?.textContent ?? "").toBe("https://acme-2.com/");
 
     unmount();
   });

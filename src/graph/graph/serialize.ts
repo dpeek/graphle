@@ -1,6 +1,6 @@
+import { core } from "./core";
 import { edgeId, typeId } from "./schema";
 import type { EdgeOutput } from "./schema";
-import { core } from "./core";
 import type { Id, Store } from "./store";
 
 /**

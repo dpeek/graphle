@@ -1,3 +1,5 @@
+import { useMemo, useRef, useSyncExternalStore } from "react";
+
 import {
   entityReferenceChecklistEditorKind,
   entityReferenceListDisplayKind,
@@ -12,7 +14,6 @@ import {
   type PredicateRef,
   type PredicateValueOf,
 } from "../index.js";
-import { useMemo, useRef, useSyncExternalStore } from "react";
 
 export type PredicateFieldMeta<T extends EdgeOutput> = T extends { meta: infer Meta }
   ? Meta

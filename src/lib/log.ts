@@ -3,6 +3,7 @@ export type LogSeverity = "debug" | "info" | "warn" | "error";
 export type LogFormat = "pretty" | "json";
 
 import { z } from "zod/v4";
+
 import { env } from "./env.js";
 
 export interface LogRuntime {

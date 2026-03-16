@@ -1,8 +1,8 @@
 import { describe, expect, it } from "bun:test";
-import { fireEvent, render } from "@testing-library/react";
-import { act } from "react";
 
 import { bootstrap, createStore, createTypeClient, core } from "@io/core/graph";
+import { fireEvent, render } from "@testing-library/react";
+import { act } from "react";
 
 import { app } from "../graph/app.js";
 import { getByData, getReactProps, getRequiredElement, textContent } from "../test-dom.js";
@@ -67,17 +67,23 @@ describe("env-var settings surface", () => {
       getReactProps<{ onChange(event: { target: { value: string } }): void }>(nameInput).onChange({
         target: { value: "OPENAI_API_KEY" },
       });
-      getReactProps<{ onChange(event: { target: { value: string } }): void }>(descriptionInput).onChange({
+      getReactProps<{ onChange(event: { target: { value: string } }): void }>(
+        descriptionInput,
+      ).onChange({
         target: { value: "Primary model credential" },
       });
-      getReactProps<{ onChange(event: { target: { value: string } }): void }>(secretInput).onChange({
-        target: { value: "sk-test-secret" },
-      });
+      getReactProps<{ onChange(event: { target: { value: string } }): void }>(secretInput).onChange(
+        {
+          target: { value: "sk-test-secret" },
+        },
+      );
       await Promise.resolve();
     });
 
     await act(async () => {
-      getReactProps<{ onSubmit(event: { preventDefault(): void }): void | Promise<void> }>(form).onSubmit({
+      getReactProps<{ onSubmit(event: { preventDefault(): void }): void | Promise<void> }>(
+        form,
+      ).onSubmit({
         preventDefault() {},
       });
       await Promise.resolve();
@@ -154,7 +160,9 @@ describe("env-var settings surface", () => {
     });
 
     await act(async () => {
-      getReactProps<{ onSubmit(event: { preventDefault(): void }): void | Promise<void> }>(form).onSubmit({
+      getReactProps<{ onSubmit(event: { preventDefault(): void }): void | Promise<void> }>(
+        form,
+      ).onSubmit({
         preventDefault() {},
       });
       await Promise.resolve();

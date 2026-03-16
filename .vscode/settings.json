@@ -20,6 +20,10 @@
     "**/bun.lock": true,
     "**/.gitignore": true,
     "**/tsconfig.json": true,
-    "**/package.json": true
+    "**/package.json": true,
+    "**/bunfig.toml": true,
+    "**/.env": true,
+    "**/components.json": true,
+    "**/tmp": true
   }
 }

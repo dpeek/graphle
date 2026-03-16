@@ -298,10 +298,7 @@ export async function createAppAuthority(
       .list()
       .find((envVar) => envVar.name === name && envVar.id !== input.id);
     if (duplicate) {
-      throw new AppAuthorityMutationError(
-        409,
-        `Environment variable "${name}" already exists.`,
-      );
+      throw new AppAuthorityMutationError(409, `Environment variable "${name}" already exists.`);
     }
 
     const existingSecretId = existing?.secret;

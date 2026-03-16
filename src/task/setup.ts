@@ -21,6 +21,10 @@ const vscodeSettings = {
     "**/.gitignore": true,
     "**/tsconfig.json": true,
     "**/package.json": true,
+    "**/bunfig.toml": true,
+    "**/.env": true,
+    "**/components.json": true,
+    "**/tmp": true,
   },
 };
 
@@ -77,10 +81,11 @@ const oxlintSettings = {
 const gitignore = `out
 .DS_Store
 node_modules
-.io
 .env
 out
 tmp
+.gitnexus
+.claude
 `;
 
 export async function run() {

@@ -1,10 +1,9 @@
-import type { ObjectViewFieldSpec, ObjectViewSpec, PredicateRef } from "../../../index.js";
-import { usePredicateField } from "../../../react/predicate.js";
-import { performValidatedMutation } from "../../../react/mutation-validation.js";
-import { PredicateFieldEditor } from "../../../react-dom/resolver.js";
 import type { ReactNode } from "react";
 
-import { workspaceManagementWorkflow } from "./workflows.js";
+import type { ObjectViewFieldSpec, ObjectViewSpec, PredicateRef } from "../../../index.js";
+import { PredicateFieldEditor } from "../../../react-dom/resolver.js";
+import { performValidatedMutation } from "../../../react/mutation-validation.js";
+import { usePredicateField } from "../../../react/predicate.js";
 import {
   clearOptionalReference,
   findIssueName,
@@ -16,6 +15,7 @@ import {
   type WorkspaceManagementRuntime,
   type WorkspaceSection,
 } from "./react.js";
+import { workspaceManagementWorkflow } from "./workflows.js";
 import { workspaceIssueObjectView } from "./workspace-issue/index.js";
 import { workspaceLabelObjectView } from "./workspace-label/index.js";
 import { workspaceProjectObjectView } from "./workspace-project/index.js";
@@ -31,8 +31,7 @@ const workspaceIssueFieldDescriptions: WorkspaceFieldDescriptions = {
   labels: "Attach planning labels from the workspace label catalog.",
   name: "Short operator-facing title for the issue.",
   parent: "Optional parent link for stream and feature hierarchy.",
-  priority:
-    "Optional planning priority. Lower numbers indicate more urgent work in the seed data.",
+  priority: "Optional planning priority. Lower numbers indicate more urgent work in the seed data.",
   project: "Optional project link for grouping related issue work.",
   status: "Required workflow status from the workspace status lane.",
 };
@@ -53,7 +52,8 @@ const workspaceLabelFieldDescriptions: WorkspaceFieldDescriptions = {
 };
 
 const workspaceIssueRelatedDescriptions: WorkspaceFieldDescriptions = {
-  blockedBy: "Browse linked issues from the route without leaving the workspace management surface.",
+  blockedBy:
+    "Browse linked issues from the route without leaving the workspace management surface.",
 };
 
 function formatDate(value: Date | undefined): string {

@@ -1,7 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
 import { bootstrap, core, createStore, createTypeClient, defineNamespace } from "../../../index.js";
-
 import {
   createWorkspaceFixture,
   createWorkspaceIssueFixture,

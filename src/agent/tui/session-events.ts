@@ -104,12 +104,7 @@ export interface AgentSessionRef {
   workspacePath?: string;
 }
 
-export type AgentSessionPhase =
-  | "scheduled"
-  | "started"
-  | "completed"
-  | "failed"
-  | "stopped";
+export type AgentSessionPhase = "scheduled" | "started" | "completed" | "failed" | "stopped";
 
 export type AgentStatusCode =
   | "ready"

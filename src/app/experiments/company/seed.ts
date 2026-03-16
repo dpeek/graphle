@@ -1,7 +1,7 @@
 import type { NamespaceClient } from "@io/core/graph";
 
-import { statusTypeModule } from "../../type/status/index.js";
 import ids from "../../graph/app.json";
+import { statusTypeModule } from "../../type/status/index.js";
 import type { companyExperimentSchema } from "./graph.js";
 
 type CompanyExperimentClient = NamespaceClient<typeof companyExperimentSchema>;

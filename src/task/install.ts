@@ -1,5 +1,6 @@
-import config from "@io/core/config";
 import { $ } from "bun";
+
+import config from "../../io.js";
 
 process.env.HOMEBREW_NO_AUTO_UPDATE = "1";
 process.env.HOMEBREW_NO_ENV_HINTS = "1";

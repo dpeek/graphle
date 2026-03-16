@@ -38,21 +38,21 @@ type DeepResolvedFields<T> = T extends FieldsOutput
     }
   : never;
 
-type ResolvedType<T extends AnyTypeOutput> = T extends EntityTypeOutput<any, any>
-  ? T & { values: T["values"] & { id: string }; fields: DeepResolvedFields<T["fields"]> }
-  : T extends ScalarTypeOutput<any, any>
-    ? T & { values: T["values"] & { id: string } }
-    : T extends EnumTypeOutput<any, any>
-      ? T & {
-          values: Omit<T["values"], keyof T["options"]> &
-            { id: string } & {
+type ResolvedType<T extends AnyTypeOutput> =
+  T extends EntityTypeOutput<any, any>
+    ? T & { values: T["values"] & { id: string }; fields: DeepResolvedFields<T["fields"]> }
+    : T extends ScalarTypeOutput<any, any>
+      ? T & { values: T["values"] & { id: string } }
+      : T extends EnumTypeOutput<any, any>
+        ? T & {
+            values: Omit<T["values"], keyof T["options"]> & { id: string } & {
               [Alias in keyof T["options"]]: T["options"][Alias] & { id: string };
             };
-          options: {
-            [Alias in keyof T["options"]]: T["options"][Alias] & { id: string };
-          };
-        }
-    : never;
+            options: {
+              [Alias in keyof T["options"]]: T["options"][Alias] & { id: string };
+            };
+          }
+        : never;
 
 export type ResolvedNamespace<T extends IdNamespace> = {
   [K in keyof T]: ResolvedType<T[K]>;

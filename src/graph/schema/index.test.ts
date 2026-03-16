@@ -1,6 +1,5 @@
 import { describe, expect, it } from "bun:test";
 
-import { core } from "../graph/index.js";
 import {
   probeContractGraph,
   probeContractItem,
@@ -8,7 +7,13 @@ import {
   probeContractWorkflow,
   probeSaveContractItemCommand,
 } from "../graph/contracts.probe.js";
-import * as schemaExports from "./index.js";
+import { core } from "../graph/index.js";
+import { dateFilter as compatDateFilter } from "../type/date/filter.js";
+import { dateTypeModule as compatDateTypeModule } from "../type/date/index.js";
+import { parseDate as compatParseDate } from "../type/date/parse.js";
+import { emailTypeModule as compatEmailTypeModule } from "../type/email/index.js";
+import { urlTypeModule as compatUrlTypeModule } from "../type/url/index.js";
+import { urlMeta as compatUrlMeta } from "../type/url/meta.js";
 import {
   envVar,
   envVarNameBlankMessage,
@@ -37,24 +42,19 @@ import {
   workspaceSchema,
   workspaceWorkflows,
 } from "./app/workspace/index.js";
-import { dateTypeModule } from "./core/date/index.js";
-import { emailTypeModule } from "./core/email/index.js";
-import { stringTypeModule } from "./core/string/index.js";
-import { urlTypeModule } from "./core/url/index.js";
 import { cardinality } from "./core/cardinality/index.js";
+import { dateFilter } from "./core/date/filter.js";
+import { dateTypeModule } from "./core/date/index.js";
+import { parseDate } from "./core/date/parse.js";
+import { emailTypeModule } from "./core/email/index.js";
 import { enumType } from "./core/enum/index.js";
 import { node } from "./core/node/index.js";
 import { predicate } from "./core/predicate/index.js";
+import { stringTypeModule } from "./core/string/index.js";
 import { coreType } from "./core/type/index.js";
-import { dateFilter as compatDateFilter } from "../type/date/filter.js";
-import { dateTypeModule as compatDateTypeModule } from "../type/date/index.js";
-import { parseDate as compatParseDate } from "../type/date/parse.js";
-import { emailTypeModule as compatEmailTypeModule } from "../type/email/index.js";
-import { urlMeta as compatUrlMeta } from "../type/url/meta.js";
-import { urlTypeModule as compatUrlTypeModule } from "../type/url/index.js";
-import { dateFilter } from "./core/date/filter.js";
-import { parseDate } from "./core/date/parse.js";
+import { urlTypeModule } from "./core/url/index.js";
 import { urlMeta } from "./core/url/meta.js";
+import * as schemaExports from "./index.js";
 
 function resolvedTypeId(typeDef: { values: { key: string } }): string {
   const values = typeDef.values as { key: string; id?: string };

@@ -1,10 +1,10 @@
 import { describe, expect, it } from "bun:test";
+
 import { render } from "@testing-library/react";
 import { act } from "react";
 
 import { createExampleRuntime } from "../graph/runtime.js";
 import { getAllByData, getByData, textContent } from "../test-dom.js";
-
 import { AppRuntimeBootstrap, type AppRuntime, useAppRuntime } from "./runtime.js";
 
 function createDeferred<TValue>() {
@@ -25,7 +25,10 @@ function RuntimeProbe() {
   const runtime = useAppRuntime();
   return (
     <div data-app-bootstrap="ready">
-      {runtime.graph.company.list().map((company) => company.name).join(", ")}
+      {runtime.graph.company
+        .list()
+        .map((company) => company.name)
+        .join(", ")}
     </div>
   );
 }
@@ -45,7 +48,11 @@ describe("app runtime bootstrap", () => {
     const { container, unmount } = rendered;
 
     expect(getByData(container, "data-app-bootstrap", "loading")).toBeDefined();
-    expect(getAllByData(container, "data-app-bootstrap").filter((node) => node.dataset.appBootstrap === "ready")).toHaveLength(0);
+    expect(
+      getAllByData(container, "data-app-bootstrap").filter(
+        (node) => node.dataset.appBootstrap === "ready",
+      ),
+    ).toHaveLength(0);
 
     await act(async () => {
       deferred.resolve(createExampleRuntime() as AppRuntime);

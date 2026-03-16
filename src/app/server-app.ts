@@ -1,9 +1,8 @@
-import page from "./web/index.html";
-
 import { GraphValidationError, type GraphWriteTransaction } from "@io/core/graph";
 
 import type { AppAuthority } from "./authority.js";
 import type { SaveEnvVarInput } from "./env-vars.js";
+import page from "./web/index.html";
 
 export function handleSyncRequest(request: Request, authority: AppAuthority): Response {
   if (request.method !== "GET") {

@@ -11,15 +11,14 @@ here.
 
 ## Docs
 
-- `./package-surface.md`
-- `./experiments.md`
-- `./env-vars.md`
-- `../graph/overview.md`
-- `../graph/architecture.md`
-- `../graph/runtime.md`
-- `../graph/sync.md`
-- `../graph/type-modules.md`
-- `../graph/refs-and-ui.md`
+- `./experiments/index.md`
+- `./experiments/env-vars/index.md`
+- `../graph/index.md`
+- `../graph/spec/architecture.md`
+- `../graph/spec/runtime.md`
+- `../graph/graph/sync.md`
+- `../graph/graph/type-module.md`
+- `../graph/spec/refs-and-ui.md`
 
 ## Layout
 

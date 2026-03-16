@@ -1,5 +1,4 @@
 import type { GraphCommandSpec } from "../../../../graph/contracts.js";
-
 import { workspaceLabel } from "./type.js";
 
 export type SaveWorkspaceLabelCommandInput = {

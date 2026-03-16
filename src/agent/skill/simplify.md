@@ -11,8 +11,8 @@ Scope:
 
 Workflows:
 
-- `@io/project/simplify.md simplify the recent change`
-- `@io/project/simplify.md <repo path to simplify>`
+- `@src/agent/skill/simplify.md simplify the recent change`
+- `@src/agent/skill/simplify.md <repo path to simplify>`
 
 Rules:
 

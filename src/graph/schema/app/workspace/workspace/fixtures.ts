@@ -1,5 +1,4 @@
 import type { CreateInputOfType } from "../../../../graph/client.js";
-
 import { workspace } from "./type.js";
 
 export type WorkspaceFixtureInput = CreateInputOfType<typeof workspace>;

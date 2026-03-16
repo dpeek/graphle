@@ -1,12 +1,18 @@
 import { describe, expect, it } from "bun:test";
+
+import { createTypeClient, core, edgeId, typeId } from "@io/core/graph";
 import { fireEvent, render } from "@testing-library/react";
 import { act } from "react";
 
-import { createTypeClient, core, edgeId, typeId } from "@io/core/graph";
-
 import { app } from "../graph/app.js";
 import { createExampleRuntime } from "../graph/runtime.js";
-import { getAllByData, getByData, getReactProps, getRequiredElement, textContent } from "../test-dom.js";
+import {
+  getAllByData,
+  getByData,
+  getReactProps,
+  getRequiredElement,
+  textContent,
+} from "../test-dom.js";
 import { Explorer, ExplorerSurface } from "./explorer.js";
 
 describe("explorer surface", () => {
@@ -105,14 +111,18 @@ describe("explorer surface", () => {
 
     const rangeRow = getByData(container, "data-explorer-field-path", "metadata.range");
     const rangeSelect = getRequiredElement(
-      rangeRow.querySelector<HTMLSelectElement>(`select[data-explorer-range-editor="${websitePredicateId}"]`),
+      rangeRow.querySelector<HTMLSelectElement>(
+        `select[data-explorer-range-editor="${websitePredicateId}"]`,
+      ),
       "Expected range select.",
     );
 
     act(() => {
-      getReactProps<{ onChange(event: { target: { value: string } }): void }>(rangeSelect).onChange({
-        target: { value: runtime.ids.acme },
-      });
+      getReactProps<{ onChange(event: { target: { value: string } }): void }>(rangeSelect).onChange(
+        {
+          target: { value: runtime.ids.acme },
+        },
+      );
     });
 
     expect(graph.predicate.ref(websitePredicateId).fields.range.get()).toBe(initialRange);
@@ -147,9 +157,9 @@ describe("explorer surface", () => {
       });
     });
 
-    expect(textContent(getByData(container, "data-explorer-item-entity", runtime.ids.acme))).toContain(
-      "Acme Graph Labs",
-    );
+    expect(
+      textContent(getByData(container, "data-explorer-item-entity", runtime.ids.acme)),
+    ).toContain("Acme Graph Labs");
 
     fireEvent.click(getByData(container, "data-explorer-nav", "types"));
 
@@ -163,7 +173,9 @@ describe("explorer surface", () => {
     );
 
     act(() => {
-      getReactProps<{ onChange(event: { target: { value: string } }): void }>(typeNameInput).onChange({
+      getReactProps<{ onChange(event: { target: { value: string } }): void }>(
+        typeNameInput,
+      ).onChange({
         target: { value: "Company Model" },
       });
     });
@@ -184,7 +196,11 @@ describe("explorer surface", () => {
     );
 
     const ownerTypeButton = getByData(container, "data-explorer-open-type", companyTypeId);
-    expect(textContent(ownerTypeButton.closest("section") ?? ownerTypeButton.parentElement ?? ownerTypeButton)).toContain("Company");
+    expect(
+      textContent(
+        ownerTypeButton.closest("section") ?? ownerTypeButton.parentElement ?? ownerTypeButton,
+      ),
+    ).toContain("Company");
 
     act(() => {
       getReactProps<{ onChange(event: { target: { value: string } }): void }>(
@@ -195,9 +211,9 @@ describe("explorer surface", () => {
     });
 
     expect(graph.predicate.ref(websitePredicateId).fields.name.get()).toBe("Website predicate");
-    expect(textContent(getByData(container, "data-explorer-item-predicate", websitePredicateId))).toContain(
-      "Website predicate",
-    );
+    expect(
+      textContent(getByData(container, "data-explorer-item-predicate", websitePredicateId)),
+    ).toContain("Website predicate");
 
     unmount();
   });

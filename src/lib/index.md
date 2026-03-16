@@ -7,7 +7,7 @@ runtime utilities used across repo domains.
 
 ## Docs
 
-- `../project/overview.md`
+- `../index.md`
 
 ## Layout
 

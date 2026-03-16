@@ -1,5 +1,4 @@
 import type { CreateInputOfType } from "../../../../graph/client.js";
-
 import { workspaceLabel } from "./type.js";
 
 export type WorkspaceLabelFixtureInput = CreateInputOfType<typeof workspaceLabel>;

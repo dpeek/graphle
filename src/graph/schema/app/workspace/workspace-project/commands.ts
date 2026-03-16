@@ -1,5 +1,4 @@
 import type { GraphCommandSpec } from "../../../../graph/contracts.js";
-
 import { workspaceProject } from "./type.js";
 
 export type SaveWorkspaceProjectCommandInput = {

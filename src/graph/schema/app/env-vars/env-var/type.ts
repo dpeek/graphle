@@ -2,12 +2,8 @@ import { core } from "../../../../graph/core.js";
 import { defineType } from "../../../../graph/schema.js";
 import { defineReferenceField } from "../../../../graph/type-module.js";
 import { stringTypeModule } from "../../../../type/string/index.js";
-import {
-  envVarNameBlankMessage,
-  envVarNameInvalidMessage,
-  envVarNamePattern,
-} from "../shared.js";
 import { secretRef } from "../secret-ref/index.js";
+import { envVarNameBlankMessage, envVarNameInvalidMessage, envVarNamePattern } from "../shared.js";
 
 export const envVar = defineType({
   values: { key: "app:envVar", name: "Environment Variable" },

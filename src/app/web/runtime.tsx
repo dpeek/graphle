@@ -19,7 +19,12 @@ const runtimeCache = new Map<string, Promise<AppRuntime>>();
 
 const AppRuntimeContext = createContext<AppRuntime | null>(null);
 
-function readErrorMessage(status: number, statusText: string, payload: unknown, fallback: string): string {
+function readErrorMessage(
+  status: number,
+  statusText: string,
+  payload: unknown,
+  fallback: string,
+): string {
   if (
     typeof payload === "object" &&
     payload !== null &&
@@ -40,7 +45,10 @@ async function fetchSyncPayload(after?: string): Promise<SyncPayload> {
     },
   });
 
-  const payload = (await response.json().catch(() => undefined)) as SyncPayload | { error?: string } | undefined;
+  const payload = (await response.json().catch(() => undefined)) as
+    | SyncPayload
+    | { error?: string }
+    | undefined;
   if (!response.ok) {
     throw new Error(
       readErrorMessage(response.status, response.statusText, payload, "Sync request failed"),

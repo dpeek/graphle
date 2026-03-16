@@ -6,4 +6,4 @@ import type { SkillsListEntry } from "./SkillsListEntry";
 /**
  * Response payload for `Op::ListSkills`.
  */
-export type ListSkillsResponseEvent = { skills: Array<SkillsListEntry>, };
+export type ListSkillsResponseEvent = { skills: Array<SkillsListEntry> };

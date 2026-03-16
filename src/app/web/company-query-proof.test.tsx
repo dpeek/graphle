@@ -1,8 +1,8 @@
 import { describe, expect, it } from "bun:test";
+
+import { bootstrap, core, createStore, createTypeClient } from "@io/core/graph";
 import { render } from "@testing-library/react";
 import { act } from "react";
-
-import { bootstrap, createStore, createTypeClient, core } from "@io/core/graph";
 
 import { app } from "../graph/app.js";
 import { getAllByData, getByData, getReactProps, getRequiredElement } from "../test-dom.js";
@@ -31,7 +31,7 @@ function setupGraph() {
     name: "Atlas Labs",
     status: app.status.values.active.id,
     foundedYear: 2015,
-    website: new URL("https://atlas.io"),
+    website: new URL("https://atlastmp/workspace"),
   });
 
   return {
@@ -91,7 +91,9 @@ describe("company query proof surface", () => {
       "Expected website operator select.",
     );
     const foundedYearOperator = getRequiredElement(
-      foundedYearRow.querySelector<HTMLSelectElement>('select[data-company-query-control="operator"]'),
+      foundedYearRow.querySelector<HTMLSelectElement>(
+        'select[data-company-query-control="operator"]',
+      ),
       "Expected founded year operator select.",
     );
 
@@ -113,7 +115,9 @@ describe("company query proof surface", () => {
       "Expected website input.",
     );
     const foundedYearInput = getRequiredElement(
-      foundedYearRow.querySelector<HTMLInputElement>('input[data-web-filter-operand-kind="number"]'),
+      foundedYearRow.querySelector<HTMLInputElement>(
+        'input[data-web-filter-operand-kind="number"]',
+      ),
       "Expected founded year input.",
     );
 
@@ -121,13 +125,19 @@ describe("company query proof surface", () => {
       getReactProps<{ onChange(event: { target: { value: string } }): void }>(nameInput).onChange({
         target: { value: "Acme" },
       });
-      getReactProps<{ onChange(event: { target: { value: string } }): void }>(statusOperand).onChange({
+      getReactProps<{ onChange(event: { target: { value: string } }): void }>(
+        statusOperand,
+      ).onChange({
         target: { value: app.status.values.active.id },
       });
-      getReactProps<{ onChange(event: { target: { value: string } }): void }>(websiteInput).onChange({
+      getReactProps<{ onChange(event: { target: { value: string } }): void }>(
+        websiteInput,
+      ).onChange({
         target: { value: "https://acme.com" },
       });
-      getReactProps<{ onChange(event: { target: { value: string } }): void }>(foundedYearInput).onChange({
+      getReactProps<{ onChange(event: { target: { value: string } }): void }>(
+        foundedYearInput,
+      ).onChange({
         target: { value: "1987" },
       });
     });
@@ -210,7 +220,9 @@ describe("company query proof surface", () => {
       "Expected website operator select.",
     );
     const foundedYearOperator = getRequiredElement(
-      foundedYearRow.querySelector<HTMLSelectElement>('select[data-company-query-control="operator"]'),
+      foundedYearRow.querySelector<HTMLSelectElement>(
+        'select[data-company-query-control="operator"]',
+      ),
       "Expected founded year operator select.",
     );
 
@@ -232,7 +244,9 @@ describe("company query proof surface", () => {
       "Expected website host input.",
     );
     const foundedYearInput = getRequiredElement(
-      foundedYearRow.querySelector<HTMLInputElement>('input[data-web-filter-operand-kind="number"]'),
+      foundedYearRow.querySelector<HTMLInputElement>(
+        'input[data-web-filter-operand-kind="number"]',
+      ),
       "Expected founded year input.",
     );
 
@@ -240,9 +254,11 @@ describe("company query proof surface", () => {
       getReactProps<{ onChange(event: { target: { value: string } }): void }>(
         websiteHostInput,
       ).onChange({
-        target: { value: "atlas.io" },
+        target: { value: "atlastmp" },
       });
-      getReactProps<{ onChange(event: { target: { value: string } }): void }>(foundedYearInput).onChange({
+      getReactProps<{ onChange(event: { target: { value: string } }): void }>(
+        foundedYearInput,
+      ).onChange({
         target: { value: "2000" },
       });
     });
@@ -258,7 +274,7 @@ describe("company query proof surface", () => {
         operatorLabel: "Host",
         operand: {
           kind: "string",
-          value: "atlas.io",
+          value: "atlastmp",
         },
       },
       {

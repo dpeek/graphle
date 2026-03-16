@@ -4,7 +4,7 @@
 
 This document is the entry point for agents working on workflow loading, issue routing, context assembly, or module-scoped doc selection.
 For the user-facing `Stream -> Feature -> Task` contract, start with
-`../project/workflow.md`; this page only covers the current loading, routing, and
+`./skill/backlog.md`; this page only covers the current loading, routing, and
 prompt-assembly implementation.
 
 ## Current Workflow Surface
@@ -13,7 +13,7 @@ prompt-assembly implementation.
 
 `../../src/agent/workflow.ts` uses a single repo-local entry style:
 
-- `io.ts` for runtime config plus `io.md` for prompt body
+- `../../io.ts` for runtime config plus `../../io.md` for prompt body
 
 Resolved workflow state already includes:
 
@@ -79,7 +79,7 @@ This is already real runtime behavior, not a draft plan.
 
 ## Future Work Suggestions
 
-1. Add one end-to-end example showing `io.ts`, `io.md`, issue-linked doc references, and the resulting context bundle order.
+1. Add one end-to-end example showing `../../io.ts`, `../../io.md`, issue-linked doc references, and the resulting context bundle order.
 2. Document the expected stability of doc-id conventions and issue-description doc linking.
 3. Add a compact routing precedence table with representative examples.
 4. Clarify when a doc should be registered by id versus linked by repo path.

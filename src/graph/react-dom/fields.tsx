@@ -1,3 +1,5 @@
+import { useEffect, useRef, useState } from "react";
+
 import {
   GraphValidationError,
   isEnumType,
@@ -25,7 +27,6 @@ import {
   type PredicateFieldViewCapability,
   usePersistedMutationCallbacks,
 } from "../react/index.js";
-import { useEffect, useRef, useState } from "react";
 
 type AnyPredicate = PredicateRef<any, any>;
 type AnyFieldProps = PredicateFieldProps<any, any>;

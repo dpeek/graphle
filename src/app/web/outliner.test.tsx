@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+
 import { fireEvent, render } from "@testing-library/react";
 
 import { createExampleRuntime } from "../graph/runtime.js";
@@ -19,7 +20,9 @@ describe("outliner", () => {
 
     expect(textContent(container)).toContain("2 nodes");
     expect(textContent(container)).not.toContain('Validation failed for "parent"');
-    expect(textContent(container)).not.toContain('must reference an existing "Outline Node" entity.');
+    expect(textContent(container)).not.toContain(
+      'must reference an existing "Outline Node" entity.',
+    );
 
     unmount();
   });

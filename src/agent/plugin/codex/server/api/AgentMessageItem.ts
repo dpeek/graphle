@@ -11,11 +11,14 @@ import type { MessagePhase } from "./MessagePhase";
  * should use it when present, but retain legacy completion semantics when it
  * is `None`.
  */
-export type AgentMessageItem = { id: string, content: Array<AgentMessageContent>, 
-/**
- * Optional phase metadata carried through from `ResponseItem::Message`.
- *
- * This is currently used by TUI rendering to distinguish mid-turn
- * commentary from a final answer and avoid status-indicator jitter.
- */
-phase?: MessagePhase, };
+export type AgentMessageItem = {
+  id: string;
+  content: Array<AgentMessageContent>;
+  /**
+   * Optional phase metadata carried through from `ResponseItem::Message`.
+   *
+   * This is currently used by TUI rendering to distinguish mid-turn
+   * commentary from a final answer and avoid status-indicator jitter.
+   */
+  phase?: MessagePhase;
+};

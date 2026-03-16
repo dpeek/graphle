@@ -7,8 +7,8 @@ the retained runtime and normalized event stream produced by `agent`.
 
 ## Docs
 
-- `./overview.md`
-- `./module-stream-workflow-plan.md`
+- `../index.md`
+- `../workflow.md`
 
 ## Layout
 

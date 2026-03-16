@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+
 import { render } from "@testing-library/react";
 import { act } from "react";
 
@@ -28,7 +29,9 @@ async function renderShell(url: string) {
 
 describe("app shell", () => {
   it("canonicalizes the legacy env-var surface URL onto the route path", async () => {
-    const { browser, container, unmount } = await renderShell("/?surface=env-vars&mode=demo#details");
+    const { browser, container, unmount } = await renderShell(
+      "/?surface=env-vars&mode=demo#details",
+    );
 
     expect(browser.url()).toBe("/settings/env-vars?mode=demo#details");
     expect(getByData(container, "data-app-shell-route", "envVars")).toBeDefined();
@@ -37,7 +40,9 @@ describe("app shell", () => {
   });
 
   it("strips stale surface params from explicit proof routes", async () => {
-    const { browser, container, unmount } = await renderShell("/query?surface=query&mode=demo#details");
+    const { browser, container, unmount } = await renderShell(
+      "/query?surface=query&mode=demo#details",
+    );
 
     expect(browser.url()).toBe("/query?mode=demo#details");
     expect(getByData(container, "data-app-shell-route", "query")).toBeDefined();

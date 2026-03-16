@@ -1,5 +1,4 @@
 import type { ObjectViewSpec } from "../../../../graph/contracts.js";
-
 import { saveWorkspaceProjectCommand } from "./commands.js";
 import { workspaceProject } from "./type.js";
 

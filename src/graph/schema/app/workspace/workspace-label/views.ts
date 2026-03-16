@@ -1,5 +1,4 @@
 import type { ObjectViewSpec } from "../../../../graph/contracts.js";
-
 import { saveWorkspaceLabelCommand } from "./commands.js";
 import { workspaceLabel } from "./type.js";
 

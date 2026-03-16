@@ -1,3 +1,9 @@
+import {
+  appendCodexNotificationToBlocks,
+  formatCodexNotificationSummary,
+  renderCodexNotificationEvent as renderCodexNotificationEventImpl,
+} from "./codex-event-stream.js";
+import { summarizeLinearToolCall } from "./linear-tool-format.js";
 import type {
   AgentCodexNotificationEvent,
   AgentRawLineEvent,
@@ -10,12 +16,6 @@ import type {
   AgentStatusEvent,
   AgentStatusFormat,
 } from "./session-events.js";
-import {
-  appendCodexNotificationToBlocks,
-  formatCodexNotificationSummary,
-  renderCodexNotificationEvent as renderCodexNotificationEventImpl,
-} from "./codex-event-stream.js";
-import { summarizeLinearToolCall } from "./linear-tool-format.js";
 export { createStatusSummaryFromCodexNotification } from "./codex-event-stream.js";
 
 const DEFAULT_TRANSCRIPT_WAITING_MESSAGE = "Waiting for session transcript...";
@@ -182,10 +182,7 @@ function renderSessionLine(
   state.lineOpen = false;
 }
 
-function closeSessionLine(
-  state: AgentSessionDisplayState,
-  writeDisplay: (text: string) => void,
-) {
+function closeSessionLine(state: AgentSessionDisplayState, writeDisplay: (text: string) => void) {
   if (!state.lineOpen) {
     return;
   }
@@ -227,7 +224,9 @@ function formatToolCallText(data: Record<string, unknown> | undefined) {
     return undefined;
   }
   const argumentsText =
-    data?.arguments && typeof data.arguments === "object" ? ` ${JSON.stringify(data.arguments)}` : "";
+    data?.arguments && typeof data.arguments === "object"
+      ? ` ${JSON.stringify(data.arguments)}`
+      : "";
   return `Tool: ${server}.${tool}${argumentsText}`;
 }
 
@@ -247,7 +246,9 @@ function formatToolFailedText(data: Record<string, unknown> | undefined) {
 }
 
 function formatErrorText(data: Record<string, unknown> | undefined) {
-  const details = [asString(data?.message), asString(data?.additionalDetails)].filter(Boolean).join(" ");
+  const details = [asString(data?.message), asString(data?.additionalDetails)]
+    .filter(Boolean)
+    .join(" ");
   return details ? `Error: ${details}` : undefined;
 }
 
@@ -329,7 +330,11 @@ export function renderAgentStatusEvent(options: {
 
   switch (event.format) {
     case "chunk": {
-      if (event.itemId && state.activeAgentMessageId && event.itemId !== state.activeAgentMessageId) {
+      if (
+        event.itemId &&
+        state.activeAgentMessageId &&
+        event.itemId !== state.activeAgentMessageId
+      ) {
         closeSessionLine(state, writeDisplay);
       }
       if (event.itemId) {
@@ -415,10 +420,7 @@ export function createAgentSessionStdoutObserver(): AgentSessionEventObserver {
   };
 }
 
-export function appendBlock(
-  target: BlockTarget,
-  entry: AgentTuiBlock,
-) {
+export function appendBlock(target: BlockTarget, entry: AgentTuiBlock) {
   target.blocks.push(entry);
 }
 
@@ -433,7 +435,8 @@ export function formatLifecycleText(
   const branchName =
     (typeof data?.branchName === "string" ? data.branchName : undefined) ?? session.branchName;
   const workspacePath =
-    (typeof data?.workspacePath === "string" ? data.workspacePath : undefined) ?? session.workspacePath;
+    (typeof data?.workspacePath === "string" ? data.workspacePath : undefined) ??
+    session.workspacePath;
   if (commitSha) {
     parts.push(`commit ${commitSha.slice(0, 7)}`);
   }
@@ -455,10 +458,7 @@ export function formatRawLineEvent(event: AgentRawLineEvent) {
   return `${prefix}: ${event.line}`;
 }
 
-function appendAgentMessageEntry(
-  target: BlockTarget,
-  event: AgentStatusEvent,
-) {
+function appendAgentMessageEntry(target: BlockTarget, event: AgentStatusEvent) {
   const text = event.text ?? "";
   if (!text) {
     return;
@@ -472,25 +472,19 @@ function appendAgentMessageEntry(
     lastEntry.timestamp = event.timestamp;
     return;
   }
-  appendBlock(
-    target,
-    {
-      count: 1,
-      itemId: event.itemId,
-      kind: "agent-message",
-      segments: [text],
-      sequenceEnd: event.sequence,
-      sequenceStart: event.sequence,
-      text,
-      timestamp: event.timestamp,
-    },
-  );
+  appendBlock(target, {
+    count: 1,
+    itemId: event.itemId,
+    kind: "agent-message",
+    segments: [text],
+    sequenceEnd: event.sequence,
+    sequenceStart: event.sequence,
+    text,
+    timestamp: event.timestamp,
+  });
 }
 
-function appendCommandOutputEntry(
-  target: BlockTarget,
-  event: AgentStatusEvent,
-) {
+function appendCommandOutputEntry(target: BlockTarget, event: AgentStatusEvent) {
   const lines = getCommandOutputLines(event);
   if (!lines.length) {
     return;
@@ -513,23 +507,17 @@ function appendCommandOutputEntry(
     lastEntry.timestamp = event.timestamp;
     return;
   }
-  appendBlock(
-    target,
-    {
-      count: lines.length,
-      kind: "command-output",
-      lines,
-      sequenceEnd: event.sequence,
-      sequenceStart: event.sequence,
-      timestamp: event.timestamp,
-    },
-  );
+  appendBlock(target, {
+    count: lines.length,
+    kind: "command-output",
+    lines,
+    sequenceEnd: event.sequence,
+    sequenceStart: event.sequence,
+    timestamp: event.timestamp,
+  });
 }
 
-function appendCommandStatusEntry(
-  target: BlockTarget,
-  event: AgentStatusEvent,
-) {
+function appendCommandStatusEntry(target: BlockTarget, event: AgentStatusEvent) {
   const commandText = formatCommandText(event.data) ?? event.text?.replace(/^\$\s*/, "").trim();
   if (!commandText) {
     return false;
@@ -544,28 +532,22 @@ function appendCommandStatusEntry(
     return true;
   }
 
-  appendBlock(
-    target,
-    {
-      command: commandText.replace(/^\$\s*/, ""),
-      count: 1,
-      cwd: asString(event.data?.cwd),
-      itemId: event.itemId,
-      kind: "command",
-      outputLines: [],
-      sequenceEnd: event.sequence,
-      sequenceStart: event.sequence,
-      status: "running",
-      timestamp: event.timestamp,
-    },
-  );
+  appendBlock(target, {
+    command: commandText.replace(/^\$\s*/, ""),
+    count: 1,
+    cwd: asString(event.data?.cwd),
+    itemId: event.itemId,
+    kind: "command",
+    outputLines: [],
+    sequenceEnd: event.sequence,
+    sequenceStart: event.sequence,
+    status: "running",
+    timestamp: event.timestamp,
+  });
   return true;
 }
 
-function appendCommandFailureEntry(
-  target: BlockTarget,
-  event: AgentStatusEvent,
-) {
+function appendCommandFailureEntry(target: BlockTarget, event: AgentStatusEvent) {
   const existing = [...target.blocks]
     .reverse()
     .find((entry) => entry.kind === "command" && (!event.itemId || entry.itemId === event.itemId));
@@ -610,10 +592,7 @@ function findBlockByItemId(
   return undefined;
 }
 
-function appendToolStatusEntry(
-  target: BlockTarget,
-  event: AgentStatusEvent,
-) {
+function appendToolStatusEntry(target: BlockTarget, event: AgentStatusEvent) {
   const parsedToolText = parseToolText(event.text);
   const server = asString(event.data?.server) ?? parsedToolText?.server;
   const tool = asString(event.data?.tool) ?? parsedToolText?.tool;
@@ -625,12 +604,7 @@ function appendToolStatusEntry(
     findBlockByItemId(target, event.itemId) ??
     [...target.blocks]
       .reverse()
-      .find(
-        (entry) =>
-          entry.kind === "tool" &&
-          entry.server === server &&
-          entry.tool === tool,
-      );
+      .find((entry) => entry.kind === "tool" && entry.server === server && entry.tool === tool);
   const hasResultData = Object.prototype.hasOwnProperty.call(event.data ?? {}, "result");
   const resultData = hasResultData ? event.data?.result : undefined;
   const resultText = asString(event.data?.resultText);
@@ -657,32 +631,26 @@ function appendToolStatusEntry(
     return true;
   }
 
-  appendBlock(
-    target,
-    {
-      argumentsData: event.data?.arguments,
-      argumentsText: parsedToolText?.argumentsText,
-      count: 1,
-      errorText,
-      itemId: event.itemId,
-      kind: "tool",
-      resultData,
-      resultText,
-      server,
-      sequenceEnd: event.sequence,
-      sequenceStart: event.sequence,
-      status,
-      timestamp: event.timestamp,
-      tool,
-    },
-  );
+  appendBlock(target, {
+    argumentsData: event.data?.arguments,
+    argumentsText: parsedToolText?.argumentsText,
+    count: 1,
+    errorText,
+    itemId: event.itemId,
+    kind: "tool",
+    resultData,
+    resultText,
+    server,
+    sequenceEnd: event.sequence,
+    sequenceStart: event.sequence,
+    status,
+    timestamp: event.timestamp,
+    tool,
+  });
   return true;
 }
 
-export function appendBlocksForEvent(
-  target: BlockTarget,
-  event: AgentSessionEvent,
-) {
+export function appendBlocksForEvent(target: BlockTarget, event: AgentSessionEvent) {
   if (event.type === "codex-notification") {
     appendCodexNotificationToBlocks(
       {
@@ -697,18 +665,15 @@ export function appendBlocksForEvent(
   }
 
   if (event.type === "session") {
-    appendBlock(
-      target,
-      {
-        count: 1,
-        kind: "lifecycle",
-        phase: event.phase,
-        sequenceEnd: event.sequence,
-        sequenceStart: event.sequence,
-        text: formatLifecycleText(event.phase, event.data, event.session),
-        timestamp: event.timestamp,
-      },
-    );
+    appendBlock(target, {
+      count: 1,
+      kind: "lifecycle",
+      phase: event.phase,
+      sequenceEnd: event.sequence,
+      sequenceStart: event.sequence,
+      text: formatLifecycleText(event.phase, event.data, event.session),
+      timestamp: event.timestamp,
+    });
     return;
   }
 
@@ -725,19 +690,16 @@ export function appendBlocksForEvent(
       lastEntry.timestamp = event.timestamp;
       return;
     }
-    appendBlock(
-      target,
-      {
-        count: 1,
-        encoding: event.encoding,
-        kind: "raw",
-        lines: [event.line],
-        sequenceEnd: event.sequence,
-        sequenceStart: event.sequence,
-        stream: event.stream,
-        timestamp: event.timestamp,
-      },
-    );
+    appendBlock(target, {
+      count: 1,
+      encoding: event.encoding,
+      kind: "raw",
+      lines: [event.line],
+      sequenceEnd: event.sequence,
+      sequenceStart: event.sequence,
+      stream: event.stream,
+      timestamp: event.timestamp,
+    });
     return;
   }
 
@@ -758,25 +720,25 @@ export function appendBlocksForEvent(
   if (event.code === "command-failed" && appendCommandFailureEntry(target, event)) {
     return;
   }
-  if ((event.code === "tool" || event.code === "tool-failed") && appendToolStatusEntry(target, event)) {
+  if (
+    (event.code === "tool" || event.code === "tool-failed") &&
+    appendToolStatusEntry(target, event)
+  ) {
     return;
   }
 
-  appendBlock(
-    target,
-    {
-      code: event.code,
-      count: 1,
-      data: event.data,
-      format: event.format,
-      itemId: event.itemId,
-      kind: "status",
-      sequenceEnd: event.sequence,
-      sequenceStart: event.sequence,
-      text: formatStatusEventText(event) ?? event.code,
-      timestamp: event.timestamp,
-    },
-  );
+  appendBlock(target, {
+    code: event.code,
+    count: 1,
+    data: event.data,
+    format: event.format,
+    itemId: event.itemId,
+    kind: "status",
+    sequenceEnd: event.sequence,
+    sequenceStart: event.sequence,
+    text: formatStatusEventText(event) ?? event.code,
+    timestamp: event.timestamp,
+  });
 }
 
 export function summarizeAgentSessionEvent(event: AgentSessionEvent) {
@@ -832,7 +794,10 @@ function formatLifecycleEntry(entry: Extract<AgentTuiBlock, { kind: "lifecycle" 
 }
 
 function normalizeBlockLines(text: string) {
-  return text.replace(/\r\n/g, "\n").split("\n").map((line) => line.trimEnd());
+  return text
+    .replace(/\r\n/g, "\n")
+    .split("\n")
+    .map((line) => line.trimEnd());
 }
 
 function indentBlockLines(lines: string[], prefix = "  ") {
@@ -968,14 +933,18 @@ function getToolArgumentLines(
   return formatJsonBlock(parsedArguments);
 }
 
-function getToolResultLines(
-  resultData: unknown,
-  resultText: string | undefined,
-) {
+function getToolResultLines(resultData: unknown, resultText: string | undefined) {
   if (resultData !== undefined) {
     const record = asRecord(resultData);
     if (record) {
-      return formatRecordSummaryLines(record, ["id", "identifier", "title", "status", "state", "url"]);
+      return formatRecordSummaryLines(record, [
+        "id",
+        "identifier",
+        "title",
+        "status",
+        "state",
+        "url",
+      ]);
     }
     if (typeof resultData === "string") {
       return normalizeBlockLines(resultData);

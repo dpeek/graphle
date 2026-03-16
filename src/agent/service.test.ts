@@ -3,7 +3,6 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 
-import type { AgentSessionEvent, AgentStatusEvent } from "./tui/index.js";
 import {
   DEFAULT_BACKLOG_BUILTIN_DOC_IDS,
   DEFAULT_EXECUTE_BUILTIN_DOC_IDS,
@@ -12,6 +11,7 @@ import {
 import { resolveIssueRouting } from "./issue-routing.js";
 import { AgentService, pickCandidateIssues } from "./service.js";
 import { LinearTrackerAdapter, normalizeLinearIssue } from "./tracker/linear.js";
+import type { AgentSessionEvent, AgentStatusEvent } from "./tui/index.js";
 import type { AgentIssue, PreparedWorkspace } from "./types.js";
 import { renderPrompt } from "./workflow.js";
 
@@ -2053,8 +2053,10 @@ test("AgentService publishes supervisor and worker session events", async () => 
     const workflowSummaryEvent = events.find(
       (
         event,
-      ): event is AgentStatusEvent & { code: "workflow-diagnostic"; session: { id: "supervisor" } } =>
-        isSupervisorWorkflowDiagnosticEvent(event) && event.text === "Workflow: 1 runnable",
+      ): event is AgentStatusEvent & {
+        code: "workflow-diagnostic";
+        session: { id: "supervisor" };
+      } => isSupervisorWorkflowDiagnosticEvent(event) && event.text === "Workflow: 1 runnable",
     );
     expect(workflowSummaryEvent?.data?.workflowDiagnostics).toMatchObject({
       counts: {
@@ -2384,7 +2386,10 @@ test("AgentService surfaces workflow diagnostics for retained and skipped task s
     const workflowSummaryEvent = events.find(
       (
         event,
-      ): event is AgentStatusEvent & { code: "workflow-diagnostic"; session: { id: "supervisor" } } =>
+      ): event is AgentStatusEvent & {
+        code: "workflow-diagnostic";
+        session: { id: "supervisor" };
+      } =>
         isSupervisorWorkflowDiagnosticEvent(event) &&
         (event.text?.startsWith("Workflow:") ?? false),
     );

@@ -6,7 +6,7 @@ Purpose:
 
 Read first:
 
-- `./io/overview.md`
+- `./src/index.md`
 - any docs linked from the issue body
 - only then the affected code
 
@@ -19,7 +19,7 @@ Local constraints:
 
 - keep changes narrow and reviewable across workspaces
 - update docs, examples, and tests together when entrypoint or context behavior changes
-- keep repo-local guidance in `io.md` and `io/overview.md`
+- keep repo-local guidance in `io.md` and `src/index.md`
 
 Output:
 

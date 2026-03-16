@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
-import { bootstrap, createStore, createTypeClient, core } from "@io/core/graph";
+import { bootstrap, core, createStore, createTypeClient } from "@io/core/graph";
 
 import { app } from "../graph/app.js";
 import { appExperimentGraphs, appGraphDefinitions, seedRegisteredAppExperiments } from "./graph.js";

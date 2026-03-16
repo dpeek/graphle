@@ -6,10 +6,9 @@
 
 ## Entry Points
 
-- `../project/workflow.md`: primary user-facing contract for the preferred `Stream -> Feature -> Task` workflow
-- `../project/backlog.md`: interactive stream backlog prompt and issue-structure contract
-- `./module-stream-workflow-plan.md`: workflow loading, context assembly, routing, and module scoping
-- `./tui-overview.md`: operator-facing terminal layout, transcript shaping, and live/replay display behavior
+- `./skill/backlog.md`: user-facing `Stream -> Feature -> Task` workflow and interactive backlog-editing contract
+- `./workflow.md`: workflow loading, context assembly, routing, and module scoping
+- `./tui/index.md`: operator-facing terminal layout, transcript shaping, and live/replay display behavior
 - `../../src/agent/service.ts`: supervisor scheduling and issue run orchestration
 - `../../src/agent/workspace.ts`: branch lifecycle, task landing, and feature finalization
 
@@ -32,7 +31,7 @@ right parent states, rebases and merges successful task work onto the feature
 branch during the execution path, and reconciles `Done` features by squashing
 them back onto the stream branch while preserving recoverable branch state on
 conflicts. Supervisor-side follow-up after a task run is limited to cleanup and
-stale-state reconciliation. `../project/workflow.md` remains the user-facing
+stale-state reconciliation. `./skill/backlog.md` remains the user-facing
 contract for when humans choose to release a feature or stream.
 
 ## Future Work Suggestions

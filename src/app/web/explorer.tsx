@@ -35,10 +35,7 @@ import {
 } from "react";
 
 import { app } from "../graph/app.js";
-import {
-  type AppRuntime,
-  useAppRuntime,
-} from "./runtime.js";
+import { type AppRuntime, useAppRuntime } from "./runtime.js";
 
 const explorerNamespace = { ...core, ...app };
 
@@ -1755,224 +1752,224 @@ export function Explorer({ runtime }: { runtime?: ExplorerRuntime }) {
   return (
     <ExplorerSyncContext.Provider value={graphRuntime.sync}>
       <div className="grid gap-4 text-slate-100 xl:grid-cols-[280px_minmax(0,1fr)] 2xl:grid-cols-[280px_340px_minmax(0,1fr)]">
-      <div className="space-y-4">
-        <Section title="Explorer">
-          <div className="space-y-3">
-            <div>
-              <h1 className="text-lg font-semibold text-white">Graph Devtool</h1>
-              <p className="mt-1 text-sm text-slate-400">
-                One surface for live entity data, compiled schema shape, and editable schema
-                metadata.
-              </p>
-            </div>
-            <div className="space-y-2">
-              <SectionNav
-                count={entityEntries.length}
-                label="Entities"
-                mode="entities"
-                onSelect={setSection}
-                selected={section}
-              />
-              <SectionNav
-                count={typeEntries.length}
-                label="Types"
-                mode="types"
-                onSelect={setSection}
-                selected={section}
-              />
-              <SectionNav
-                count={predicateEntries.length}
-                label="Predicates"
-                mode="predicates"
-                onSelect={setSection}
-                selected={section}
-              />
-            </div>
-          </div>
-        </Section>
-
-        <StreamInspector sync={graphRuntime.sync} />
-
-        {section === "entities" ? (
-          <Section
-            title="Entity Types"
-            right={
-              <Badge className="border-slate-700 bg-slate-950 text-slate-300">
-                {entityEntries.length}
-              </Badge>
-            }
-          >
-            <div className="space-y-2">
-              {entityEntries.map((entry) => (
-                <ListButton
-                  active={entry.id === selectedEntityType?.id}
-                  key={entry.id}
-                  onClick={() => {
-                    setSelectedEntityTypeId(entry.id);
-                    setSelectedEntityId(entry.ids[0] ?? "");
-                  }}
-                  props={{ "data-explorer-entity-type": entry.id }}
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="space-y-1">
-                      <div className="text-sm font-medium">{entry.name}</div>
-                      <div className="font-mono text-[11px] text-slate-500">{entry.key}</div>
-                    </div>
-                    <Badge className="border-slate-700 bg-slate-900 text-slate-300">
-                      {entry.count}
-                    </Badge>
-                  </div>
-                </ListButton>
-              ))}
-            </div>
-          </Section>
-        ) : (
-          <Section title="Mode Context">
-            <div className="space-y-3 text-sm text-slate-400">
-              <p>
-                The explorer keeps compiled definitions and graph metadata side by side. When you
-                edit schema nodes here, the drift checks stay visible until runtime schema
-                recompilation exists.
-              </p>
-              <div className="flex flex-wrap gap-2">
-                <Badge className="border-emerald-500/30 bg-emerald-500/10 text-emerald-200">
-                  aligned
-                </Badge>
-                <Badge className="border-amber-500/30 bg-amber-500/10 text-amber-200">
-                  drifted
-                </Badge>
-                <Badge className="border-rose-500/30 bg-rose-500/10 text-rose-200">missing</Badge>
+        <div className="space-y-4">
+          <Section title="Explorer">
+            <div className="space-y-3">
+              <div>
+                <h1 className="text-lg font-semibold text-white">Graph Devtool</h1>
+                <p className="mt-1 text-sm text-slate-400">
+                  One surface for live entity data, compiled schema shape, and editable schema
+                  metadata.
+                </p>
+              </div>
+              <div className="space-y-2">
+                <SectionNav
+                  count={entityEntries.length}
+                  label="Entities"
+                  mode="entities"
+                  onSelect={setSection}
+                  selected={section}
+                />
+                <SectionNav
+                  count={typeEntries.length}
+                  label="Types"
+                  mode="types"
+                  onSelect={setSection}
+                  selected={section}
+                />
+                <SectionNav
+                  count={predicateEntries.length}
+                  label="Predicates"
+                  mode="predicates"
+                  onSelect={setSection}
+                  selected={section}
+                />
               </div>
             </div>
           </Section>
-        )}
-      </div>
 
-      <div className="space-y-4">
-        {section === "entities" ? (
-          <Section
-            title={selectedEntityType ? `${selectedEntityType.name} Nodes` : "Nodes"}
-            right={
-              <Badge className="border-slate-700 bg-slate-950 text-slate-300">
-                {visibleEntityIds.length}
-              </Badge>
-            }
-          >
-            <input
-              className="mb-3 w-full rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-cyan-400 focus:outline-none"
-              onChange={(event) => setEntityQuery(event.target.value)}
-              placeholder="Filter by id or name"
-              value={entityQuery}
-            />
-            <div className="space-y-2">
-              {selectedEntityType && visibleEntityIds.length > 0 ? (
-                visibleEntityIds.map((id) => (
-                  <EntityListItem
-                    active={id === selectedEntityId}
-                    entity={selectedEntityType.getRef(id)}
-                    key={id}
-                    onSelect={() => setSelectedEntityId(id)}
-                  />
-                ))
-              ) : (
-                <EmptyState>No nodes match the current filter.</EmptyState>
-              )}
-            </div>
-          </Section>
-        ) : section === "types" ? (
-          <Section
-            title="Types"
-            right={
-              <Badge className="border-slate-700 bg-slate-950 text-slate-300">
-                {visibleTypes.length}
-              </Badge>
-            }
-          >
-            <input
-              className="mb-3 w-full rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-cyan-400 focus:outline-none"
-              onChange={(event) => setTypeQuery(event.target.value)}
-              placeholder="Filter by key, name, or kind"
-              value={typeQuery}
-            />
-            <div className="space-y-2">
-              {visibleTypes.length > 0 ? (
-                visibleTypes.map((entry) => (
-                  <TypeListItem
-                    active={entry.id === selectedTypeEntry?.id}
-                    entry={entry}
+          <StreamInspector sync={graphRuntime.sync} />
+
+          {section === "entities" ? (
+            <Section
+              title="Entity Types"
+              right={
+                <Badge className="border-slate-700 bg-slate-950 text-slate-300">
+                  {entityEntries.length}
+                </Badge>
+              }
+            >
+              <div className="space-y-2">
+                {entityEntries.map((entry) => (
+                  <ListButton
+                    active={entry.id === selectedEntityType?.id}
                     key={entry.id}
-                    onSelect={() => setSelectedTypeId(entry.id)}
-                    store={graphRuntime.store}
-                  />
-                ))
-              ) : (
-                <EmptyState>No schema types match the current filter.</EmptyState>
-              )}
-            </div>
-          </Section>
-        ) : (
-          <Section
-            title="Predicates"
-            right={
-              <Badge className="border-slate-700 bg-slate-950 text-slate-300">
-                {visiblePredicates.length}
-              </Badge>
-            }
-          >
-            <input
-              className="mb-3 w-full rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-cyan-400 focus:outline-none"
-              onChange={(event) => setPredicateQuery(event.target.value)}
-              placeholder="Filter by key, path, or range"
-              value={predicateQuery}
+                    onClick={() => {
+                      setSelectedEntityTypeId(entry.id);
+                      setSelectedEntityId(entry.ids[0] ?? "");
+                    }}
+                    props={{ "data-explorer-entity-type": entry.id }}
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="space-y-1">
+                        <div className="text-sm font-medium">{entry.name}</div>
+                        <div className="font-mono text-[11px] text-slate-500">{entry.key}</div>
+                      </div>
+                      <Badge className="border-slate-700 bg-slate-900 text-slate-300">
+                        {entry.count}
+                      </Badge>
+                    </div>
+                  </ListButton>
+                ))}
+              </div>
+            </Section>
+          ) : (
+            <Section title="Mode Context">
+              <div className="space-y-3 text-sm text-slate-400">
+                <p>
+                  The explorer keeps compiled definitions and graph metadata side by side. When you
+                  edit schema nodes here, the drift checks stay visible until runtime schema
+                  recompilation exists.
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <Badge className="border-emerald-500/30 bg-emerald-500/10 text-emerald-200">
+                    aligned
+                  </Badge>
+                  <Badge className="border-amber-500/30 bg-amber-500/10 text-amber-200">
+                    drifted
+                  </Badge>
+                  <Badge className="border-rose-500/30 bg-rose-500/10 text-rose-200">missing</Badge>
+                </div>
+              </div>
+            </Section>
+          )}
+        </div>
+
+        <div className="space-y-4">
+          {section === "entities" ? (
+            <Section
+              title={selectedEntityType ? `${selectedEntityType.name} Nodes` : "Nodes"}
+              right={
+                <Badge className="border-slate-700 bg-slate-950 text-slate-300">
+                  {visibleEntityIds.length}
+                </Badge>
+              }
+            >
+              <input
+                className="mb-3 w-full rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-cyan-400 focus:outline-none"
+                onChange={(event) => setEntityQuery(event.target.value)}
+                placeholder="Filter by id or name"
+                value={entityQuery}
+              />
+              <div className="space-y-2">
+                {selectedEntityType && visibleEntityIds.length > 0 ? (
+                  visibleEntityIds.map((id) => (
+                    <EntityListItem
+                      active={id === selectedEntityId}
+                      entity={selectedEntityType.getRef(id)}
+                      key={id}
+                      onSelect={() => setSelectedEntityId(id)}
+                    />
+                  ))
+                ) : (
+                  <EmptyState>No nodes match the current filter.</EmptyState>
+                )}
+              </div>
+            </Section>
+          ) : section === "types" ? (
+            <Section
+              title="Types"
+              right={
+                <Badge className="border-slate-700 bg-slate-950 text-slate-300">
+                  {visibleTypes.length}
+                </Badge>
+              }
+            >
+              <input
+                className="mb-3 w-full rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-cyan-400 focus:outline-none"
+                onChange={(event) => setTypeQuery(event.target.value)}
+                placeholder="Filter by key, name, or kind"
+                value={typeQuery}
+              />
+              <div className="space-y-2">
+                {visibleTypes.length > 0 ? (
+                  visibleTypes.map((entry) => (
+                    <TypeListItem
+                      active={entry.id === selectedTypeEntry?.id}
+                      entry={entry}
+                      key={entry.id}
+                      onSelect={() => setSelectedTypeId(entry.id)}
+                      store={graphRuntime.store}
+                    />
+                  ))
+                ) : (
+                  <EmptyState>No schema types match the current filter.</EmptyState>
+                )}
+              </div>
+            </Section>
+          ) : (
+            <Section
+              title="Predicates"
+              right={
+                <Badge className="border-slate-700 bg-slate-950 text-slate-300">
+                  {visiblePredicates.length}
+                </Badge>
+              }
+            >
+              <input
+                className="mb-3 w-full rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-cyan-400 focus:outline-none"
+                onChange={(event) => setPredicateQuery(event.target.value)}
+                placeholder="Filter by key, path, or range"
+                value={predicateQuery}
+              />
+              <div className="space-y-2">
+                {visiblePredicates.length > 0 ? (
+                  visiblePredicates.map((entry) => (
+                    <PredicateListItem
+                      active={entry.id === selectedPredicateEntry?.id}
+                      entry={entry}
+                      key={entry.id}
+                      onSelect={() => setSelectedPredicateId(entry.id)}
+                    />
+                  ))
+                ) : (
+                  <EmptyState>No predicates match the current filter.</EmptyState>
+                )}
+              </div>
+            </Section>
+          )}
+        </div>
+
+        <div className="space-y-4 overflow-y-auto pr-1">
+          {section === "entities" && selectedEntity && selectedEntityType ? (
+            <EntityInspector
+              entity={selectedEntity}
+              typeEntry={selectedEntityType}
+              typeKeyById={typeKeyById}
             />
-            <div className="space-y-2">
-              {visiblePredicates.length > 0 ? (
-                visiblePredicates.map((entry) => (
-                  <PredicateListItem
-                    active={entry.id === selectedPredicateEntry?.id}
-                    entry={entry}
-                    key={entry.id}
-                    onSelect={() => setSelectedPredicateId(entry.id)}
-                  />
-                ))
-              ) : (
-                <EmptyState>No predicates match the current filter.</EmptyState>
-              )}
-            </div>
-          </Section>
-        )}
-      </div>
+          ) : null}
 
-      <div className="space-y-4 overflow-y-auto pr-1">
-        {section === "entities" && selectedEntity && selectedEntityType ? (
-          <EntityInspector
-            entity={selectedEntity}
-            typeEntry={selectedEntityType}
-            typeKeyById={typeKeyById}
-          />
-        ) : null}
+          {section === "types" && selectedTypeEntry ? (
+            <TypeInspector
+              client={client}
+              entry={selectedTypeEntry}
+              onOpenPredicate={openPredicate}
+              store={graphRuntime.store}
+              typeKeyById={typeKeyById}
+            />
+          ) : null}
 
-        {section === "types" && selectedTypeEntry ? (
-          <TypeInspector
-            client={client}
-            entry={selectedTypeEntry}
-            onOpenPredicate={openPredicate}
-            store={graphRuntime.store}
-            typeKeyById={typeKeyById}
-          />
-        ) : null}
-
-        {section === "predicates" && selectedPredicateEntry ? (
-          <PredicateInspector
-            client={client}
-            entry={selectedPredicateEntry}
-            onOpenType={openType}
-            store={graphRuntime.store}
-            typeEntries={typeEntries}
-            typeKeyById={typeKeyById}
-          />
-        ) : null}
-      </div>
+          {section === "predicates" && selectedPredicateEntry ? (
+            <PredicateInspector
+              client={client}
+              entry={selectedPredicateEntry}
+              onOpenType={openType}
+              store={graphRuntime.store}
+              typeEntries={typeEntries}
+              typeKeyById={typeKeyById}
+            />
+          ) : null}
+        </div>
       </div>
     </ExplorerSyncContext.Provider>
   );

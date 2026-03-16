@@ -4,4 +4,8 @@
 import type { HazelnutScope } from "./HazelnutScope";
 import type { ProductSurface } from "./ProductSurface";
 
-export type SkillsRemoteReadParams = { hazelnutScope: HazelnutScope, productSurface: ProductSurface, enabled: boolean, };
+export type SkillsRemoteReadParams = {
+  hazelnutScope: HazelnutScope;
+  productSurface: ProductSurface;
+  enabled: boolean;
+};

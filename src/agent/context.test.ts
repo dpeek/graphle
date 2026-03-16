@@ -273,7 +273,7 @@ test("repo backlog context points at the current stream workflow docs", async ()
       controlPath: repoRoot,
       createdNow: true,
       originPath: repoRoot,
-      path: resolve(repoRoot, ".io", "workers", issue.identifier, "repo"),
+      path: resolve(repoRoot, "tmp", "workspace", "workers", issue.identifier, "repo"),
       workerId: issue.identifier,
     },
   });
@@ -283,18 +283,15 @@ test("repo backlog context points at the current stream workflow docs", async ()
     profile: "backlog",
   });
   expect(resolved.bundle.docs.map((doc) => doc.id)).toContain("project.overview");
+  expect(resolved.bundle.docs.map((doc) => doc.id)).toContain("project.workflow");
   expect(resolved.bundle.docs.map((doc) => doc.id)).toContain("project.backlog");
   expect(resolved.bundle.docs.map((doc) => doc.id)).toContain("project.goals");
-  expect(resolved.bundle.docs.map((doc) => doc.id)).toContain("./io/agent/overview.md");
-  expect(resolved.bundle.docs.map((doc) => doc.id)).toContain(
-    "./io/agent/module-stream-workflow-plan.md",
-  );
   expect(rendered).toContain("three-level Linear workflow");
   expect(rendered).toContain("Stream");
   expect(rendered).toContain("Feature");
   expect(rendered).toContain("Task");
   expect(rendered).toContain("do not use comment-driven workflows");
-  expect(rendered).toContain("Use the three-level stream/feature/task model");
+  expect(rendered).toContain("interactive backlog-editing contract");
 });
 
 test("repo config allows shared repo docs in stream issue descriptions without warning", async () => {
@@ -311,7 +308,7 @@ test("repo config allows shared repo docs in stream issue descriptions without w
   const issue: AgentIssue = {
     blockedBy: [],
     createdAt: "2024-01-01T00:00:00.000Z",
-    description: "Keep the stream description aligned with `./io/project/overview.md`.",
+    description: "Keep the stream description aligned with `./src/index.md`.",
     hasChildren: true,
     hasParent: false,
     id: "1",
@@ -336,7 +333,7 @@ test("repo config allows shared repo docs in stream issue descriptions without w
   });
 
   expect(resolved.warnings).not.toContain(
-    "Issue doc reference is outside module scope: ./io/project/overview.md",
+    "Issue doc reference is outside module scope: ./src/index.md",
   );
 });
 

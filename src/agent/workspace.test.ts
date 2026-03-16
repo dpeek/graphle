@@ -486,7 +486,9 @@ test("WorkspaceManager preserves task worktree state when landing rebase conflic
     const featureCommitSha = await commitAll(repoRoot, "advance feature branch");
     await run(["git", "checkout", "main"], repoRoot);
 
-    await expect(manager.complete(workspace, childIssue)).rejects.toThrow("task_landing_rebase_failed");
+    await expect(manager.complete(workspace, childIssue)).rejects.toThrow(
+      "task_landing_rebase_failed",
+    );
 
     expect(await run(["git", "rev-parse", "io/ope-12"], repoRoot)).toBe(featureCommitSha);
     expect(await run(["git", "status", "--short"], workspace.path)).toContain("UU README.md");

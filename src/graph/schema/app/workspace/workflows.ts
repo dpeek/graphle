@@ -1,6 +1,4 @@
 import type { WorkflowSpec } from "../../../graph/contracts.js";
-
-import { workspace } from "./workspace/index.js";
 import {
   saveWorkspaceIssueCommand,
   workspaceIssue,
@@ -16,6 +14,7 @@ import {
   workspaceProject,
   workspaceProjectObjectView,
 } from "./workspace-project/index.js";
+import { workspace } from "./workspace/index.js";
 
 export const workspaceManagementWorkflow = {
   key: "app:workspace:management",
@@ -32,7 +31,8 @@ export const workspaceManagementWorkflow = {
     {
       key: "triage-issues",
       title: "Review issue details",
-      description: "Inspect issue status, project links, and dependencies from the workspace board.",
+      description:
+        "Inspect issue status, project links, and dependencies from the workspace board.",
       objectView: workspaceIssueObjectView.key,
       command: saveWorkspaceIssueCommand.key,
     },

@@ -1,9 +1,9 @@
-import type { AgentCodexNotificationEventInit, AgentStatusEventInit } from "../tui/index.js";
 import type {
   RequestId,
   ServerNotification,
   ServerRequest,
 } from "../plugin/codex/server/api/index.js";
+import type { AgentCodexNotificationEventInit, AgentStatusEventInit } from "../tui/index.js";
 
 export type JsonRpcError = {
   code?: number;

@@ -1,5 +1,6 @@
-import { createTestRenderer } from "@opentui/core/testing";
 import { expect, test } from "bun:test";
+
+import { createTestRenderer } from "@opentui/core/testing";
 
 import { buildAgentTuiRootComponentModel } from "./layout.js";
 import type { AgentSessionRef } from "./session-events.js";
@@ -53,7 +54,7 @@ function createWorkerSession(overrides: SessionRefOverrides = {}): AgentSessionR
     rootSessionId: "supervisor",
     title: "Run plan",
     workerId: "OPE-68",
-    workspacePath: "/Users/dpeek/code/io/.io/tree/ope-68",
+    workspacePath: "/Users/dpeek/code/io/tmp/workspace/tree/ope-68",
     ...sessionOverrides,
     issue: resolveIssueRef(baseIssue, issueOverrides),
   };
@@ -68,7 +69,7 @@ function createChildSession(overrides: SessionRefOverrides = {}): AgentSessionRe
     rootSessionId: "supervisor",
     title: "Helper",
     workerId: "OPE-68",
-    workspacePath: "/Users/dpeek/code/io/.io/tree/ope-68",
+    workspacePath: "/Users/dpeek/code/io/tmp/workspace/tree/ope-68",
     ...sessionOverrides,
     issue: resolveIssueRef(undefined, issueOverrides),
   };
@@ -219,7 +220,7 @@ test("AgentTuiStore keeps active workers ahead of a short retained completed and
     },
     title: "Handle failure path",
     workerId: "OPE-69",
-    workspacePath: "/Users/dpeek/code/io/.io/tree/ope-69",
+    workspacePath: "/Users/dpeek/code/io/tmp/workspace/tree/ope-69",
   });
   const activeWorker = createWorkerSession({
     branchName: "ope-70",
@@ -231,7 +232,7 @@ test("AgentTuiStore keeps active workers ahead of a short retained completed and
     },
     title: "Keep active work visible",
     workerId: "OPE-70",
-    workspacePath: "/Users/dpeek/code/io/.io/tree/ope-70",
+    workspacePath: "/Users/dpeek/code/io/tmp/workspace/tree/ope-70",
   });
   const recentCompletedWorker = createWorkerSession({
     branchName: "ope-71",
@@ -243,7 +244,7 @@ test("AgentTuiStore keeps active workers ahead of a short retained completed and
     },
     title: "Inspect recent completion",
     workerId: "OPE-71",
-    workspacePath: "/Users/dpeek/code/io/.io/tree/ope-71",
+    workspacePath: "/Users/dpeek/code/io/tmp/workspace/tree/ope-71",
   });
 
   store.observe({
@@ -336,7 +337,7 @@ test("buildAgentTuiRootComponentModel keeps workflow stream, task, blocker, and 
         title: "Run the workflow-aware agent rollout",
       },
     },
-    workspacePath: "/repo/.io/tree/ope-174",
+    workspacePath: "/repo/tmp/workspace/tree/ope-174",
   });
   const blockedTask = createWorkerSession({
     branchName: "io/ope-174",
@@ -365,7 +366,7 @@ test("buildAgentTuiRootComponentModel keeps workflow stream, task, blocker, and 
         title: "Prove workflow-aware TUI behavior with regression coverage",
       },
     },
-    workspacePath: "/repo/.io/tree/ope-188",
+    workspacePath: "/repo/tmp/workspace/tree/ope-188",
   });
   const commitSha = "abc1234def567890abc1234def567890abc1234";
 
@@ -499,8 +500,10 @@ test("buildAgentTuiRootComponentModel keeps workflow stream, task, blocker, and 
   });
   const streamColumn = snapshot.columns.find((column) => column.session.id === streamWorker.id);
   const blockedColumn = snapshot.columns.find((column) => column.session.id === blockedTask.id);
-  const streamContent = model.columns.find((column) => column.id === streamWorker.id)?.content ?? "";
-  const blockedContent = model.columns.find((column) => column.id === blockedTask.id)?.content ?? "";
+  const streamContent =
+    model.columns.find((column) => column.id === streamWorker.id)?.content ?? "";
+  const blockedContent =
+    model.columns.find((column) => column.id === blockedTask.id)?.content ?? "";
 
   expect(snapshot.columns.map((column) => column.session.id)).toEqual([
     "supervisor",
@@ -551,9 +554,13 @@ test("buildAgentTuiRootComponentModel keeps workflow stream, task, blocker, and 
   expect(streamContent).toContain("finalization: pending abc1234");
   expect(streamContent).toContain("stream: OPE-121 Run the workflow-aware agent rollout");
   expect(streamContent).toContain("feature: OPE-174 Ship workflow-aware TUI behavior");
-  expect(streamContent).toContain("Session scheduled | io/ope-174 | /repo/.io/tree/ope-174");
+  expect(streamContent).toContain(
+    "Session scheduled | io/ope-174 | /repo/tmp/workspace/tree/ope-174",
+  );
   expect(streamContent).toContain(`OPE-174: committed ${commitSha} on io/ope-174`);
-  expect(streamContent).toContain("Session completed | commit abc1234 | io/ope-174 | /repo/.io/tree/ope-174");
+  expect(streamContent).toContain(
+    "Session completed | commit abc1234 | io/ope-174 | /repo/tmp/workspace/tree/ope-174",
+  );
   expect(blockedContent).toContain("state: blocked");
   expect(blockedContent).toContain("branch: io/ope-174");
   expect(blockedContent).toContain("blocked: Blocked on OPE-187 finalization");
@@ -562,10 +569,12 @@ test("buildAgentTuiRootComponentModel keeps workflow stream, task, blocker, and 
   expect(blockedContent).toContain(
     "task: OPE-188 Prove workflow-aware TUI behavior with regression coverage",
   );
-  expect(blockedContent).toContain("Session scheduled | io/ope-174 | /repo/.io/tree/ope-188");
+  expect(blockedContent).toContain(
+    "Session scheduled | io/ope-174 | /repo/tmp/workspace/tree/ope-188",
+  );
   expect(blockedContent).toContain("OPE-188: blocked");
   expect(blockedContent).toContain(
-    "Session failed | io/ope-174 | /repo/.io/tree/ope-188: Blocked on OPE-187 finalization",
+    "Session failed | io/ope-174 | /repo/tmp/workspace/tree/ope-188: Blocked on OPE-187 finalization",
   );
 });
 
@@ -958,10 +967,9 @@ test("buildAgentTuiRootComponentModel highlights completed Linear writes", () =>
   });
 
   const snapshot = store.getSnapshot();
-  const renderedColumn =
-    buildAgentTuiRootComponentModel(snapshot, {
-      selectedColumnId: worker.id,
-    }).columns.find((column) => column.id === worker.id);
+  const renderedColumn = buildAgentTuiRootComponentModel(snapshot, {
+    selectedColumnId: worker.id,
+  }).columns.find((column) => column.id === worker.id);
   const snapshotColumn = snapshot.columns.find((column) => column.session.id === worker.id);
   const content = renderedColumn?.content ?? "";
 
@@ -1257,7 +1265,8 @@ test("buildAgentTuiRootComponentModel keeps live transcript slices readable in r
     method: "item/completed",
     params: {
       item: {
-        aggregatedOutput: "src/agent/runner/codex.ts | 4 ++--\nsrc/agent/tui/ui.test.ts | 8 ++++++--\n",
+        aggregatedOutput:
+          "src/agent/runner/codex.ts | 4 ++--\nsrc/agent/tui/ui.test.ts | 8 ++++++--\n",
         exitCode: 1,
         id: "cmd-1",
         status: "failed",
@@ -1363,9 +1372,7 @@ test("buildAgentTuiRootComponentModel keeps live transcript slices readable in r
     "tool",
     "raw",
   ]);
-  expect(
-    snapshotColumn?.blocks.find((entry) => entry.kind === "reasoning"),
-  ).toMatchObject({
+  expect(snapshotColumn?.blocks.find((entry) => entry.kind === "reasoning")).toMatchObject({
     content: ["Keeping replay readable", "Retaining fallback output"],
     status: "completed",
     summary: ["Checking transcript seams"],
@@ -1515,7 +1522,7 @@ test("createAgentTui keeps a short recent completed and failed worker tail in li
     },
     title: "Handle failure path",
     workerId: "OPE-69",
-    workspacePath: "/Users/dpeek/code/io/.io/tree/ope-69",
+    workspacePath: "/Users/dpeek/code/io/tmp/workspace/tree/ope-69",
   });
   const activeWorker = createWorkerSession({
     branchName: "ope-70",
@@ -1527,7 +1534,7 @@ test("createAgentTui keeps a short recent completed and failed worker tail in li
     },
     title: "Keep active work visible",
     workerId: "OPE-70",
-    workspacePath: "/Users/dpeek/code/io/.io/tree/ope-70",
+    workspacePath: "/Users/dpeek/code/io/tmp/workspace/tree/ope-70",
   });
   const recentCompletedWorker = createWorkerSession({
     branchName: "ope-71",
@@ -1539,7 +1546,7 @@ test("createAgentTui keeps a short recent completed and failed worker tail in li
     },
     title: "Inspect recent completion",
     workerId: "OPE-71",
-    workspacePath: "/Users/dpeek/code/io/.io/tree/ope-71",
+    workspacePath: "/Users/dpeek/code/io/tmp/workspace/tree/ope-71",
   });
 
   try {

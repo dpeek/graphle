@@ -1,10 +1,10 @@
+import { useEffect, useState } from "react";
+
 import {
   GraphValidationError,
   type GraphMutationValidationResult,
   type PredicateRef,
 } from "../../../index.js";
-import { useEffect, useState } from "react";
-
 import type { MutationCallbacks } from "../../../react/mutation-validation.js";
 import { performValidatedMutation } from "../../../react/mutation-validation.js";
 import { usePersistedMutationCallbacks } from "../../../react/persisted-mutation.js";
@@ -192,10 +192,7 @@ export function formatWorkspaceMutationError(error: unknown): string {
   return String(error);
 }
 
-export function countIssuesByStatus(
-  issues: readonly IssueSummary[],
-  statusId: string,
-): number {
+export function countIssuesByStatus(issues: readonly IssueSummary[], statusId: string): number {
   return issues.filter((issue) => issue.statusId === statusId).length;
 }
 
@@ -255,7 +252,10 @@ function getPrimaryWorkspace(graph: WorkspaceManagementRuntime["graph"]) {
     .sort((left, right) => left.name.localeCompare(right.name))[0];
 }
 
-function createIssueSummaries(graph: WorkspaceManagementRuntime["graph"], issueIds: readonly string[]) {
+function createIssueSummaries(
+  graph: WorkspaceManagementRuntime["graph"],
+  issueIds: readonly string[],
+) {
   return issueIds.map((id) => {
     const issue = graph.workspaceIssue.get(id);
     const status = graph.workflowStatus.get(issue.status);

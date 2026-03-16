@@ -2,7 +2,6 @@ import { app } from "@io/core/app";
 
 import { core, defineDefaultEnumTypeModule, defineType } from "../index.js";
 import type { FilterOperandEditorProps } from "../react/index.js";
-
 import { defaultWebFilterResolver } from "./index.js";
 
 const defs = { ...core, ...app };

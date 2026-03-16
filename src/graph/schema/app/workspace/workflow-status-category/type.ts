@@ -27,7 +27,8 @@ const workflowStatusCategoryType = defineEnum({
   },
 });
 
-export const workflowStatusCategoryTypeModule =
-  defineDefaultEnumTypeModule(workflowStatusCategoryType);
+export const workflowStatusCategoryTypeModule = defineDefaultEnumTypeModule(
+  workflowStatusCategoryType,
+);
 
 export const workflowStatusCategory = workflowStatusCategoryTypeModule.type;

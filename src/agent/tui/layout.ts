@@ -1,20 +1,11 @@
 import type { AgentSessionWorkflowIssueRef, AgentSessionWorkflowRef } from "./session-events.js";
+import type { AgentTuiColumnSnapshot, AgentTuiSnapshot } from "./store.js";
 import { formatBlocks, hasStreamingReasoningBlocks } from "./transcript.js";
-import type {
-  AgentTuiColumnSnapshot,
-  AgentTuiSnapshot,
-} from "./store.js";
 
 const DEFAULT_FRAME_COLUMNS = 120;
 const DEFAULT_FRAME_ROWS = 32;
 
-type AgentTuiColumnRole =
-  | "child"
-  | "feature"
-  | "stream"
-  | "supervisor"
-  | "task"
-  | "worker";
+type AgentTuiColumnRole = "child" | "feature" | "stream" | "supervisor" | "task" | "worker";
 
 type AgentTuiColumnWorkflowContext = {
   branchName?: string;
@@ -102,12 +93,13 @@ function mergeWorkflowIssueRef(
   primary: AgentSessionWorkflowIssueRef | undefined,
   inherited: AgentSessionWorkflowIssueRef | undefined,
 ) {
-  const merged = primary || inherited
-    ? {
-    ...inherited,
-    ...primary,
-      }
-    : undefined;
+  const merged =
+    primary || inherited
+      ? {
+          ...inherited,
+          ...primary,
+        }
+      : undefined;
   return merged?.identifier ? (merged as AgentSessionWorkflowIssueRef) : undefined;
 }
 
@@ -207,7 +199,8 @@ function buildColumnWorkflowContext(
 ): AgentTuiColumnWorkflowContext {
   const workflow = resolveInheritedWorkflow(column, columnsById);
   const role = resolveColumnRole(column, workflow);
-  const currentIdentifier = column.session.issue?.identifier ?? resolveIssueLabel(column, columnsById);
+  const currentIdentifier =
+    column.session.issue?.identifier ?? resolveIssueLabel(column, columnsById);
   return {
     branchName: column.session.branchName,
     currentIdentifier,
@@ -258,11 +251,7 @@ function buildColumnMetadataLines(
     );
   }
   if (finalization?.state === "finalized") {
-    lines.push(
-      finalization.linearState
-        ? `finalized: ${finalization.linearState}`
-        : "finalized",
-    );
+    lines.push(finalization.linearState ? `finalized: ${finalization.linearState}` : "finalized");
   }
   const streamLabel = formatWorkflowIssueLabel(context.stream);
   if (streamLabel) {
@@ -289,7 +278,7 @@ function formatPanelTitle(
   const context = buildColumnWorkflowContext(column, columnsById);
   const baseTitle =
     context.role === "supervisor"
-      ? column.session.workspacePath ?? "Supervisor"
+      ? (column.session.workspacePath ?? "Supervisor")
       : context.role === "child"
         ? `Child ${column.session.title}`
         : `${capitalize(context.role)} ${context.currentIdentifier}`;
@@ -346,7 +335,11 @@ function findWorkflowSummaryLine(
   }
   for (let index = column.blocks.length - 1; index >= 0; index -= 1) {
     const entry = column.blocks[index];
-    if (entry?.kind === "status" && entry.code === "workflow-diagnostic" && entry.text.startsWith("Workflow:")) {
+    if (
+      entry?.kind === "status" &&
+      entry.code === "workflow-diagnostic" &&
+      entry.text.startsWith("Workflow:")
+    ) {
       return entry.text;
     }
   }
@@ -605,9 +598,7 @@ export function renderAgentTuiFrame(
   const lines = [
     ...summaryLines,
     ...Array.from({ length: panelRows }, (_, rowIndex) =>
-      panels
-        .map((panel) => panel.lines[rowIndex] ?? "".padEnd(panel.width, " "))
-        .join("|"),
+      panels.map((panel) => panel.lines[rowIndex] ?? "".padEnd(panel.width, " ")).join("|"),
     ),
   ].slice(0, rows);
   return lines.join("\n");

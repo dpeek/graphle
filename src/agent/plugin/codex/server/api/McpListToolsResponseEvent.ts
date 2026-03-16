@@ -6,20 +6,21 @@ import type { Resource } from "./Resource";
 import type { ResourceTemplate } from "./ResourceTemplate";
 import type { Tool } from "./Tool";
 
-export type McpListToolsResponseEvent = { 
-/**
- * Fully qualified tool name -> tool definition.
- */
-tools: { [key in string]?: Tool }, 
-/**
- * Known resources grouped by server name.
- */
-resources: { [key in string]?: Array<Resource> }, 
-/**
- * Known resource templates grouped by server name.
- */
-resource_templates: { [key in string]?: Array<ResourceTemplate> }, 
-/**
- * Authentication status for each configured MCP server.
- */
-auth_statuses: { [key in string]?: McpAuthStatus }, };
+export type McpListToolsResponseEvent = {
+  /**
+   * Fully qualified tool name -> tool definition.
+   */
+  tools: { [key in string]?: Tool };
+  /**
+   * Known resources grouped by server name.
+   */
+  resources: { [key in string]?: Array<Resource> };
+  /**
+   * Known resource templates grouped by server name.
+   */
+  resource_templates: { [key in string]?: Array<ResourceTemplate> };
+  /**
+   * Authentication status for each configured MCP server.
+   */
+  auth_statuses: { [key in string]?: McpAuthStatus };
+};

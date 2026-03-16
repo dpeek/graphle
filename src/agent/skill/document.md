@@ -15,8 +15,8 @@ Own:
 
 Workflows:
 
-- `@io/project/document.md <text to merge into docs>`
-- `@io/project/document.md <repo path to verify against docs>`
+- `@src/agent/skill/document.md <text to merge into docs>`
+- `@src/agent/skill/document.md <repo path to verify against docs>`
 
 Rules:
 

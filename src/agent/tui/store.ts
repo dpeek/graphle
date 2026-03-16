@@ -291,7 +291,9 @@ function buildColumnSnapshots(
     visit(root, 0);
   }
 
-  const orphaned = states.filter((state) => !visited.has(state.session.id)).sort(compareColumnOrder);
+  const orphaned = states
+    .filter((state) => !visited.has(state.session.id))
+    .sort(compareColumnOrder);
   for (const state of orphaned) {
     visit(state, 0);
   }

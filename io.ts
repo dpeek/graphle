@@ -14,13 +14,13 @@ export default defineIoConfig({
     afterCreate: "bun install",
   },
   context: {
-    entrypoint: "./io/project/overview.md",
+    entrypoint: "./io.md",
     docs: {
-      "project.backlog": "./io/project/backlog.md",
-      "project.goals": "./io/project/goals.md",
-      "project.module-stream-workflow-plan": "./io/agent/module-stream-workflow-plan.md",
-      "project.overview": "./io/project/overview.md",
-      "project.workflow": "./io/project/workflow.md",
+      "project.backlog": "./src/agent/skill/backlog.md",
+      "project.goals": "./src/agent/index.md",
+      "project.module-stream-workflow-plan": "./src/agent/workflow.md",
+      "project.overview": "./src/index.md",
+      "project.workflow": "./src/agent/workflow.md",
     },
     profiles: {
       backlog: {
@@ -50,33 +50,33 @@ export default defineIoConfig({
   },
   modules: {
     agent: {
-      allowedSharedPaths: ["./io/project", "./io/agent"],
-      docs: ["./io/agent/overview.md", "./io/agent/module-stream-workflow-plan.md"],
+      allowedSharedPaths: ["./src"],
+      docs: ["./src/agent/index.md", "./src/agent/workflow.md"],
       path: "./src/agent",
     },
     app: {
-      allowedSharedPaths: ["./io/project", "./io/app", "./io/graph"],
-      docs: ["./io/app/overview.md"],
+      allowedSharedPaths: ["./src"],
+      docs: ["./src/app/index.md"],
       path: "./src/app",
     },
     cli: {
-      allowedSharedPaths: ["./io/project", "./io/cli"],
-      docs: ["./io/cli/overview.md"],
+      allowedSharedPaths: ["./src"],
+      docs: ["./src/cli/index.md"],
       path: "./src/cli",
     },
     config: {
-      allowedSharedPaths: ["./io/project", "./io/config", "./io/lib"],
-      docs: ["./io/config/overview.md"],
+      allowedSharedPaths: ["./src"],
+      docs: ["./src/lib/index.md"],
       path: "./src/config",
     },
     graph: {
-      allowedSharedPaths: ["./io/project", "./io/graph"],
-      docs: ["./io/graph/overview.md", "./io/graph/architecture.md"],
+      allowedSharedPaths: ["./src"],
+      docs: ["./src/graph/index.md", "./src/graph/spec/architecture.md"],
       path: "./src/graph",
     },
     lib: {
-      allowedSharedPaths: ["./io/project", "./io/lib"],
-      docs: ["./io/lib/overview.md"],
+      allowedSharedPaths: ["./src"],
+      docs: ["./src/lib/index.md"],
       path: "./src/lib",
     },
   },
@@ -131,6 +131,6 @@ export default defineIoConfig({
     projectSlug: env.string("LINEAR_PROJECT_SLUG"),
   }),
   workspace: {
-    root: ".io",
+    root: "./tmp/workspace",
   },
 });

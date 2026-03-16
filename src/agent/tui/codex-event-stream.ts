@@ -1,9 +1,9 @@
+import { summarizeLinearToolCall } from "./linear-tool-format.js";
 import type {
   AgentCodexNotificationEvent,
   AgentSessionDisplayState,
   AgentStatusEvent,
 } from "./session-events.js";
-import { summarizeLinearToolCall } from "./linear-tool-format.js";
 import type { AgentTuiBlock, AgentTuiStatusSummary } from "./transcript.js";
 
 type CodexBlockAdapter = {

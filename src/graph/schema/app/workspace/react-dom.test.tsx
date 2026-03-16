@@ -1,10 +1,11 @@
 import { describe, expect, it } from "bun:test";
-import { fireEvent, render } from "@testing-library/react";
+
 import { createExampleRuntime } from "@io/core/app";
+import { fireEvent, render } from "@testing-library/react";
 import { act } from "react";
 
-import { getByData, getReactProps, getRequiredElement, textContent } from "../../../test-dom.js";
 import { WorkspaceManagementSurface } from "../../../react-dom/index.js";
+import { getByData, getReactProps, getRequiredElement, textContent } from "../../../test-dom.js";
 import { workspaceManagementWorkflow } from "./index.js";
 
 describe("workspace react-dom surface", () => {
@@ -12,10 +13,16 @@ describe("workspace react-dom surface", () => {
     const runtime = createExampleRuntime();
     const { container, unmount } = render(<WorkspaceManagementSurface runtime={runtime} />);
 
-    expect(getByData(container, "data-workspace-workflow", workspaceManagementWorkflow.key)).toBeDefined();
+    expect(
+      getByData(container, "data-workspace-workflow", workspaceManagementWorkflow.key),
+    ).toBeDefined();
     expect(textContent(container)).toContain("IO Planning Workspace");
 
-    const routeIssue = getByData(container, "data-workspace-entity-item", runtime.ids.workspaceRoute);
+    const routeIssue = getByData(
+      container,
+      "data-workspace-entity-item",
+      runtime.ids.workspaceRoute,
+    );
     await act(async () => {
       fireEvent.click(routeIssue);
       await Promise.resolve();

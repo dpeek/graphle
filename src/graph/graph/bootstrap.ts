@@ -49,7 +49,12 @@ function collectShapeNodes(tree: SchemaTree): Array<{ id: string; key: string }>
   return out;
 }
 
-function assertCurrentFactOnce(store: Store, subjectId: string, predicateId: string, objectId: string): void {
+function assertCurrentFactOnce(
+  store: Store,
+  subjectId: string,
+  predicateId: string,
+  objectId: string,
+): void {
   if (store.facts(subjectId, predicateId, objectId).length > 0) return;
   store.assert(subjectId, predicateId, objectId);
 }

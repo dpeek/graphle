@@ -1,9 +1,9 @@
 import { createLogger, handleExit } from "@io/core/lib";
 
-import { createAgentTui } from "./tui/index.js";
-import type { AgentSessionEvent, AgentSessionPhase } from "./tui/index.js";
 import { AgentService } from "./service.js";
 import { AgentTuiRetainedReader } from "./tui-runtime.js";
+import { createAgentTui } from "./tui/index.js";
+import type { AgentSessionEvent, AgentSessionPhase } from "./tui/index.js";
 import { loadWorkflowFile } from "./workflow.js";
 import { readIssueRuntimeState } from "./workspace.js";
 

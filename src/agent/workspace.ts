@@ -1138,7 +1138,10 @@ export class CheckoutManager {
 
     const baseHead = await this.#revParse(control.path, stream.baseBranchName);
     if (await this.#isAncestor(control.path, featureHead, stream.baseBranchName)) {
-      this.#reportStreamProgress(stream, `${stream.branchName} already merged into ${stream.baseBranchName}`);
+      this.#reportStreamProgress(
+        stream,
+        `${stream.branchName} already merged into ${stream.baseBranchName}`,
+      );
       await this.#upsertStreamState(
         {
           ...stream,
@@ -1250,7 +1253,7 @@ export class CheckoutManager {
   #renderFeatureCommitBody(taskStates: IssueRuntimeState[]) {
     const lines = taskStates.length
       ? taskStates.map((task) => `- ${task.issueIdentifier} ${task.issueTitle}`)
-      : ["- No completed task runs were recorded in .io runtime state."];
+      : ["- No completed task runs were recorded in tmp/workspace runtime state."];
     return ["Tasks completed:", ...lines].join("\n");
   }
 

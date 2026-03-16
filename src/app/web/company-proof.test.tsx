@@ -1,8 +1,8 @@
 import { describe, expect, it } from "bun:test";
-import { render } from "@testing-library/react";
-import { act } from "react";
 
 import { bootstrap, createStore, createTypeClient, core } from "@io/core/graph";
+import { render } from "@testing-library/react";
+import { act } from "react";
 
 import { app } from "../graph/app.js";
 import { getAllByData, getByData, getReactProps, getRequiredElement } from "../test-dom.js";
@@ -84,7 +84,9 @@ async function waitForInstrumentation(container: HTMLElement, timeoutMs = 100): 
 describe("company proof surface", () => {
   it("renders the combined proof and mutates nested, many, and relationship fields through predicate refs", async () => {
     const { company, estiiId, person } = setupGraph();
-    const { container, unmount } = render(<CompanyProofSurface company={company} person={person} />);
+    const { container, unmount } = render(
+      <CompanyProofSurface company={company} person={person} />,
+    );
 
     const nameRow = findByProofProp(container, "data-proof-field", "name");
     const statusRow = findByProofProp(container, "data-proof-field", "status");
@@ -157,27 +159,39 @@ describe("company proof surface", () => {
         target: { value: "Acme Labs" },
       });
       getReactProps<{ onChangeCapture(): void }>(statusRow).onChangeCapture();
-      getReactProps<{ onChange(event: { target: { value: string } }): void }>(statusSelect).onChange({
+      getReactProps<{ onChange(event: { target: { value: string } }): void }>(
+        statusSelect,
+      ).onChange({
         target: { value: app.status.values.paused.id },
       });
       getReactProps<{ onChangeCapture(): void }>(websiteRow).onChangeCapture();
-      getReactProps<{ onChange(event: { target: { value: string } }): void }>(websiteInput).onChange({
+      getReactProps<{ onChange(event: { target: { value: string } }): void }>(
+        websiteInput,
+      ).onChange({
         target: { value: "https://labs.acme.com" },
       });
       getReactProps<{ onChangeCapture(): void }>(foundedYearRow).onChangeCapture();
-      getReactProps<{ onChange(event: { target: { value: string } }): void }>(foundedYearInput).onChange({
+      getReactProps<{ onChange(event: { target: { value: string } }): void }>(
+        foundedYearInput,
+      ).onChange({
         target: { value: "1999" },
       });
       getReactProps<{ onChangeCapture(): void }>(addressLine1Row).onChangeCapture();
-      getReactProps<{ onChange(event: { target: { value: string } }): void }>(addressLine1Input).onChange({
+      getReactProps<{ onChange(event: { target: { value: string } }): void }>(
+        addressLine1Input,
+      ).onChange({
         target: { value: "99 Schema Rd" },
       });
       getReactProps<{ onChangeCapture(): void }>(localityRow).onChangeCapture();
-      getReactProps<{ onChange(event: { target: { value: string } }): void }>(localityInput).onChange({
+      getReactProps<{ onChange(event: { target: { value: string } }): void }>(
+        localityInput,
+      ).onChange({
         target: { value: "Melbourne" },
       });
       getReactProps<{ onChangeCapture(): void }>(postalCodeRow).onChangeCapture();
-      getReactProps<{ onChange(event: { target: { value: string } }): void }>(postalCodeInput).onChange({
+      getReactProps<{ onChange(event: { target: { value: string } }): void }>(
+        postalCodeInput,
+      ).onChange({
         target: { value: "3000" },
       });
       getReactProps<{ onChange(event: { target: { value: string } }): void }>(tagsInput).onChange({
@@ -200,14 +214,17 @@ describe("company proof surface", () => {
       });
       getReactProps<{ onClick(): void }>(removeTagButton).onClick();
       getReactProps<{ onChangeCapture(): void }>(worksAtRow).onChangeCapture();
-      getReactProps<{ onChange(event: { target: { checked: boolean } }): void }>(worksAtToggle).onChange({
+      getReactProps<{ onChange(event: { target: { checked: boolean } }): void }>(
+        worksAtToggle,
+      ).onChange({
         target: { checked: true },
       });
       getReactProps<{
         onClickCapture(event: { target: { getAttribute(name: string): string | null } }): void;
       }>(worksAtRow).onClickCapture({
         target: {
-          getAttribute: (name: string) => (name === "data-proof-mutation" ? "entity-reference" : null),
+          getAttribute: (name: string) =>
+            name === "data-proof-mutation" ? "entity-reference" : null,
         },
       });
       getReactProps<{ onClick(): void }>(removeCurrentEmployer).onClick();
@@ -231,7 +248,9 @@ describe("company proof surface", () => {
 
   it("records predicate-local rerender instrumentation for nested leaves and relationship edits", async () => {
     const { company, estiiId, person } = setupGraph();
-    const { container, unmount } = render(<CompanyProofSurface company={company} person={person} />);
+    const { container, unmount } = render(
+      <CompanyProofSurface company={company} person={person} />,
+    );
 
     const initialCounts = readProofCounts(container);
     expect(initialCounts).toEqual({
@@ -262,7 +281,9 @@ describe("company proof surface", () => {
 
     await act(async () => {
       getReactProps<{ onChangeCapture(): void }>(localityRow).onChangeCapture();
-      getReactProps<{ onChange(event: { target: { value: string } }): void }>(localityInput).onChange({
+      getReactProps<{ onChange(event: { target: { value: string } }): void }>(
+        localityInput,
+      ).onChange({
         target: { value: "Melbourne" },
       });
       await Promise.resolve();
@@ -288,7 +309,9 @@ describe("company proof surface", () => {
 
     await act(async () => {
       getReactProps<{ onChangeCapture(): void }>(worksAtRow).onChangeCapture();
-      getReactProps<{ onChange(event: { target: { checked: boolean } }): void }>(worksAtToggle).onChange({
+      getReactProps<{ onChange(event: { target: { checked: boolean } }): void }>(
+        worksAtToggle,
+      ).onChange({
         target: { checked: true },
       });
       await Promise.resolve();

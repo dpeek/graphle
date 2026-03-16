@@ -6,6 +6,8 @@ export * from "./workspace-issue/index.js";
 export * from "./workspace-label/index.js";
 export * from "./workspace-project/index.js";
 
+import { workflowStatusCategory } from "./workflow-status-category/index.js";
+import { workflowStatus } from "./workflow-status/index.js";
 import {
   saveWorkspaceIssueCommand,
   workspaceIssue,
@@ -21,8 +23,6 @@ import {
   workspaceProject,
   workspaceProjectObjectView,
 } from "./workspace-project/index.js";
-import { workflowStatusCategory } from "./workflow-status-category/index.js";
-import { workflowStatus } from "./workflow-status/index.js";
 import { workspace } from "./workspace/index.js";
 
 export const workspaceSchema = {

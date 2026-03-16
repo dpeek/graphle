@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+
 import type { AnyTypeOutput, EdgeOutput } from "../index.js";
 import {
   PredicateFieldEditor as GraphPredicateFieldEditor,
@@ -7,12 +9,7 @@ import {
   type PredicateFieldViewProps,
   type UnsupportedFieldFallbackProps,
 } from "../react/index.js";
-import type { ReactNode } from "react";
-
-import {
-  genericWebFieldEditorCapabilities,
-  genericWebFieldViewCapabilities,
-} from "./fields.js";
+import { genericWebFieldEditorCapabilities, genericWebFieldViewCapabilities } from "./fields.js";
 
 export { createWebFieldResolver } from "../react/index.js";
 export type {
@@ -37,11 +34,7 @@ function UnsupportedField({ kind, reason }: UnsupportedFieldFallbackProps): Reac
 export function PredicateFieldView<
   T extends EdgeOutput,
   Defs extends Record<string, AnyTypeOutput>,
->({
-  fallback,
-  resolver = defaultWebFieldResolver,
-  ...props
-}: PredicateFieldViewProps<T, Defs>) {
+>({ fallback, resolver = defaultWebFieldResolver, ...props }: PredicateFieldViewProps<T, Defs>) {
   return (
     <GraphPredicateFieldView
       {...props}
@@ -54,11 +47,7 @@ export function PredicateFieldView<
 export function PredicateFieldEditor<
   T extends EdgeOutput,
   Defs extends Record<string, AnyTypeOutput>,
->({
-  fallback,
-  resolver = defaultWebFieldResolver,
-  ...props
-}: PredicateFieldEditorProps<T, Defs>) {
+>({ fallback, resolver = defaultWebFieldResolver, ...props }: PredicateFieldEditorProps<T, Defs>) {
   return (
     <GraphPredicateFieldEditor
       {...props}

@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+
 import type { AnyTypeOutput, EdgeOutput } from "../index.js";
 import {
   FilterOperandEditor as GraphFilterOperandEditor,
@@ -7,7 +9,6 @@ import {
   type UnsupportedFilterOperandFallbackProps,
 } from "../react/index.js";
 import { genericWebFilterOperandEditorCapabilities } from "./filter-editors.js";
-import type { ReactNode } from "react";
 
 export { createWebFilterResolver } from "../react/index.js";
 export type {
@@ -56,10 +57,5 @@ export function FilterOperandEditor<
   Defs extends Record<string, AnyTypeOutput>,
   Key extends FieldFilterOperatorKey<T>,
 >({ fallback, ...props }: FilterOperandEditorProps<T, Defs, Key>) {
-  return (
-    <GraphFilterOperandEditor
-      {...props}
-      fallback={fallback ?? UnsupportedFilterOperand}
-    />
-  );
+  return <GraphFilterOperandEditor {...props} fallback={fallback ?? UnsupportedFilterOperand} />;
 }

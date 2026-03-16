@@ -6,11 +6,7 @@ import {
   defineType,
   stringTypeModule,
 } from "../index.js";
-import type {
-  GraphCommandSpec,
-  ObjectViewSpec,
-  WorkflowSpec,
-} from "../index.js";
+import type { GraphCommandSpec, ObjectViewSpec, WorkflowSpec } from "../index.js";
 
 // Test-only root-safe contract probes that feature work can copy from.
 export const probeContractItem = defineType({
@@ -90,10 +86,7 @@ export const probeSaveContractItemCommand = {
     capabilities: ["probe.contract.write"],
     touchesPredicates: [probeContractItem.fields.name.key, probeContractItem.fields.summary.key],
   },
-} satisfies GraphCommandSpec<
-  { name: string; summary?: string },
-  { itemId: string }
->;
+} satisfies GraphCommandSpec<{ name: string; summary?: string }, { itemId: string }>;
 
 export const probeContractWorkflow = {
   key: "probe:contractItem:review",

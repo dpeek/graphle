@@ -6,7 +6,11 @@ const slugPattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const slugFragmentPattern = /^[a-z0-9]+(?:-[a-z0-9]+)*-?$/;
 
 function normalizeSlug(raw: string): string {
-  return raw.trim().toLowerCase().replace(/[_\s]+/g, "-").replace(/-+/g, "-");
+  return raw
+    .trim()
+    .toLowerCase()
+    .replace(/[_\s]+/g, "-")
+    .replace(/-+/g, "-");
 }
 
 function parseSlug(raw: string): string {

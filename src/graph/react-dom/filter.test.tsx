@@ -1,11 +1,11 @@
 import { describe, expect, it } from "bun:test";
-import { fireEvent, render } from "@testing-library/react";
+
 import { app } from "@io/core/app";
+import { fireEvent, render } from "@testing-library/react";
 import { act } from "react";
 
 import { core, defineDefaultEnumTypeModule, defineType } from "../index.js";
 import { lowerWebFilterClause } from "../react/index.js";
-
 import { getReactProps, getRequiredElement } from "../test-dom.js";
 import { FilterOperandEditor, defaultWebFilterResolver } from "./index.js";
 
@@ -350,10 +350,9 @@ describe("web filter resolver", () => {
     expect(select.dataset.webFilterSelection).toBe("many");
 
     for (const option of Array.from(select.options)) {
-      option.selected = [
-        app.status.values.active.id,
-        app.status.values.paused.id,
-      ].includes(option.value);
+      option.selected = [app.status.values.active.id, app.status.values.paused.id].includes(
+        option.value,
+      );
     }
     fireEvent.change(select);
 

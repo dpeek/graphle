@@ -6,7 +6,10 @@ const existingReferencePolicy = {
   create: false,
 } as const;
 
-export function workspaceReferenceField<const Range extends RangeRef, const Card extends Cardinality>(
+export function workspaceReferenceField<
+  const Range extends RangeRef,
+  const Card extends Cardinality,
+>(
   range: Range,
   input: {
     cardinality: Card;

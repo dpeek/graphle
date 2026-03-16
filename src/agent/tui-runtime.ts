@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
+import { toCodexNotificationEvent } from "./runner/codex-events.js";
 import type {
   AgentCodexNotificationEvent,
   AgentRawLineEvent,
@@ -15,7 +16,6 @@ import type {
   AgentStatusCode,
   AgentStatusEvent,
 } from "./tui/index.js";
-import { toCodexNotificationEvent } from "./runner/codex-events.js";
 import type { IssueRuntimeState } from "./workspace.js";
 
 export type AgentTuiRetainedMode = "attach" | "replay";

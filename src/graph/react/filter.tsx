@@ -1,3 +1,5 @@
+import type { ComponentType, ReactNode } from "react";
+
 import {
   isEnumType,
   type AnyTypeOutput,
@@ -7,7 +9,6 @@ import {
   type TypeFilterOperator,
   typeId,
 } from "../index.js";
-import type { ComponentType, ReactNode } from "react";
 
 type FieldFilterContract = {
   defaultOperator: string;

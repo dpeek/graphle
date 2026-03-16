@@ -16,4 +16,8 @@ export const urlMeta = {
     allowed: ["url", "text"] as const,
     placeholder: "https://example.com",
   },
-} satisfies TypeModuleMeta<URL, readonly ["link", "external-link", "text"], readonly ["url", "text"]>;
+} satisfies TypeModuleMeta<
+  URL,
+  readonly ["link", "external-link", "text"],
+  readonly ["url", "text"]
+>;

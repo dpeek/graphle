@@ -13,7 +13,9 @@ type GraphPackageJson = {
 
 describe("@io/core/graph adapter entry surfaces", () => {
   it("declares the reserved adapter subpath exports", async () => {
-    const packageJson = (await Bun.file(new URL("../../package.json", import.meta.url)).json()) as GraphPackageJson;
+    const packageJson = (await Bun.file(
+      new URL("../../package.json", import.meta.url),
+    ).json()) as GraphPackageJson;
 
     expect(packageJson.exports).toMatchObject({
       "./graph": "./src/graph/index.ts",

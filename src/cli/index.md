@@ -6,8 +6,8 @@
 
 ## Docs
 
-- `../lib/overview.md`
-- `../project/overview.md`
+- `../lib/index.md`
+- `../index.md`
 
 ## Layout
 

@@ -3,11 +3,7 @@ import type {
   ObjectViewSpec as ObjectViewSpecFromRoot,
   WorkflowSpec as WorkflowSpecFromRoot,
 } from "../index.js";
-import type {
-  GraphCommandSpec,
-  ObjectViewSpec,
-  WorkflowSpec,
-} from "./index.js";
+import type { GraphCommandSpec, ObjectViewSpec, WorkflowSpec } from "./index.js";
 
 const workspaceIssueSummaryView = {
   key: "app:workspaceIssue:summary",

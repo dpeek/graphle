@@ -1,7 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
 import type { ObjectViewSpec, WorkflowSpec } from "../../../graph/contracts.js";
-
 import {
   saveWorkspaceIssueCommand,
   saveWorkspaceLabelCommand,

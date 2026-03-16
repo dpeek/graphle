@@ -3,9 +3,9 @@ import { appendFile, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 
+import { AgentTuiRetainedReader } from "./tui-runtime.js";
 import { createAgentTuiStore, renderAgentTuiFrame } from "./tui/index.js";
 import type { AgentSessionRef } from "./tui/index.js";
-import { AgentTuiRetainedReader } from "./tui-runtime.js";
 import type { IssueRuntimeState } from "./workspace.js";
 
 type SessionRefOverrides = Omit<Partial<AgentSessionRef>, "issue"> & {
@@ -55,7 +55,7 @@ function createWorkerSession(overrides: SessionRefOverrides = {}): AgentSessionR
     rootSessionId: "supervisor",
     title: "Implement io agent tui",
     workerId: "OPE-67",
-    workspacePath: "/Users/dpeek/code/io/.io/tree/ope-67",
+    workspacePath: "/Users/dpeek/code/io/tmp/workspace/tree/ope-67",
     ...sessionOverrides,
     issue: resolveIssueRef(baseIssue, issueOverrides),
   };
@@ -67,7 +67,7 @@ function createIssueState(
 ): IssueRuntimeState {
   return {
     branchName: "ope-67",
-    controlPath: "/Users/dpeek/code/io/.io/control",
+    controlPath: "/Users/dpeek/code/io/tmp/workspace/control",
     issueId: "issue-67",
     issueIdentifier: "OPE-67",
     issueTitle: "Implement io agent tui",
@@ -80,7 +80,7 @@ function createIssueState(
     streamRuntimePath: runtimePath,
     updatedAt: "2026-03-10T02:00:00.000Z",
     workerId: "OPE-67",
-    worktreePath: "/Users/dpeek/code/io/.io/tree/ope-67",
+    worktreePath: "/Users/dpeek/code/io/tmp/workspace/tree/ope-67",
     ...overrides,
   };
 }
@@ -197,7 +197,7 @@ test("AgentTuiStore keeps supervisor first and records status plus raw output", 
   expect(snapshot.sessions[0]?.body).toContain("Session started | /Users/dpeek/code/io");
   expect(snapshot.sessions[0]?.body).toContain("IO is supervising /Users/dpeek/code/io");
   expect(snapshot.sessions[1]?.body).toContain(
-    "Session scheduled | ope-67 | /Users/dpeek/code/io/.io/tree/ope-67\n",
+    "Session scheduled | ope-67 | /Users/dpeek/code/io/tmp/workspace/tree/ope-67\n",
   );
   expect(snapshot.sessions[1]?.body).toContain("Session started\n");
   expect(snapshot.sessions[1]?.body).toContain("Inspecting runtime state\n");
@@ -230,7 +230,7 @@ test("renderAgentTuiFrame lays out supervisor and worker columns", () => {
     }),
     createSnapshotColumn({
       body:
-        "Session scheduled | ope-67 | /Users/dpeek/code/io/.io/tree/ope-67\n" +
+        "Session scheduled | ope-67 | /Users/dpeek/code/io/tmp/workspace/tree/ope-67\n" +
         "Session started\n" +
         'jsonl: {"method":"thread/started"}\n' +
         "stderr: stderr line\n",
@@ -344,11 +344,11 @@ test("AgentTuiRetainedReader keeps workflow blocker context visible in attach mo
     },
     title: "Prove workflow-aware TUI behavior with regression coverage",
     workerId: "OPE-188",
-    workspacePath: "/repo/.io/tree/ope-188",
+    workspacePath: "/repo/tmp/workspace/tree/ope-188",
   });
   const issueState = createIssueState(runtimePath, {
     branchName: "io/ope-174",
-    controlPath: "/repo/.io/control",
+    controlPath: "/repo/tmp/workspace/control",
     issueId: "issue-188",
     issueIdentifier: "OPE-188",
     issueTitle: "Prove workflow-aware TUI behavior with regression coverage",
@@ -359,7 +359,7 @@ test("AgentTuiRetainedReader keeps workflow blocker context visible in attach mo
     streamIssueId: "issue-174",
     streamIssueIdentifier: "OPE-174",
     workerId: "OPE-188",
-    worktreePath: "/repo/.io/tree/ope-188",
+    worktreePath: "/repo/tmp/workspace/tree/ope-188",
   });
   await writeFile(
     resolve(runtimePath, "events.log"),
@@ -428,11 +428,11 @@ test("AgentTuiRetainedReader keeps workflow blocker context visible in attach mo
       state: "blocked",
     });
     expect(snapshot.sessions[1]?.body).toContain(
-      "Session scheduled | io/ope-174 | /repo/.io/tree/ope-188",
+      "Session scheduled | io/ope-174 | /repo/tmp/workspace/tree/ope-188",
     );
     expect(snapshot.sessions[1]?.body).toContain("OPE-188: blocked");
     expect(snapshot.sessions[1]?.body).toContain(
-      "Session failed | io/ope-174 | /repo/.io/tree/ope-188: Blocked on OPE-187 finalization",
+      "Session failed | io/ope-174 | /repo/tmp/workspace/tree/ope-188: Blocked on OPE-187 finalization",
     );
     expect(frame).toContain("Attach OPE-188 from events.log");
     expect(frame).toContain("OPE-188: blocked");
@@ -531,7 +531,7 @@ test("AgentTuiRetainedReader keeps finalized workflow context visible in replay 
 
   const issueState = createIssueState(runtimePath, {
     branchName: "io/ope-174",
-    controlPath: "/repo/.io/control",
+    controlPath: "/repo/tmp/workspace/control",
     finalizedAt: "2026-03-10T06:00:03.000Z",
     finalizedLinearState: "Done",
     issueId: "issue-174",
@@ -543,7 +543,7 @@ test("AgentTuiRetainedReader keeps finalized workflow context visible in replay 
     streamIssueIdentifier: "OPE-174",
     updatedAt: "2026-03-10T06:00:00.000Z",
     workerId: "OPE-174",
-    worktreePath: "/repo/.io/tree/ope-174",
+    worktreePath: "/repo/tmp/workspace/tree/ope-174",
   });
   await writeFile(
     resolve(runtimePath, "codex.stdout.jsonl"),
@@ -585,7 +585,7 @@ test("AgentTuiRetainedReader keeps finalized workflow context visible in replay 
     });
     expect(snapshot.sessions[1]?.phase).toBe("completed");
     expect(snapshot.sessions[1]?.body).toContain(
-      "Session completed | io/ope-174 | /repo/.io/tree/ope-174",
+      "Session completed | io/ope-174 | /repo/tmp/workspace/tree/ope-174",
     );
     expect(frame).toContain("Replay OPE-174 from codex.stdout.jsonl");
     expect(frame).toContain("Session completed | io/ope-174");
@@ -610,11 +610,11 @@ test("AgentTuiRetainedReader supplements partial events.log with retained workfl
     },
     title: "Ship workflow-aware TUI behavior",
     workerId: "OPE-174",
-    workspacePath: "/repo/.io/tree/ope-174",
+    workspacePath: "/repo/tmp/workspace/tree/ope-174",
   });
   const issueState = createIssueState(runtimePath, {
     branchName: "io/ope-174",
-    controlPath: "/repo/.io/control",
+    controlPath: "/repo/tmp/workspace/control",
     finalizedAt: "2026-03-10T06:00:03.000Z",
     finalizedLinearState: "Done",
     issueId: "issue-174",
@@ -628,7 +628,7 @@ test("AgentTuiRetainedReader supplements partial events.log with retained workfl
     streamIssueIdentifier: "OPE-174",
     updatedAt: "2026-03-10T06:00:00.000Z",
     workerId: "OPE-174",
-    worktreePath: "/repo/.io/tree/ope-174",
+    worktreePath: "/repo/tmp/workspace/tree/ope-174",
   });
   await writeFile(
     resolve(runtimePath, "events.log"),
@@ -675,12 +675,12 @@ test("AgentTuiRetainedReader supplements partial events.log with retained workfl
       text: `OPE-174: committed ${commitSha} on io/ope-174`,
     });
     expect(snapshot.sessions[1]?.body).toContain(
-      "Session scheduled | io/ope-174 | /repo/.io/tree/ope-174",
+      "Session scheduled | io/ope-174 | /repo/tmp/workspace/tree/ope-174",
     );
     expect(snapshot.sessions[1]?.body).toContain("Session started");
     expect(snapshot.sessions[1]?.body).toContain(`OPE-174: committed ${commitSha} on io/ope-174`);
     expect(snapshot.sessions[1]?.body).toContain(
-      "Session completed | commit abc1234 | io/ope-174 | /repo/.io/tree/ope-174",
+      "Session completed | commit abc1234 | io/ope-174 | /repo/tmp/workspace/tree/ope-174",
     );
     expect(frame).toContain("finalized: Done");
     expect(frame).toContain("Session completed | commit abc1234");
@@ -705,11 +705,11 @@ test("AgentTuiRetainedReader inserts retained commit context before a partial co
     },
     title: "Ship workflow-aware TUI behavior",
     workerId: "OPE-174",
-    workspacePath: "/repo/.io/tree/ope-174",
+    workspacePath: "/repo/tmp/workspace/tree/ope-174",
   });
   const issueState = createIssueState(runtimePath, {
     branchName: "io/ope-174",
-    controlPath: "/repo/.io/control",
+    controlPath: "/repo/tmp/workspace/control",
     issueId: "issue-174",
     issueIdentifier: "OPE-174",
     issueTitle: "Ship workflow-aware TUI behavior",
@@ -721,7 +721,7 @@ test("AgentTuiRetainedReader inserts retained commit context before a partial co
     streamIssueIdentifier: "OPE-174",
     updatedAt: "2026-03-10T06:00:00.000Z",
     workerId: "OPE-174",
-    worktreePath: "/repo/.io/tree/ope-174",
+    worktreePath: "/repo/tmp/workspace/tree/ope-174",
   });
   await writeFile(
     resolve(runtimePath, "events.log"),
@@ -758,7 +758,9 @@ test("AgentTuiRetainedReader inserts retained commit context before a partial co
     const snapshot = store.getSnapshot();
     const body = snapshot.sessions[1]?.body ?? "";
     const commitIndex = body.indexOf(`OPE-174: committed ${commitSha} on io/ope-174`);
-    const completedIndex = body.indexOf("Session completed | io/ope-174 | /repo/.io/tree/ope-174");
+    const completedIndex = body.indexOf(
+      "Session completed | io/ope-174 | /repo/tmp/workspace/tree/ope-174",
+    );
 
     expect(snapshot.sessions[1]?.status).toMatchObject({
       code: "issue-committed",
@@ -769,7 +771,7 @@ test("AgentTuiRetainedReader inserts retained commit context before a partial co
     expect(completedIndex).toBeGreaterThan(commitIndex);
     expect(snapshot.sessions[1]?.eventHistory.map((entry) => entry.summary).slice(-2)).toEqual([
       `issue-committed: OPE-174: committed ${commitSha} on io/ope-174`,
-      "Session completed | io/ope-174 | /repo/.io/tree/ope-174",
+      "Session completed | io/ope-174 | /repo/tmp/workspace/tree/ope-174",
     ]);
   } finally {
     await rm(root, { force: true, recursive: true });
@@ -783,7 +785,7 @@ test("AgentTuiRetainedReader reconstructs blocker context from runtime files whe
 
   const issueState = createIssueState(runtimePath, {
     branchName: "io/ope-174",
-    controlPath: "/repo/.io/control",
+    controlPath: "/repo/tmp/workspace/control",
     issueId: "issue-188",
     issueIdentifier: "OPE-188",
     issueTitle: "Prove workflow-aware TUI behavior with regression coverage",
@@ -795,7 +797,7 @@ test("AgentTuiRetainedReader reconstructs blocker context from runtime files whe
     streamIssueIdentifier: "OPE-174",
     updatedAt: "2026-03-10T05:00:00.000Z",
     workerId: "OPE-188",
-    worktreePath: "/repo/.io/tree/ope-188",
+    worktreePath: "/repo/tmp/workspace/tree/ope-188",
   });
   await writeFile(
     resolve(runtimePath, "output.log"),
@@ -835,11 +837,11 @@ test("AgentTuiRetainedReader reconstructs blocker context from runtime files whe
       state: "blocked",
     });
     expect(snapshot.sessions[1]?.body).toContain(
-      "Session scheduled | io/ope-174 | /repo/.io/tree/ope-188",
+      "Session scheduled | io/ope-174 | /repo/tmp/workspace/tree/ope-188",
     );
     expect(snapshot.sessions[1]?.body).toContain("OPE-188: blocked");
     expect(snapshot.sessions[1]?.body).toContain(
-      "Session failed | io/ope-174 | /repo/.io/tree/ope-188: Blocked on OPE-187 finalization",
+      "Session failed | io/ope-174 | /repo/tmp/workspace/tree/ope-188: Blocked on OPE-187 finalization",
     );
     expect(frame).toContain("Attach OPE-188 from runtime files");
   } finally {
@@ -862,11 +864,11 @@ test("AgentTuiRetainedReader inserts retained blocker context before a partial f
     },
     title: "Prove workflow-aware TUI behavior with regression coverage",
     workerId: "OPE-188",
-    workspacePath: "/repo/.io/tree/ope-188",
+    workspacePath: "/repo/tmp/workspace/tree/ope-188",
   });
   const issueState = createIssueState(runtimePath, {
     branchName: "io/ope-174",
-    controlPath: "/repo/.io/control",
+    controlPath: "/repo/tmp/workspace/control",
     issueId: "issue-188",
     issueIdentifier: "OPE-188",
     issueTitle: "Prove workflow-aware TUI behavior with regression coverage",
@@ -878,7 +880,7 @@ test("AgentTuiRetainedReader inserts retained blocker context before a partial f
     streamIssueIdentifier: "OPE-174",
     updatedAt: "2026-03-10T05:00:00.000Z",
     workerId: "OPE-188",
-    worktreePath: "/repo/.io/tree/ope-188",
+    worktreePath: "/repo/tmp/workspace/tree/ope-188",
   });
   await writeFile(
     resolve(runtimePath, "events.log"),
@@ -919,7 +921,7 @@ test("AgentTuiRetainedReader inserts retained blocker context before a partial f
     const body = snapshot.sessions[1]?.body ?? "";
     const blockedIndex = body.indexOf("OPE-188: blocked");
     const failedIndex = body.indexOf(
-      "Session failed | io/ope-174 | /repo/.io/tree/ope-188: Blocked on OPE-187 finalization",
+      "Session failed | io/ope-174 | /repo/tmp/workspace/tree/ope-188: Blocked on OPE-187 finalization",
     );
 
     expect(snapshot.sessions[1]?.status).toMatchObject({
@@ -931,7 +933,7 @@ test("AgentTuiRetainedReader inserts retained blocker context before a partial f
     expect(failedIndex).toBeGreaterThan(blockedIndex);
     expect(snapshot.sessions[1]?.eventHistory.map((entry) => entry.summary).slice(-2)).toEqual([
       "issue-blocked: OPE-188: blocked",
-      "Session failed | io/ope-174 | /repo/.io/tree/ope-188: Blocked on OPE-187 finalization",
+      "Session failed | io/ope-174 | /repo/tmp/workspace/tree/ope-188: Blocked on OPE-187 finalization",
     ]);
   } finally {
     await rm(root, { force: true, recursive: true });

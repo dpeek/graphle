@@ -5,4 +5,8 @@ import type { AdditionalFileSystemPermissions } from "./AdditionalFileSystemPerm
 import type { AdditionalMacOsPermissions } from "./AdditionalMacOsPermissions";
 import type { AdditionalNetworkPermissions } from "./AdditionalNetworkPermissions";
 
-export type AdditionalPermissionProfile = { network: AdditionalNetworkPermissions | null, fileSystem: AdditionalFileSystemPermissions | null, macos: AdditionalMacOsPermissions | null, };
+export type AdditionalPermissionProfile = {
+  network: AdditionalNetworkPermissions | null;
+  fileSystem: AdditionalFileSystemPermissions | null;
+  macos: AdditionalMacOsPermissions | null;
+};

@@ -6,13 +6,13 @@
 
 ## Entry Points
 
-- `./architecture.md`: durable engine model, current persistence ownership, and longer-range platform shape
-- `./authority.md`: authority boundaries, predicate visibility, typed business methods, and secrets
-- `./runtime.md`: schema authoring, id maps, core schema, bootstrap, store behavior, and persisted authority helpers
-- `./validation.md`: local and authoritative validation lifecycle plus result surfaces
-- `./sync.md`: total snapshot bootstrap, retained history recovery, incremental write reconciliation, and sync state
-- `./type-modules.md`: scalar/enum modules, field metadata/filter contracts, and reference-field helpers
-- `./refs-and-ui.md`: typed refs, predicate-slot subscriptions, and the current UI-adjacent surface
+- `./spec/architecture.md`: durable engine model, current persistence ownership, and longer-range platform shape
+- `./graph/authority.md`: authority boundaries, predicate visibility, typed business methods, and secrets
+- `./spec/runtime.md`: schema authoring, id maps, core schema, bootstrap, store behavior, and persisted authority helpers
+- `./spec/validation.md`: local and authoritative validation lifecycle plus result surfaces
+- `./graph/sync.md`: total snapshot bootstrap, retained history recovery, incremental write reconciliation, and sync state
+- `./graph/type-module.md`: scalar/enum modules, field metadata/filter contracts, and reference-field helpers
+- `./spec/refs-and-ui.md`: typed refs, predicate-slot subscriptions, and the current UI-adjacent surface
 
 ## Current Package Layout
 

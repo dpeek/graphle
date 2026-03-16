@@ -3,6 +3,10 @@ import { relative, resolve } from "node:path";
 
 import { createLogger, type Logger } from "@io/core/lib";
 
+import { renderContextBundle, resolveIssueContext, summarizeContextBundle } from "./context.js";
+import { resolveIssueRouting } from "./issue-routing.js";
+import { CodexAppServerRunner } from "./runner/codex.js";
+import { LinearTrackerAdapter } from "./tracker/linear.js";
 import {
   createAgentSessionEventBus,
   createAgentSessionStdoutObserver,
@@ -13,10 +17,6 @@ import {
   type AgentWorkflowDiagnosticIssue,
   type AgentWorkflowDiagnostics,
 } from "./tui/index.js";
-import { renderContextBundle, resolveIssueContext, summarizeContextBundle } from "./context.js";
-import { resolveIssueRouting } from "./issue-routing.js";
-import { CodexAppServerRunner } from "./runner/codex.js";
-import { LinearTrackerAdapter } from "./tracker/linear.js";
 import type {
   AgentIssue,
   IssueRunResult,

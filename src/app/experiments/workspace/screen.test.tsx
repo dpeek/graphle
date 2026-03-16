@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+
 import { fireEvent, render } from "@testing-library/react";
 import { act } from "react";
 
@@ -17,9 +18,15 @@ describe("workspace management surface", () => {
     const { container, unmount } = render(<WorkspaceManagementScreen runtime={runtime} />);
 
     expect(textContent(container)).toContain("IO Planning Workspace");
-    expect(getByData(container, "data-workspace-object-view", workspaceIssueObjectView.key)).toBeDefined();
+    expect(
+      getByData(container, "data-workspace-object-view", workspaceIssueObjectView.key),
+    ).toBeDefined();
 
-    const routeIssue = getByData(container, "data-workspace-entity-item", runtime.ids.workspaceRoute);
+    const routeIssue = getByData(
+      container,
+      "data-workspace-entity-item",
+      runtime.ids.workspaceRoute,
+    );
     await act(async () => {
       fireEvent.click(routeIssue);
       await Promise.resolve();
@@ -32,12 +39,16 @@ describe("workspace management surface", () => {
     );
     const statusField = getByData(container, "data-workspace-field", "status");
     const statusSelect = getRequiredElement(
-      statusField.querySelector<HTMLSelectElement>('select[data-workspace-reference-select="status"]'),
+      statusField.querySelector<HTMLSelectElement>(
+        'select[data-workspace-reference-select="status"]',
+      ),
       "Expected status select.",
     );
     const projectField = getByData(container, "data-workspace-field", "project");
     const projectSelect = getRequiredElement(
-      projectField.querySelector<HTMLSelectElement>('select[data-workspace-reference-select="project"]'),
+      projectField.querySelector<HTMLSelectElement>(
+        'select[data-workspace-reference-select="project"]',
+      ),
       "Expected project select.",
     );
     const labelsField = getByData(container, "data-workspace-field", "labels");
@@ -52,10 +63,14 @@ describe("workspace management surface", () => {
       getReactProps<{ onChange(event: { target: { value: string } }): void }>(nameInput).onChange({
         target: { value: "Build the routed workspace surface" },
       });
-      getReactProps<{ onChange(event: { target: { value: string } }): void }>(statusSelect).onChange({
+      getReactProps<{ onChange(event: { target: { value: string } }): void }>(
+        statusSelect,
+      ).onChange({
         target: { value: runtime.ids.inProgressStatus },
       });
-      getReactProps<{ onChange(event: { target: { value: string } }): void }>(projectSelect).onChange({
+      getReactProps<{ onChange(event: { target: { value: string } }): void }>(
+        projectSelect,
+      ).onChange({
         target: { value: runtime.ids.graphRuntimeProject },
       });
       getReactProps<{ onChange(event: { target: { checked: boolean } }): void }>(
@@ -90,7 +105,9 @@ describe("workspace management surface", () => {
       fireEvent.click(projectsTab);
       await Promise.resolve();
     });
-    expect(getByData(container, "data-workspace-object-view", workspaceProjectObjectView.key)).toBeDefined();
+    expect(
+      getByData(container, "data-workspace-object-view", workspaceProjectObjectView.key),
+    ).toBeDefined();
 
     const graphRuntimeProject = getByData(
       container,
@@ -109,7 +126,9 @@ describe("workspace management surface", () => {
     );
 
     await act(async () => {
-      getReactProps<{ onChange(event: { target: { value: string } }): void }>(projectColorInput).onChange({
+      getReactProps<{ onChange(event: { target: { value: string } }): void }>(
+        projectColorInput,
+      ).onChange({
         target: { value: "#111827" },
       });
       await Promise.resolve();
@@ -124,7 +143,9 @@ describe("workspace management surface", () => {
       fireEvent.click(labelsTab);
       await Promise.resolve();
     });
-    expect(getByData(container, "data-workspace-object-view", workspaceLabelObjectView.key)).toBeDefined();
+    expect(
+      getByData(container, "data-workspace-object-view", workspaceLabelObjectView.key),
+    ).toBeDefined();
 
     const appLabel = getByData(container, "data-workspace-entity-item", runtime.ids.appLabel);
     await act(async () => {
@@ -139,7 +160,9 @@ describe("workspace management surface", () => {
     );
 
     await act(async () => {
-      getReactProps<{ onChange(event: { target: { value: string } }): void }>(labelColorInput).onChange({
+      getReactProps<{ onChange(event: { target: { value: string } }): void }>(
+        labelColorInput,
+      ).onChange({
         target: { value: "#1d4ed8" },
       });
       await Promise.resolve();

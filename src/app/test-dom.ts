@@ -35,8 +35,9 @@ function installDomGlobals() {
     },
   });
 
-  (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT =
-    true;
+  (
+    globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
+  ).IS_REACT_ACT_ENVIRONMENT = true;
 
   if (!("attachEvent" in window.HTMLElement.prototype)) {
     Object.defineProperty(window.HTMLElement.prototype, "attachEvent", {
@@ -54,11 +55,7 @@ function installDomGlobals() {
 
 installDomGlobals();
 
-export function getByData(
-  container: ParentNode,
-  attribute: string,
-  value: string,
-): HTMLElement {
+export function getByData(container: ParentNode, attribute: string, value: string): HTMLElement {
   const match = Array.from(container.querySelectorAll<HTMLElement>(`[${attribute}]`)).find(
     (element) => element.getAttribute(attribute) === value,
   );
@@ -68,10 +65,7 @@ export function getByData(
   return match;
 }
 
-export function getAllByData(
-  container: ParentNode,
-  attribute: string,
-): HTMLElement[] {
+export function getAllByData(container: ParentNode, attribute: string): HTMLElement[] {
   return Array.from(container.querySelectorAll<HTMLElement>(`[${attribute}]`));
 }
 

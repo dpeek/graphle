@@ -1,5 +1,4 @@
 import type { ObjectViewSpec } from "../../../../graph/contracts.js";
-
 import { saveWorkspaceIssueCommand } from "./commands.js";
 import { workspaceIssue } from "./type.js";
 
