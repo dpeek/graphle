@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "out/tsc/lib",
+    "rootDir": ".",
+    "types": ["@types/bun"]
+  },
+  "include": ["config/src/**/*", "io.ts", "lib/src/**/*"],
+  "exclude": ["config/src/**/*.test.ts", "config/src/**/*.test.tsx", "lib/src/**/*.test.ts", "lib/src/**/*.test.tsx"]
+}

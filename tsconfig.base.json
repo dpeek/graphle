@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "compilerOptions": {
+    "allowJs": true,
+    "esModuleInterop": true,
+    "isolatedModules": true,
+    "jsx": "react-jsx",
+    "lib": ["ESNext", "DOM", "DOM.Iterable"],
+    "module": "preserve",
+    "moduleDetection": "force",
+    "moduleResolution": "bundler",
+    "noImplicitOverride": true,
+    "noUncheckedIndexedAccess": true,
+    "noUnusedLocals": true,
+    "paths": {
+      "@io/core/agent": ["./agent/src/index.ts"],
+      "@io/core/app": ["./app/src/index.ts"],
+      "@io/core/cli": ["./cli/src/index.ts"],
+      "@io/core/config": ["./config/src/index.ts"],
+      "@io/core/graph": ["./graph/src/index.ts"],
+      "@io/core/graph/react": ["./graph/src/react/index.ts"],
+      "@io/core/graph/react-dom": ["./graph/src/react-dom/index.ts"],
+      "@io/core/graph/react-opentui": ["./graph/src/react-opentui/index.ts"],
+      "@io/core/graph/schema": ["./graph/src/schema/index.ts"],
+      "@io/core/graph/schema/*": ["./graph/src/schema/*/index.ts"],
+      "@io/core/graph/taxonomy/*": ["./graph/src/taxonomy/*.ts"],
+      "@io/core/lib": ["./lib/src/index.ts"],
+      "@io/core/lib/config": ["./lib/src/config.ts"],
+      "@io/core/tsconfig/base": ["./tsconfig.base.json"]
+    },
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "target": "ESNext",
+    "verbatimModuleSyntax": true
+  }
+}

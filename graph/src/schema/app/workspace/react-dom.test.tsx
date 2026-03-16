@@ -1,8 +1,8 @@
 import { describe, expect, it } from "bun:test";
 import { fireEvent, render } from "@testing-library/react";
+import { createExampleRuntime } from "@io/app";
 import { act } from "react";
 
-import { createExampleRuntime } from "../../../../../app/src/graph/runtime.js";
 import { getByData, getReactProps, getRequiredElement, textContent } from "../../../test-dom.js";
 import { WorkspaceManagementSurface } from "../../../react-dom/index.js";
 import { workspaceManagementWorkflow } from "./index.js";

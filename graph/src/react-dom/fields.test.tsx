@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { fireEvent, render } from "@testing-library/react";
+import { app } from "@io/app";
 
 import {
   GraphValidationError,
@@ -20,7 +21,6 @@ import {
 } from "../react/index.js";
 import { Fragment, Profiler, act } from "react";
 
-import { app } from "../../../app/src/graph/app.js";
 import { getAllByData, getReactProps, getRequiredElement } from "../test-dom.js";
 import { PredicateFieldEditor, PredicateFieldView } from "./index.js";
 

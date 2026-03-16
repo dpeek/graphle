@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "jsxImportSource": "@opentui/react",
+    "outDir": "out/tsc/cli",
+    "types": ["@types/bun"]
+  },
+  "include": ["cli/src/**/*"],
+  "exclude": ["cli/src/**/*.test.ts", "cli/src/**/*.test.tsx"]
+}

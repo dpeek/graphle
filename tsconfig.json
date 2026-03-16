@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "files": [],
+  "references": [
+    { "path": "./tsconfig.lib.json" },
+    { "path": "./tsconfig.graph.json" },
+    { "path": "./tsconfig.app.json" },
+    { "path": "./tsconfig.agent.json" },
+    { "path": "./tsconfig.cli.json" }
+  ]
+}

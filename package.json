@@ -11,12 +11,44 @@
     "lib"
   ],
   "type": "module",
+  "exports": {
+    "./agent": "./agent/src/index.ts",
+    "./app": "./app/src/index.ts",
+    "./cli": "./cli/src/index.ts",
+    "./config": "./config/src/index.ts",
+    "./graph": "./graph/src/index.ts",
+    "./graph/react": "./graph/src/react/index.ts",
+    "./graph/react-dom": "./graph/src/react-dom/index.ts",
+    "./graph/react-opentui": "./graph/src/react-opentui/index.ts",
+    "./graph/schema": "./graph/src/schema/index.ts",
+    "./graph/schema/*": "./graph/src/schema/*/index.ts",
+    "./graph/taxonomy/*": "./graph/src/taxonomy/*.ts",
+    "./lib": "./lib/src/index.ts",
+    "./lib/config": "./lib/src/config.ts",
+    "./tsconfig/base": "./tsconfig.base.json"
+  },
   "scripts": {
     "check": "bun run --cwd graph check && bun run --cwd app check",
-    "agent": "io agent start"
+    "agent": "io agent start",
+    "types": "bun run types:lib && bun run types:graph && bun run types:app && bun run types:agent && bun run types:cli",
+    "types:agent": "tsgo --noEmit -p tsconfig.agent.json",
+    "types:app": "tsgo --noEmit -p tsconfig.app.json",
+    "types:cli": "tsgo --noEmit -p tsconfig.cli.json",
+    "types:graph": "tsgo --noEmit -p tsconfig.graph.json",
+    "types:lib": "tsgo --noEmit -p tsconfig.lib.json"
   },
   "devDependencies": {
+    "@io/agent": "workspace:*",
+    "@io/app": "workspace:*",
     "@io/cli": "workspace:",
-    "@io/lib": "workspace:*"
+    "@io/config": "workspace:*",
+    "@io/graph": "workspace:*",
+    "@io/lib": "workspace:*",
+    "@types/bun": "^1.3.9",
+    "@types/node": "^25.3.2",
+    "@typescript/native-preview": "^7.0.0-dev.20260226.1",
+    "bun": "1.3.9",
+    "oxfmt": "^0.35.0",
+    "oxlint": "^1.50.0"
   }
 }

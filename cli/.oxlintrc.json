@@ -1,7 +1,55 @@
 {
   "plugins": null,
   "categories": {},
-  "rules": {},
+  "rules": {
+    "no-restricted-imports": [
+      "error",
+      {
+        "patterns": [
+          {
+            "group": [
+              "../../agent/src/**",
+              "../../app/src/**",
+              "../../config/src/**",
+              "../../graph/src/**",
+              "../../lib/src/**",
+              "../../../agent/src/**",
+              "../../../app/src/**",
+              "../../../config/src/**",
+              "../../../graph/src/**",
+              "../../../lib/src/**",
+              "../../../../agent/src/**",
+              "../../../../app/src/**",
+              "../../../../config/src/**",
+              "../../../../graph/src/**",
+              "../../../../lib/src/**",
+              "../../../../../agent/src/**",
+              "../../../../../app/src/**",
+              "../../../../../config/src/**",
+              "../../../../../graph/src/**",
+              "../../../../../lib/src/**",
+              "../../../../../../agent/src/**",
+              "../../../../../../app/src/**",
+              "../../../../../../config/src/**",
+              "../../../../../../graph/src/**",
+              "../../../../../../lib/src/**",
+              "../../../../../../../agent/src/**",
+              "../../../../../../../app/src/**",
+              "../../../../../../../config/src/**",
+              "../../../../../../../graph/src/**",
+              "../../../../../../../lib/src/**",
+              "../../../../../../../../agent/src/**",
+              "../../../../../../../../app/src/**",
+              "../../../../../../../../config/src/**",
+              "../../../../../../../../graph/src/**",
+              "../../../../../../../../lib/src/**"
+            ],
+            "message": "Use package entrypoints for cross-domain imports."
+          }
+        ]
+      }
+    ]
+  },
   "settings": {
     "jsx-a11y": {
       "polymorphicPropName": null,

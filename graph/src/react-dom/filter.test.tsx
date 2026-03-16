@@ -1,16 +1,16 @@
 import { describe, expect, it } from "bun:test";
 import { fireEvent, render } from "@testing-library/react";
+import { app } from "@io/app";
 import { act } from "react";
 
-import { core, defineType } from "../index.js";
+import { core, defineDefaultEnumTypeModule, defineType } from "../index.js";
 import { lowerWebFilterClause } from "../react/index.js";
 
-import { app } from "../../../app/src/graph/app.js";
-import { statusTypeModule } from "../../../app/src/type/status/index.js";
 import { getReactProps, getRequiredElement } from "../test-dom.js";
 import { FilterOperandEditor, defaultWebFilterResolver } from "./index.js";
 
 const defs = { ...core, ...app };
+const statusTypeModule = defineDefaultEnumTypeModule(app.status);
 
 describe("web filter resolver", () => {
   it("resolves narrowed string operators from schema metadata", () => {

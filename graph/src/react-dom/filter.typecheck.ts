@@ -1,11 +1,12 @@
-import { core, defineType } from "../index.js";
+import { app } from "@io/app";
+
+import { core, defineDefaultEnumTypeModule, defineType } from "../index.js";
 import type { FilterOperandEditorProps } from "../react/index.js";
 
-import { app } from "../../../app/src/graph/app.js";
-import { statusTypeModule } from "../../../app/src/type/status/index.js";
 import { defaultWebFilterResolver } from "./index.js";
 
 const defs = { ...core, ...app };
+const statusTypeModule = defineDefaultEnumTypeModule(app.status);
 
 const foundedYearResolution = defaultWebFilterResolver.resolveField(
   app.company.fields.foundedYear,
