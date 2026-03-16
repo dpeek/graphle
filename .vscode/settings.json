@@ -13,12 +13,13 @@
   "editor.tabSize": 2,
   "editor.insertSpaces": true,
   "files.exclude": {
-    "**/.vscode": false,
-    "**/node_modules": false,
-    "**/.oxlintrc.json": false,
-    "**/.oxfmtrc.json": false,
-    "**/bun.lock": false,
-    "**/.gitignore": false,
-    "**/tsconfig.json": false
+    "**/.vscode": true,
+    "**/node_modules": true,
+    "**/.oxlintrc.json": true,
+    "**/.oxfmtrc.json": true,
+    "**/bun.lock": true,
+    "**/.gitignore": true,
+    "**/tsconfig.json": true,
+    "**/package.json": true
   }
 }

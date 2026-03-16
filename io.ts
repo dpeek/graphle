@@ -1,4 +1,4 @@
-import { defineIoConfig, env, linearTracker } from "@io/lib/config";
+import { defineIoConfig, env, linearTracker } from "@io/core/lib/config";
 
 export default defineIoConfig({
   agent: {
@@ -14,13 +14,13 @@ export default defineIoConfig({
     afterCreate: "bun install",
   },
   context: {
-    entrypoint: "./io/overview.md",
+    entrypoint: "./io/project/overview.md",
     docs: {
-      "project.backlog": "./io/backlog.md",
-      "project.goals": "./io/goals.md",
-      "project.module-stream-workflow-plan": "./agent/io/module-stream-workflow-plan.md",
-      "project.overview": "./io/overview.md",
-      "project.workflow": "./io/workflow.md",
+      "project.backlog": "./io/project/backlog.md",
+      "project.goals": "./io/project/goals.md",
+      "project.module-stream-workflow-plan": "./io/agent/module-stream-workflow-plan.md",
+      "project.overview": "./io/project/overview.md",
+      "project.workflow": "./io/project/workflow.md",
     },
     profiles: {
       backlog: {
@@ -50,34 +50,34 @@ export default defineIoConfig({
   },
   modules: {
     agent: {
-      allowedSharedPaths: ["./io"],
-      docs: ["./agent/io/overview.md", "./agent/io/module-stream-workflow-plan.md"],
-      path: "./agent",
+      allowedSharedPaths: ["./io/project", "./io/agent"],
+      docs: ["./io/agent/overview.md", "./io/agent/module-stream-workflow-plan.md"],
+      path: "./src/agent",
     },
     app: {
-      allowedSharedPaths: ["./graph/io", "./io"],
-      docs: ["./app/io/overview.md"],
-      path: "./app",
+      allowedSharedPaths: ["./io/project", "./io/app", "./io/graph"],
+      docs: ["./io/app/overview.md"],
+      path: "./src/app",
     },
     cli: {
-      allowedSharedPaths: ["./io"],
-      docs: ["./cli/io/overview.md"],
-      path: "./cli",
+      allowedSharedPaths: ["./io/project", "./io/cli"],
+      docs: ["./io/cli/overview.md"],
+      path: "./src/cli",
     },
     config: {
-      allowedSharedPaths: ["./io"],
-      docs: ["./config/io/overview.md"],
-      path: "./config",
+      allowedSharedPaths: ["./io/project", "./io/config", "./io/lib"],
+      docs: ["./io/config/overview.md"],
+      path: "./src/config",
     },
     graph: {
-      allowedSharedPaths: ["./io"],
-      docs: ["./graph/io/overview.md", "./graph/io/architecture.md"],
-      path: "./graph",
+      allowedSharedPaths: ["./io/project", "./io/graph"],
+      docs: ["./io/graph/overview.md", "./io/graph/architecture.md"],
+      path: "./src/graph",
     },
     lib: {
-      allowedSharedPaths: ["./io"],
-      docs: ["./lib/io/overview.md"],
-      path: "./lib",
+      allowedSharedPaths: ["./io/project", "./io/lib"],
+      docs: ["./io/lib/overview.md"],
+      path: "./src/lib",
     },
   },
   install: {
