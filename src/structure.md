@@ -189,18 +189,23 @@ today.
 
 Do not grow one flat string namespace forever.
 
-Prefer family/variant names such as:
+Use family/variant names when one editor surface has multiple semantic
+specializations. The current structured-value editor families already follow
+that pattern:
 
-- `text/input`
-- `text/textarea`
-- `source/markdown`
-- `source/svg`
-- `reference/entity`
-- `reference/entity-many`
+- `number/duration`
+- `number/percent`
 - `number/quantity`
+- `number/rate`
+- `number/range`
 - `money/amount`
 
-That keeps the taxonomy readable as the editor surface grows.
+Keep simple standalone kinds such as `text`, `textarea`, `markdown`, `svg`,
+`checkbox`, `date`, `number`, and `url` when there is no shared family to
+distinguish yet.
+
+That keeps the taxonomy readable as the editor surface grows without inventing
+extra prefixes for one-off inputs.
 
 ## Taxonomy Direction
 
@@ -246,7 +251,9 @@ module naming.
 ## Structured Value Families
 
 Structured value work should keep replacing loose `string` and `json`
-placeholders with durable module-owned shapes.
+placeholders with durable module-owned shapes. Choose a value family by the
+meaning of the field, not by the fact that it can be serialized as a number or
+string.
 
 Implemented core families:
 
@@ -261,19 +268,54 @@ Near-term follow-ups:
 
 - `unit`
 
+Selection rules:
+
+- `duration`: elapsed time, estimates, windows, cooldowns, and retention
+  periods. The canonical value is a non-negative millisecond count, but authors
+  should treat it as a human duration rather than a raw integer. Do not use it
+  for a point in time; use date/timestamp fields for instants.
+- `percent`: bounded `0-100` ratios that are naturally shown with `%`, such as
+  completion, confidence, or utilization. Do not use it for raw fractional
+  coefficients or ratios that can exceed `100`.
+- `quantity`: measured amounts with an explicit unit string such as `kg`, `GB`,
+  or `requests`. Use it when the unit is part of the meaning of one value. Do
+  not use it for currency; use `money`.
+- `money`: monetary amounts whose currency must round-trip and compare
+  correctly. Use it for budgets, prices, and cost figures. Do not use it for
+  generic points, credits, or other unitized counts.
+- `rate`: numerator-per-denominator values such as burn, throughput, or cost
+  over time. Use it when the field semantically means "per". Do not use it for
+  simple percentages or single measured values.
+- `range`: inclusive min/max bounds over one structured value kind. Use it for
+  bands, thresholds, and planned or allowed intervals. Both endpoints must use
+  the same kind, and quantity or money ranges must also share unit or
+  currency.
+
 `measure` is not a good canonical type name because it is too vague. Use more
 specific terms such as `quantity` or `rate`.
 
 ## Structured Editors
 
-Current shared editor families:
+Default editor/display family mapping:
 
-- quantity editor: amount + unit
-- money editor: amount + currency
-- duration editor: human units instead of raw milliseconds
-- percent editor: constrained numeric entry and display formatting
-- rate editor: numerator + denominator
-- range editor: min/max pair
+- `duration` -> `number/duration`
+- `percent` -> `number/percent`
+- `quantity` -> `number/quantity`
+- `money` -> `money/amount`
+- `rate` -> `number/rate`
+- `range` -> `number/range`
+
+Usage rules:
+
+- prefer the family-specific editor and display kind by default; it should be
+  the canonical surface for the matching value family
+- `text` remains an allowed fallback for every current structured value family
+  when a surface intentionally wants literal entry or plain text rendering
+- `percent` also allows generic `number` display/editor fallback because the
+  stored value is still a constrained scalar number
+- `rate` and `range` stay family-specific even when their nested values are
+  `duration`, `percent`, `quantity`, or `money`; use the outer family kind
+  rather than trying to reuse one inner editor directly
 
 Near-term editor families:
 
