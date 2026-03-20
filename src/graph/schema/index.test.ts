@@ -30,17 +30,18 @@ import {
   probeContractWorkflow,
   probeSaveContractItemCommand,
 } from "../runtime/contracts.probe.js";
-import { app as canonicalApp } from "./app.js";
+import { core as canonicalCore } from "./core.js";
+import * as schemaExports from "./index.js";
+import { ops as canonicalOps } from "./ops.js";
 import {
   envVar,
   envVarNameBlankMessage,
   envVarNameInvalidMessage,
   envVarNamePattern,
-  envVarsSchema,
-} from "./app/env-vars/index.js";
-import { topic, topicKind, topicSchema } from "./app/topic/index.js";
-import { core as canonicalCore } from "./core.js";
-import * as schemaExports from "./index.js";
+  envVarSchema,
+} from "./ops/env-var.js";
+import { pkm as canonicalPkm } from "./pkm.js";
+import { topic, topicKind, topicSchema } from "./pkm/topic.js";
 
 function resolvedTypeId(typeDef: { values: { key: string } }): string {
   const values = typeDef.values as { key: string; id?: string };
@@ -82,7 +83,7 @@ describe("schema entry surfaces", () => {
     );
   });
 
-  it("defines canonical core and app namespaces from schema entrypoints", () => {
+  it("defines canonical core, pkm, and ops namespaces from schema entrypoints", () => {
     expect(canonicalCore.node.values.key).toBe(node.values.key);
     expect(canonicalCore.string.values.key).toBe(stringTypeModule.type.values.key);
     expect(canonicalCore.color.values.key).toBe(colorTypeModule.type.values.key);
@@ -94,13 +95,13 @@ describe("schema entry surfaces", () => {
     expect(canonicalCore.secretHandle.values.key).toBe(secretHandle.values.key);
     expect(String(canonicalCore.type.fields.icon.range)).toBe(resolvedTypeId(icon));
     expect(String(canonicalCore.predicate.fields.icon.range)).toBe(resolvedTypeId(icon));
-    expect(canonicalApp.envVar.values.key).toBe(envVar.values.key);
-    expect(canonicalApp.topic.values.key).toBe(topic.values.key);
-    expect(canonicalApp.topicKind.values.key).toBe(topicKind.values.key);
+    expect(canonicalPkm.topic.values.key).toBe(topic.values.key);
+    expect(canonicalPkm.topicKind.values.key).toBe(topicKind.values.key);
+    expect(canonicalOps.envVar.values.key).toBe(envVar.values.key);
   });
 
-  it("exports the env-var slice from the canonical app schema tree", () => {
-    expect(envVarsSchema).toEqual({
+  it("exports the env-var slice from the canonical ops schema tree", () => {
+    expect(envVarSchema).toEqual({
       envVar,
     });
     expect(String(envVar.fields.secret.range)).toBe(resolvedTypeId(secretHandle));
@@ -139,7 +140,7 @@ describe("schema entry surfaces", () => {
     });
   });
 
-  it("exports the topic slice from the canonical app schema tree", () => {
+  it("exports the topic slice from the canonical pkm schema tree", () => {
     expect(topicSchema).toEqual({
       topic,
       topicKind,
@@ -157,6 +158,12 @@ describe("schema entry surfaces", () => {
   });
 
   it("keeps the schema root index wired to the new tree", () => {
+    expect(schemaExports.core).toBe(canonicalCore);
+    expect(schemaExports.ops).toBe(canonicalOps);
+    expect(schemaExports.pkm).toBe(canonicalPkm);
+    expect(typeof schemaExports.core.node.values.id).toBe("string");
+    expect(typeof schemaExports.ops.envVar.values.id).toBe("string");
+    expect(typeof schemaExports.pkm.topic.values.id).toBe("string");
     expect(schemaExports.node).toBe(node);
     expect(schemaExports.icon).toBe(icon);
     expect(schemaExports.iconReferenceField).toBe(iconReferenceField);

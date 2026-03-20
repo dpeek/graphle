@@ -40,7 +40,8 @@ That leads to a few concrete problems:
 
 - type-local authoring is only partially true because DOM editors still live in
   centralized adapter folders
-- `app:` is becoming a junk-drawer namespace instead of a durable taxonomy
+- one catch-all product namespace makes ownership drift and taxonomy cleanup
+  harder
 - generic browser primitives such as Monaco source editing and source/preview
   shells live in `graph` even when they are not graph-specific
 - large files and large datasets hide naming drift and make agent work slower
@@ -166,7 +167,7 @@ today.
 ### Namespace rules
 
 - keep `core:` small and durable
-- replace vague catch-all namespaces such as `app:` with domainful names
+- replace vague catch-all product namespaces with domainful names
 - prefer `pkm:`, `ops:`, `work:`, `people:`, `files:`, and similar domain
   prefixes over one giant product bucket
 - if imported fit-test schemas return later, keep them outside product
@@ -177,6 +178,9 @@ today.
 - singular names for type folders such as `topic`, `env-var`, `quantity`
 - plural names only for containers such as `entities`, `enums`, `values`,
   `views`, `commands`
+- use `schema.ts` as the public entry file inside a type folder and prefer
+  direct compatibility shims like `schema/pkm/topic.ts` over nested
+  `schema/pkm/topic/index.ts` wrappers
 - avoid duplicate path segments like `topic/topic`
 - avoid implementation-first names like `react-dom` when the real boundary is
   `web`

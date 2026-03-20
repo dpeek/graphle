@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
-import { app } from "../modules/app.js";
 import { graphIconSeeds } from "../modules/core/icon/seed.js";
+import { pkm } from "../modules/pkm.js";
 import { bootstrap } from "./bootstrap";
 import { createTypeClient } from "./client";
 import { core } from "./core";
@@ -69,10 +69,10 @@ describe("bootstrap cardinality metadata", () => {
     );
   });
 
-  it("keeps shared predicate icon metadata single-valued across core and app bootstrap passes", () => {
+  it("keeps shared predicate icon metadata single-valued across core and pkm bootstrap passes", () => {
     const store = createStore();
     bootstrap(store, core);
-    bootstrap(store, app);
+    bootstrap(store, pkm);
 
     const predicateIconPredicateId = edgeId(core.predicate.fields.icon);
     expect(store.facts(edgeId(core.node.fields.type), predicateIconPredicateId)).toHaveLength(1);

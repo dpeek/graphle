@@ -1,7 +1,8 @@
 import { describe, expect, it } from "bun:test";
 
 import { bootstrap, createStore, createTypeClient, core, isEntityType } from "@io/core/graph";
-import { app } from "@io/core/graph/schema/app";
+import { ops } from "@io/core/graph/schema/ops";
+import { pkm } from "@io/core/graph/schema/pkm";
 
 import { seedExampleGraph } from "../../lib/example-data.js";
 import { buildEntityCatalog, buildTypeCatalog } from "./catalog.js";
@@ -10,9 +11,10 @@ import { explorerNamespace } from "./model.js";
 function createCatalogFixture() {
   const store = createStore();
   bootstrap(store, core);
-  bootstrap(store, app);
+  bootstrap(store, pkm);
+  bootstrap(store, ops);
 
-  const graph = createTypeClient(store, { ...core, ...app });
+  const graph = createTypeClient(store, { ...core, ...pkm, ...ops });
   seedExampleGraph(graph);
 
   return { graph, store };
@@ -29,9 +31,9 @@ describe("explorer catalog", () => {
         .map((typeDef) => typeDef.values.key)
         .sort(),
     );
-    expect(byKey.get("app:topic")?.dataCount).toBe(3);
+    expect(byKey.get("pkm:topic")?.dataCount).toBe(3);
     expect(byKey.get("core:tag")?.dataCount).toBe(2);
-    expect(byKey.get("app:topicKind")?.kind).toBe("enum");
+    expect(byKey.get("pkm:topicKind")?.kind).toBe("enum");
     expect(byKey.get("core:string")?.kind).toBe("scalar");
   });
 
@@ -46,8 +48,8 @@ describe("explorer catalog", () => {
         .map((typeDef) => typeDef.values.key)
         .sort(),
     );
-    expect(byKey.get("app:topic")?.count).toBe(3);
-    expect(byKey.get("app:envVar")?.count).toBe(0);
+    expect(byKey.get("pkm:topic")?.count).toBe(3);
+    expect(byKey.get("ops:envVar")?.count).toBe(0);
     expect(byKey.get("core:icon")?.count).toBeGreaterThan(0);
     expect(byKey.get("core:tag")?.count).toBe(2);
     expect(byKey.get("core:type")?.count).toBeGreaterThan(0);

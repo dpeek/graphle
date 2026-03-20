@@ -8,7 +8,7 @@ import {
   type MutationCallbacks,
 } from "@io/core/graph/react";
 import { PredicateFieldEditor } from "@io/core/graph/react-dom";
-import { topicKind } from "@io/core/graph/schema/app/topic";
+import { topicKind } from "@io/core/graph/schema/pkm/topic";
 import { Badge } from "@io/web/badge";
 import { Button } from "@io/web/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@io/web/card";

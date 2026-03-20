@@ -9,14 +9,15 @@ import {
   type GraphWriteTransaction,
   type StoreSnapshot,
 } from "@io/core/graph";
-import { app } from "@io/core/graph/schema/app";
+import { ops } from "@io/core/graph/schema/ops";
+import { pkm } from "@io/core/graph/schema/pkm";
 
 import { createInMemoryTestWebAppAuthorityStorage } from "./authority-test-storage.js";
 import { createWebAppAuthority } from "./authority.js";
 import { handleSecretFieldRequest } from "./server-routes.js";
 
-const appGraph = { ...core, ...app } as const;
-const envVarSecretPredicateId = edgeId(app.envVar.fields.secret);
+const productGraph = { ...core, ...pkm, ...ops } as const;
+const envVarSecretPredicateId = edgeId(ops.envVar.fields.secret);
 
 function buildGraphWriteTransaction(
   before: StoreSnapshot,
@@ -128,8 +129,9 @@ describe("web authority", () => {
 
     const mutationStore = createStore();
     bootstrap(mutationStore, core);
-    bootstrap(mutationStore, app);
-    const mutationGraph = createTypeClient(mutationStore, appGraph);
+    bootstrap(mutationStore, pkm);
+    bootstrap(mutationStore, ops);
+    const mutationGraph = createTypeClient(mutationStore, productGraph);
     mutationStore.replace(authority.store.snapshot());
     const before = mutationStore.snapshot();
 
@@ -144,7 +146,7 @@ describe("web authority", () => {
     );
 
     await expect(authority.applyTransaction(transaction)).rejects.toThrow(
-      'Field "app:envVar:secret" requires "server-command" writes and cannot be changed through an ordinary transaction.',
+      'Field "ops:envVar:secret" requires "server-command" writes and cannot be changed through an ordinary transaction.',
     );
     expect(authority.graph.envVar.get(primaryEnvVarId).secret).toBe(primarySecretId);
   });

@@ -1,6 +1,9 @@
 import { core, type NamespaceClient } from "@io/core/graph";
-import { app } from "@io/core/graph/schema/app";
-import { topicKind } from "@io/core/graph/schema/app/topic";
+import { ops } from "@io/core/graph/schema/ops";
+import { pkm } from "@io/core/graph/schema/pkm";
+import { topicKind } from "@io/core/graph/schema/pkm/topic";
+
+const exampleGraph = { ...pkm, ...ops } as const;
 
 function resolvedEnumValue(value: { key: string; id?: string }): string {
   return value.id ?? value.key;
@@ -15,7 +18,7 @@ export type ExampleGraphIds = {
 };
 
 export function seedExampleGraph(
-  graph: NamespaceClient<typeof app & Pick<typeof core, "tag">>,
+  graph: NamespaceClient<typeof exampleGraph & Pick<typeof core, "tag">>,
 ): ExampleGraphIds {
   const graphTag = graph.tag.create({
     color: "#0ea5e9",
@@ -29,7 +32,7 @@ export function seedExampleGraph(
   });
 
   const graphExplorer = graph.topic.create({
-    content: "Shared explorer surface for the canonical app graph.",
+    content: "Shared explorer surface for the canonical product graph.",
     kind: resolvedEnumValue(topicKind.values.module),
     name: "Graph Explorer",
     isArchived: false,

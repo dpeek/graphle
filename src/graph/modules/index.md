@@ -8,10 +8,14 @@ from top-level `schema/` ownership toward explicit module ownership.
 ## Current State
 
 - canonical built-in schema now lives under `../../src/graph/modules/`
-- `@io/core/graph/modules`, `@io/core/graph/modules/core`, and
-  `@io/core/graph/modules/app` are the ownership-first package entry surfaces
-- focused app slices stay available from `@io/core/graph/modules/app/env-vars`
-  and `@io/core/graph/modules/app/topic`
+- `@io/core/graph/modules`, `@io/core/graph/modules/core`,
+  `@io/core/graph/modules/ops`, and `@io/core/graph/modules/pkm` are the
+  ownership-first package entry surfaces
+- focused product slices stay available from `@io/core/graph/modules/pkm/topic`
+  and `@io/core/graph/modules/ops/env-var`
+- per-type authoring stays in singular folders such as
+  `../../src/graph/modules/pkm/topic/`, with `schema.ts` as the slice entry
+  file and direct compatibility shims at `../../src/graph/schema/<namespace>/<type>.ts`
 - `../../src/graph/schema/` and `@io/core/graph/schema*` remain as compatibility
   wrappers for existing imports
 - follow-up slices can extend module families here without reintroducing the

@@ -37,7 +37,7 @@ the graph-first application direction the rest of the workspace is proving.
 - `../src/agent/`: scheduler, context assembly, tracker integration, retained runtime,
   and the operator TUI
 - `../src/config/`, `../src/lib/`: shared config loading and typed config surface
-- `../src/graph/`, `../src/web/`: graph runtime, canonical schema, the persisted-authority
-  contract, worker-backed browser surfaces, and the SQLite Durable Object authority path that
-  backs the web shell
+- `../src/graph/`, `../src/web/`: graph runtime, canonical `core:`, `ops:`, and `pkm:`
+  schema families, the persisted-authority contract, worker-backed browser surfaces, and the
+  SQLite Durable Object authority path that backs the web shell
 - `../src/cli/`: operator command surface

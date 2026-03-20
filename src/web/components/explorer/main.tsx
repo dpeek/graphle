@@ -1,6 +1,6 @@
 import { typeId } from "@io/core/graph";
 import { GraphMutationRuntimeProvider } from "@io/core/graph/react";
-import { app } from "@io/core/graph/schema/app";
+import { pkm } from "@io/core/graph/schema/pkm";
 import { Input } from "@io/web/input";
 import { ScrollArea } from "@io/web/scroll-area";
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
@@ -84,7 +84,7 @@ export function Explorer({
 
   const initialSearchParams = readExplorerSearchParams();
   const defaultTypeId =
-    typeEntryById.get(typeId(app.topic))?.id ?? typeEntries[0]?.id ?? typeId(app.topic);
+    typeEntryById.get(typeId(pkm.topic))?.id ?? typeEntries[0]?.id ?? typeId(pkm.topic);
 
   function canCreateType(typeIdValue: string): boolean {
     return createPlanByTypeId.get(typeIdValue)?.supported ?? false;

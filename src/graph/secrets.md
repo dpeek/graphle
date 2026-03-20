@@ -293,7 +293,7 @@ const rotateSecretCommand: GraphCommandSpec<
   output: undefined as never,
   policy: {
     capabilities: ["secret:rotate"],
-    touchesPredicates: ["app:envVar:secret"],
+    touchesPredicates: ["ops:envVar:secret"],
   },
 };
 ```
@@ -490,11 +490,11 @@ The minimal useful contract is:
 
 ## Open Questions
 
-### Should secret handles live in `app:` or `core:`?
+### Should secret handles live in `pkm:` or `core:`?
 
 `core:` is now the right home. The type itself is graph-generic replicated
-metadata, while env-var-specific naming, validation, and mutation contracts stay
-in `app:`.
+metadata, while product-specific naming, validation, and mutation contracts stay
+in domain namespaces such as `ops:` or `pkm:`.
 
 ### Should hidden predicates exist in the same authoritative store?
 

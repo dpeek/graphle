@@ -3,9 +3,9 @@ import {
   envVarNameBlankMessage,
   envVarNameInvalidMessage,
   envVarNamePattern,
-} from "./env-var.js";
+} from "./type.js";
 
-export const envVarsSchema = {
+export const envVarSchema = {
   envVar,
 } as const;
 

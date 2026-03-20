@@ -11,12 +11,13 @@ import {
   type NamespaceClient,
   type StoreSnapshot,
 } from "@io/core/graph";
-import { app } from "@io/core/graph/schema/app";
+import { ops } from "@io/core/graph/schema/ops";
+import { pkm } from "@io/core/graph/schema/pkm";
 
 import { WebGraphAuthorityDurableObject } from "./graph-authority-do.js";
 
-const appGraph = { ...core, ...app } as const;
-const envVarSecretPredicateId = edgeId(app.envVar.fields.secret);
+const productGraph = { ...core, ...pkm, ...ops } as const;
+const envVarSecretPredicateId = edgeId(ops.envVar.fields.secret);
 
 type SqliteMasterRow = {
   name: string;
@@ -192,16 +193,17 @@ function buildGraphWriteTransaction(
 function buildTransactionFromSnapshot<TResult>(
   snapshot: StoreSnapshot,
   id: string,
-  mutate: (graph: NamespaceClient<typeof appGraph>) => TResult,
+  mutate: (graph: NamespaceClient<typeof productGraph>) => TResult,
 ): {
   readonly result: TResult;
   readonly transaction: GraphWriteTransaction;
 } {
   const mutationStore = createStore();
   bootstrap(mutationStore, core);
-  bootstrap(mutationStore, app);
+  bootstrap(mutationStore, pkm);
+  bootstrap(mutationStore, ops);
   mutationStore.replace(snapshot);
-  const mutationGraph = createTypeClient(mutationStore, appGraph);
+  const mutationGraph = createTypeClient(mutationStore, productGraph);
   const before = mutationStore.snapshot();
   const result = mutate(mutationGraph);
 

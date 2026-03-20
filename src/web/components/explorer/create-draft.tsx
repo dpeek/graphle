@@ -274,7 +274,7 @@ function buildCreateDefaults(
     Object.assign(defaults, setDraftValue(defaults, field.path, field.fieldName, optionId));
   }
 
-  if (entry.key === "app:topic") {
+  if (entry.key === "pkm:topic") {
     return setDraftValue(defaults, [], "order", entry.count);
   }
 

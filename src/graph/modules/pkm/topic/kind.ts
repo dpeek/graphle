@@ -1,7 +1,9 @@
 import { defineEnum } from "@io/core/graph/def";
 
+import { defineDefaultEnumTypeModule } from "../../core/enum-module.js";
+
 export const topicKindType = defineEnum({
-  values: { key: "app:topicKind", name: "Topic Kind" },
+  values: { key: "pkm:topicKind", name: "Topic Kind" },
   options: {
     module: {
       name: "Module",
@@ -29,3 +31,7 @@ export const topicKindType = defineEnum({
     },
   },
 });
+
+export const topicKindTypeModule = defineDefaultEnumTypeModule(topicKindType);
+
+export const topicKind = topicKindTypeModule.type;

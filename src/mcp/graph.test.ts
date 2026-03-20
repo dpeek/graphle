@@ -17,10 +17,13 @@ import {
   type NamespaceClient,
   type SyncPayload,
 } from "../graph/index.js";
-import { app } from "../graph/schema/app.js";
-import { topicKind } from "../graph/schema/app/topic/index.js";
+import { ops } from "../graph/schema/ops.js";
+import { pkm } from "../graph/schema/pkm.js";
+import { topicKind } from "../graph/schema/pkm/topic.js";
 import { kitchenSink } from "../graph/schema/test.js";
 import { createGraphMcpServer, createGraphMcpSession } from "./graph.js";
+
+const productGraph = { ...pkm, ...ops } as const;
 
 type GraphNamespace = Record<string, AnyTypeOutput>;
 type MockAuthority = {
@@ -59,8 +62,8 @@ function createAuthority<const T extends GraphNamespace>(
   return { graph, store, writes };
 }
 
-function createAppAuthority() {
-  return createAuthority(app, (graph) => {
+function createProductAuthority() {
+  return createAuthority(productGraph, (graph) => {
     graph.envVar.create({ name: "OPENAI_API_KEY" });
     graph.topic.create({
       content: "Seeded topic",
@@ -189,8 +192,8 @@ async function callTool(
 }
 
 describe("createGraphMcpSession", () => {
-  it("reports synced graph status for the app namespace", async () => {
-    const authority = createAppAuthority();
+  it("reports synced graph status for the product namespace", async () => {
+    const authority = createProductAuthority();
 
     const session = await createGraphMcpSession({
       fetch: createMockFetch(authority),
@@ -207,16 +210,19 @@ describe("createGraphMcpSession", () => {
     });
     expect(status.cursor).toBeDefined();
     expect(status.lastSyncedAt).toBeDefined();
-    expect(status.entityTypeCounts).toEqual([
-      { count: 1, name: "envVar", type: "app:envVar" },
-      { count: 1, name: "topic", type: "app:topic" },
-    ]);
+    expect(status.entityTypeCounts).toHaveLength(2);
+    expect(status.entityTypeCounts).toEqual(
+      expect.arrayContaining([
+        { count: 1, name: "topic", type: "pkm:topic" },
+        { count: 1, name: "envVar", type: "ops:envVar" },
+      ]),
+    );
   });
 });
 
 describe("createGraphMcpServer", () => {
   it("registers the read-first graph tools", async () => {
-    const authority = createAppAuthority();
+    const authority = createProductAuthority();
     const session = await createGraphMcpSession({
       fetch: createMockFetch(authority),
       url: "http://graph.test",
@@ -240,7 +246,7 @@ describe("createGraphMcpServer", () => {
   });
 
   it("registers gated write tools only when enabled", async () => {
-    const authority = createAppAuthority();
+    const authority = createProductAuthority();
     const session = await createGraphMcpSession({
       allowWrites: true,
       fetch: createMockFetch(authority),
@@ -267,8 +273,8 @@ describe("createGraphMcpServer", () => {
     }
   });
 
-  it("returns schema summaries and compact entity previews for the app namespace", async () => {
-    const authority = createAppAuthority();
+  it("returns schema summaries and compact entity previews for the pkm namespace", async () => {
+    const authority = createProductAuthority();
     const session = await createGraphMcpSession({
       fetch: createMockFetch(authority),
       url: "http://graph.test",
@@ -289,17 +295,17 @@ describe("createGraphMcpServer", () => {
       expect(types).toContainEqual(
         expect.objectContaining({
           kind: "entity",
-          type: "app:topic",
+          type: "pkm:topic",
         }),
       );
       expect(types).toContainEqual(
         expect.objectContaining({
           kind: "enum",
-          type: "app:topicKind",
+          type: "pkm:topicKind",
         }),
       );
 
-      const topicType = types.find((type) => type.type === "app:topic");
+      const topicType = types.find((type) => type.type === "pkm:topic");
       expect(topicType?.fields).toContainEqual(
         expect.objectContaining({
           path: "content",
@@ -309,7 +315,7 @@ describe("createGraphMcpServer", () => {
       );
 
       const entitiesResult = await callTool(client, "graph.listEntities", {
-        type: "app:topic",
+        type: "pkm:topic",
       });
       expect(entitiesResult.isError).toBe(false);
 
@@ -318,7 +324,7 @@ describe("createGraphMcpServer", () => {
         totalCount: number;
         type: string;
       };
-      expect(entities.type).toBe("app:topic");
+      expect(entities.type).toBe("pkm:topic");
       expect(entities.totalCount).toBe(1);
       expect(entities.entities).toHaveLength(1);
       expect(entities.entities[0]?.preview).toMatchObject({
@@ -479,7 +485,7 @@ describe("createGraphMcpServer", () => {
   });
 
   it("creates, updates, and deletes entities when writes are explicitly enabled", async () => {
-    const authority = createAppAuthority();
+    const authority = createProductAuthority();
     const session = await createGraphMcpSession({
       allowWrites: true,
       fetch: createMockFetch(authority),
@@ -490,7 +496,7 @@ describe("createGraphMcpServer", () => {
 
     try {
       const created = await callTool(client, "graph.createEntity", {
-        type: "app:topic",
+        type: "pkm:topic",
         values: {
           content: "Created through MCP",
           isArchived: false,
@@ -514,7 +520,7 @@ describe("createGraphMcpServer", () => {
           name: "Writable Topic",
           order: 2,
         },
-        type: "app:topic",
+        type: "pkm:topic",
       });
       expect(typeof createdId).toBe("string");
 
@@ -524,7 +530,7 @@ describe("createGraphMcpServer", () => {
           content: "Updated through MCP",
           name: "Writable Topic Updated",
         },
-        type: "app:topic",
+        type: "pkm:topic",
       });
       expect(updated.isError).toBe(false);
       expect(updated.structuredContent).toMatchObject({
@@ -533,23 +539,23 @@ describe("createGraphMcpServer", () => {
           id: createdId,
           name: "Writable Topic Updated",
         },
-        type: "app:topic",
+        type: "pkm:topic",
       });
 
       const deleted = await callTool(client, "graph.deleteEntity", {
         id: createdId,
-        type: "app:topic",
+        type: "pkm:topic",
       });
       expect(deleted.isError).toBe(false);
       expect(deleted.structuredContent).toEqual({
         deleted: true,
         id: createdId,
-        type: "app:topic",
+        type: "pkm:topic",
       });
 
       const missing = await callTool(client, "graph.getEntity", {
         id: createdId,
-        type: "app:topic",
+        type: "pkm:topic",
       });
       expect(missing.isError).toBe(true);
       expect(missing.structuredContent).toMatchObject({
@@ -557,7 +563,7 @@ describe("createGraphMcpServer", () => {
           code: "graph.missingEntity",
           details: {
             id: createdId,
-            type: "app:topic",
+            type: "pkm:topic",
           },
         },
       });

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
 import { GraphValidationError, edgeId, type GraphWriteTransaction } from "@io/core/graph";
-import { app } from "@io/core/graph/schema/app";
+import { pkm } from "@io/core/graph/schema/pkm";
 
 import { createExampleRuntime } from "./example-runtime.js";
 
@@ -15,7 +15,7 @@ function createTopicNameWriteTransaction(
     edgeId?: string;
   } = {},
 ): GraphWriteTransaction {
-  const retractOps = store.facts(topicId, edgeId(app.topic.fields.name)).map((edge) => ({
+  const retractOps = store.facts(topicId, edgeId(pkm.topic.fields.name)).map((edge) => ({
     op: "retract" as const,
     edgeId: edge.id,
   }));
@@ -24,7 +24,7 @@ function createTopicNameWriteTransaction(
     edge: {
       id: options.edgeId ?? store.newNode(),
       s: topicId,
-      p: edgeId(app.topic.fields.name),
+      p: edgeId(pkm.topic.fields.name),
       o: name,
     },
   };

@@ -19,7 +19,8 @@ import {
   type Store,
   type StoreSnapshot,
 } from "@io/core/graph";
-import { app } from "@io/core/graph/schema/app";
+import { ops } from "@io/core/graph/schema/ops";
+import { pkm } from "@io/core/graph/schema/pkm";
 
 import { seedExampleGraph } from "./example-data.js";
 import {
@@ -31,7 +32,7 @@ import {
   type WriteSecretFieldResult,
 } from "./secret-fields.js";
 
-const webAppGraph = { ...core, ...app } as const;
+const webAppGraph = { ...core, ...pkm, ...ops } as const;
 
 type WebAppGraph = typeof webAppGraph;
 type SecretFieldDefinition = {
@@ -225,7 +226,8 @@ function planAuthorityMutation<TResult>(
 } {
   const mutationStore = createStore();
   bootstrap(mutationStore, core);
-  bootstrap(mutationStore, app);
+  bootstrap(mutationStore, pkm);
+  bootstrap(mutationStore, ops);
   mutationStore.replace(snapshot);
 
   const mutationGraph = createTypeClient(mutationStore, webAppGraph);
@@ -234,7 +236,7 @@ function planAuthorityMutation<TResult>(
   const after = mutationStore.snapshot();
   const previousEdgeIds = new Set(before.edges.map((edge) => edge.id));
   const previousRetractedIds = new Set(before.retracted);
-  const ops: GraphWriteTransaction["ops"] = [
+  const writeOps: GraphWriteTransaction["ops"] = [
     ...after.retracted
       .filter((edgeId) => !previousRetractedIds.has(edgeId))
       .map((edgeId) => ({ op: "retract" as const, edgeId })),
@@ -247,11 +249,11 @@ function planAuthorityMutation<TResult>(
   ];
 
   return {
-    changed: ops.length > 0,
+    changed: writeOps.length > 0,
     result,
     transaction: {
       id: txId,
-      ops,
+      ops: writeOps,
     },
   };
 }
@@ -296,7 +298,8 @@ export async function createWebAppAuthority(
 ): Promise<WebAppAuthority> {
   const store = createStore();
   bootstrap(store, core);
-  bootstrap(store, app);
+  bootstrap(store, pkm);
+  bootstrap(store, ops);
 
   const persistedSecrets = await storage.loadSecrets();
   const secretValuesRef = {

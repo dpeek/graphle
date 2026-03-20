@@ -50,19 +50,19 @@ The initial namespace and schema-module ownership rules are concrete now:
   `core:boolean`, `core:date`, `core:url`, `core:email`, `core:slug`,
   `core:address`, `core:country`, `core:currency`, `core:language`, and
   `core:locale` stay in `core:` for now.
-- `app:` is the only other namespace bucket justified today. It covers the
-  current experiment and domain slices that are still being proven out. That
-  includes the current company/person, outliner block, env-var/secret-handle, and
-  workspace/workflow proof types composed by `app`.
+- `pkm:` and `ops:` are the current product namespace buckets justified today.
+  `pkm:` carries the knowledge/workflow proof types such as topics, while
+  `ops:` owns environment configuration slices such as env vars.
 - Do not pre-create extra namespace buckets such as `geo:`, `locale:`,
   `finance:`, or `collab:` before reusable code actually needs them.
-- Promotion out of `app:` should happen only as a concrete refactor that
-  updates imports, tests, and docs together.
+- Promotion into a more specific namespace should happen only as a concrete
+  refactor that updates imports, tests, and docs together, as the topic move to
+  `pkm:` and the env-var move to `ops:` did.
 
 The `graph` package owns canonical namespace keys and the long-term schema
-module layout for both `core:` and `app:`. Consumer packages such as `app`
-compose those modules into routes, seed data, and authority surfaces, but they
-do not own new durable namespace buckets.
+module layout for `core:` plus the current product namespaces. Consumer
+packages such as `app` compose those modules into routes, seed data, and
+authority surfaces, but they do not own new durable namespace buckets.
 
 ## What Is Not Yet Current
 

@@ -49,7 +49,7 @@ Icon assignment stays explicit:
 
 - `core:type.icon`
 - `core:predicate.icon`
-- future app-owned types such as `topic.icon`
+- future pkm-owned types such as `topic.icon`
 
 No global `icon` predicate is inherited from `core:node`.
 

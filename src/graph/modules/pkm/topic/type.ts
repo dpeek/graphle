@@ -3,16 +3,16 @@ import { defineType } from "@io/core/graph/def";
 import {
   entityReferenceComboboxEditorKind,
   existingEntityReferenceField,
-} from "../../../../graph/reference-policy.js";
-import { core } from "../../../core.js";
-import { booleanTypeModule } from "../../../core/index.js";
-import { markdownTypeModule } from "../../../core/markdown/index.js";
-import { numberTypeModule } from "../../../core/number/index.js";
-import { slugTypeModule } from "../../../core/slug/index.js";
-import { topicKindTypeModule } from "../topic-kind/index.js";
+} from "../../../graph/reference-policy.js";
+import { core } from "../../core.js";
+import { booleanTypeModule } from "../../core/index.js";
+import { markdownTypeModule } from "../../core/markdown/index.js";
+import { numberTypeModule } from "../../core/number/index.js";
+import { slugTypeModule } from "../../core/slug/index.js";
+import { topicKindTypeModule } from "./kind.js";
 
 export const topic = defineType({
-  values: { key: "app:topic", name: "Topic" },
+  values: { key: "pkm:topic", name: "Topic" },
   fields: {
     ...core.node.fields,
     kind: topicKindTypeModule.field({
@@ -50,7 +50,7 @@ export const topic = defineType({
         defaultOperator: "contains",
       },
     }),
-    parent: existingEntityReferenceField("app:topic", {
+    parent: existingEntityReferenceField("pkm:topic", {
       cardinality: "one?",
       excludeSubject: true,
       label: "Parent",
@@ -68,7 +68,7 @@ export const topic = defineType({
       editorKind: entityReferenceComboboxEditorKind,
       label: "Tags",
     }),
-    references: existingEntityReferenceField("app:topic", {
+    references: existingEntityReferenceField("pkm:topic", {
       cardinality: "many",
       collection: "unordered",
       label: "References",

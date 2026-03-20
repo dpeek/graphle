@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Describe the canonical `app:` env-var schema, its relationship to the
+Describe the canonical `ops:` env-var schema, its relationship to the
 core-owned `secretHandle` type, and the authority boundary that keeps plaintext
 secret material out of the replicated graph.
 
@@ -12,12 +12,18 @@ at `POST /api/secret-fields`.
 
 ## Graph Shape
 
-The canonical app slice lives alongside this doc under
-`../../../../src/graph/modules/app/env-vars/`. The slice is intentionally flat:
-`env-var.ts` defines the env-var type and validation helpers, and `index.ts`
-re-exports the public env-var surface plus the app-specific
-`buildSecretHandleName(...)` helper. The referenced secret-handle type now lives
-under `../../../../src/graph/modules/core/secret/`.
+The canonical ops slice lives alongside this doc under
+`../../../../src/graph/modules/ops/env-var/`. The slice uses the standard
+per-type module shape:
+
+- `type.ts`: defines the env-var type and validation helpers
+- `schema.ts`: re-exports the public env-var surface plus the
+  `buildSecretHandleName(...)` helper
+- `../../../../src/graph/schema/ops/env-var.ts`: compatibility shim for the
+  legacy schema import surface
+
+The referenced secret-handle type lives under
+`../../../../src/graph/modules/core/secret/`.
 
 Together, the env-var proof models:
 

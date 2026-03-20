@@ -147,18 +147,18 @@ Each row should show:
 The type list should be sourced from the full explorer namespace, not from a
 hand-picked entity catalog.
 
-That means the column includes ordinary app types and core support types such
-as:
+That means the column includes ordinary product types and core support types
+such as:
 
-- `app:topic`
-- `app:envVar`
+- `pkm:topic`
+- `ops:envVar`
 - `core:tag`
 - `core:icon`
 - `core:type`
 - `core:predicate`
 - `core:secretHandle`
 - scalar and enum definitions such as `core:string`, `core:markdown`, and
-  `app:topicKind`
+  `pkm:topicKind`
 
 ### Column 2: Targets
 
@@ -591,7 +591,7 @@ should still land incrementally.
 ### Phase 2: Expand the catalog
 
 - build the type list from the full explorer namespace
-- build instance lists for every entity type, not just app entities plus icons
+- build instance lists for every entity type, not just product entities plus icons
 - keep the existing inspectors temporarily while the catalog broadens
 - preserve the existing routes and top-level explorer layout during this phase
 

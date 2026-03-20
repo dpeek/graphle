@@ -112,7 +112,8 @@ modules.
 The current canonical tree is:
 
 - `../../src/graph/modules/core/` for `core:` types
-- `../../src/graph/modules/app/<slice>/` for `app:` types
+- `../../src/graph/modules/ops/<slice>/` for `ops:` types
+- `../../src/graph/modules/pkm/<slice>/` for `pkm:` types
 
 `../../src/graph/schema/` remains as the compatibility entry surface for existing
 package imports. Ownership now lives in `../../src/graph/modules/`, which keeps

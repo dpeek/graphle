@@ -1,5 +1,5 @@
 import { typeId } from "@io/core/graph";
-import { app } from "@io/core/graph/schema/app";
+import { pkm } from "@io/core/graph/schema/pkm";
 
 import type { ExplorerSelection } from "./model.js";
 import { newTarget, schemaTarget } from "./model.js";
@@ -20,7 +20,7 @@ export function readExplorerSearchParams(): URLSearchParams {
 export function readExplorerSelectionFromSearchParams(
   searchParams: URLSearchParams,
 ): ExplorerSelection {
-  const defaultTypeId = typeId(app.topic);
+  const defaultTypeId = typeId(pkm.topic);
   return {
     target: searchParams.get("target") ?? schemaTarget,
     typeId: searchParams.get("type") ?? defaultTypeId,

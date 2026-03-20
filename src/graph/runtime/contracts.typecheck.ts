@@ -6,8 +6,8 @@ import type {
 import type { GraphCommandSpec, ObjectViewSpec, WorkflowSpec } from "./index.js";
 
 const topicSummaryView = {
-  key: "app:topic:summary",
-  entity: "app:topic",
+  key: "pkm:topic:summary",
+  entity: "pkm:topic",
   titleField: "name",
   subtitleField: "kind",
   sections: [
@@ -28,14 +28,14 @@ const topicSummaryView = {
       presentation: "list",
     },
   ],
-  commands: ["app:topic:save"],
+  commands: ["pkm:topic:save"],
 } satisfies ObjectViewSpec;
 
 const topicReviewWorkflow = {
-  key: "app:topic:review",
+  key: "pkm:topic:review",
   label: "Review topic",
   description: "Review and update a topic.",
-  subjects: ["app:topic"],
+  subjects: ["pkm:topic"],
   steps: [
     {
       key: "review",
@@ -45,16 +45,16 @@ const topicReviewWorkflow = {
     {
       key: "save",
       title: "Save changes",
-      command: "app:topic:save",
+      command: "pkm:topic:save",
     },
   ],
-  commands: ["app:topic:save"],
+  commands: ["pkm:topic:save"],
 } satisfies WorkflowSpec;
 
 const saveTopicCommand = {
-  key: "app:topic:save",
+  key: "pkm:topic:save",
   label: "Save topic",
-  subject: "app:topic",
+  subject: "pkm:topic",
   execution: "optimisticVerify",
   input: {
     title: "Document graph explorer affordances",
@@ -64,7 +64,7 @@ const saveTopicCommand = {
   },
   policy: {
     capabilities: ["topic.write"],
-    touchesPredicates: ["app:topic.name", "app:topic.content"],
+    touchesPredicates: ["pkm:topic.name", "pkm:topic.content"],
   },
 } satisfies GraphCommandSpec<{ title: string }, { topicId: string }>;
 
@@ -78,8 +78,8 @@ void rootWorkflow;
 void rootCommand;
 
 void ({
-  key: "app:topic:summary",
-  entity: "app:topic",
+  key: "pkm:topic:summary",
+  entity: "pkm:topic",
   sections: [
     {
       key: "summary",
@@ -96,10 +96,10 @@ void ({
 } satisfies ObjectViewSpec);
 
 void ({
-  key: "app:topic:review",
+  key: "pkm:topic:review",
   label: "Review topic",
   description: "Review and update a topic.",
-  subjects: ["app:topic"],
+  subjects: ["pkm:topic"],
   steps: [
     {
       key: "review",
@@ -111,7 +111,7 @@ void ({
 } satisfies WorkflowSpec);
 
 void ({
-  key: "app:topic:save",
+  key: "pkm:topic:save",
   label: "Save topic",
   // @ts-expect-error commands must use one of the supported execution modes
   execution: "eventual",

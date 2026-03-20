@@ -9,7 +9,8 @@ import {
   type SyncedTypeClient,
 } from "@io/core/graph";
 import { GraphMutationRuntimeProvider } from "@io/core/graph/react";
-import { app } from "@io/core/graph/schema/app";
+import { ops } from "@io/core/graph/schema/ops";
+import { pkm } from "@io/core/graph/schema/pkm";
 import { Button } from "@io/web/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@io/web/card";
 import { Skeleton } from "@io/web/skeleton";
@@ -18,7 +19,9 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from "
 const syncUrl = "/api/sync";
 const transactionUrl = "/api/tx";
 
-export type GraphRuntime = SyncedTypeClient<typeof app>;
+const graphSchema = { ...pkm, ...ops } as const;
+
+export type GraphRuntime = SyncedTypeClient<typeof graphSchema>;
 
 const runtimeCache = new Map<string, Promise<GraphRuntime>>();
 
@@ -103,7 +106,7 @@ export function createWebTxIdFactory(): () => string {
 
 export async function createGraphRuntime(): Promise<GraphRuntime> {
   const createTxId = createWebTxIdFactory();
-  const runtime = createSyncedTypeClient(app, {
+  const runtime = createSyncedTypeClient(graphSchema, {
     createTxId,
     pull: (state) => fetchSyncPayload(state.cursor),
     push: pushTransaction,

@@ -50,9 +50,11 @@ shared `@io/web` primitive rather than reintroducing browser chrome locally.
   runtime contracts plus canonical built-in modules from `../../src/graph/modules/`
 - `@io/core/graph/runtime`, `@io/core/graph/authority`, `@io/core/graph/def`: stable runtime,
   authoritative persistence, and schema-authoring contracts
-- `@io/core/graph/modules`, `@io/core/graph/modules/app`, `@io/core/graph/modules/core`,
-  `@io/core/graph/modules/app/env-vars`, `@io/core/graph/modules/app/topic`: ownership-first
-  module entry surfaces that match the moved tree
+- `@io/core/graph/modules`, `@io/core/graph/modules/core`,
+  `@io/core/graph/modules/ops`, `@io/core/graph/modules/pkm`,
+  `@io/core/graph/modules/pkm/topic`,
+  `@io/core/graph/modules/ops/env-var`: ownership-first module entry surfaces that match the
+  moved tree
 - `@io/core/graph/adapters/react`, `@io/core/graph/adapters/react-dom`,
   `@io/core/graph/adapters/react-opentui`: ownership-first adapter entry surfaces that match
   `../../src/graph/adapters/`
@@ -67,7 +69,7 @@ shared `@io/web` primitive rather than reintroducing browser chrome locally.
 - `../../src/graph/runtime/react/`: host-neutral React ownership for predicate hooks,
   traversal helpers, mutation helpers, and resolver primitives that still depend on graph refs
 - `../../src/graph/modules/`: canonical home for built-in graph module authoring, including the
-  `core:` and `app:` schema families plus their namespace id maps
+  `core:`, `ops:`, and `pkm:` schema families plus their namespace id maps
 - `../../src/graph/adapters/`: host-specific adapter ownership for React entry composition,
   DOM capability registries, and the OpenTUI placeholder boundary
 - `../../src/graph/adapters/react-dom/editor/markdown.tsx`,

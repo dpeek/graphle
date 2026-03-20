@@ -10,13 +10,13 @@ import {
   sanitizeSvgMarkup,
   typeId,
 } from "@io/core/graph";
-import { app } from "@io/core/graph/schema/app";
+import { pkm } from "@io/core/graph/schema/pkm";
 
 function createGraph() {
   const store = createStore();
   bootstrap(store, core);
-  bootstrap(store, app);
-  return createTypeClient(store, { ...core, ...app });
+  bootstrap(store, pkm);
+  return createTypeClient(store, { ...core, ...pkm });
 }
 
 describe("graph icons", () => {
@@ -115,7 +115,7 @@ describe("graph icons", () => {
       name: "Planning",
       svg: graphIconSeeds.string.svg,
     });
-    const topicTypeId = typeId(app.topic);
+    const topicTypeId = typeId(pkm.topic);
     graph.type.ref(topicTypeId).fields.icon.set(iconId);
 
     const blockedDelete = graph.icon.validateDelete(iconId);

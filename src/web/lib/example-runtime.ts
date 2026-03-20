@@ -14,19 +14,21 @@ import {
   type SyncFreshness,
   type TotalSyncPayload,
 } from "@io/core/graph";
-import { app } from "@io/core/graph/schema/app";
+import { ops } from "@io/core/graph/schema/ops";
+import { pkm } from "@io/core/graph/schema/pkm";
 
 import { seedExampleGraph } from "./example-data.js";
 
-const appGraph = { ...core, ...app } as const;
+const productGraph = { ...core, ...pkm, ...ops } as const;
 
 function createExampleAuthorityGraph() {
   const store = createStore();
   bootstrap(store, core);
-  bootstrap(store, app);
+  bootstrap(store, pkm);
+  bootstrap(store, ops);
 
-  const graph = createTypeClient(store, appGraph);
-  const ids = seedExampleGraph(createTypeClient(store, appGraph));
+  const graph = createTypeClient(store, productGraph);
+  const ids = seedExampleGraph(createTypeClient(store, productGraph));
 
   return {
     store,
@@ -35,11 +37,11 @@ function createExampleAuthorityGraph() {
   };
 }
 
-export type ExampleSyncedClient = SyncedTypeClient<typeof appGraph>;
+export type ExampleSyncedClient = SyncedTypeClient<typeof productGraph>;
 
 export function createExampleRuntime() {
   const authority = createExampleAuthorityGraph();
-  let writes = createAuthoritativeGraphWriteSession(authority.store, appGraph, {
+  let writes = createAuthoritativeGraphWriteSession(authority.store, productGraph, {
     cursorPrefix: "example:",
   });
   const clients = new Set<ExampleSyncedClient>();
@@ -71,7 +73,7 @@ export function createExampleRuntime() {
   }
 
   function resetAuthorityStream(cursorPrefix = "reset:"): string {
-    writes = createAuthoritativeGraphWriteSession(authority.store, appGraph, {
+    writes = createAuthoritativeGraphWriteSession(authority.store, productGraph, {
       cursorPrefix,
     });
     return writes.getBaseCursor();
@@ -80,7 +82,7 @@ export function createExampleRuntime() {
   function createClient(): ExampleSyncedClient {
     let client: ExampleSyncedClient;
     const queuedTxIds: string[] = [];
-    client = createSyncedTypeClient(appGraph, {
+    client = createSyncedTypeClient(productGraph, {
       pull: (state) =>
         state.cursor ? getIncrementalSyncResult(state.cursor) : createSyncPayload(),
       createTxId() {
@@ -129,7 +131,8 @@ export function createExampleRuntime() {
 
   const runtime = createClient();
   return Object.assign(runtime, {
-    app,
+    pkm,
+    ops,
     ids: authority.ids,
     createPeer,
     commitLocalMutation,

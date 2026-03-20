@@ -12,7 +12,8 @@ import {
   type FetchImpl,
   type SyncedTypeClient,
 } from "../graph/index.js";
-import { app } from "../graph/schema/app.js";
+import { ops } from "../graph/schema/ops.js";
+import { pkm } from "../graph/schema/pkm.js";
 import {
   GraphMcpToolError,
   buildSelectionFromPaths,
@@ -133,6 +134,8 @@ export type GraphMcpSession = {
   reset(): Promise<void>;
   sync(): Promise<void>;
 };
+
+const graphNamespace = { ...pkm, ...ops } as const;
 
 function toValidationErrorMessage(error: GraphValidationError<unknown>): string {
   return error.result.issues[0]?.message ?? error.message;
@@ -415,7 +418,7 @@ export function normalizeGraphMcpUrl(url: string): string {
 export async function createGraphMcpSession(
   options: GraphMcpSessionOptions = {},
 ): Promise<GraphMcpSession> {
-  const namespace = options.namespace ?? app;
+  const namespace = options.namespace ?? graphNamespace;
   const baseUrl = normalizeGraphMcpUrl(options.url ?? defaultHttpGraphUrl);
   const allowWrites = options.allowWrites ?? false;
   const entityTypeEntries = Object.entries(namespace)

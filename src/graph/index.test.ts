@@ -23,10 +23,11 @@ describe("@io/core/graph package entry surfaces", () => {
       "./graph/authority": "./src/graph/runtime/authority.ts",
       "./graph/def": "./src/graph/runtime/def.ts",
       "./graph/modules": "./src/graph/modules/index.ts",
-      "./graph/modules/app": "./src/graph/modules/app.ts",
-      "./graph/modules/app/env-vars": "./src/graph/modules/app/env-vars/index.ts",
-      "./graph/modules/app/topic": "./src/graph/modules/app/topic/index.ts",
       "./graph/modules/core": "./src/graph/modules/core.ts",
+      "./graph/modules/ops": "./src/graph/modules/ops.ts",
+      "./graph/modules/ops/env-var": "./src/graph/modules/ops/env-var/schema.ts",
+      "./graph/modules/pkm": "./src/graph/modules/pkm.ts",
+      "./graph/modules/pkm/topic": "./src/graph/modules/pkm/topic/schema.ts",
       "./graph/react": "./src/graph/react/index.ts",
       "./graph/react-dom": "./src/graph/react-dom/index.ts",
       "./graph/react-opentui": "./src/graph/react-opentui/index.ts",
@@ -34,13 +35,18 @@ describe("@io/core/graph package entry surfaces", () => {
       "./graph/adapters/react-dom": "./src/graph/adapters/react-dom/index.ts",
       "./graph/adapters/react-opentui": "./src/graph/adapters/react-opentui/index.ts",
       "./graph/schema": "./src/graph/schema/index.ts",
-      "./graph/schema/app": "./src/graph/schema/app.ts",
-      "./graph/schema/app/env-vars": "./src/graph/schema/app/env-vars/index.ts",
-      "./graph/schema/app/topic": "./src/graph/schema/app/topic/index.ts",
       "./graph/schema/core": "./src/graph/schema/core.ts",
+      "./graph/schema/ops": "./src/graph/schema/ops.ts",
+      "./graph/schema/ops/env-var": "./src/graph/schema/ops/env-var.ts",
+      "./graph/schema/pkm": "./src/graph/schema/pkm.ts",
+      "./graph/schema/pkm/topic": "./src/graph/schema/pkm/topic.ts",
     });
     expect(packageJson.exports["./graph/modules/*"]).toBeUndefined();
     expect(packageJson.exports["./graph/adapters/*"]).toBeUndefined();
+    expect(packageJson.exports["./graph/modules/app"]).toBeUndefined();
+    expect(packageJson.exports["./graph/modules/app/topic"]).toBeUndefined();
+    expect(packageJson.exports["./graph/schema/app"]).toBeUndefined();
+    expect(packageJson.exports["./graph/schema/app/topic"]).toBeUndefined();
     expect(packageJson.exports["./graph/schema/*"]).toBeUndefined();
     expect(packageJson.exports["./graph/taxonomy/*"]).toBeUndefined();
   });
@@ -134,6 +140,8 @@ describe("@io/core/graph package entry surfaces", () => {
 
     expect(rootExports).toMatchObject({
       core: expect.any(Object),
+      ops: expect.any(Object),
+      pkm: expect.any(Object),
       createIdMap: expect.any(Function),
       defineNamespace: expect.any(Function),
       defineReferenceField: expect.any(Function),
@@ -172,5 +180,24 @@ describe("@io/core/graph package entry surfaces", () => {
         ],
       },
     });
+  });
+
+  it("keeps module and schema root surfaces aligned with the canonical namespace exports", async () => {
+    const [moduleExports, schemaExports, coreExports, opsExports, pkmExports] = await Promise.all([
+      import("./modules/index.js"),
+      import("./schema/index.js"),
+      import("./modules/core.js"),
+      import("./modules/ops.js"),
+      import("./modules/pkm.js"),
+    ]);
+
+    expect(moduleExports.core).toBe(coreExports.core);
+    expect(moduleExports.ops).toBe(opsExports.ops);
+    expect(moduleExports.pkm).toBe(pkmExports.pkm);
+    expect(schemaExports.core).toBe(coreExports.core);
+    expect(schemaExports.ops).toBe(opsExports.ops);
+    expect(schemaExports.pkm).toBe(pkmExports.pkm);
+    expect(typeof schemaExports.ops.envVar.values.id).toBe("string");
+    expect(typeof schemaExports.pkm.topic.values.id).toBe("string");
   });
 });

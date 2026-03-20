@@ -9,12 +9,13 @@ import {
   type PredicateRef,
   typeId,
 } from "@io/core/graph";
-import { app } from "@io/core/graph/schema/app";
+import { ops } from "@io/core/graph/schema/ops";
+import { pkm } from "@io/core/graph/schema/pkm";
 
 import type { WriteSecretFieldInput, WriteSecretFieldResult } from "../../lib/secret-fields.js";
 import type { GraphRuntime } from "../graph-runtime-bootstrap.js";
 
-export const explorerNamespace = { ...core, ...app } as const;
+export const explorerNamespace = { ...core, ...pkm, ...ops } as const;
 
 export type ExplorerNamespace = typeof explorerNamespace;
 export type ExplorerClient = NamespaceClient<ExplorerNamespace>;
