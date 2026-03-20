@@ -31,7 +31,7 @@ function setupGraph() {
     headline: "KS-ROOT",
     status: testNamespace.status.values.draft.id,
     score: 10,
-    estimate: 3,
+    estimate: 180_000,
     contact: {
       email: "root@example.com",
     },
@@ -42,7 +42,7 @@ function setupGraph() {
     headline: "KS-CHILD",
     status: testNamespace.status.values.inReview.id,
     score: 20,
-    estimate: 5,
+    estimate: 300_000,
     parent: rootRecordId,
     reviewers: [reviewerAId, reviewerBId],
     contact: {

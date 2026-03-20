@@ -25,7 +25,7 @@ describe("rangeOf typing and namespace resolution", () => {
     expect(core.predicate.fields.cardinality.range as string).toBe(core.cardinality.values.id);
     expect(testNamespace.record.fields.contactEmail.range as string).toBe(core.email.values.id);
     expect(testNamespace.record.fields.status.range as string).toBe(testNamespace.status.values.id);
-    expect(testNamespace.record.fields.estimate.range as string).toBe(core.number.values.id);
+    expect(testNamespace.record.fields.estimate.range as string).toBe(core.duration.values.id);
     expect(testNamespace.record.fields.slug.range as string).toBe(core.slug.values.id);
     expect(testNamespace.record.fields.tags.range as string).toBe(core.tag.values.id);
     expect(testNamespace.record.fields.website.range as string).toBe(core.url.values.id);

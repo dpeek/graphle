@@ -11,7 +11,6 @@ import { colorTypeModule } from "../../modules/core/color/index.js";
 import { dateTypeModule } from "../../modules/core/date/index.js";
 import { durationTypeModule } from "../../modules/core/duration/index.js";
 import { emailTypeModule } from "../../modules/core/email/index.js";
-import { jsonTypeModule } from "../../modules/core/json/index.js";
 import { markdownTypeModule } from "../../modules/core/markdown/index.js";
 import { moneyTypeModule } from "../../modules/core/money/index.js";
 import { numberTypeModule } from "../../modules/core/number/index.js";
@@ -299,14 +298,10 @@ export const kitchenSinkRecord = defineType({
         label: "Quantity band",
       },
     }),
-    estimate: numberTypeModule.field({
+    estimate: durationTypeModule.field({
       cardinality: "one?",
       meta: {
         label: "Estimate",
-      },
-      filter: {
-        operators: ["equals", "gt", "lt"] as const,
-        defaultOperator: "equals",
       },
     }),
     archived: booleanTypeModule.field({
@@ -349,10 +344,10 @@ export const kitchenSinkRecord = defineType({
         label: "Details",
       },
     }),
-    metadata: jsonTypeModule.field({
+    budgetBand: rangeTypeModule.field({
       cardinality: "one?",
       meta: {
-        label: "Metadata",
+        label: "Budget band",
       },
     }),
     accentColor: colorTypeModule.field({

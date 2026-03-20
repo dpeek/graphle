@@ -23,3 +23,13 @@ from top-level `schema/` ownership toward explicit module ownership.
   wrappers for existing imports
 - follow-up slices can extend module families here without reintroducing the
   legacy `../../src/graph/graph/` compatibility bucket
+
+## Structured Value Fit
+
+- use `duration` for time estimates, windows, and intervals rather than raw
+  numbers
+- use `percent` for bounded 0-100 ratios such as completion or confidence
+- use `quantity` for measured amounts that need an explicit unit
+- use `money` for currency amounts rather than stringly amount/currency pairs
+- use `rate` for numerator-per-denominator values such as burn or throughput
+- use `range` for min/max bounds such as completion bands or budget bands

@@ -24,7 +24,7 @@ function createRecordFields() {
     statusHistory: [kitchenSink.status.values.draft.id],
     score: 84,
     completion: 72.5,
-    duration: 90_000,
+    estimate: 1_800_000,
     quantity: { amount: 12.5, unit: "kg" },
     budget: { amount: 1250, currency: defaultMoneyCurrencyKey },
     burnRate: {
@@ -47,17 +47,22 @@ function createRecordFields() {
       min: { amount: 10, unit: "kg" },
       max: { amount: 25, unit: "kg" },
     },
+    budgetBand: {
+      kind: "money",
+      min: { amount: 1500, currency: defaultMoneyCurrencyKey },
+      max: { amount: 3000, currency: defaultMoneyCurrencyKey },
+    },
   });
   const recordRef = graph.record.ref(recordId);
 
   return {
     budget: recordRef.fields.budget,
+    budgetBand: recordRef.fields.budgetBand,
     burnRate: recordRef.fields.burnRate,
     completion: recordRef.fields.completion,
     completionBand: recordRef.fields.completionBand,
-    duration: recordRef.fields.duration,
+    estimate: recordRef.fields.estimate,
     quantity: recordRef.fields.quantity,
-    quantityBand: recordRef.fields.quantityBand,
   };
 }
 
@@ -69,31 +74,31 @@ describe("generic react-dom field coverage", () => {
     const moneyEditor = defaultWebFieldResolver.resolveEditor(fields.budget);
     const percentView = defaultWebFieldResolver.resolveView(fields.completion);
     const percentEditor = defaultWebFieldResolver.resolveEditor(fields.completion);
-    const durationView = defaultWebFieldResolver.resolveView(fields.duration);
-    const durationEditor = defaultWebFieldResolver.resolveEditor(fields.duration);
+    const estimateView = defaultWebFieldResolver.resolveView(fields.estimate);
+    const estimateEditor = defaultWebFieldResolver.resolveEditor(fields.estimate);
     const quantityView = defaultWebFieldResolver.resolveView(fields.quantity);
     const quantityEditor = defaultWebFieldResolver.resolveEditor(fields.quantity);
     const rateView = defaultWebFieldResolver.resolveView(fields.burnRate);
     const rateEditor = defaultWebFieldResolver.resolveEditor(fields.burnRate);
     const percentRangeView = defaultWebFieldResolver.resolveView(fields.completionBand);
     const percentRangeEditor = defaultWebFieldResolver.resolveEditor(fields.completionBand);
-    const quantityRangeView = defaultWebFieldResolver.resolveView(fields.quantityBand);
-    const quantityRangeEditor = defaultWebFieldResolver.resolveEditor(fields.quantityBand);
+    const budgetRangeView = defaultWebFieldResolver.resolveView(fields.budgetBand);
+    const budgetRangeEditor = defaultWebFieldResolver.resolveEditor(fields.budgetBand);
 
     expect(moneyView.status).toBe("resolved");
     expect(moneyEditor.status).toBe("resolved");
     expect(percentView.status).toBe("resolved");
     expect(percentEditor.status).toBe("resolved");
-    expect(durationView.status).toBe("resolved");
-    expect(durationEditor.status).toBe("resolved");
+    expect(estimateView.status).toBe("resolved");
+    expect(estimateEditor.status).toBe("resolved");
     expect(quantityView.status).toBe("resolved");
     expect(quantityEditor.status).toBe("resolved");
     expect(rateView.status).toBe("resolved");
     expect(rateEditor.status).toBe("resolved");
     expect(percentRangeView.status).toBe("resolved");
     expect(percentRangeEditor.status).toBe("resolved");
-    expect(quantityRangeView.status).toBe("resolved");
-    expect(quantityRangeEditor.status).toBe("resolved");
+    expect(budgetRangeView.status).toBe("resolved");
+    expect(budgetRangeEditor.status).toBe("resolved");
 
     if (moneyView.status === "resolved") {
       expect(moneyView.capability.kind).toBe("money/amount");
@@ -107,11 +112,11 @@ describe("generic react-dom field coverage", () => {
     if (percentEditor.status === "resolved") {
       expect(percentEditor.capability.kind).toBe("number/percent");
     }
-    if (durationView.status === "resolved") {
-      expect(durationView.capability.kind).toBe("number/duration");
+    if (estimateView.status === "resolved") {
+      expect(estimateView.capability.kind).toBe("number/duration");
     }
-    if (durationEditor.status === "resolved") {
-      expect(durationEditor.capability.kind).toBe("number/duration");
+    if (estimateEditor.status === "resolved") {
+      expect(estimateEditor.capability.kind).toBe("number/duration");
     }
     if (quantityView.status === "resolved") {
       expect(quantityView.capability.kind).toBe("number/quantity");
@@ -131,11 +136,11 @@ describe("generic react-dom field coverage", () => {
     if (percentRangeEditor.status === "resolved") {
       expect(percentRangeEditor.capability.kind).toBe("number/range");
     }
-    if (quantityRangeView.status === "resolved") {
-      expect(quantityRangeView.capability.kind).toBe("number/range");
+    if (budgetRangeView.status === "resolved") {
+      expect(budgetRangeView.capability.kind).toBe("number/range");
     }
-    if (quantityRangeEditor.status === "resolved") {
-      expect(quantityRangeEditor.capability.kind).toBe("number/range");
+    if (budgetRangeEditor.status === "resolved") {
+      expect(budgetRangeEditor.capability.kind).toBe("number/range");
     }
   });
 
@@ -149,14 +154,14 @@ describe("generic react-dom field coverage", () => {
     const percentViewMarkup = renderToStaticMarkup(
       <PredicateFieldView predicate={fields.completion} />,
     );
-    const durationViewMarkup = renderToStaticMarkup(
-      <PredicateFieldView predicate={fields.duration} />,
+    const estimateViewMarkup = renderToStaticMarkup(
+      <PredicateFieldView predicate={fields.estimate} />,
     );
     const percentEditorMarkup = renderToStaticMarkup(
       <PredicateFieldEditor predicate={fields.completion} />,
     );
-    const durationEditorMarkup = renderToStaticMarkup(
-      <PredicateFieldEditor predicate={fields.duration} />,
+    const estimateEditorMarkup = renderToStaticMarkup(
+      <PredicateFieldEditor predicate={fields.estimate} />,
     );
     const quantityViewMarkup = renderToStaticMarkup(
       <PredicateFieldView predicate={fields.quantity} />,
@@ -174,11 +179,11 @@ describe("generic react-dom field coverage", () => {
     const percentRangeEditorMarkup = renderToStaticMarkup(
       <PredicateFieldEditor predicate={fields.completionBand} />,
     );
-    const quantityRangeViewMarkup = renderToStaticMarkup(
-      <PredicateFieldView predicate={fields.quantityBand} />,
+    const budgetRangeViewMarkup = renderToStaticMarkup(
+      <PredicateFieldView predicate={fields.budgetBand} />,
     );
-    const quantityRangeEditorMarkup = renderToStaticMarkup(
-      <PredicateFieldEditor predicate={fields.quantityBand} />,
+    const budgetRangeEditorMarkup = renderToStaticMarkup(
+      <PredicateFieldEditor predicate={fields.budgetBand} />,
     );
 
     expect(moneyViewMarkup).toContain('data-web-field-kind="money/amount"');
@@ -187,20 +192,20 @@ describe("generic react-dom field coverage", () => {
     expect(moneyEditorMarkup).toContain('value="1250"');
     expect(percentViewMarkup).toContain('data-web-field-kind="number/percent"');
     expect(percentViewMarkup).toContain("72.5%");
-    expect(durationViewMarkup).toContain('data-web-field-kind="number/duration"');
-    expect(durationViewMarkup).toContain("1.5 min");
+    expect(estimateViewMarkup).toContain('data-web-field-kind="number/duration"');
+    expect(estimateViewMarkup).toContain("30 min");
     expect(quantityViewMarkup).toContain('data-web-field-kind="number/quantity"');
     expect(quantityViewMarkup).toContain("12.5 kg");
     expect(rateViewMarkup).toContain('data-web-field-kind="number/rate"');
     expect(rateViewMarkup).toContain("1250 USD / 1 day");
     expect(percentRangeViewMarkup).toContain('data-web-field-kind="number/range"');
     expect(percentRangeViewMarkup).toContain("10% .. 80%");
-    expect(quantityRangeViewMarkup).toContain('data-web-field-kind="number/range"');
-    expect(quantityRangeViewMarkup).toContain("10 kg .. 25 kg");
+    expect(budgetRangeViewMarkup).toContain('data-web-field-kind="number/range"');
+    expect(budgetRangeViewMarkup).toContain("1500 USD .. 3000 USD");
     expect(percentEditorMarkup).toContain('data-web-field-kind="number/percent"');
     expect(percentEditorMarkup).toContain("%");
-    expect(durationEditorMarkup).toContain('data-web-field-kind="number/duration"');
-    expect(durationEditorMarkup).toContain('value="1.5"');
+    expect(estimateEditorMarkup).toContain('data-web-field-kind="number/duration"');
+    expect(estimateEditorMarkup).toContain('value="30"');
     expect(quantityEditorMarkup).toContain('data-web-field-kind="number/quantity"');
     expect(quantityEditorMarkup).toContain('value="12.5"');
     expect(quantityEditorMarkup).toContain('value="kg"');
@@ -209,8 +214,8 @@ describe("generic react-dom field coverage", () => {
     expect(rateEditorMarkup).toContain('value="1250"');
     expect(percentRangeEditorMarkup).toContain('data-web-field-kind="number/range"');
     expect(percentRangeEditorMarkup).toContain('value="10"');
-    expect(quantityRangeEditorMarkup).toContain('data-web-field-kind="number/range"');
-    expect(quantityRangeEditorMarkup).toContain('value="25"');
-    expect(quantityRangeEditorMarkup).toContain('value="kg"');
+    expect(budgetRangeEditorMarkup).toContain('data-web-field-kind="number/range"');
+    expect(budgetRangeEditorMarkup).toContain('value="1500"');
+    expect(budgetRangeEditorMarkup).toContain('value="3000"');
   });
 });

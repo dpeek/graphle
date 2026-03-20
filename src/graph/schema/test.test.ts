@@ -48,8 +48,10 @@ describe("kitchen sink schema namespace", () => {
     expect(kitchenSink.record.fields.burnRate.range as string).toBe(core.rate.values.id);
     expect(kitchenSink.record.fields.completionBand.range as string).toBe(core.range.values.id);
     expect(kitchenSink.record.fields.quantityBand.range as string).toBe(core.range.values.id);
+    expect(kitchenSink.record.fields.estimate.range as string).toBe(core.duration.values.id);
     expect(kitchenSink.record.fields.status.range as string).toBe(kitchenSink.status.values.id);
     expect(kitchenSink.record.fields.secret.range as string).toBe(kitchenSink.secret.values.id);
+    expect(kitchenSink.record.fields.budgetBand.range as string).toBe(core.range.values.id);
     expect(kitchenSink.status.values.inReview.key).toBe("kitchen:status.in_review");
     expect(typeof kitchenSink.status.values.inReview.id).toBe("string");
     expect(fieldTreeId(kitchenSink.record.fields.review)).toBeTruthy();
@@ -64,6 +66,8 @@ describe("kitchen sink schema namespace", () => {
     expect(kitchenSink.record.fields.completion.meta.editor.kind).toBe("number/percent");
     expect(kitchenSink.record.fields.duration.meta.display.kind).toBe("number/duration");
     expect(kitchenSink.record.fields.duration.meta.editor.kind).toBe("number/duration");
+    expect(kitchenSink.record.fields.estimate.meta.display.kind).toBe("number/duration");
+    expect(kitchenSink.record.fields.estimate.meta.editor.kind).toBe("number/duration");
     expect(kitchenSink.record.fields.quantity.meta.display.kind).toBe("number/quantity");
     expect(kitchenSink.record.fields.quantity.meta.editor.kind).toBe("number/quantity");
     expect(kitchenSink.record.fields.budget.meta.display.kind).toBe("money/amount");
@@ -74,6 +78,8 @@ describe("kitchen sink schema namespace", () => {
     expect(kitchenSink.record.fields.completionBand.meta.editor.kind).toBe("number/range");
     expect(kitchenSink.record.fields.quantityBand.meta.display.kind).toBe("number/range");
     expect(kitchenSink.record.fields.quantityBand.meta.editor.kind).toBe("number/range");
+    expect(kitchenSink.record.fields.budgetBand.meta.display.kind).toBe("number/range");
+    expect(kitchenSink.record.fields.budgetBand.meta.editor.kind).toBe("number/range");
     expect(kitchenSink.record.fields.reviewers.meta.collection?.kind).toBe("ordered");
     expect(kitchenSink.record.fields.tags.meta.reference.selection).toBe("existing-only");
     expect(kitchenSink.record.fields.tags.meta.reference.create).toBe(true);
@@ -149,6 +155,7 @@ describe("kitchen sink schema namespace", () => {
       score: 84,
       completion: 72.5,
       duration: 90_000,
+      estimate: 1_800_000,
       quantity: { amount: 12.5, unit: "kg" },
       budget: { amount: 1250, currency: defaultMoneyCurrencyKey },
       burnRate: {
@@ -170,6 +177,11 @@ describe("kitchen sink schema namespace", () => {
         kind: "quantity",
         min: { amount: 10, unit: "kg" },
         max: { amount: 25, unit: "kg" },
+      },
+      budgetBand: {
+        kind: "money",
+        min: { amount: 1500, currency: defaultMoneyCurrencyKey },
+        max: { amount: 3000, currency: defaultMoneyCurrencyKey },
       },
       owner: personId,
       reviewers: [personId],
@@ -190,6 +202,7 @@ describe("kitchen sink schema namespace", () => {
       score: 84,
       completion: 72.5,
       duration: 90_000,
+      estimate: 1_800_000,
       quantity: { amount: 12.5, unit: "kg" },
       budget: { amount: 1250, currency: defaultMoneyCurrencyKey },
       burnRate: {
@@ -211,6 +224,11 @@ describe("kitchen sink schema namespace", () => {
         kind: "quantity",
         min: { amount: 10, unit: "kg" },
         max: { amount: 25, unit: "kg" },
+      },
+      budgetBand: {
+        kind: "money",
+        min: { amount: 1500, currency: defaultMoneyCurrencyKey },
+        max: { amount: 3000, currency: defaultMoneyCurrencyKey },
       },
       owner: personId,
       reviewers: [personId],

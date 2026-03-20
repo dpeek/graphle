@@ -93,7 +93,7 @@ describe("entity traversal helpers", () => {
       "website",
       "contactEmail",
       "details",
-      "metadata",
+      "budgetBand",
       "accentColor",
       "externalId",
       "syncedAt",

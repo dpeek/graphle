@@ -414,7 +414,7 @@ describe("graph validation", () => {
 
   it("returns explicit undefined payloads for successful optional field clear preflight", () => {
     const { graph } = createGraph();
-    const recordId = graph.record.create(createRecordInput({ estimate: 1999 }));
+    const recordId = graph.record.create(createRecordInput({ estimate: 1_200_000 }));
     const recordRef = graph.record.ref(recordId);
 
     const result = recordRef.fields.estimate.validateClear();
@@ -431,7 +431,7 @@ describe("graph validation", () => {
     if (!result.ok) throw new Error("Expected optional clear validation to pass");
     expect(Object.hasOwn(result.value, "estimate")).toBe(true);
     expect(result.value["estimate"]).toBeUndefined();
-    expect(recordRef.fields.estimate.get()).toBe(1999);
+    expect(recordRef.fields.estimate.get()).toBe(1_200_000);
   });
 
   it("hides internal clear sentinels from caller-facing validation results", () => {
@@ -671,7 +671,8 @@ describe("graph validation", () => {
       expect.arrayContaining([
         expect.objectContaining({
           source: "type",
-          code: "number.notFinite",
+          code: "value.invalid",
+          message: 'Field "estimate" is invalid: Duration values must be finite.',
           predicateKey: testNamespace.record.fields.estimate.key,
         }),
       ]),
@@ -697,7 +698,7 @@ describe("graph validation", () => {
         predicateKey: testNamespace.record.fields.estimate.key,
         result: graph.record.validateCreate({
           ...createRecordInput(),
-          estimate: "1" as unknown as number,
+          estimate: "30 min" as unknown as number,
         }),
       },
       {

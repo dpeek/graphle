@@ -173,8 +173,8 @@ describe("typed refs", () => {
     companyRef.fields.name.set("Acme 2");
     expect(companyRef.fields.name.get()).toBe("Acme 2");
 
-    companyRef.fields.estimate.set(1999);
-    expect(companyRef.fields.estimate.get()).toBe(1999);
+    companyRef.fields.estimate.set(1_200_000);
+    expect(companyRef.fields.estimate.get()).toBe(1_200_000);
     companyRef.fields.estimate.clear();
     expect(companyRef.fields.estimate.get()).toBeUndefined();
 
