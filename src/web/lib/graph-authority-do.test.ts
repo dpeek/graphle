@@ -90,7 +90,16 @@ function createCursor<T extends Record<string, unknown>>(
 ): DurableObjectSqlCursor<T> {
   return {
     one() {
-      return rows[0] ?? null;
+      if (rows.length !== 1) {
+        throw new Error(
+          `Expected exactly one result from SQL query, but got ${rows.length === 0 ? "no results" : `${rows.length} results`}.`,
+        );
+      }
+      const row = rows[0];
+      if (!row) {
+        throw new Error("Expected a SQL row when the cursor reports exactly one result.");
+      }
+      return row;
     },
     *[Symbol.iterator]() {
       yield* rows;

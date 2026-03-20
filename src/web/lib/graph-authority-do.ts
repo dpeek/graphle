@@ -130,10 +130,10 @@ function readOneRow<T extends SqlRow>(
   ...bindings: unknown[]
 ): T | null {
   const cursor = sql.exec<T>(query, ...bindings);
-  if (typeof cursor.one === "function") {
-    return cursor.one() ?? null;
+  for (const row of cursor) {
+    return row;
   }
-  return readAllRows(cursor)[0] ?? null;
+  return null;
 }
 
 function requireInteger(value: unknown, label: string): number {

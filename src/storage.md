@@ -53,6 +53,8 @@ Current behavior:
 - the Durable Object constructor bootstraps the SQLite schema synchronously
 - startup hydrates graph snapshot rows, retained transaction rows, and secret
   side-data from SQL tables
+- optional metadata reads iterate the SQL cursor directly so an unseeded table
+  cleanly returns "no row" instead of depending on `cursor.one()`
 - startup treats broken retained transaction windows as reset baselines instead
   of advertising stale cursors after restart
 - retained history is pruned by transaction count (currently a 128-transaction

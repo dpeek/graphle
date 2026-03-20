@@ -1,12 +1,14 @@
 import { describe, expect, it } from "bun:test";
 
+import { app } from "../schema/app";
 import { bootstrap } from "./bootstrap";
 import { createTypeClient } from "./client";
 import { core } from "./core";
 import { createHttpGraphClient, defaultHttpGraphUrl, type FetchImpl } from "./http-client";
 import { createIdMap, defineNamespace } from "./identity";
-import { defineType } from "./schema";
+import { defineType, edgeId, typeId } from "./schema";
 import { createStore } from "./store";
+import { createSyncedTypeClient } from "./sync";
 import {
   createAuthoritativeGraphWriteSession,
   createTotalSyncPayload,
@@ -100,5 +102,37 @@ describe("createHttpGraphClient", () => {
       "Seeded item",
       "Created from client",
     ]);
+  });
+
+  it("does not resurrect bootstrapped retracted facts during total sync", async () => {
+    const authorityStore = createStore();
+    bootstrap(authorityStore, core);
+    bootstrap(authorityStore, app);
+
+    const topicTypeId = typeId(app.topic);
+    const topicNamePredicateId = edgeId(core.node.fields.name);
+    const currentNameEdge = authorityStore.facts(topicTypeId, topicNamePredicateId)[0];
+    if (!currentNameEdge) throw new Error("Expected bootstrapped topic name edge.");
+
+    authorityStore.batch(() => {
+      authorityStore.retract(currentNameEdge.id);
+      authorityStore.assert(topicTypeId, topicNamePredicateId, "Topics");
+    });
+
+    const payload = createTotalSyncPayload(authorityStore, {
+      cursor: "server:1",
+      namespace: app,
+    });
+
+    const client = createSyncedTypeClient(app, {
+      createTxId: () => "cli:1",
+      pull: async () => payload,
+    });
+
+    await expect(client.sync.sync()).resolves.toMatchObject({
+      mode: "total",
+      cursor: "server:1",
+    });
+    expect(client.graph.topic.get(topicTypeId)?.name).toBe("Topics");
   });
 });

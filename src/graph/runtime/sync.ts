@@ -597,19 +597,14 @@ function materializeTotalSyncPayload(
     return payload;
   }
 
-  const retractedIds = new Set(payload.snapshot.retracted);
-  const currentFactKeys = new Set(
-    payload.snapshot.edges
-      .filter((edge) => !retractedIds.has(edge.id))
-      .map((edge) => logicalFactKey(edge)),
-  );
+  const payloadFactKeys = new Set(payload.snapshot.edges.map((edge) => logicalFactKey(edge)));
   const edgeIds = new Set(payload.snapshot.edges.map((edge) => edge.id));
   const mergedRetractedIds = new Set(payload.snapshot.retracted);
   const edges = payload.snapshot.edges.map((edge) => ({ ...edge }));
   const retracted = [...payload.snapshot.retracted];
 
   for (const edge of preserveSnapshot.edges) {
-    if (currentFactKeys.has(logicalFactKey(edge))) continue;
+    if (payloadFactKeys.has(logicalFactKey(edge))) continue;
     if (edgeIds.has(edge.id)) continue;
     edges.push({ ...edge });
     edgeIds.add(edge.id);
