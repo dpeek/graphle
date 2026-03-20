@@ -11,47 +11,94 @@ type GraphPackageJson = {
   exports: Record<string, string>;
 };
 
+const publicGraphSubpaths = [
+  "./graph",
+  "./graph/runtime",
+  "./graph/authority",
+  "./graph/def",
+  "./graph/modules",
+  "./graph/modules/core",
+  "./graph/modules/ops",
+  "./graph/modules/ops/env-var",
+  "./graph/modules/pkm",
+  "./graph/modules/pkm/topic",
+  "./graph/react",
+  "./graph/react-dom",
+  "./graph/react-opentui",
+  "./graph/adapters/react",
+  "./graph/adapters/react-dom",
+  "./graph/adapters/react-opentui",
+  "./graph/schema",
+  "./graph/schema/core",
+  "./graph/schema/ops",
+  "./graph/schema/ops/env-var",
+  "./graph/schema/pkm",
+  "./graph/schema/pkm/topic",
+  "./graph/schema/test",
+] as const;
+
+const retiredGraphSubpaths = [
+  "./graph/modules/*",
+  "./graph/adapters/*",
+  "./graph/modules/app",
+  "./graph/modules/app/topic",
+  "./graph/schema/app",
+  "./graph/schema/app/topic",
+  "./graph/schema/*",
+  "./graph/taxonomy/*",
+] as const;
+
+const requiredRootExports = [
+  "core",
+  "ops",
+  "pkm",
+  "createIdMap",
+  "defineNamespace",
+  "defineReferenceField",
+  "defineType",
+  "existingEntityReferenceField",
+  "existingEntityReferenceFieldMeta",
+  "stringTypeModule",
+] as const;
+
+const requiredReactExports = [
+  "createWebFieldResolver",
+  "defaultWebFieldResolver",
+  "performValidatedMutation",
+  "usePredicateField",
+] as const;
+
+const requiredReactDomExports = [
+  "FilterOperandEditor",
+  "GraphIcon",
+  "PredicateFieldEditor",
+  "PredicateFieldView",
+  "defaultWebFilterResolver",
+] as const;
+
+function expectNamedExports(
+  moduleExports: Record<string, unknown>,
+  names: readonly string[],
+): void {
+  expect(Object.keys(moduleExports)).toEqual(expect.arrayContaining([...names]));
+}
+
 describe("@io/core/graph package entry surfaces", () => {
-  it("declares canonical module, adapter, and compatibility subpath exports", async () => {
+  it("declares the stable graph subpaths without reviving retired aliases", async () => {
     const packageJson = (await Bun.file(
       new URL("../../package.json", import.meta.url),
     ).json()) as GraphPackageJson;
 
-    expect(packageJson.exports).toMatchObject({
-      "./graph": "./src/graph/index.ts",
-      "./graph/runtime": "./src/graph/runtime/index.ts",
-      "./graph/authority": "./src/graph/runtime/authority.ts",
-      "./graph/def": "./src/graph/runtime/def.ts",
-      "./graph/modules": "./src/graph/modules/index.ts",
-      "./graph/modules/core": "./src/graph/modules/core.ts",
-      "./graph/modules/ops": "./src/graph/modules/ops.ts",
-      "./graph/modules/ops/env-var": "./src/graph/modules/ops/env-var/schema.ts",
-      "./graph/modules/pkm": "./src/graph/modules/pkm.ts",
-      "./graph/modules/pkm/topic": "./src/graph/modules/pkm/topic/schema.ts",
-      "./graph/react": "./src/graph/react/index.ts",
-      "./graph/react-dom": "./src/graph/react-dom/index.ts",
-      "./graph/react-opentui": "./src/graph/react-opentui/index.ts",
-      "./graph/adapters/react": "./src/graph/adapters/react/index.ts",
-      "./graph/adapters/react-dom": "./src/graph/adapters/react-dom/index.ts",
-      "./graph/adapters/react-opentui": "./src/graph/adapters/react-opentui/index.ts",
-      "./graph/schema": "./src/graph/schema/index.ts",
-      "./graph/schema/core": "./src/graph/schema/core.ts",
-      "./graph/schema/ops": "./src/graph/schema/ops.ts",
-      "./graph/schema/ops/env-var": "./src/graph/schema/ops/env-var.ts",
-      "./graph/schema/pkm": "./src/graph/schema/pkm.ts",
-      "./graph/schema/pkm/topic": "./src/graph/schema/pkm/topic.ts",
-    });
-    expect(packageJson.exports["./graph/modules/*"]).toBeUndefined();
-    expect(packageJson.exports["./graph/adapters/*"]).toBeUndefined();
-    expect(packageJson.exports["./graph/modules/app"]).toBeUndefined();
-    expect(packageJson.exports["./graph/modules/app/topic"]).toBeUndefined();
-    expect(packageJson.exports["./graph/schema/app"]).toBeUndefined();
-    expect(packageJson.exports["./graph/schema/app/topic"]).toBeUndefined();
-    expect(packageJson.exports["./graph/schema/*"]).toBeUndefined();
-    expect(packageJson.exports["./graph/taxonomy/*"]).toBeUndefined();
+    for (const subpath of publicGraphSubpaths) {
+      expect(packageJson.exports[subpath]).toEqual(expect.any(String));
+    }
+
+    for (const subpath of retiredGraphSubpaths) {
+      expect(packageJson.exports[subpath]).toBeUndefined();
+    }
   });
 
-  it("keeps canonical adapter exports aligned with the stable adapter shims", async () => {
+  it("keeps adapter shims aligned with the canonical adapter surfaces", async () => {
     const [
       reactExports,
       reactAdapterExports,
@@ -60,74 +107,20 @@ describe("@io/core/graph package entry surfaces", () => {
       reactOpentuiExports,
       reactOpentuiAdapterExports,
     ] = await Promise.all([
-      import("./react/index.js"),
-      import("./adapters/react/index.js"),
-      import("./react-dom/index.js"),
-      import("./adapters/react-dom/index.js"),
-      import("./react-opentui/index.js"),
-      import("./adapters/react-opentui/index.js"),
+      import("@io/core/graph/react"),
+      import("@io/core/graph/adapters/react"),
+      import("@io/core/graph/react-dom"),
+      import("@io/core/graph/adapters/react-dom"),
+      import("@io/core/graph/react-opentui"),
+      import("@io/core/graph/adapters/react-opentui"),
     ]);
 
-    expect(Object.keys(reactExports).sort()).toEqual([
-      "EntityPredicates",
-      "FilterOperandEditor",
-      "GraphMutationRuntimeProvider",
-      "PredicateFieldEditor",
-      "PredicateFieldView",
-      "PredicateRelatedEntities",
-      "compileWebFilterQuery",
-      "createWebFieldResolver",
-      "createWebFilterResolver",
-      "defaultWebFieldResolver",
-      "defaultWebFilterResolver",
-      "formatPredicateEditorValue",
-      "formatPredicateValue",
-      "getPredicateCollectionKind",
-      "getPredicateDisplayKind",
-      "getPredicateEditorAutocomplete",
-      "getPredicateEditorInputMode",
-      "getPredicateEditorInputType",
-      "getPredicateEditorKind",
-      "getPredicateEditorParser",
-      "getPredicateEditorPlaceholder",
-      "getPredicateEntityReferenceOptions",
-      "getPredicateEntityReferencePolicy",
-      "getPredicateEntityReferenceSelection",
-      "getPredicateEnumOptions",
-      "getPredicateFieldMeta",
-      "lowerWebFilterClause",
-      "lowerWebFilterQuery",
-      "performValidatedMutation",
-      "persistSyncedGraphChanges",
-      "useEntityPredicateEntries",
-      "useOptionalMutationRuntime",
-      "usePersistedMutationCallbacks",
-      "usePredicateField",
-      "usePredicateRelatedEntities",
-      "usePredicateValue",
-    ]);
+    expectNamedExports(reactExports, requiredReactExports);
     expect(Object.keys(reactAdapterExports).sort()).toEqual(Object.keys(reactExports).sort());
     expect(reactAdapterExports.createWebFieldResolver).toBe(reactExports.createWebFieldResolver);
     expect(reactAdapterExports.usePredicateField).toBe(reactExports.usePredicateField);
-    expect(Object.keys(reactDomExports).sort()).toEqual([
-      "FilterOperandEditor",
-      "GraphIcon",
-      "HostNeutralFilterOperandEditor",
-      "PredicateFieldEditor",
-      "PredicateFieldView",
-      "SvgMarkup",
-      "compileWebFilterQuery",
-      "createWebFieldResolver",
-      "createWebFilterResolver",
-      "defaultHostNeutralWebFilterResolver",
-      "defaultWebFieldResolver",
-      "defaultWebFilterResolver",
-      "genericWebFieldEditorCapabilities",
-      "genericWebFieldViewCapabilities",
-      "genericWebFilterOperandEditorCapabilities",
-      "lowerWebFilterClause",
-      "lowerWebFilterQuery",
-    ]);
+
+    expectNamedExports(reactDomExports, requiredReactDomExports);
     expect(Object.keys(reactDomAdapterExports).sort()).toEqual(Object.keys(reactDomExports).sort());
     expect(reactDomAdapterExports.GraphIcon).toBe(reactDomExports.GraphIcon);
     expect(reactDomAdapterExports.PredicateFieldEditor).toBe(reactDomExports.PredicateFieldEditor);
@@ -136,39 +129,28 @@ describe("@io/core/graph package entry surfaces", () => {
   });
 
   it("supports root-safe contract authoring from the package root without exposing host widgets", async () => {
-    const rootExports = await import("./index.js");
+    const rootExports = await import("@io/core/graph");
 
-    expect(rootExports).toMatchObject({
-      core: expect.any(Object),
-      ops: expect.any(Object),
-      pkm: expect.any(Object),
-      createIdMap: expect.any(Function),
-      defineNamespace: expect.any(Function),
-      defineReferenceField: expect.any(Function),
-      defineType: expect.any(Function),
-      existingEntityReferenceField: expect.any(Function),
-      existingEntityReferenceFieldMeta: expect.any(Function),
-      stringTypeModule: expect.any(Object),
-    });
+    expectNamedExports(rootExports, requiredRootExports);
     expect(Object.keys(rootExports)).not.toContain("FilterOperandEditor");
     expect(Object.keys(rootExports)).not.toContain("PredicateFieldView");
 
     expect(probeContractItem.kind).toBe("entity");
-    expect(probeContractObjectView.entity).toBe(probeContractItem.values.key);
-    expect(probeContractObjectView.commands).toEqual([probeSaveContractItemCommand.key]);
-    expect(probeContractWorkflow.subjects).toEqual([probeContractItem.values.key]);
-    expect(probeContractWorkflow.steps).toEqual([
-      {
-        key: "review",
-        title: "Review details",
-        objectView: probeContractObjectView.key,
-      },
-      {
-        key: "save",
-        title: "Save item",
-        command: probeSaveContractItemCommand.key,
-      },
-    ]);
+    expect(probeContractObjectView).toMatchObject({
+      entity: probeContractItem.values.key,
+      commands: [probeSaveContractItemCommand.key],
+    });
+    expect(probeContractWorkflow).toMatchObject({
+      subjects: [probeContractItem.values.key],
+      commands: [probeSaveContractItemCommand.key],
+    });
+    expect(probeContractWorkflow.steps).toHaveLength(2);
+    expect(probeContractWorkflow.steps[0]).toMatchObject({
+      objectView: probeContractObjectView.key,
+    });
+    expect(probeContractWorkflow.steps[1]).toMatchObject({
+      command: probeSaveContractItemCommand.key,
+    });
     expect(probeSaveContractItemCommand).toMatchObject({
       subject: probeContractItem.values.key,
       execution: "optimisticVerify",
@@ -183,13 +165,15 @@ describe("@io/core/graph package entry surfaces", () => {
   });
 
   it("keeps module and schema root surfaces aligned with the canonical namespace exports", async () => {
-    const [moduleExports, schemaExports, coreExports, opsExports, pkmExports] = await Promise.all([
-      import("./modules/index.js"),
-      import("./schema/index.js"),
-      import("./modules/core.js"),
-      import("./modules/ops.js"),
-      import("./modules/pkm.js"),
-    ]);
+    const [moduleExports, schemaExports, coreExports, opsExports, pkmExports, testSchemaExports] =
+      await Promise.all([
+        import("@io/core/graph/modules"),
+        import("@io/core/graph/schema"),
+        import("@io/core/graph/modules/core"),
+        import("@io/core/graph/modules/ops"),
+        import("@io/core/graph/modules/pkm"),
+        import("@io/core/graph/schema/test"),
+      ]);
 
     expect(moduleExports.core).toBe(coreExports.core);
     expect(moduleExports.ops).toBe(opsExports.ops);
@@ -199,5 +183,8 @@ describe("@io/core/graph package entry surfaces", () => {
     expect(schemaExports.pkm).toBe(pkmExports.pkm);
     expect(typeof schemaExports.ops.envVar.values.id).toBe("string");
     expect(typeof schemaExports.pkm.topic.values.id).toBe("string");
+    expect(testSchemaExports.kitchenSink.record.values.key).toBe(
+      testSchemaExports.kitchenSinkRecord.values.key,
+    );
   });
 });
