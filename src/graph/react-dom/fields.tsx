@@ -1,3 +1,5 @@
+import { MarkdownRenderer } from "@io/web/markdown";
+
 import {
   formatPredicateValue,
   getPredicateEntityReferenceSelection,
@@ -5,9 +7,9 @@ import {
   type PredicateFieldProps,
   type PredicateFieldViewCapability,
 } from "../react/index.js";
-import { normalizeTextValue, SvgPreview } from "./editor/shared.js";
+import { normalizeTextValue } from "./editor/shared.js";
+import { SvgPreview } from "./editor/svg-preview.js";
 import { EntityReferenceSummary } from "./entity-reference-ui.js";
-import { MarkdownRenderer } from "./markdown.js";
 
 type AnyFieldProps = PredicateFieldProps<any, any>;
 

@@ -13,6 +13,24 @@ now runs through a raw-SQL SQLite-backed Durable Object adapter that retains a
 bounded transaction window and keeps secret plaintext in authority-only side
 storage.
 
+## Ownership Boundary
+
+`web` is the product surface package, not the shared browser-primitive package.
+
+- keep reusable browser UI and editor chrome in `../../lib/web/src/*`
+- keep graph-aware field resolver, predicate mutation, and typed preview logic
+  in `../../src/graph/react-dom/*`
+- keep route/page composition, explorer state, topic workflows, and Worker
+  authority wiring in `../../src/web/*`
+
+In practice, `web` should compose `@io/web` primitives such as shared inputs,
+comboboxes, markdown rendering, Monaco loading, and source/preview shells, but
+it should not become the default home for reusable editor infrastructure. If a
+browser component can be reused by non-graph screens without importing graph
+types, move it to `@io/web`. If it is deciding how a graph predicate validates,
+mutates, or previews, leave that code in `graph` even when the surrounding
+chrome comes from `@io/web`.
+
 ## Docs
 
 - `../index.md`
@@ -43,6 +61,13 @@ storage.
   closed-option fields, markdown authoring UI, and shared `ColorInput`-backed
   color predicate editing with an inline swatch trigger in the input chrome
 - `../../src/web/components/app-shell.tsx`: shared shell and navigation
+- `../../lib/web/src/markdown.tsx`: shared markdown renderer with Bun-first and
+  `react-markdown` fallback behavior reused by graph field views and previews
+- `../../lib/web/src/source-preview.tsx`,
+  `../../lib/web/src/monaco.tsx`: shared source/preview editor shell, Monaco
+  bootstrapping, shared source-editor preset, and panel styling reused by graph
+  DOM field editors and future browser editors that need the same chrome, but
+  without moving graph predicate semantics into `@io/web`
 - `../../src/web/lib/graph-authority-do.ts`: SQLite-backed Durable Object
   adapter that bootstraps graph tables in the constructor, hydrates retained
   history during authority init, commits graph and secret side-storage changes

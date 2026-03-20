@@ -1,9 +1,5 @@
-import { cn } from "@io/web/utils";
-import { useState, type ReactNode } from "react";
-
 import {
   GraphValidationError,
-  sanitizeSvgMarkup,
   type GraphMutationValidationResult,
   type PredicateRef,
 } from "../../index.js";
@@ -14,8 +10,6 @@ import {
   type MutationValidation,
   type PredicateFieldProps,
 } from "../../react/index.js";
-import { SvgMarkup } from "../icon.js";
-import { sourcePreviewPanelClassName } from "../source-preview-styles.js";
 
 export type AnyPredicate = PredicateRef<any, any>;
 export type AnyFieldProps = PredicateFieldProps<any, any>;
@@ -23,8 +17,6 @@ export type AnyFieldProps = PredicateFieldProps<any, any>;
 export const fieldActionClassName =
   "border-input bg-muted/30 text-foreground inline-flex items-center justify-center rounded-lg border px-2.5 py-1.5 text-xs font-medium transition hover:bg-muted";
 export const unsetSelectValue = "__io_unset_select_value__";
-
-export type SourcePreviewMode = "source" | "preview";
 
 export function useFieldMutationCallbacks({
   onMutationError,
@@ -133,84 +125,6 @@ export function normalizeDateValue(value: unknown): string {
   if (value instanceof Date) return value.toISOString();
   if (value === undefined) return "";
   return String(value);
-}
-
-export function SourcePreviewFieldEditor({
-  defaultMode = "source",
-  kind,
-  preview,
-  source,
-}: {
-  defaultMode?: SourcePreviewMode;
-  kind: string;
-  preview: ReactNode;
-  source: ReactNode;
-}) {
-  const [mode, setMode] = useState<SourcePreviewMode>(defaultMode);
-  const isPreview = mode === "preview";
-
-  return (
-    <div className="space-y-3" data-web-field-kind={kind} data-web-source-preview-mode={mode}>
-      <div className="relative" data-web-source-preview-panel={mode}>
-        <button
-          aria-label={isPreview ? "Hide preview" : "Show preview"}
-          aria-pressed={isPreview}
-          className={cn(
-            "border-border/80 absolute top-3 right-3 z-10 inline-flex items-center rounded-full border px-3 py-1.5 text-xs font-medium shadow-sm backdrop-blur transition",
-            isPreview
-              ? "border-foreground/10 bg-foreground text-background"
-              : "bg-background/90 text-foreground hover:bg-background",
-          )}
-          data-web-source-preview-toggle="preview"
-          data-web-source-preview-toggle-state={isPreview ? "active" : "inactive"}
-          onClick={() => setMode(isPreview ? "source" : "preview")}
-          type="button"
-        >
-          Preview
-        </button>
-
-        {isPreview ? preview : source}
-      </div>
-    </div>
-  );
-}
-
-export function EmptyPreview({ attribute, children }: { attribute: string; children: ReactNode }) {
-  return (
-    <p
-      className={cn(sourcePreviewPanelClassName, "text-muted-foreground border-dashed text-sm")}
-      data-web-source-preview-empty={attribute}
-    >
-      {children}
-    </p>
-  );
-}
-
-export function SvgPreview({ content }: { content: string }) {
-  if (content.trim().length === 0) {
-    return <EmptyPreview attribute="svg">Paste SVG markup to preview it.</EmptyPreview>;
-  }
-
-  const preview = sanitizeSvgMarkup(content);
-  if (!preview.ok) {
-    return (
-      <EmptyPreview attribute="svg">
-        {preview.issues[0]?.message ?? "SVG preview is unavailable because the markup is invalid."}
-      </EmptyPreview>
-    );
-  }
-
-  return (
-    <div
-      className={cn(sourcePreviewPanelClassName, "flex items-center justify-center")}
-      data-web-svg-preview="ready"
-    >
-      <SvgMarkup
-        className="text-foreground inline-flex max-w-full items-center justify-center [&>svg]:max-h-48 [&>svg]:max-w-full"
-        svg={content}
-      />
-    </div>
-  );
 }
 
 export function getNormalizedColorValue(

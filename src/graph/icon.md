@@ -69,20 +69,21 @@ Icons are edited through the existing `entities` section.
 
 - `core:icon` appears as a normal entity type in the entity-type list
 - icon entities reuse the generic entity inspector
-- the `svg` predicate renders a shared source/preview editor
+- the `svg` predicate renders the shared `@io/web` source/preview editor shell
 - icon reference fields still use the shared Base UI entity-reference combobox
 
 `/graph/icons` can remain as a route alias, but it should land in the generic entity explorer rather than a dedicated icon panel.
 
 ## Preview Toggle Editing
 
-Markdown and SVG now share the same explorer interaction pattern:
+Markdown and SVG now share the same `@io/web` source/preview shell:
 
 - source mode shows Monaco without line numbers when available and falls back to a textarea
 - a single `Preview` toggle sits in the top-right overlay of the editor or preview panel
 - enabling preview renders the typed content, and the same toggle returns to source mode
 - source and preview panels share the same rounded-xl field surface and 16px inset so markdown and SVG stay visually aligned
-- the field resolver owns the toggle rather than individual screens
+- the field resolver owns the toggle and the shared Monaco preset rather than individual screens,
+  while graph keeps the SVG sanitization and preview wiring
 
 For SVG preview:
 
@@ -113,7 +114,8 @@ The same sanitizer is reused by:
 ## Current Coverage
 
 - schema/runtime coverage for `core:icon`, `core:svg`, create/update validation, and delete safety
-- generic field resolver coverage for markdown and SVG source/preview editing
+- generic field resolver coverage for markdown and SVG editing on the shared
+  `@io/web` source/preview shell
 - explorer coverage for icon assignment and icon-entity editing through the normal entity pane
 
 ## Deferred

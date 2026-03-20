@@ -98,6 +98,9 @@ lib/
 
 - app routes, app composition, Worker integration, and browser-specific product
   surfaces
+- consumes reusable browser primitives from `@io/web` and graph-aware field
+  adapters from `graph`, but does not own either package's shared editor
+  contracts
 
 `lib/web/`
 
@@ -105,6 +108,42 @@ lib/
 - generic source/preview shell
 - Monaco wrappers
 - markdown rendering helpers
+
+## Browser Editor Boundary
+
+The extraction line is now:
+
+- `@io/web` owns reusable browser primitives that do not need graph schema,
+  typed refs, or graph mutation semantics
+- `graph` owns graph-aware editor and field behavior, even when the browser UI
+  is rendered through shared `@io/web` primitives
+- `src/web` owns route-level product surfaces and app composition on top of
+  both packages
+
+Put code in `@io/web` when it is any of:
+
+- presentational browser chrome such as source/preview shells and panel styles
+- Monaco bootstrapping, loading fallbacks, and generic source-editor presets
+- markdown rendering helpers or other typed-content renderers with no graph
+  dependency
+- reusable form controls, comboboxes, and layout primitives that any browser
+  surface could consume
+
+Keep code in `graph` when it needs any of:
+
+- `PredicateRef`, typed entity refs, compiled schema metadata, or field-kind
+  capability registration
+- graph validation, normalization, persisted mutation callbacks, or draft to
+  predicate writes
+- graph-owned preview behavior such as SVG sanitization, icon markup rules, or
+  typed entity-reference summaries
+- resolver composition that decides which field editor or view a graph
+  predicate should use
+
+If a future browser editor could be reused outside graph-backed field editing
+without carrying graph runtime imports, it belongs in `@io/web`. If it needs
+graph contracts to function, keep it in `graph` and have it compose the shared
+`@io/web` primitive instead of reimplementing the browser shell.
 
 ## Naming Rules
 

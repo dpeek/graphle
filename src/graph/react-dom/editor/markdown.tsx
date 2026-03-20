@@ -1,3 +1,10 @@
+import { MarkdownRenderer } from "@io/web/markdown";
+import { MonacoSourceEditor, sourcePreviewMonacoOptions } from "@io/web/monaco";
+import {
+  EmptyPreview,
+  SourcePreviewFieldEditor,
+  sourcePreviewPanelClassName,
+} from "@io/web/source-preview";
 import { useDeferredValue, useEffect, useState } from "react";
 
 import {
@@ -5,11 +12,7 @@ import {
   performValidatedMutation,
   usePredicateField,
 } from "../../react/index.js";
-import { MarkdownRenderer, MonacoMarkdownEditor } from "../markdown.js";
-import { sourcePreviewPanelClassName } from "../source-preview-styles.js";
 import {
-  EmptyPreview,
-  SourcePreviewFieldEditor,
   normalizeTextValue,
   setPredicateValue,
   useFieldMutationCallbacks,
@@ -54,9 +57,7 @@ export function MarkdownFieldEditor({
             className={sourcePreviewPanelClassName}
             data-web-markdown-preview={deferredDraft === draft ? "ready" : "deferred"}
           >
-            <div className="topic-markdown">
-              <MarkdownRenderer content={deferredDraft} />
-            </div>
+            <MarkdownRenderer className="topic-markdown" content={deferredDraft} />
           </div>
         ) : (
           <EmptyPreview attribute="markdown">
@@ -66,7 +67,14 @@ export function MarkdownFieldEditor({
       }
       source={
         <div aria-invalid={isInvalid || undefined}>
-          <MonacoMarkdownEditor onChange={applyDraft} placeholder={placeholder} value={draft} />
+          <MonacoSourceEditor
+            language="markdown"
+            onChange={applyDraft}
+            options={sourcePreviewMonacoOptions}
+            placeholder={placeholder}
+            sourceKind="markdown"
+            value={draft}
+          />
         </div>
       }
     />

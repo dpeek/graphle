@@ -1,14 +1,30 @@
-import type { editor as MonacoEditorNamespace } from "monaco-editor";
-import { startTransition, useEffect, useState } from "react";
-import type { ComponentType, ReactNode } from "react";
-import ReactMarkdown from "react-markdown";
-
 import {
   sourcePreviewEditorFrameClassName,
   sourcePreviewTextareaClassName,
-} from "./source-preview-styles.js";
+} from "@io/web/source-preview";
+import type { editor as MonacoEditorNamespace } from "monaco-editor";
+import { startTransition, useEffect, useState, type ComponentType, type ReactNode } from "react";
 
-type BunMarkdownApi = typeof Bun.markdown;
+export const sourcePreviewMonacoOptions = {
+  automaticLayout: true,
+  fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, monospace",
+  fontSize: 13,
+  folding: false,
+  lineDecorationsWidth: 0,
+  lineNumbers: "off",
+  lineNumbersMinChars: 0,
+  minimap: { enabled: false },
+  overviewRulerBorder: false,
+  overviewRulerLanes: 0,
+  padding: { top: 16, bottom: 16 },
+  renderWhitespace: "selection",
+  roundedSelection: false,
+  scrollBeyondLastLine: false,
+  tabSize: 2,
+  wordWrap: "on",
+  wrappingIndent: "indent",
+} satisfies MonacoEditorNamespace.IStandaloneEditorConstructionOptions;
+
 type MonacoEditorComponent = ComponentType<{
   defaultLanguage?: string;
   height?: number | string;
@@ -18,16 +34,6 @@ type MonacoEditorComponent = ComponentType<{
   theme?: string;
   value?: string;
 }>;
-
-type GlobalWithOptionalBun = typeof globalThis & {
-  Bun?: {
-    markdown?: BunMarkdownApi;
-  };
-};
-
-function getBunMarkdown(): BunMarkdownApi | null {
-  return (globalThis as GlobalWithOptionalBun).Bun?.markdown ?? null;
-}
 
 function CodeEditorFallback({
   onChange,
@@ -60,19 +66,23 @@ function CodeEditorFallback({
   );
 }
 
-export function MonacoCodeEditor({
+export function MonacoSourceEditor({
   height = 360,
   language,
   onChange,
+  options,
   placeholder,
   sourceKind,
+  theme = "vs",
   value,
 }: {
   height?: number | string;
-  language: string;
-  onChange(nextValue: string): void;
+  language?: string;
+  onChange?(nextValue: string): void;
+  options?: MonacoEditorNamespace.IStandaloneEditorConstructionOptions;
   placeholder?: string;
   sourceKind: string;
+  theme?: string;
   value: string;
 }) {
   const [Editor, setEditor] = useState<MonacoEditorComponent | null>(null);
@@ -133,72 +143,11 @@ export function MonacoCodeEditor({
             value={value}
           />
         }
-        onChange={(nextValue) => onChange(nextValue ?? "")}
-        options={{
-          automaticLayout: true,
-          fontFamily:
-            "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, monospace",
-          fontSize: 13,
-          folding: false,
-          lineDecorationsWidth: 0,
-          lineNumbers: "off",
-          lineNumbersMinChars: 0,
-          minimap: { enabled: false },
-          overviewRulerBorder: false,
-          overviewRulerLanes: 0,
-          padding: { top: 16, bottom: 16 },
-          renderWhitespace: "selection",
-          roundedSelection: false,
-          scrollBeyondLastLine: false,
-          tabSize: 2,
-          wordWrap: "on",
-          wrappingIndent: "indent",
-        }}
-        theme="vs"
+        onChange={(nextValue) => onChange?.(nextValue ?? "")}
+        options={options}
+        theme={theme}
         value={value}
       />
     </div>
-  );
-}
-
-export function MarkdownRenderer({ className, content }: { className?: string; content: string }) {
-  const bunMarkdown = getBunMarkdown();
-
-  return (
-    <div className={className} data-web-markdown-renderer={bunMarkdown ? "bun" : "react-markdown"}>
-      {bunMarkdown ? (
-        bunMarkdown.react(content, undefined, {
-          autolinks: true,
-          headings: { ids: true },
-          reactVersion: 19,
-          tagFilter: true,
-        })
-      ) : (
-        <ReactMarkdown>{content}</ReactMarkdown>
-      )}
-    </div>
-  );
-}
-
-export function MonacoMarkdownEditor({
-  height = 360,
-  onChange,
-  placeholder,
-  value,
-}: {
-  height?: number | string;
-  onChange(nextValue: string): void;
-  placeholder?: string;
-  value: string;
-}) {
-  return (
-    <MonacoCodeEditor
-      height={height}
-      language="markdown"
-      onChange={onChange}
-      placeholder={placeholder}
-      sourceKind="markdown"
-      value={value}
-    />
   );
 }

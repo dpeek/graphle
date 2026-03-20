@@ -1,3 +1,5 @@
+import { MonacoSourceEditor, sourcePreviewMonacoOptions } from "@io/web/monaco";
+import { SourcePreviewFieldEditor } from "@io/web/source-preview";
 import { useDeferredValue, useEffect, useState } from "react";
 
 import {
@@ -5,16 +7,14 @@ import {
   performValidatedMutation,
   usePredicateField,
 } from "../../react/index.js";
-import { MonacoCodeEditor } from "../markdown.js";
 import {
-  SourcePreviewFieldEditor,
-  SvgPreview,
   normalizeTextValue,
   setPredicateValue,
   useFieldMutationCallbacks,
   validatePredicateValue,
   type AnyFieldProps,
 } from "./shared.js";
+import { SvgPreview } from "./svg-preview.js";
 
 export function SvgFieldEditor({ onMutationError, onMutationSuccess, predicate }: AnyFieldProps) {
   const callbacks = useFieldMutationCallbacks({ onMutationError, onMutationSuccess });
@@ -47,10 +47,11 @@ export function SvgFieldEditor({ onMutationError, onMutationSuccess, predicate }
       preview={<SvgPreview content={deferredDraft} />}
       source={
         <div aria-invalid={isInvalid || undefined}>
-          <MonacoCodeEditor
+          <MonacoSourceEditor
             height={360}
             language="xml"
             onChange={applyDraft}
+            options={sourcePreviewMonacoOptions}
             placeholder={placeholder}
             sourceKind="svg"
             value={draft}
