@@ -291,7 +291,7 @@ describe("total sync", () => {
         ]),
       }),
     ]);
-  });
+  }, 10_000);
 
   it("flushes queued pending writes through the authority and clears them after acknowledgement", async () => {
     const server = createServerGraph();

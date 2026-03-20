@@ -21,6 +21,8 @@ export * from "./number/index.js";
 export * from "./percent/index.js";
 export * from "./predicate/index.js";
 export * from "./quantity/index.js";
+export * from "./range/index.js";
+export * from "./rate/index.js";
 export * from "./secret/index.js";
 export * from "./slug/index.js";
 export * from "./svg/index.js";

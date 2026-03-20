@@ -16,6 +16,8 @@ import { numberTypeModule } from "./core/number/index.js";
 import { percentTypeModule } from "./core/percent/index.js";
 import { predicate } from "./core/predicate/index.js";
 import { quantityTypeModule } from "./core/quantity/index.js";
+import { rangeTypeModule } from "./core/range/index.js";
+import { rateTypeModule } from "./core/rate/index.js";
 import { secretHandle } from "./core/secret/index.js";
 import { slugTypeModule } from "./core/slug/index.js";
 import { stringTypeModule } from "./core/string/index.js";
@@ -54,6 +56,10 @@ const percent = percentTypeModule.type;
 
 const quantity = quantityTypeModule.type;
 
+const range = rangeTypeModule.type;
+
+const rate = rateTypeModule.type;
+
 export const core = defineNamespace(coreIdMap, {
   string,
   number,
@@ -70,6 +76,8 @@ export const core = defineNamespace(coreIdMap, {
   svg,
   percent,
   quantity,
+  range,
+  rate,
   icon,
   tag,
   type: coreType,

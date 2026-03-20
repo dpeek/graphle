@@ -83,6 +83,16 @@ function QuantityFieldView({ predicate }: AnyFieldProps) {
   );
 }
 
+function RangeFieldView({ predicate }: AnyFieldProps) {
+  const { value } = usePredicateField(predicate);
+  return <span data-web-field-kind="number/range">{formatPredicateValue(predicate, value)}</span>;
+}
+
+function RateFieldView({ predicate }: AnyFieldProps) {
+  const { value } = usePredicateField(predicate);
+  return <span data-web-field-kind="number/rate">{formatPredicateValue(predicate, value)}</span>;
+}
+
 function MoneyFieldView({ predicate }: AnyFieldProps) {
   const { value } = usePredicateField(predicate);
   return <span data-web-field-kind="money/amount">{formatPredicateValue(predicate, value)}</span>;
@@ -162,6 +172,8 @@ export const genericWebFieldViewCapabilities = [
   { kind: "number/duration", Component: DurationFieldView },
   { kind: "number/percent", Component: PercentFieldView },
   { kind: "number/quantity", Component: QuantityFieldView },
+  { kind: "number/range", Component: RangeFieldView },
+  { kind: "number/rate", Component: RateFieldView },
   { kind: "money/amount", Component: MoneyFieldView },
   { kind: "link", Component: LinkFieldView },
   { kind: "external-link", Component: ExternalLinkFieldView },

@@ -21,6 +21,8 @@ import { node } from "../modules/core/node/index.js";
 import { percentTypeModule } from "../modules/core/percent/index.js";
 import { predicate } from "../modules/core/predicate/index.js";
 import { quantityTypeModule } from "../modules/core/quantity/index.js";
+import { rangeTypeModule } from "../modules/core/range/index.js";
+import { rateTypeModule } from "../modules/core/rate/index.js";
 import { secretHandle } from "../modules/core/secret/index.js";
 import { stringTypeModule } from "../modules/core/string/index.js";
 import { svgTypeModule } from "../modules/core/svg/index.js";
@@ -82,6 +84,8 @@ describe("schema entry surfaces", () => {
     expect(durationTypeModule.type.values.key).toBe("core:duration");
     expect(percentTypeModule.type.values.key).toBe("core:percent");
     expect(quantityTypeModule.type.values.key).toBe("core:quantity");
+    expect(rangeTypeModule.type.values.key).toBe("core:range");
+    expect(rateTypeModule.type.values.key).toBe("core:rate");
     expect(icon.values.key).toBe("core:icon");
     expect(tag.values.key).toBe("core:tag");
     expect(stringTypeModule.type.values.icon).toBe(graphIconSeeds.string);
@@ -102,6 +106,8 @@ describe("schema entry surfaces", () => {
     expect(canonicalCore.duration.values.key).toBe(durationTypeModule.type.values.key);
     expect(canonicalCore.percent.values.key).toBe(percentTypeModule.type.values.key);
     expect(canonicalCore.quantity.values.key).toBe(quantityTypeModule.type.values.key);
+    expect(canonicalCore.range.values.key).toBe(rangeTypeModule.type.values.key);
+    expect(canonicalCore.rate.values.key).toBe(rateTypeModule.type.values.key);
     expect(canonicalCore.icon.values.key).toBe(icon.values.key);
     expect(canonicalCore.tag.values.key).toBe(tag.values.key);
     expect(canonicalCore.secretHandle.values.key).toBe(secretHandle.values.key);
@@ -187,6 +193,8 @@ describe("schema entry surfaces", () => {
     expect(schemaExports.markdownTypeModule).toBe(markdownTypeModule);
     expect(schemaExports.moneyTypeModule).toBe(moneyTypeModule);
     expect(schemaExports.quantityTypeModule).toBe(quantityTypeModule);
+    expect(schemaExports.rangeTypeModule).toBe(rangeTypeModule);
+    expect(schemaExports.rateTypeModule).toBe(rateTypeModule);
     expect(schemaExports.svgTypeModule).toBe(svgTypeModule);
   });
 
@@ -217,6 +225,8 @@ describe("schema entry surfaces", () => {
     expect(svgTypeModule.type).toBe(core.svg);
     expect(percentTypeModule.type).toBe(core.percent);
     expect(quantityTypeModule.type).toBe(core.quantity);
+    expect(rangeTypeModule.type).toBe(core.range);
+    expect(rateTypeModule.type).toBe(core.rate);
     expect(tag).toBe(core.tag);
   });
 });

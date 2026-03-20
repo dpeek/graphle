@@ -254,12 +254,12 @@ Implemented core families:
 - `percent`
 - `quantity`
 - `money`
+- `rate`
+- `range`
 
 Near-term follow-ups:
 
 - `unit`
-- `rate`
-- `range`
 
 `measure` is not a good canonical type name because it is too vague. Use more
 specific terms such as `quantity` or `rate`.
@@ -272,11 +272,11 @@ Current shared editor families:
 - money editor: amount + currency
 - duration editor: human units instead of raw milliseconds
 - percent editor: constrained numeric entry and display formatting
+- rate editor: numerator + denominator
+- range editor: min/max pair
 
 Near-term editor families:
 
-- rate editor: numerator + denominator
-- range editor: min/max pair
 - generic source/preview editor: markdown, SVG, JSON, code
 - file/image editor: upload + preview
 - richer reference editors: single, many, ordered, createable

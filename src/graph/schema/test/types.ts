@@ -17,6 +17,8 @@ import { moneyTypeModule } from "../../modules/core/money/index.js";
 import { numberTypeModule } from "../../modules/core/number/index.js";
 import { percentTypeModule } from "../../modules/core/percent/index.js";
 import { quantityTypeModule } from "../../modules/core/quantity/index.js";
+import { rangeTypeModule } from "../../modules/core/range/index.js";
+import { rateTypeModule } from "../../modules/core/rate/index.js";
 import { slugTypeModule } from "../../modules/core/slug/index.js";
 import { stringTypeModule } from "../../modules/core/string/index.js";
 import { urlTypeModule } from "../../modules/core/url/index.js";
@@ -277,6 +279,24 @@ export const kitchenSinkRecord = defineType({
       cardinality: "one?",
       meta: {
         label: "Budget",
+      },
+    }),
+    burnRate: rateTypeModule.field({
+      cardinality: "one?",
+      meta: {
+        label: "Burn rate",
+      },
+    }),
+    completionBand: rangeTypeModule.field({
+      cardinality: "one?",
+      meta: {
+        label: "Completion band",
+      },
+    }),
+    quantityBand: rangeTypeModule.field({
+      cardinality: "one?",
+      meta: {
+        label: "Quantity band",
       },
     }),
     estimate: numberTypeModule.field({

@@ -11,6 +11,7 @@ import {
   formatDuration,
   formatDurationAmount,
   formatDurationEditorValue,
+  normalizeDurationInput,
   parseDuration,
   type DurationUnitKey,
 } from "./type.js";
@@ -33,6 +34,7 @@ export {
   formatDuration,
   formatDurationAmount,
   formatDurationEditorValue,
+  normalizeDurationInput,
   parseDuration,
 };
 export type { DurationUnitKey };
