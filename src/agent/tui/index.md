@@ -3,7 +3,9 @@
 ## Purpose
 
 The agent-owned TUI renders the operator-facing session UI for IO runs on top of
-the retained runtime and normalized event stream produced by `agent`.
+the retained runtime and normalized event stream produced by `agent`. Live mode
+keeps a short completed/failed worker tail, but finalized worker columns are
+removed once finalization completes.
 
 ## Docs
 

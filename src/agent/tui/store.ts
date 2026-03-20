@@ -98,6 +98,7 @@ export interface AgentTuiStore {
 export interface AgentTuiStoreOptions {
   maxEventHistory?: number;
   maxRetainedTerminalWorkers?: number;
+  removeFinalizedSessions?: boolean;
   retainTerminalSessions?: boolean;
 }
 
@@ -305,6 +306,7 @@ export function createAgentTuiStore(options: AgentTuiStoreOptions = {}): AgentTu
   const listeners = new Set<() => void>();
   const maxEventHistory = options.maxEventHistory ?? DEFAULT_MAX_EVENT_HISTORY;
   const maxRetainedTerminalWorkers = options.maxRetainedTerminalWorkers;
+  const removeFinalizedSessions = options.removeFinalizedSessions ?? false;
   const retainTerminalSessions = options.retainTerminalSessions ?? true;
   const sessions = new Map<string, AgentTuiInternalColumnState>();
   let updatedAt: string | undefined;
@@ -387,9 +389,9 @@ export function createAgentTuiStore(options: AgentTuiStoreOptions = {}): AgentTu
         appendBlocksForEvent(state, event);
         pushEventHistory(state, event, maxEventHistory);
         if (
-          !retainTerminalSessions &&
           event.session.kind !== "supervisor" &&
-          isTerminalPhase(event.phase)
+          ((removeFinalizedSessions && event.session.runtime?.state === "finalized") ||
+            (!retainTerminalSessions && isTerminalPhase(event.phase)))
         ) {
           deleteSessionTree(event.session.id);
         } else {

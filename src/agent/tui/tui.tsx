@@ -154,6 +154,7 @@ export function createAgentTui(options: AgentTuiOptions = {}): AgentTui {
       maxEventHistory: options.maxEventHistory,
       maxRetainedTerminalWorkers:
         options.maxRetainedTerminalWorkers ?? DEFAULT_LIVE_RECENT_TERMINAL_WORKER_LIMIT,
+      removeFinalizedSessions: options.removeFinalizedSessions ?? true,
       retainTerminalSessions: options.retainTerminalSessions ?? true,
     });
   let active = false;

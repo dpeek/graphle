@@ -1646,3 +1646,115 @@ test("createAgentTui keeps a short recent completed and failed worker tail in li
     renderer.destroy();
   }
 });
+
+test("createAgentTui removes finalized workers from the live column set", async () => {
+  const { renderOnce, renderer } = await createTestRenderer({
+    height: 14,
+    width: 96,
+  });
+  const tui = createAgentTui({
+    renderer,
+    requireTty: false,
+  });
+  const supervisor = createSupervisorSession();
+  const finalizedWorker = createWorkerSession();
+  const activeWorker = createWorkerSession({
+    branchName: "ope-69",
+    id: "worker:OPE-69:1",
+    issue: {
+      id: "issue-69",
+      identifier: "OPE-69",
+      title: "Keep active work visible",
+    },
+    title: "Keep active work visible",
+    workerId: "OPE-69",
+    workspacePath: "/Users/dpeek/code/io/tmp/workspace/tree/ope-69",
+  });
+  const commitSha = "abc1234def567890abc1234def567890abc1234";
+
+  try {
+    await act(async () => {
+      await tui.start();
+    });
+    await act(async () => {
+      tui.observe({
+        phase: "started",
+        sequence: 1,
+        session: supervisor,
+        timestamp: "2026-03-10T02:13:00.000Z",
+        type: "session",
+      });
+      tui.observe({
+        phase: "started",
+        sequence: 2,
+        session: finalizedWorker,
+        timestamp: "2026-03-10T02:13:01.000Z",
+        type: "session",
+      });
+      tui.observe({
+        phase: "completed",
+        sequence: 3,
+        session: {
+          ...finalizedWorker,
+          runtime: {
+            finalization: {
+              commitSha,
+              state: "pending",
+            },
+            state: "pending-finalization",
+          },
+        },
+        timestamp: "2026-03-10T02:13:02.000Z",
+        type: "session",
+      });
+      tui.observe({
+        phase: "started",
+        sequence: 4,
+        session: activeWorker,
+        timestamp: "2026-03-10T02:13:03.000Z",
+        type: "session",
+      });
+
+      await Promise.resolve();
+      await renderOnce();
+    });
+    expect(tui.getSnapshot().columns.map((column) => column.session.id)).toEqual([
+      "supervisor",
+      "worker:OPE-69:1",
+      "worker:OPE-68:1",
+    ]);
+
+    await act(async () => {
+      tui.observe({
+        phase: "completed",
+        sequence: 5,
+        session: {
+          ...finalizedWorker,
+          runtime: {
+            finalization: {
+              commitSha,
+              finalizedAt: "2026-03-10T02:13:04.000Z",
+              linearState: "Done",
+              state: "finalized",
+            },
+            state: "finalized",
+          },
+        },
+        timestamp: "2026-03-10T02:13:04.000Z",
+        type: "session",
+      });
+
+      await Promise.resolve();
+      await renderOnce();
+    });
+    expect(tui.getSnapshot().columns.map((column) => column.session.id)).toEqual([
+      "supervisor",
+      "worker:OPE-69:1",
+    ]);
+  } finally {
+    await act(async () => {
+      await tui.stop();
+    });
+    renderer.destroy();
+  }
+});
