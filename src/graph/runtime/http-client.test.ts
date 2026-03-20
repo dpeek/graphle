@@ -8,9 +8,9 @@ import { createHttpGraphClient, defaultHttpGraphUrl, type FetchImpl } from "./ht
 import { createIdMap, defineNamespace } from "./identity";
 import { defineType, edgeId, typeId } from "./schema";
 import { createStore } from "./store";
-import { createSyncedTypeClient } from "./sync";
 import {
   createAuthoritativeGraphWriteSession,
+  createSyncedTypeClient,
   createTotalSyncPayload,
   type AuthoritativeGraphWriteResult,
   type GraphWriteTransaction,

@@ -4,6 +4,17 @@
 
 This document is the entry point for agents working on sync payloads, authoritative write replay, or synced client behavior.
 
+## Implementation Layout
+
+The public runtime entry surface remains `../../src/graph/runtime/sync.ts`.
+The internal implementation is now split by concern under `../../src/graph/runtime/sync/`:
+
+- `contracts.ts`: public sync contracts, state types, clone helpers, and activity helpers
+- `transactions.ts`: graph write transaction derivation, canonicalization, and snapshot materialization
+- `validation.ts`: payload/result validation plus total and incremental apply preparation
+- `authority.ts`: authoritative write session state, history replay, and incremental delivery
+- `session.ts`: total-sync sessions, controller wiring, and the synced typed client
+
 ## Current Contract
 
 The current engine already supports two authoritative delivery shapes in `../../src/graph/runtime/sync.ts`:
