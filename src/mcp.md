@@ -1,15 +1,42 @@
-# MCP MVP Proposal
+# Graph MCP
 
 ## Purpose
 
-Describe a practical first pass for adding Model Context Protocol support to
-`io` so external agents can read the current graph through a standard MCP
-server, with write support as an explicit stretch goal.
+Describe the current read-first Model Context Protocol surface for `io`,
+including the opt-in CRUD write gate and the remaining command roadmap.
+
+## Current Implemented Surface
+
+The repo now ships a stdio graph MCP entrypoint:
+
+- command: `io mcp graph [--url <url>] [--allow-writes]`
+- runtime: one `createHttpGraphClient(app, ...)` session kept alive for the stdio server
+- current read tools:
+  - `graph.status`
+  - `graph.listTypes`
+  - `graph.listEntities`
+  - `graph.getEntity`
+  - `graph.getEntities`
+- gated write tools when `--allow-writes` is set:
+  - `graph.createEntity`
+  - `graph.updateEntity`
+  - `graph.deleteEntity`
+- read behavior:
+  - entity tools re-sync before reading
+  - type discovery stays local to the compiled schema
+  - default entity reads only expose visible fields
+  - explicit field-path selections are validated against the compiled schema
+  - unknown type keys, ids, and field paths return structured errors
+- write behavior:
+  - write tools stay unregistered unless `--allow-writes` is set
+  - writes use the current typed mutation plus `sync.flush()` path
+  - failed pushes surface the current validation or authority error text
+  - failed pushes reset the local MCP session client before the next request
 
 ## Why This Is Feasible Now
 
-The repo does not ship its own MCP server today, but most of the hard runtime
-pieces already exist:
+The repo now ships its own MCP server, and the underlying runtime pieces were
+already in place:
 
 - the graph already has a typed client and query surface in
   `../../src/graph/graph/client.ts`
@@ -24,7 +51,7 @@ pieces already exist:
 - secret-backed and `server-command` fields already reject ordinary writes in
   `../../src/web/lib/authority.test.ts`
 
-That means the missing work is mostly the MCP adapter, the tool shape, and a
+That meant the missing work was mostly the MCP adapter, the tool shape, and a
 small amount of schema-to-tool plumbing.
 
 ## Goals
@@ -81,9 +108,7 @@ stdio session:
 This keeps MCP behavior aligned with current graph semantics instead of
 re-implementing reads and writes directly against store internals.
 
-## Initial Read Surface
-
-The MVP should stay read-first.
+## Current Read Surface
 
 ### Required tools
 
@@ -140,10 +165,10 @@ Inputs:
 - `id`
 - optional `select`
 
-If `select` is omitted, the server should return all visible scalar fields plus
-raw reference ids. If `select` is provided, the server should validate the
-requested field paths against the compiled schema and build a typed selection
-object dynamically.
+If `select` is omitted, the server returns the visible default field shape,
+including raw reference ids for entity references. If `select` is provided, the
+server validates the requested field paths against the compiled schema and
+builds a typed selection object dynamically.
 
 The important constraint is that MCP should only expose fields whose visibility
 is currently safe to replicate. Hidden or authority-only fields should stay
@@ -184,14 +209,14 @@ That means the MVP should not pretend to offer arbitrary graph queries. A small
 set of reliable read tools is better than a fake-generic query tool that would
 need to be redesigned immediately.
 
-## Stretch Goal: Write Support
+## Opt-In Write Support
 
-Write support is reasonable as an opt-in second step after read-only MCP lands.
+The MVP now ships opt-in CRUD writes behind `--allow-writes`.
 
 ### Proposed write gate
 
-Write tools should only be registered when the server is launched with an
-explicit flag such as `--allow-writes`.
+Write tools are only registered when the server is launched with
+`--allow-writes`.
 
 That is not real auth. It is just a deliberate local safety latch for the MVP.
 
@@ -238,8 +263,8 @@ This is intentionally incomplete but still better than a raw store backdoor:
 - secret-backed fields that require `server-command` writes already reject
   ordinary transactions
 
-In other words, the stretch write path can be unprotected at the process level
-without being totally unstructured at the graph-runtime level.
+In other words, the current gated write path can be unprotected at the process
+level without being totally unstructured at the graph-runtime level.
 
 ### What write should not do yet
 
@@ -285,9 +310,9 @@ The root `graph` package should not absorb MCP-specific transport logic.
 `graph` should keep owning schema, client, validation, sync, and authority
 contracts. The MCP server is a consumer of those contracts.
 
-## Acceptance Criteria
+## Current Status
 
-The MVP is good enough when all of the following are true:
+The read-first MVP is in place:
 
 - an MCP client can launch `io mcp graph`
 - the server can connect to the current local or deployed Worker authority
@@ -296,9 +321,9 @@ The MVP is good enough when all of the following are true:
 - `graph.getEntity` and `graph.getEntities` return visible graph data
 - unknown type keys, ids, and field paths produce explicit structured errors
 - authority-only and hidden fields are not returned by default
-- write tools are omitted unless `--allow-writes` is set
+- write tools are omitted unless an explicit future write flag is added
 
-The write stretch goal is good enough when:
+The remaining write milestone is good enough when:
 
 - `graph.createEntity`, `graph.updateEntity`, and `graph.deleteEntity` work for
   normal replicated fields
@@ -306,16 +331,13 @@ The write stretch goal is good enough when:
 - attempts to mutate secret-backed `server-command` fields fail with the
   current authoritative rejection path
 
-## Recommended Implementation Order
+## Next Steps
 
-1. Add `@modelcontextprotocol/sdk` and a minimal stdio `io mcp graph` task.
-2. Implement read-only schema and entity tools on top of one synced HTTP graph
-   client.
-3. Add tests for unknown types, hidden fields, selection validation, and basic
-   entity reads.
-4. Add opt-in CRUD write tools behind `--allow-writes`.
-5. Add tests that prove ordinary replicated writes work and secret-backed
+1. Add opt-in CRUD write tools behind `--allow-writes`.
+2. Add tests that prove ordinary replicated writes work and secret-backed
    `server-command` writes still fail.
+3. Decide whether resources such as `graph://schema` belong in the next cut or
+   can wait behind the write pass.
 
 ## Open Questions
 
