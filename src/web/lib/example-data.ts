@@ -1,7 +1,8 @@
-import { core, type NamespaceClient } from "@io/core/graph";
-import { ops } from "@io/core/graph/schema/ops";
-import { pkm } from "@io/core/graph/schema/pkm";
-import { topicKind } from "@io/core/graph/schema/pkm/topic";
+import type { NamespaceClient } from "@io/core/graph";
+import { core } from "@io/core/graph/modules";
+import { ops } from "@io/core/graph/modules/ops";
+import { pkm } from "@io/core/graph/modules/pkm";
+import { topicKind } from "@io/core/graph/modules/pkm/topic";
 
 const exampleGraph = { ...pkm, ...ops } as const;
 

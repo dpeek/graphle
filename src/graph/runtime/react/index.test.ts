@@ -3,13 +3,13 @@ import { describe, expect, it } from "bun:test";
 import {
   GraphValidationError,
   bootstrap,
-  core,
   createIdMap,
   createStore,
   createTypeClient,
   defineNamespace,
   defineType,
-} from "../index.js";
+} from "../../index.js";
+import { core } from "../../modules/index.js";
 import {
   createWebFieldResolver,
   createWebFilterResolver,
@@ -36,7 +36,7 @@ function createNameRef() {
   return { itemId, nameRef: graph.item.ref(itemId).fields.name };
 }
 
-describe("@io/core/graph/react", () => {
+describe("@io/core/graph/runtime/react", () => {
   it("keeps the default resolver host-neutral until a host provides capabilities", () => {
     const { nameRef } = createNameRef();
 

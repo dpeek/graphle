@@ -1,4 +1,4 @@
-import { core } from "../../index.js";
+import { core } from "../../modules/index.js";
 import { GraphIcon } from "./icon.js";
 
 export type EntityReferenceEntity = {

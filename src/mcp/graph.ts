@@ -12,8 +12,8 @@ import {
   type FetchImpl,
   type SyncedTypeClient,
 } from "../graph/index.js";
-import { ops } from "../graph/schema/ops.js";
-import { pkm } from "../graph/schema/pkm.js";
+import { ops } from "../graph/modules/ops.js";
+import { pkm } from "../graph/modules/pkm.js";
 import {
   GraphMcpToolError,
   buildSelectionFromPaths,

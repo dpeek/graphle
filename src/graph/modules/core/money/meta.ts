@@ -1,4 +1,4 @@
-import type { TypeModuleMeta } from "../../../graph/type-module.js";
+import type { TypeModuleMeta } from "../../../runtime/type-module.js";
 import { formatMoney, formatMoneyEditorValue, parseMoney, type MoneyValue } from "./type.js";
 
 export const moneyMeta = {

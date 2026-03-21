@@ -1,7 +1,7 @@
 import {
   entityReferenceComboboxEditorKind,
   existingEntityReferenceField,
-} from "../../../graph/reference-policy.js";
+} from "../../../runtime/reference-policy.js";
 import { icon } from "./type.js";
 
 export function iconReferenceField(label = "Icon") {

@@ -8,6 +8,12 @@ const srcRoot = join(repoRoot, "src");
 const domainNames = new Set(["agent", "app", "cli", "config", "graph", "lib"]);
 const importPattern =
   /\b(?:import|export)\s+(?:[^"'()]*?\s+from\s+)?["']([^"']+)["']|\bimport\(\s*["']([^"']+)["']\s*\)/g;
+const forbiddenGraphPackageImports = [
+  /^@io\/core\/graph\/graph\//,
+  /^@io\/core\/graph\/schema(?:$|\/)/,
+  /^@io\/core\/graph\/react(?:$|[-/])/,
+  /^@io\/core\/graph\/adapters\/react(?:$|\/)/,
+] as const;
 
 function collectSourceFiles(dir: string): string[] {
   const entries = readdirSync(dir).sort();
@@ -78,6 +84,26 @@ describe("flat source import boundaries", () => {
         }
 
         violations.push(`${relative(repoRoot, file)} -> ${specifier} (${targetDomain})`);
+      }
+    }
+
+    expect(violations).toEqual([]);
+  });
+
+  it("forbids retired graph shim package imports inside src", () => {
+    const violations: string[] = [];
+
+    for (const file of collectSourceFiles(srcRoot)) {
+      const source = readFileSync(file, "utf8");
+
+      for (const specifier of collectImportSpecifiers(source)) {
+        if (specifier.startsWith(".")) {
+          continue;
+        }
+
+        if (forbiddenGraphPackageImports.some((pattern) => pattern.test(specifier))) {
+          violations.push(`${relative(repoRoot, file)} -> ${specifier}`);
+        }
       }
     }
 

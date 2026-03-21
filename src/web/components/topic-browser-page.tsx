@@ -1,14 +1,14 @@
 "use client";
 
 import { GraphValidationError } from "@io/core/graph";
+import { PredicateFieldEditor } from "@io/core/graph/adapters/react-dom";
+import { topicKind } from "@io/core/graph/modules/pkm/topic";
 import {
   performValidatedMutation,
   usePersistedMutationCallbacks,
   usePredicateField,
   type MutationCallbacks,
-} from "@io/core/graph/react";
-import { PredicateFieldEditor } from "@io/core/graph/react-dom";
-import { topicKind } from "@io/core/graph/schema/pkm/topic";
+} from "@io/core/graph/runtime/react";
 import { Badge } from "@io/web/badge";
 import { Button } from "@io/web/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@io/web/card";

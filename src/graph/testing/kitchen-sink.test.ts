@@ -2,7 +2,6 @@ import { describe, expect, it } from "bun:test";
 
 import {
   bootstrap,
-  core,
   createStore,
   createTypeClient,
   edgeId,
@@ -12,6 +11,7 @@ import {
   isSecretBackedField,
 } from "../index.js";
 import { defaultMoneyCurrencyKey } from "../modules/core/money/index.js";
+import { core } from "../modules/index.js";
 import {
   kitchenSink,
   kitchenSinkBlock,
@@ -23,7 +23,7 @@ import {
   kitchenSinkSecret,
   kitchenSinkSeverity,
   kitchenSinkStatus,
-} from "./test.js";
+} from "./kitchen-sink.js";
 
 describe("kitchen sink schema namespace", () => {
   it("resolves ids across types, enum members, and nested field trees", () => {

@@ -1,6 +1,7 @@
-import { core, defineDefaultEnumTypeModule, defineType } from "../index.js";
-import type { FilterOperandEditorProps } from "../react/index.js";
-import { kitchenSink } from "../schema/test.js";
+import { defineType } from "../../index.js";
+import { core, defineDefaultEnumTypeModule } from "../../modules/index.js";
+import type { FilterOperandEditorProps } from "../../runtime/react/index.js";
+import { kitchenSink } from "../../testing/kitchen-sink.js";
 import { defaultWebFilterResolver } from "./index.js";
 
 const defs = { ...core, ...kitchenSink };

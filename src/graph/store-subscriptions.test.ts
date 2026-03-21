@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
-import { bootstrap, createStore, createTypeClient, core, edgeId } from "@io/core/graph";
+import { bootstrap, createStore, createTypeClient, edgeId } from "@io/core/graph";
+import { core } from "@io/core/graph/modules";
 
 import { testNamespace } from "./test-graph.js";
 

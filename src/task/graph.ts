@@ -1,4 +1,4 @@
-import { pkm } from "@io/core/graph/schema/pkm";
+import { pkm } from "@io/core/graph/modules/pkm";
 
 import { createHttpGraphClient } from "../graph/index.js";
 

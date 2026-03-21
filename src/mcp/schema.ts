@@ -1,5 +1,4 @@
 import {
-  core,
   fieldVisibility,
   fieldWritePolicy,
   isEntityType,
@@ -13,6 +12,7 @@ import {
   type GraphFieldWritePolicy,
   type TypeOutput,
 } from "../graph/index.js";
+import { core } from "../graph/modules/index.js";
 
 type GraphMcpNamespace = Record<string, AnyTypeOutput>;
 type GraphTypeKind = AnyTypeOutput["kind"] | "unknown";

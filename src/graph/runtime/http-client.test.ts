@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
-import { pkm } from "../schema/pkm";
+import { pkm } from "../modules/pkm.js";
 import { bootstrap } from "./bootstrap";
 import { createTypeClient } from "./client";
 import { core } from "./core";

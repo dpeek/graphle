@@ -4,13 +4,12 @@ import {
   bootstrap,
   createStore,
   createTypeClient,
-  graphIconSeeds,
   GraphValidationError,
-  core,
   sanitizeSvgMarkup,
   typeId,
 } from "@io/core/graph";
-import { pkm } from "@io/core/graph/schema/pkm";
+import { core, graphIconSeeds } from "@io/core/graph/modules";
+import { pkm } from "@io/core/graph/modules/pkm";
 
 function createGraph() {
   const store = createStore();

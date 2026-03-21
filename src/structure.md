@@ -179,8 +179,7 @@ today.
 - plural names only for containers such as `entities`, `enums`, `values`,
   `views`, `commands`
 - use `schema.ts` as the public entry file inside a type folder and prefer
-  direct compatibility shims like `schema/pkm/topic.ts` over nested
-  `schema/pkm/topic/index.ts` wrappers
+  direct package exports to that file over extra wrapper layers
 - avoid duplicate path segments like `topic/topic`
 - avoid implementation-first names like `react-dom` when the real boundary is
   `web`

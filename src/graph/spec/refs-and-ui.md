@@ -2,28 +2,31 @@
 
 ## Purpose
 
-This document is the entry point for agents working on typed refs, predicate-slot subscriptions, or UI-adjacent engine contracts.
+This document is the entry point for typed refs, predicate-slot subscriptions,
+reference policies, and the split between the root runtime surface, the
+host-neutral React layer, and host-specific adapters.
 
-## Current Engine Surface
+## Engine Surface
 
-The legacy docs treated typed refs as roadmap. That is no longer accurate.
-
-`../../src/graph/runtime/client.ts` already exports:
+`../../src/graph/runtime/client.ts` exports:
 
 - typed `EntityRef`
 - typed `PredicateRef`
 - nested field-group refs
 - predicate-slot subscriptions
 - cardinality-aware predicate mutation methods
-- `resolveEntity(...)` and `listEntities()` for relationship-aware predicate refs
+- `resolveEntity(...)` and `listEntities()` for relationship-aware predicate
+  refs
 
-## Current Ref Semantics
+## Ref Semantics
 
 - refs are stable handles over one store plus one schema namespace
 - predicate subscriptions are keyed to `(subjectId, predicateId)`
 - `many`, `one`, and `one?` cardinality already produce different mutation APIs
-- nested field groups preserve traversal shape without becoming their own reactive unit
-- synced clients preserve ref ergonomics by proxy-wrapping the same typed handles rather than inventing a second graph API
+- nested field groups preserve traversal shape without becoming their own
+  reactive unit
+- synced clients preserve ref ergonomics by proxy-wrapping the same typed
+  handles rather than inventing a second graph API
 
 Relevant source:
 
@@ -31,9 +34,9 @@ Relevant source:
 - `../../src/graph/runtime/store.ts`
 - `../../src/graph/runtime/sync.ts`
 
-## Current UI-Adjacent Contracts
+## UI-Adjacent Contracts
 
-The engine already exposes enough surface for UI work to build on:
+The engine exposes enough surface for higher-level UI work:
 
 - field metadata and filter contracts from type modules
 - predicate-local subscriptions
@@ -44,7 +47,7 @@ The engine already exposes enough surface for UI work to build on:
   `existingEntityReferenceField(...)` and
   `existingEntityReferenceFieldMeta(...)`
 
-What the root engine entry does not currently ship:
+What the root engine entry does not ship:
 
 - React hooks or components
 - host capability registries or default DOM widgets
@@ -53,14 +56,15 @@ What the root engine entry does not currently ship:
 - authoritative command implementations
 - async option loading or relationship search infrastructure
 
-## Current Adapter Split
+## React And Adapter Split
 
-Adapter subpaths now exist at `@io/core/graph/react`, `@io/core/graph/react-dom`, and
-`@io/core/graph/react-opentui`.
+React package subpaths split between the canonical host-neutral surface at
+`@io/core/graph/runtime/react` and the host-specific entries
+`@io/core/graph/adapters/react-dom` and
+`@io/core/graph/adapters/react-opentui`.
 
-Today `@io/core/graph/react` ships the host-neutral layer from
-`src/graph/runtime/react/*`, while `src/graph/react/index.ts` stays as the stable
-public entry shim:
+`@io/core/graph/runtime/react` ships the host-neutral layer from
+`../../src/graph/runtime/react/`:
 
 - predicate hooks and field metadata helpers
 - entity-level traversal helpers such as
@@ -72,35 +76,31 @@ public entry shim:
 - field and filter resolver primitives that still require host-supplied
   capabilities
 
-Despite the current `Web` naming on some resolver helpers, this package is the
-host-neutral React layer. It depends on graph refs and metadata, not DOM tags
-or browser-specific input behavior.
-
-`@io/core/graph/react-dom` ships DOM defaults from `src/graph/adapters/react-dom/*`
-on top of that layer:
+`@io/core/graph/adapters/react-dom` ships DOM defaults from
+`../../src/graph/adapters/react-dom/`:
 
 - default field view and editor capabilities
-- editor modules split under `src/graph/adapters/react-dom/editor/*`, with
-  `fields.tsx` reduced to view capabilities plus editor-capability wiring
+- editor modules under `../../src/graph/adapters/react-dom/editor/`
 - default filter operand editors and filter resolvers
 - browser fallback rendering around `PredicateFieldView` and
   `PredicateFieldEditor`
 
-`@io/core/graph/react-opentui` is the reserved terminal-specific adapter boundary.
-The subpath exists today as a stable shim over `src/graph/adapters/react-opentui/`,
-but it does not ship widget capabilities yet.
+`@io/core/graph/adapters/react-opentui` maps to
+`../../src/graph/adapters/react-opentui/index.ts`. It is the terminal adapter
+package root and currently exports an empty surface.
 
-## How The Contracts Cross The Boundary
+## Boundary Rules
 
 - `ObjectViewSpec`, `WorkflowSpec`, and `GraphCommandSpec` stay on the root
-  `@io/core/graph` surface as pure data contracts.
-- `@io/core/graph/react` may read those root-safe contracts and type-module
-  metadata, but it should not introduce DOM tags, route registration, or
-  authoritative command execution.
-- `@io/core/graph/react-dom` may provide HTML widgets, browser fallbacks, and DOM
-  capability registries on top of the host-neutral React layer.
+  `@io/core/graph` surface as pure data contracts
+- `@io/core/graph/runtime/react` may read those root-safe contracts and
+  type-module metadata, but it should not introduce DOM tags, route
+  registration, or authoritative command execution
+- `@io/core/graph/adapters/react-dom` may provide HTML widgets, browser
+  fallbacks, and DOM capability registries on top of the host-neutral React
+  layer
 - `app` owns route registration, shell chrome, experiment selection, transport,
-  and the authoritative implementations behind `GraphCommandSpec`.
+  and the authoritative implementations behind `GraphCommandSpec`
 
 ## Reference-Policy Flow
 
@@ -110,34 +110,30 @@ The current reference-policy helpers are intentionally small:
   `meta.reference` and optional relationship UI hints
 - `existingEntityReferenceFieldMeta(...)` encodes the existing-entity-only
   selection policy, including whether the UI may create-and-link new entities,
-  whether the current subject should be excluded from its own picker, collection
-  semantics, and an explicit editor kind when needed
+  whether the current subject should be excluded from its own picker,
+  collection semantics, and an explicit editor kind when needed
 
-`@io/core/graph/react` reads that policy through
+`@io/core/graph/runtime/react` reads that policy through
 `getPredicateEntityReferencePolicy(...)` and uses it to infer the default
-entity-reference display and editor kinds. `@io/core/graph/react-dom` then supplies
-the default list view plus a shared Base UI entity-reference combobox editor for
-both single-value and collection relationships. That editor lives in its own
-module, uses the standard clear affordance for optional single-value edges,
-renders inline chips for `many` fields, and includes target icons wherever the
-referenced entities expose them. Shared combobox option rows must expose visible
-hover, highlight, and selected states so pointer and keyboard navigation are
-both legible. Tag fields currently add the extra
-create-on-Enter behavior on top of that shared combobox. Enum-backed and other
-closed-option pickers now use the same shared Base UI combobox mechanics with a
-lighter-weight item renderer.
+entity-reference display and editor kinds.
+`@io/core/graph/adapters/react-dom` then supplies the default list view plus a
+shared Base UI entity-reference combobox editor for both single-value and
+collection relationships. That editor lives in its own module, uses the
+standard clear affordance for optional single-value edges, renders inline chips
+for `many` fields, and includes target icons wherever the referenced entities
+expose them. Shared combobox option rows must expose visible hover,
+highlight, and selected states so pointer and keyboard navigation are both
+legible. Tag fields currently add the extra create-on-Enter behavior on top of
+that shared combobox. Enum-backed and other closed-option pickers use the same
+shared Base UI combobox mechanics with a lighter-weight item renderer.
 
 That keeps reference-selection semantics in the graph authoring layer while
 leaving host widgets and route-level relationship search UX in adapter or app
 code.
 
-The root `@io/core/graph` export remains free of React and host-specific adapters.
-DOM and OpenTUI widget capabilities still belong on their host-specific
-subpaths rather than the root or the host-neutral React entry.
+## Delineation
 
-## Current Delineation
-
-### Current in engine
+### In Engine
 
 - typed refs
 - field-group traversal
@@ -147,18 +143,10 @@ subpaths rather than the root or the host-neutral React entry.
 - root-safe object-view, workflow, and command contracts
 - narrow reference-policy helpers for entity-reference fields
 
-### Still roadmap or higher-level UI work
+### In Adapters Or App
 
 - generic object or workflow renderers over `ObjectViewSpec` and `WorkflowSpec`
 - schema-driven form composition
 - richer relationship policies beyond existing-only selection
 - full collection UX conventions for every `many` field shape
 - OpenTUI widget capabilities
-
-## Future Work Suggestions
-
-1. Add one short example showing a typed entity ref and a few predicate-ref mutations in code.
-2. Document ref identity expectations more explicitly so UI layers do not fight the cache model.
-3. Add a note about which ref methods are safe public contracts for app-level bindings.
-4. Capture expected collection semantics for ordered versus unordered `many` fields before more UI proof code lands.
-5. Decide whether future renderer contracts should live in `graph`, `web`, or a dedicated adapter package.

@@ -1,10 +1,5 @@
 import { defineType } from "@io/core/graph/def";
 
-import {
-  entityReferenceComboboxEditorKind,
-  existingEntityReferenceField,
-} from "../../graph/reference-policy.js";
-import { defineSecretField } from "../../graph/type-module.js";
 import { core } from "../../modules/core.js";
 import { booleanTypeModule } from "../../modules/core/boolean/index.js";
 import { colorTypeModule } from "../../modules/core/color/index.js";
@@ -21,6 +16,11 @@ import { rateTypeModule } from "../../modules/core/rate/index.js";
 import { slugTypeModule } from "../../modules/core/slug/index.js";
 import { stringTypeModule } from "../../modules/core/string/index.js";
 import { urlTypeModule } from "../../modules/core/url/index.js";
+import {
+  entityReferenceComboboxEditorKind,
+  existingEntityReferenceField,
+} from "../../runtime/reference-policy.js";
+import { defineSecretField } from "../../runtime/type-module.js";
 import { kitchenSinkSeverityTypeModule, kitchenSinkStatusTypeModule } from "./enums.js";
 import { kitchenSinkReferenceField } from "./reference-field.js";
 import { kitchenSinkScoreTypeModule } from "./scalars.js";

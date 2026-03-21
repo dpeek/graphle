@@ -1,4 +1,4 @@
-import type { TypeModuleFilter } from "../../../graph/type-module.js";
+import type { TypeModuleFilter } from "../../../runtime/type-module.js";
 import { formatDate, parseDate } from "./parse.js";
 
 export const dateFilter = {

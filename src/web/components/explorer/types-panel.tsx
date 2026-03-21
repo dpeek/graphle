@@ -1,5 +1,6 @@
-import { core, edgeId } from "@io/core/graph";
-import { GraphIcon } from "@io/core/graph/react-dom";
+import { edgeId } from "@io/core/graph";
+import { GraphIcon } from "@io/core/graph/adapters/react-dom";
+import { core } from "@io/core/graph/modules";
 import { Button } from "@io/web/button";
 
 import { asTypeMetadataFields } from "./catalog.js";

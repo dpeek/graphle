@@ -1,15 +1,15 @@
 import { fieldWritePolicy, isEntityType, typeId } from "@io/core/graph";
 import {
-  formatPredicateValue,
-  usePersistedMutationCallbacks,
-  usePredicateField,
-} from "@io/core/graph/react";
-import {
   defaultWebFieldResolver,
   GraphIcon,
   PredicateFieldEditor,
   PredicateFieldView,
-} from "@io/core/graph/react-dom";
+} from "@io/core/graph/adapters/react-dom";
+import {
+  formatPredicateValue,
+  usePersistedMutationCallbacks,
+  usePredicateField,
+} from "@io/core/graph/runtime/react";
 import { cn } from "@io/web/utils";
 import { useContext, useEffect, useState, type ReactNode } from "react";
 

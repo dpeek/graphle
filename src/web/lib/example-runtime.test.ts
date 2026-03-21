@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
 import { GraphValidationError, edgeId, type GraphWriteTransaction } from "@io/core/graph";
-import { pkm } from "@io/core/graph/schema/pkm";
+import { pkm } from "@io/core/graph/modules/pkm";
 
 import { createExampleRuntime } from "./example-runtime.js";
 

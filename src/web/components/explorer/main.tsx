@@ -1,6 +1,6 @@
 import { typeId } from "@io/core/graph";
-import { GraphMutationRuntimeProvider } from "@io/core/graph/react";
-import { pkm } from "@io/core/graph/schema/pkm";
+import { pkm } from "@io/core/graph/modules/pkm";
+import { GraphMutationRuntimeProvider } from "@io/core/graph/runtime/react";
 import { Input } from "@io/web/input";
 import { ScrollArea } from "@io/web/scroll-area";
 import { useDeferredValue, useEffect, useMemo, useState } from "react";

@@ -1,15 +1,13 @@
 import {
-  core,
   edgeId,
   formatValidationPath,
   GraphValidationError,
-  graphIconSeeds,
   isEntityType,
-  resolvePredicateDefinitionIconId,
   type AnyTypeOutput,
   type Store,
   typeId,
 } from "@io/core/graph";
+import { core, graphIconSeeds, resolvePredicateDefinitionIconId } from "@io/core/graph/modules";
 import { format as formatDate } from "date-fns";
 
 import type {

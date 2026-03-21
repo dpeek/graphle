@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
-import { country, countryTypeModule, currency, currencyTypeModule } from "@io/core/graph";
+import { country, countryTypeModule, currency, currencyTypeModule } from "@io/core/graph/modules";
 
 describe("core enum data modules", () => {
   it("keeps country members on the existing enum export", () => {

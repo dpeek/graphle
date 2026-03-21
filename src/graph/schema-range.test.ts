@@ -1,9 +1,10 @@
 import { describe, expect, it } from "bun:test";
 
-import { core, country, rangeOf, typeId } from "@io/core/graph";
-import { kitchenSinkRecord, kitchenSinkStatus } from "@io/core/graph/schema/test";
+import { rangeOf, typeId } from "@io/core/graph";
+import { core, country } from "@io/core/graph/modules";
 
 import { testNamespace } from "./test-graph.js";
+import { kitchenSinkRecord, kitchenSinkStatus } from "./testing/kitchen-sink.js";
 
 describe("rangeOf typing and namespace resolution", () => {
   it("keeps key-literal typing while normalizing resolved refs to ids", () => {

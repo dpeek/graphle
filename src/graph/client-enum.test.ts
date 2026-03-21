@@ -3,12 +3,13 @@ import { describe, expect, it } from "bun:test";
 import {
   GraphValidationError,
   bootstrap,
-  core,
   createStore,
   createTypeClient,
   formatValidationPath,
 } from "@io/core/graph";
-import { kitchenSink } from "@io/core/graph/schema/test";
+import { core } from "@io/core/graph/modules";
+
+import { kitchenSink } from "./testing/kitchen-sink.js";
 
 describe("enum range client behavior", () => {
   it("accepts valid enum value ids", () => {

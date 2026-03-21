@@ -1,5 +1,4 @@
 import {
-  core,
   edgeId,
   type AnyTypeOutput,
   type Cardinality,
@@ -9,8 +8,9 @@ import {
   type PredicateRef,
   typeId,
 } from "@io/core/graph";
-import { ops } from "@io/core/graph/schema/ops";
-import { pkm } from "@io/core/graph/schema/pkm";
+import { core } from "@io/core/graph/modules";
+import { ops } from "@io/core/graph/modules/ops";
+import { pkm } from "@io/core/graph/modules/pkm";
 
 import type { WriteSecretFieldInput, WriteSecretFieldResult } from "../../lib/secret-fields.js";
 import type { GraphRuntime } from "../graph-runtime-bootstrap.js";

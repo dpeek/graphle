@@ -3,7 +3,7 @@ import type { Cardinality, RangeRef } from "@io/core/graph/def";
 import {
   existingEntityReferenceField,
   type EntityReferenceEditorKind,
-} from "../../graph/reference-policy.js";
+} from "../../runtime/reference-policy.js";
 
 export function kitchenSinkReferenceField<
   const Range extends RangeRef,

@@ -1,34 +1,5 @@
 import { describe, expect, it } from "bun:test";
 
-import { core } from "../index.js";
-import { cardinality } from "../modules/core/cardinality/index.js";
-import { colorTypeModule } from "../modules/core/color/index.js";
-import { dateTypeModule } from "../modules/core/date/index.js";
-import { durationTypeModule } from "../modules/core/duration/index.js";
-import { emailTypeModule } from "../modules/core/email/index.js";
-import { enumType } from "../modules/core/enum/index.js";
-import {
-  graphIconSeeds,
-  icon,
-  iconReferenceField,
-  resolvePredicateDefinitionIconId,
-  resolveTypeDefinitionIconId,
-} from "../modules/core/icon/index.js";
-import { jsonTypeModule } from "../modules/core/json/index.js";
-import { markdownTypeModule } from "../modules/core/markdown/index.js";
-import { moneyTypeModule } from "../modules/core/money/index.js";
-import { node } from "../modules/core/node/index.js";
-import { percentTypeModule } from "../modules/core/percent/index.js";
-import { predicate } from "../modules/core/predicate/index.js";
-import { quantityTypeModule } from "../modules/core/quantity/index.js";
-import { rangeTypeModule } from "../modules/core/range/index.js";
-import { rateTypeModule } from "../modules/core/rate/index.js";
-import { secretHandle } from "../modules/core/secret/index.js";
-import { stringTypeModule } from "../modules/core/string/index.js";
-import { svgTypeModule } from "../modules/core/svg/index.js";
-import { tag } from "../modules/core/tag/index.js";
-import { coreType } from "../modules/core/type/index.js";
-import { urlTypeModule } from "../modules/core/url/index.js";
 import {
   probeContractGraph,
   probeContractItem,
@@ -37,7 +8,36 @@ import {
   probeSaveContractItemCommand,
 } from "../runtime/contracts.probe.js";
 import { core as canonicalCore } from "./core.js";
-import * as schemaExports from "./index.js";
+import { cardinality } from "./core/cardinality/index.js";
+import { colorTypeModule } from "./core/color/index.js";
+import { dateTypeModule } from "./core/date/index.js";
+import { durationTypeModule } from "./core/duration/index.js";
+import { emailTypeModule } from "./core/email/index.js";
+import { enumType } from "./core/enum/index.js";
+import {
+  graphIconSeeds,
+  icon,
+  iconReferenceField,
+  resolvePredicateDefinitionIconId,
+  resolveTypeDefinitionIconId,
+} from "./core/icon/index.js";
+import { jsonTypeModule } from "./core/json/index.js";
+import { markdownTypeModule } from "./core/markdown/index.js";
+import { moneyTypeModule } from "./core/money/index.js";
+import { node } from "./core/node/index.js";
+import { percentTypeModule } from "./core/percent/index.js";
+import { predicate } from "./core/predicate/index.js";
+import { quantityTypeModule } from "./core/quantity/index.js";
+import { rangeTypeModule } from "./core/range/index.js";
+import { rateTypeModule } from "./core/rate/index.js";
+import { secretHandle } from "./core/secret/index.js";
+import { stringTypeModule } from "./core/string/index.js";
+import { svgTypeModule } from "./core/svg/index.js";
+import { tag } from "./core/tag/index.js";
+import { coreType } from "./core/type/index.js";
+import { urlTypeModule } from "./core/url/index.js";
+import { core } from "./index.js";
+import * as moduleExports from "./index.js";
 import { ops as canonicalOps } from "./ops.js";
 import {
   envVar,
@@ -45,9 +45,9 @@ import {
   envVarNameInvalidMessage,
   envVarNamePattern,
   envVarSchema,
-} from "./ops/env-var.js";
+} from "./ops/env-var/schema.js";
 import { pkm as canonicalPkm } from "./pkm.js";
-import { topic, topicKind, topicSchema } from "./pkm/topic.js";
+import { topic, topicKind, topicSchema } from "./pkm/topic/schema.js";
 
 function resolvedTypeId(typeDef: { values: { key: string } }): string {
   const values = typeDef.values as { key: string; id?: string };
@@ -55,10 +55,10 @@ function resolvedTypeId(typeDef: { values: { key: string } }): string {
 }
 
 function expectNamedExports(
-  moduleExports: Record<string, unknown>,
+  exportsObject: Record<string, unknown>,
   names: readonly string[],
 ): void {
-  expect(Object.keys(moduleExports)).toEqual(expect.arrayContaining([...names]));
+  expect(Object.keys(exportsObject)).toEqual(expect.arrayContaining([...names]));
 }
 
 const validationContext = {
@@ -75,8 +75,8 @@ const validationContext = {
   changedPredicateKeys: new Set<string>([envVar.fields.name.key]),
 };
 
-describe("schema entry surfaces", () => {
-  it("keeps built-in wrappers aligned with the canonical core contracts", () => {
+describe("module entry surfaces", () => {
+  it("keeps built-in modules aligned with the canonical core contracts", () => {
     expect(node).toBe(core.node);
     expect(coreType).toBe(core.type);
     expect(cardinality).toBe(core.cardinality);
@@ -105,7 +105,7 @@ describe("schema entry surfaces", () => {
     );
   });
 
-  it("defines canonical core, pkm, and ops namespaces from schema entrypoints", () => {
+  it("defines canonical core, pkm, and ops namespaces from module entrypoints", () => {
     expect(canonicalCore.node.values.key).toBe(node.values.key);
     expect(canonicalCore.string.values.key).toBe(stringTypeModule.type.values.key);
     expect(canonicalCore.color.values.key).toBe(colorTypeModule.type.values.key);
@@ -127,7 +127,8 @@ describe("schema entry surfaces", () => {
     expect(canonicalPkm.topicKind.values.key).toBe(topicKind.values.key);
     expect(canonicalOps.envVar.values.key).toBe(envVar.values.key);
   });
-  it("exports the env-var slice from the canonical ops schema tree", () => {
+
+  it("exports the env-var slice from the canonical ops module tree", () => {
     expect(envVarSchema).toEqual({
       envVar,
     });
@@ -167,7 +168,7 @@ describe("schema entry surfaces", () => {
     });
   });
 
-  it("exports the topic slice from the canonical pkm schema tree", () => {
+  it("exports the topic slice from the canonical pkm module tree", () => {
     expect(topicSchema).toEqual({
       topic,
       topicKind,
@@ -184,8 +185,8 @@ describe("schema entry surfaces", () => {
     expect(String(topic.fields.references.range)).toBe(resolvedTypeId(topic));
   });
 
-  it("exposes canonical namespaces and representative built-ins from the schema root", () => {
-    expectNamedExports(schemaExports, [
+  it("exposes canonical namespaces and representative built-ins from the module root", () => {
+    expectNamedExports(moduleExports, [
       "core",
       "ops",
       "pkm",
@@ -201,9 +202,9 @@ describe("schema entry surfaces", () => {
       "svgTypeModule",
     ]);
 
-    expect(schemaExports.core).toBe(canonicalCore);
-    expect(schemaExports.ops).toBe(canonicalOps);
-    expect(schemaExports.pkm).toBe(canonicalPkm);
+    expect(moduleExports.core).toBe(canonicalCore);
+    expect(moduleExports.ops).toBe(canonicalOps);
+    expect(moduleExports.pkm).toBe(canonicalPkm);
     expect(canonicalCore.node.values.key).toBe(node.values.key);
     expect(canonicalCore.icon.values.key).toBe(icon.values.key);
     expect(canonicalCore.tag.values.key).toBe(tag.values.key);
@@ -213,26 +214,26 @@ describe("schema entry surfaces", () => {
     expect(canonicalPkm.topicKind.values.key).toBe(topicKind.values.key);
     expect(String(canonicalCore.type.fields.icon.range)).toBe(resolvedTypeId(icon));
     expect(String(canonicalCore.predicate.fields.icon.range)).toBe(resolvedTypeId(icon));
-    expect(typeof schemaExports.core.node.values.id).toBe("string");
-    expect(typeof schemaExports.ops.envVar.values.id).toBe("string");
-    expect(typeof schemaExports.pkm.topic.values.id).toBe("string");
-    expect(schemaExports.node.values.key).toBe(canonicalCore.node.values.key);
-    expect(schemaExports.icon.values.key).toBe(canonicalCore.icon.values.key);
-    expect(schemaExports.iconReferenceField).toBe(iconReferenceField);
-    expect(schemaExports.envVar.values.key).toBe(canonicalOps.envVar.values.key);
-    expect(schemaExports.secretHandle.values.key).toBe(canonicalCore.secretHandle.values.key);
-    expect(schemaExports.topic.values.key).toBe(canonicalPkm.topic.values.key);
-    expect(schemaExports.topicKind.values.key).toBe(canonicalPkm.topicKind.values.key);
-    expect(schemaExports.jsonTypeModule).toBe(jsonTypeModule);
-    expect(schemaExports.markdownTypeModule).toBe(markdownTypeModule);
-    expect(schemaExports.moneyTypeModule).toBe(moneyTypeModule);
-    expect(schemaExports.quantityTypeModule).toBe(quantityTypeModule);
-    expect(schemaExports.rangeTypeModule).toBe(rangeTypeModule);
-    expect(schemaExports.rateTypeModule).toBe(rateTypeModule);
-    expect(schemaExports.svgTypeModule).toBe(svgTypeModule);
+    expect(typeof moduleExports.core.node.values.id).toBe("string");
+    expect(typeof moduleExports.ops.envVar.values.id).toBe("string");
+    expect(typeof moduleExports.pkm.topic.values.id).toBe("string");
+    expect(moduleExports.node.values.key).toBe(canonicalCore.node.values.key);
+    expect(moduleExports.icon.values.key).toBe(canonicalCore.icon.values.key);
+    expect(moduleExports.iconReferenceField).toBe(iconReferenceField);
+    expect(moduleExports.envVar.values.key).toBe(canonicalOps.envVar.values.key);
+    expect(moduleExports.secretHandle.values.key).toBe(canonicalCore.secretHandle.values.key);
+    expect(moduleExports.topic.values.key).toBe(canonicalPkm.topic.values.key);
+    expect(moduleExports.topicKind.values.key).toBe(canonicalPkm.topicKind.values.key);
+    expect(moduleExports.jsonTypeModule).toBe(jsonTypeModule);
+    expect(moduleExports.markdownTypeModule).toBe(markdownTypeModule);
+    expect(moduleExports.moneyTypeModule).toBe(moneyTypeModule);
+    expect(moduleExports.quantityTypeModule).toBe(quantityTypeModule);
+    expect(moduleExports.rangeTypeModule).toBe(rangeTypeModule);
+    expect(moduleExports.rateTypeModule).toBe(rateTypeModule);
+    expect(moduleExports.svgTypeModule).toBe(svgTypeModule);
   });
 
-  it("keeps contract probes root-safe without polluting the canonical schema tree", () => {
+  it("keeps contract probes root-safe without polluting the canonical module tree", () => {
     expect(probeContractGraph.contractItem.values.key).toBe(probeContractItem.values.key);
     expect(typeof probeContractGraph.contractItem.values.id).toBe("string");
     expect(String(probeContractItem.fields.parent.range)).toBe(resolvedTypeId(probeContractItem));
@@ -247,9 +248,9 @@ describe("schema entry surfaces", () => {
       subjects: [probeContractGraph.contractItem.values.key],
       commands: [probeSaveContractItemCommand.key],
     });
-    expect("probeContractItem" in schemaExports).toBe(false);
-    expect("probeContractObjectView" in schemaExports).toBe(false);
-    expect("probeContractWorkflow" in schemaExports).toBe(false);
+    expect("probeContractItem" in moduleExports).toBe(false);
+    expect("probeContractObjectView" in moduleExports).toBe(false);
+    expect("probeContractWorkflow" in moduleExports).toBe(false);
   });
 
   it("keeps migrated built-ins aligned with the canonical core namespace", () => {

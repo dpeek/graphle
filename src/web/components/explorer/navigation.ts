@@ -1,5 +1,5 @@
 import { typeId } from "@io/core/graph";
-import { pkm } from "@io/core/graph/schema/pkm";
+import { pkm } from "@io/core/graph/modules/pkm";
 
 import type { ExplorerSelection } from "./model.js";
 import { newTarget, schemaTarget } from "./model.js";

@@ -1,4 +1,4 @@
-import type { TypeModuleMeta } from "../../../graph/type-module.js";
+import type { TypeModuleMeta } from "../../../runtime/type-module.js";
 
 export const markdownMeta = {
   searchable: true,

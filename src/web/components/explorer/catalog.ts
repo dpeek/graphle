@@ -1,15 +1,17 @@
 import {
-  core,
   edgeId,
   type GraphMutationValidationResult,
   isEntityType,
   isFieldGroupRef,
-  resolvePredicateDefinitionIconId,
-  resolveTypeDefinitionIconId,
   type AnyTypeOutput,
   type Store,
   typeId,
 } from "@io/core/graph";
+import {
+  core,
+  resolvePredicateDefinitionIconId,
+  resolveTypeDefinitionIconId,
+} from "@io/core/graph/modules";
 
 import type {
   AnyEntityRef,

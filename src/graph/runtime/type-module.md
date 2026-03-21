@@ -2,37 +2,40 @@
 
 ## Purpose
 
-This document is the entry point for agents working on scalar or enum families,
-field metadata and filter contracts, or the root-safe object-view, workflow,
-and command contracts that live beside graph-owned types.
+This document is the entry point for scalar and enum families, field metadata
+and filter contracts, and the root-safe object-view, workflow, and command
+contracts that live beside graph-owned types.
 
-## Current Contract
+## Package Surfaces
 
-`../../src/graph/runtime/type-module.ts` already defines a real type-module authoring
-surface for scalar and enum families.
+`../../src/graph/runtime/type-module.ts` defines the core type-module
+authoring surface. `../../src/graph/runtime/def.ts` re-exports the focused
+authoring subset, and `../../src/graph/runtime/contracts.ts` holds the pure
+data contracts that UI layers consume.
 
-Current exported building blocks:
+Canonical imports:
+
+- `@io/core/graph/def`: focused schema and type-module authoring helpers from
+  `../../src/graph/runtime/def.ts`
+- `@io/core/graph`: root runtime surface, including `ObjectViewSpec`,
+  `WorkflowSpec`, and `GraphCommandSpec` from
+  `../../src/graph/runtime/contracts.ts`
+- `@io/core/graph/runtime`: full runtime entry surface from
+  `../../src/graph/runtime/index.ts`
+
+Exported building blocks in `../../src/graph/runtime/type-module.ts` include:
 
 - `defineScalarModule(...)`
 - `defineEnumModule(...)`
 - `defineReferenceField(...)`
 - `TypeModuleMeta`
 - `TypeModuleFilter`
-- `ObjectViewSpec`
-- `WorkflowSpec`
-- `GraphCommandSpec`
 - field-level metadata and filter override types
 
-The host-independent object-view, workflow, and command contracts live in
-`../../src/graph/runtime/contracts.ts` and are exported from the root `@io/core/graph`
-surface.
+`../../src/graph/runtime/contracts.typecheck.ts` shows the intended usage in
+real code.
 
-## Root-Safe Authoring Contracts
-
-The newer contract symbols are current package surface, not proposal text.
-`../../src/graph/runtime/contracts.typecheck.ts` shows the intended usage in real code.
-
-### `ObjectViewSpec`
+## `ObjectViewSpec`
 
 Use `ObjectViewSpec` for reusable, host-independent object presentation
 metadata that belongs with one type or a very small slice of related types.
@@ -49,7 +52,7 @@ Current fields:
 This contract stays pure data. React composition, DOM layout, route ownership,
 and browser event handling stay out of it.
 
-### `WorkflowSpec`
+## `WorkflowSpec`
 
 Use `WorkflowSpec` for reusable, declarative multi-step flows that reference
 object-view keys and command keys without turning the graph root into a route
@@ -66,7 +69,7 @@ Current fields:
 Type-local workflows can live beside a type. Cross-type workflows can live in a
 small graph-owned workflow module, but the contract itself stays root-safe.
 
-### `GraphCommandSpec`
+## `GraphCommandSpec`
 
 Use `GraphCommandSpec<Input, Output>` for a durable command descriptor that
 captures execution mode, I/O shape, and policy without embedding the
@@ -83,15 +86,18 @@ Current fields:
 The descriptor belongs in `@io/core/graph`. The authoritative implementation,
 transport wiring, and route ownership still belong in `app`.
 
-## Current Authoring Shape
+## Canonical Module Layout
 
-Canonical built-in scalar families now live under
-`../../src/graph/modules/core/*`. The co-located per-type pattern stays the same:
+Built-in graph modules live under `../../src/graph/modules/`:
 
-- `type.ts`: codec and scalar definition
-- `meta.ts`: display/editor metadata
-- `filter.ts`: typed filter operators
-- `index.ts`: assembled module export
+- `../../src/graph/modules/core/` for `core:` families
+- `../../src/graph/modules/ops/<slice>/` for `ops:` slices
+- `../../src/graph/modules/pkm/<slice>/` for `pkm:` slices
+- `../../src/graph/modules/core.ts`,
+  `../../src/graph/modules/ops.ts`,
+  `../../src/graph/modules/pkm.ts`: namespace assembly entrypoints
+- `../../src/graph/modules/ops/env-var/schema.ts` and
+  `../../src/graph/modules/pkm/topic/schema.ts`: exported slice subpaths
 
 Examples:
 
@@ -101,117 +107,56 @@ Examples:
 - `../../src/graph/modules/core/string/`
 - `../../src/graph/modules/core/number/`
 - `../../src/graph/modules/core/boolean/`
+- `../../src/graph/modules/core/enum-module.ts`
 
-Enum families already have a default module path via `../../src/graph/modules/core/enum-module.ts`.
+## Per-Type Authoring Layout
 
-## Default Directory Contract
-
-One directory per type is the default authoring unit for graph-owned schema
-modules.
-
-The current canonical tree is:
-
-- `../../src/graph/modules/core/` for `core:` types
-- `../../src/graph/modules/ops/<slice>/` for `ops:` types
-- `../../src/graph/modules/pkm/<slice>/` for `pkm:` types
-
-`../../src/graph/schema/` remains as the compatibility entry surface for existing
-package imports. Ownership now lives in `../../src/graph/modules/`, which keeps
-namespace ownership explicit while preserving the existing co-located scalar
-pattern as the starting point for richer modules.
-
-## Per-Type Module Shape
-
-The current scalar layout remains the baseline shape:
+Common files in the current tree:
 
 - `type.ts`: canonical type definition or codec
-- `meta.ts`: host-neutral metadata
+- `meta.ts`: host-neutral metadata when needed
 - `filter.ts`: typed filter operators when needed
-- `index.ts`: root-safe export surface for the type
+- `kind.ts`: sibling enum or helper definitions when a slice needs them
+- `index.ts`: root-safe slice aggregator
+- `schema.ts`: namespace slice entrypoint for exported subpaths
+- `data.ts`: static enum data when needed
 
-Richer entity-like types can add neighbors such as:
-
-- `views.ts`: host-neutral object or workflow specs
-- `commands.ts`: host-neutral command descriptors
-- `fixtures.ts`: reusable sample builders that are safe to ship from `graph`
-- `react.tsx`: host-neutral React composition
-- `react-dom.tsx`: DOM-specific rendering or editing
-- `react-opentui.tsx`: OpenTUI-specific rendering or editing
-
-Not every type directory needs every file. The rule is to keep the type as the
-main authoring boundary rather than splitting canonical ownership across
-taxonomy files or app routes.
+Not every slice needs every file. Keep the type or slice directory as the
+authoring boundary and publish it through the canonical module subpaths above.
 
 ## Root-Safe Export Rule
 
 Physical colocation and package export ownership are separate concerns.
 
-- A type-local `index.ts` must stay root-safe for `@io/core/graph`.
-- Root-safe exports may include canonical schema, metadata, filters, pure view
-  specs, pure command descriptors, and reusable fixtures.
-- A type-local `index.ts` must not import or re-export `react.tsx`,
-  `react-dom.tsx`, `react-opentui.tsx`, browser APIs, OpenTUI code, or route
-  registration helpers.
-- Adapter entrypoints such as `@io/core/graph/react*` should import colocated
-  adapter files directly instead of reaching through the root export.
+- published type and slice entry files must stay root-safe for
+  `@io/core/graph`, `@io/core/graph/def`, or the module subpaths
+- root-safe exports may include canonical schema, metadata, filters, pure view
+  specs, pure command descriptors, and reusable fixtures
+- published module entry files must not import browser APIs, OpenTUI code, or
+  route registration helpers
+- host-specific composition belongs on `@io/core/graph/runtime/react`,
+  `@io/core/graph/adapters/react-dom`, or
+  `@io/core/graph/adapters/react-opentui`
 
-Taxonomy modules follow the same rule: they aggregate only the root-safe parts
-of their type directories.
+## Authoring Semantics
 
-## Current Semantics
-
-Type modules already provide:
+Type modules provide:
 
 - typed decoded value alignment across schema, metadata, and filter operators
 - default display and editor kinds
 - field-level metadata overrides
 - field-level filter narrowing and default-operator overrides
-- collection metadata hooks such as ordered vs unordered semantics
+- collection metadata hooks such as ordered versus unordered semantics
 
-This is real engine code, not just a design sketch.
+## Reference Fields
 
-## Current Limits
-
-- there is no required per-type `react.tsx`, `react-dom.tsx`, or
-  `react-opentui.tsx` contract in `graph` today
-- renderer and editor resolution do not live on the root `@io/core/graph` surface;
-  current resolver primitives ship on `@io/core/graph/react` from
-  `src/graph/runtime/react/*`, and default DOM capabilities ship on
-  `@io/core/graph/react-dom` from `src/graph/adapters/react-dom/*`
-- entity-reference fields still use `defineReferenceField(...)` plus
-  reference-policy helpers rather than a richer module family
-- richer entity-level layout and composition beyond pure specs is still mostly
-  roadmap
-
-## Reference-Policy Helpers
-
-`@io/core/graph` already exports a small helper surface for relationship authoring:
+`@io/core/graph` exports a small helper surface for relationship authoring:
 
 - `existingEntityReferenceField(...)`
 - `existingEntityReferenceFieldMeta(...)`
 
-Today those helpers encode the existing-entity-only selection policy plus the
-most common UI hints that travel with it, such as collection semantics and an
-explicit collection editor kind like the shared entity-reference combobox.
-They also carry simple picker rules such as excluding the current subject from
-self-referential single-value selections.
-Entity-reference fields now resolve to the shared combobox across both
-single-value and collection cardinalities. These helpers are still thin
-field-authoring conveniences, not route code, DOM widgets, or a full
-relationship-search layer.
-
-## Roadmap
-
-- expand the current metadata, view, workflow, and command contracts into fuller
-  adapter resolution
-- add stronger conventions for richer domain modules such as address-like structures
-- decide how much entity-level layout metadata belongs beside schema definitions
-- keep runtime-safe authoring code separate from platform adapters if those land later
-
-## Future Work Suggestions
-
-1. Add one “how to author a new scalar family” example that walks through `type.ts`, `meta.ts`, and `filter.ts`.
-2. Document which metadata keys are already relied on by the web explorer and other UI surfaces.
-3. Decide whether reference fields should gain their own first-class module abstraction or stay helper-based.
-4. Add a small contract test suite that proves override composition across representative families.
-5. Capture when `web.tsx` or `tui.tsx` belongs in this package versus an adapter package.
+These helpers encode the existing-entity selection policy plus the most common
+UI hints that travel with it, such as collection semantics, subject exclusion,
+and explicit collection editor kinds. The React and DOM adapter layers consume
+that policy without moving host widgets or route code into the root module
+surface.

@@ -3,7 +3,7 @@ import { defineType } from "@io/core/graph/def";
 import {
   entityReferenceComboboxEditorKind,
   existingEntityReferenceField,
-} from "../../../graph/reference-policy.js";
+} from "../../../runtime/reference-policy.js";
 import { core } from "../../core.js";
 import { booleanTypeModule } from "../../core/index.js";
 import { markdownTypeModule } from "../../core/markdown/index.js";

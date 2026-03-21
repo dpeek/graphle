@@ -2,7 +2,6 @@ export * from "./persisted-authority";
 export * from "./bootstrap";
 export * from "./client";
 export * from "./contracts";
-export * from "./core";
 export * from "./http-client";
 export * from "./id";
 export * from "./identity";

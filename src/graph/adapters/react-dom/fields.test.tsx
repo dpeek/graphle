@@ -2,14 +2,9 @@ import { describe, expect, it } from "bun:test";
 
 import { renderToStaticMarkup } from "react-dom/server";
 
-import {
-  bootstrap,
-  core,
-  createStore,
-  createTypeClient,
-  defaultMoneyCurrencyKey,
-} from "../../index.js";
-import { kitchenSink } from "../../schema/test.js";
+import { bootstrap, createStore, createTypeClient } from "../../index.js";
+import { core, defaultMoneyCurrencyKey } from "../../modules/index.js";
+import { kitchenSink } from "../../testing/kitchen-sink.js";
 import { PredicateFieldEditor, PredicateFieldView, defaultWebFieldResolver } from "./resolver.js";
 
 function createRecordFields() {

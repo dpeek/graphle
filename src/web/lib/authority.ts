@@ -3,7 +3,6 @@ import {
   createPersistedAuthoritativeGraph,
   createStore,
   createTypeClient,
-  core,
   edgeId,
   type GraphFieldAuthority,
   isEntityType,
@@ -19,8 +18,9 @@ import {
   type Store,
   type StoreSnapshot,
 } from "@io/core/graph";
-import { ops } from "@io/core/graph/schema/ops";
-import { pkm } from "@io/core/graph/schema/pkm";
+import { core } from "@io/core/graph/modules";
+import { ops } from "@io/core/graph/modules/ops";
+import { pkm } from "@io/core/graph/modules/pkm";
 
 import { seedExampleGraph } from "./example-data.js";
 import {

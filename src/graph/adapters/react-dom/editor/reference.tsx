@@ -1,4 +1,5 @@
-import { core, type GraphMutationValidationResult } from "../../../index.js";
+import type { GraphMutationValidationResult } from "../../../index.js";
+import { core } from "../../../modules/index.js";
 import {
   getPredicateEntityReferenceOptions,
   getPredicateEntityReferencePolicy,

@@ -1,12 +1,6 @@
-import {
-  createIdMap,
-  core,
-  defineNamespace,
-  defineReferenceField,
-  defineType,
-  stringTypeModule,
-} from "../index.js";
+import { createIdMap, defineNamespace, defineReferenceField, defineType } from "../index.js";
 import type { GraphCommandSpec, ObjectViewSpec, WorkflowSpec } from "../index.js";
+import { core, stringTypeModule } from "../modules/index.js";
 
 // Test-only root-safe contract probes that feature work can copy from.
 export const probeContractItem = defineType({

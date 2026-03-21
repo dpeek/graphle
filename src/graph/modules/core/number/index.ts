@@ -1,4 +1,4 @@
-import { defineScalarModule } from "../../../graph/type-module.js";
+import { defineScalarModule } from "../../../runtime/type-module.js";
 import { numberFilter } from "./filter.js";
 import { numberMeta } from "./meta.js";
 import { numberType } from "./type.js";

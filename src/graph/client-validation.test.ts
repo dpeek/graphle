@@ -3,7 +3,6 @@ import { describe, expect, it } from "bun:test";
 import {
   GraphValidationError,
   bootstrap,
-  core,
   createStore,
   createTypeClient,
   defineNamespace,
@@ -11,8 +10,8 @@ import {
   defineType,
   edgeId,
   formatValidationPath,
-  stringTypeModule,
 } from "@io/core/graph";
+import { core, stringTypeModule } from "@io/core/graph/modules";
 
 import { createTestGraph, testNamespace } from "./test-graph.js";
 

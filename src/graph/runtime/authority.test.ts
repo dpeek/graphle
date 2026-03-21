@@ -3,7 +3,7 @@ import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
-import { kitchenSink } from "../schema/test";
+import { kitchenSink } from "../testing/kitchen-sink.js";
 import {
   createJsonPersistedAuthoritativeGraph,
   createPersistedAuthoritativeGraph,

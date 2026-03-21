@@ -1,4 +1,4 @@
-import { performValidatedMutation, usePredicateField } from "@io/core/graph/react";
+import { performValidatedMutation, usePredicateField } from "@io/core/graph/runtime/react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@io/web/select";
 
 import { getDefinitionDisplayLabel } from "./helpers.js";

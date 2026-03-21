@@ -1,4 +1,5 @@
-import { bootstrap, createStore, createTypeClient, core } from "@io/core/graph";
+import { bootstrap, createStore, createTypeClient } from "@io/core/graph";
+import { core } from "@io/core/graph/modules";
 
 import { testNamespace } from "./test-graph.js";
 

@@ -5,7 +5,6 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 
 import {
   bootstrap,
-  core,
   createAuthoritativeGraphWriteSession,
   createStore,
   createTotalSyncPayload,
@@ -17,10 +16,11 @@ import {
   type NamespaceClient,
   type SyncPayload,
 } from "../graph/index.js";
-import { ops } from "../graph/schema/ops.js";
-import { pkm } from "../graph/schema/pkm.js";
-import { topicKind } from "../graph/schema/pkm/topic.js";
-import { kitchenSink } from "../graph/schema/test.js";
+import { core } from "../graph/modules/index.js";
+import { ops } from "../graph/modules/ops.js";
+import { pkm } from "../graph/modules/pkm.js";
+import { topicKind } from "../graph/modules/pkm/topic/schema.js";
+import { kitchenSink } from "../graph/testing/kitchen-sink.js";
 import { createGraphMcpServer, createGraphMcpSession } from "./graph.js";
 
 const productGraph = { ...pkm, ...ops } as const;

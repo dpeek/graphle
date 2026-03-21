@@ -8,13 +8,12 @@ import {
   createSyncedTypeClient,
   createTotalSyncPayload,
   createTypeClient,
-  core,
   defineNamespace,
   defineScalar,
   defineType,
   edgeId,
-  stringTypeModule,
 } from "@io/core/graph";
+import { core, stringTypeModule } from "@io/core/graph/modules";
 
 import { testNamespace } from "./test-graph.js";
 

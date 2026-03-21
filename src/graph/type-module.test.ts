@@ -6,7 +6,7 @@ import {
   colorTypeModule,
   core,
   stringTypeModule,
-} from "@io/core/graph";
+} from "@io/core/graph/modules";
 
 import { testNamespace } from "./test-graph.js";
 

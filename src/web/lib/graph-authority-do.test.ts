@@ -5,14 +5,14 @@ import {
   bootstrap,
   createStore,
   createTypeClient,
-  core,
   edgeId,
   type GraphWriteTransaction,
   type NamespaceClient,
   type StoreSnapshot,
 } from "@io/core/graph";
-import { ops } from "@io/core/graph/schema/ops";
-import { pkm } from "@io/core/graph/schema/pkm";
+import { core } from "@io/core/graph/modules";
+import { ops } from "@io/core/graph/modules/ops";
+import { pkm } from "@io/core/graph/modules/pkm";
 
 import { WebGraphAuthorityDurableObject } from "./graph-authority-do.js";
 

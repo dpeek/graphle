@@ -8,9 +8,9 @@ import {
   type SyncPayload,
   type SyncedTypeClient,
 } from "@io/core/graph";
-import { GraphMutationRuntimeProvider } from "@io/core/graph/react";
-import { ops } from "@io/core/graph/schema/ops";
-import { pkm } from "@io/core/graph/schema/pkm";
+import { ops } from "@io/core/graph/modules/ops";
+import { pkm } from "@io/core/graph/modules/pkm";
+import { GraphMutationRuntimeProvider } from "@io/core/graph/runtime/react";
 import { Button } from "@io/web/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@io/web/card";
 import { Skeleton } from "@io/web/skeleton";

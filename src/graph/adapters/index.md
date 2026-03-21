@@ -2,19 +2,34 @@
 
 ## Purpose
 
-This directory owns host-specific graph adapter composition while the package
-tree keeps host-neutral graph behavior under runtime or modules.
+`../../src/graph/runtime/react/` and `../../src/graph/adapters/` define the
+graph package's React and host-specific adapter surfaces.
 
-## Current State
+## Public Entry Surfaces
 
-- `@io/core/graph/adapters/react` maps directly to
-  `../../src/graph/adapters/react/` and backs the stable `@io/core/graph/react`
-  shim
-- `@io/core/graph/adapters/react-dom` maps directly to
-  `../../src/graph/adapters/react-dom/` and owns DOM capability registries,
-  fallback rendering, and editor composition
-- `@io/core/graph/adapters/react-opentui` keeps the reserved terminal adapter
-  boundary in one place while `@io/core/graph/react-opentui` stays as the
-  stable shim
-- the top-level `../../src/graph/react*` folders remain compatibility shims
-  while ownership lives here or under `../../src/graph/runtime/react/`
+- `@io/core/graph/runtime/react`: `../../src/graph/runtime/react/index.ts`;
+  graph-aware, host-neutral React hooks and resolver primitives
+- `@io/core/graph/adapters/react-dom`:
+  `../../src/graph/adapters/react-dom/index.ts`; DOM field views and editors,
+  filter resolvers, icon rendering, and editor modules
+- `@io/core/graph/adapters/react-opentui`:
+  `../../src/graph/adapters/react-opentui/index.ts`; terminal adapter package
+  root that currently exports an empty surface
+
+## Source Layout
+
+- `../../src/graph/runtime/react/entity.tsx`,
+  `../../src/graph/runtime/react/predicate.ts`,
+  `../../src/graph/runtime/react/filter.tsx`,
+  `../../src/graph/runtime/react/mutation-validation.ts`,
+  `../../src/graph/runtime/react/persisted-mutation.tsx`,
+  `../../src/graph/runtime/react/resolver.tsx`: host-neutral React helpers
+- `../../src/graph/adapters/react-dom/fields.tsx`,
+  `../../src/graph/adapters/react-dom/filter.tsx`,
+  `../../src/graph/adapters/react-dom/filter-editors.tsx`,
+  `../../src/graph/adapters/react-dom/icon.tsx`,
+  `../../src/graph/adapters/react-dom/resolver.tsx`: DOM adapter exports
+- `../../src/graph/adapters/react-dom/editor/`: DOM editor modules and shared
+  preview helpers
+- `../../src/graph/adapters/react-opentui/index.ts`: terminal adapter entry
+  file

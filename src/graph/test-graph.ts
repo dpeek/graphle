@@ -1,5 +1,7 @@
-import { bootstrap, core, createStore, createTypeClient } from "@io/core/graph";
-import { kitchenSink } from "@io/core/graph/schema/test";
+import { bootstrap, createStore, createTypeClient } from "@io/core/graph";
+import { core } from "@io/core/graph/modules";
+
+import { kitchenSink } from "./testing/kitchen-sink.js";
 
 export const testNamespace = kitchenSink;
 export const testDefs = { ...core, ...testNamespace };

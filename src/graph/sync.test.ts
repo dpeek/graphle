@@ -15,7 +15,6 @@ import {
   createTotalSyncPayload,
   createTotalSyncSession,
   createTypeClient,
-  core,
   edgeId,
   formatValidationPath,
   type GraphWriteTransaction,
@@ -26,6 +25,7 @@ import {
   validateIncrementalSyncPayload,
   validateIncrementalSyncResult,
 } from "@io/core/graph";
+import { core } from "@io/core/graph/modules";
 
 import { testNamespace } from "./test-graph.js";
 

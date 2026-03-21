@@ -17,10 +17,8 @@ The canonical ops slice lives alongside this doc under
 per-type module shape:
 
 - `type.ts`: defines the env-var type and validation helpers
-- `schema.ts`: re-exports the public env-var surface plus the
+- `schema.ts`: backs the `@io/core/graph/modules/ops/env-var` package entry and re-exports the
   `buildSecretHandleName(...)` helper
-- `../../../../src/graph/schema/ops/env-var.ts`: compatibility shim for the
-  legacy schema import surface
 
 The referenced secret-handle type lives under
 `../../../../src/graph/modules/core/secret/`.
