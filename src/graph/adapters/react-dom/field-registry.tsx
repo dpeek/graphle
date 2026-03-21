@@ -4,15 +4,15 @@ import {
   type PredicateFieldProps,
   type PredicateFieldViewCapability,
 } from "../../runtime/react/index.js";
-import { durationFieldViewCapability } from "./editor/duration.js";
-import { markdownFieldViewCapability } from "./editor/markdown.js";
-import { moneyFieldViewCapability } from "./editor/money.js";
-import { percentFieldViewCapability } from "./editor/percent.js";
-import { quantityFieldViewCapability } from "./editor/quantity.js";
-import { rangeFieldViewCapability } from "./editor/range.js";
-import { rateFieldViewCapability } from "./editor/rate.js";
-import { entityReferenceListViewCapability } from "./editor/reference.js";
-import { svgFieldViewCapability } from "./editor/svg.js";
+import { durationFieldViewCapability } from "./fields/duration.js";
+import { markdownFieldViewCapability } from "./fields/markdown.js";
+import { moneyFieldViewCapability } from "./fields/money.js";
+import { percentFieldViewCapability } from "./fields/percent.js";
+import { quantityFieldViewCapability } from "./fields/quantity.js";
+import { rangeFieldViewCapability } from "./fields/range.js";
+import { rateFieldViewCapability } from "./fields/rate.js";
+import { entityReferenceListViewCapability } from "./fields/reference.js";
+import { svgFieldViewCapability } from "./fields/svg.js";
 
 type AnyFieldProps = PredicateFieldProps<any, any>;
 
@@ -113,4 +113,4 @@ export const genericWebFieldViewCapabilities = [
   entityReferenceListViewCapability,
 ] satisfies readonly PredicateFieldViewCapability<any, any>[];
 
-export { genericWebFieldEditorCapabilities } from "./editor/index.js";
+export { genericWebFieldEditorCapabilities } from "./fields/index.js";

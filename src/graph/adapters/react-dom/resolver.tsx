@@ -9,7 +9,10 @@ import {
   type PredicateFieldViewProps,
   type UnsupportedFieldFallbackProps,
 } from "../../runtime/react/index.js";
-import { genericWebFieldEditorCapabilities, genericWebFieldViewCapabilities } from "./fields.js";
+import {
+  genericWebFieldEditorCapabilities,
+  genericWebFieldViewCapabilities,
+} from "./field-registry.js";
 
 export { createWebFieldResolver } from "../../runtime/react/index.js";
 export type {

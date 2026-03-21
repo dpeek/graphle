@@ -94,7 +94,8 @@ subpaths.
   `../../src/graph/modules/pkm/topic/schema.ts`: slice entrypoints that back
   the exported `ops/env-var` and `pkm/topic` subpaths
 - `../../src/graph/adapters/react-dom/`: DOM capability registries, default
-  field views/editors, filter resolvers, icon rendering, and editor modules
+  field views/editors, filter resolvers, icon rendering, and field-family
+  modules
 - `../../src/graph/adapters/react-opentui/index.ts`: terminal adapter package
   root; it currently exports an empty surface
 - `../../src/graph/icon.ts`: graph-owned icon helpers

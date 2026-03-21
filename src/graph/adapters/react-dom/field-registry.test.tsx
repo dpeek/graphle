@@ -78,7 +78,7 @@ function createRecordFields() {
   };
 }
 
-describe("generic react-dom field coverage", () => {
+describe("generic react-dom field registry coverage", () => {
   it("resolves structured value fields through the shared web resolver", () => {
     const fields = createRecordFields();
 

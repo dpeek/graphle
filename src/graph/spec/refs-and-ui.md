@@ -80,7 +80,7 @@ React package subpaths split between the canonical host-neutral surface at
 `../../src/graph/adapters/react-dom/`:
 
 - default field view and editor capabilities
-- editor modules under `../../src/graph/adapters/react-dom/editor/`
+- field-family modules under `../../src/graph/adapters/react-dom/fields/`
 - default filter operand editors and filter resolvers
 - browser fallback rendering around `PredicateFieldView` and
   `PredicateFieldEditor`
