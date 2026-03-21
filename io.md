@@ -20,6 +20,7 @@ Local constraints:
 - keep changes narrow and reviewable across workspaces
 - update docs, examples, and tests together when entrypoint or context behavior changes
 - keep repo-local guidance in `io.md` and `src/index.md`
+- repo default Codex sessions run with `AGENT=1` so `bun test` output stays compact
 
 Output:
 

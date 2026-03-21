@@ -7,7 +7,7 @@ export default defineIoConfig({
   },
   codex: {
     approvalPolicy: "never",
-    command: "codex app-server",
+    command: "AGENT=1 codex app-server",
     threadSandbox: "workspace-write",
   },
   hooks: {
