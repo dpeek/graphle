@@ -81,6 +81,9 @@ function readPersistedWriteHistory(rawHistory: unknown): {
     };
   }
 
+  // Legacy entries predate durable writeScope storage. They are intentionally
+  // normalized to client-tx on load and then rewritten, rather than treated as
+  // exact historical authority-origin audit data.
   return {
     writeHistory: {
       cursorPrefix,

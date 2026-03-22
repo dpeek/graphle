@@ -47,7 +47,7 @@ export default {
       return getGraphAuthorityFetcher(env).fetch(request);
     }
 
-    if (url.pathname === "/api/secret-fields") {
+    if (url.pathname === "/api/commands") {
       return getGraphAuthorityFetcher(env).fetch(request);
     }
 

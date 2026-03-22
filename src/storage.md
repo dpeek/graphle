@@ -65,11 +65,12 @@ Current behavior:
   `io_secret_value`
 - accepted authoritative results now carry `writeScope`, so durable state keeps
   `client-tx` versus `server-command` origin across commit, restart, and
-  baseline rewrites
+  baseline rewrites for data written after `writeScope` existed
 - additive compatibility is explicit: older `io_graph_tx` tables gain a
   `write_scope` column with a `client-tx` default, and legacy JSON write
   histories without `writeScope` are normalized and rewritten through the
-  shared persisted-authority path
+  shared persisted-authority path rather than treated as exact pre-migration
+  audit truth
 
 ### Constructor Implication
 
@@ -190,7 +191,8 @@ Purpose:
 Compatibility note:
 
 - older rows are backfilled as `client-tx` when the additive `write_scope`
-  column is installed
+  column is installed; that preserves compatibility but does not recover lost
+  pre-migration `server-command` or `authority-only` origin
 
 #### `io_graph_tx_op`
 
@@ -489,7 +491,7 @@ Done in the current web Durable Object path:
   advances with pruning, and old or unknown cursors fall back to total sync
 - file-backed persisted authorities normalize legacy write histories that lack
   `writeScope` to `client-tx` and rewrite them through the same shared
-  persistence contract
+  persistence contract instead of claiming exact historical authority origin
 - coverage in `../../src/web/lib/graph-authority-do.test.ts` exercises
   constructor bootstrap, restart hydration, retained-history pruning, reset
   baselines, rollback on SQL failure, secret side-storage behavior, and

@@ -91,8 +91,8 @@ The synced client can capture local diffs as pending graph write transactions,
 `flush()` queued writes, `sync()` authoritative state, and expose queue and sync
 state.
 
-The web Worker exposes thin graph APIs, including `GET /api/sync` and
-`POST /api/secret-fields`, and there is an explicit proposal for a read-first
+The web Worker exposes thin graph APIs, including `GET /api/sync`,
+`POST /api/commands`, and there is an explicit proposal for a read-first
 MCP server on top of one synced HTTP graph client.
 
 ## Frontend Architecture

@@ -897,7 +897,7 @@ Rules:
   guards. The browser only receives replicated fields and safe capability
   metadata.
 - Secret-backed fields continue to mutate through explicit authority paths such
-  as `/api/secret-fields`; generic module editors must not bypass that boundary.
+  as `/api/commands`; generic module editors must not bypass that boundary.
 - Capability checks must gate both navigation and actions. Hiding a route but
   leaving a command callable from the browser is not acceptable.
 - Debug tools, graph explorer, and sync pages follow the same visibility rules

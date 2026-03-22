@@ -410,7 +410,8 @@ Secret-backed fields:
 
 ### Web authority secret mutation
 
-- Name: `writeSecretField(...)` and `POST /api/secret-fields`
+- Name: `executeCommand({ kind: "write-secret-field", input })`,
+  `writeSecretField(...)`, and canonical `POST /api/commands`
 - Purpose: create or rotate a secret-backed field through an explicit authority
   command
 - Caller: web operator surfaces
@@ -423,12 +424,13 @@ Secret-backed fields:
 
 ### Web authority transport proof
 
-- Name: `GET /api/sync`, `POST /api/tx`
+- Name: `GET /api/sync`, `POST /api/tx`, `POST /api/commands`
 - Purpose: expose the branch-owned sync and write contracts over HTTP for the
   current Worker proof
 - Caller: browser synced client
 - Callee: web authority runtime
-- Inputs: optional `after` cursor or `GraphWriteTransaction`
+- Inputs: optional `after` cursor, `GraphWriteTransaction`, or supported web
+  authority command envelopes
 - Outputs: sync payloads or authoritative write results
 - Failure shape: `400` for invalid JSON or graph validation failures
 - Stability: `provisional`

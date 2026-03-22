@@ -8,7 +8,8 @@ secret material out of the replicated graph.
 
 Environment variables are created as ordinary graph entities through the shared
 explorer and delegate secret-aware writes to the generic web authority command
-at `POST /api/secret-fields`.
+at the canonical `POST /api/commands` route using the `write-secret-field`
+envelope.
 
 ## Graph Shape
 
@@ -50,8 +51,8 @@ presence, version, and rotation timing.
 
 ## Authority Contract
 
-The authority boundary is the web Worker/Durable Object command
-`POST /api/secret-fields`.
+The authority boundary is the web Worker/Durable Object command transport
+`POST /api/commands` with `kind: "write-secret-field"`.
 
 The contract is:
 

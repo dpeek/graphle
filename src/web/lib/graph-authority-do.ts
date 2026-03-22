@@ -14,7 +14,7 @@ import type {
 } from "./authority.js";
 import { createWebAppAuthority } from "./authority.js";
 import {
-  handleSecretFieldRequest,
+  handleCommandRequest,
   handleSyncRequest,
   handleTransactionRequest,
 } from "./server-routes.js";
@@ -776,6 +776,9 @@ function bootstrapDurableObjectAuthoritySchema(storage: DurableObjectStorageLike
     ),
   );
   if (!graphTxColumns.has("write_scope")) {
+    // Legacy SQL rows never recorded authoritative origin. Backfilling the new
+    // column as client-tx keeps restart compatibility explicit without
+    // implying that pre-migration history can recover lost scope fidelity.
     storage.sql.exec(
       `ALTER TABLE io_graph_tx
       ADD COLUMN write_scope TEXT NOT NULL DEFAULT 'client-tx'
@@ -887,8 +890,8 @@ export class WebGraphAuthorityDurableObject {
       return handleTransactionRequest(request, authority);
     }
 
-    if (url.pathname === "/api/secret-fields") {
-      return handleSecretFieldRequest(request, authority);
+    if (url.pathname === "/api/commands") {
+      return handleCommandRequest(request, authority);
     }
 
     return new Response("Not Found", { status: 404 });

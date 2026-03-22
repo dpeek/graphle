@@ -1,7 +1,10 @@
 import { GraphValidationError, type GraphWriteTransaction } from "@io/core/graph";
 
-import type { WebAppAuthority } from "./authority.js";
-import type { WriteSecretFieldInput } from "./secret-fields.js";
+import type {
+  WebAppAuthority,
+  WebAppAuthorityCommand,
+  WebAppAuthorityCommandResult,
+} from "./authority.js";
 
 export function handleSyncRequest(request: Request, authority: WebAppAuthority): Response {
   if (request.method !== "GET") {
@@ -41,6 +44,47 @@ function formatGraphValidationError(error: GraphValidationError): string {
   return error.result.issues[0]?.message ?? error.message;
 }
 
+function isObjectRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object";
+}
+
+function isSupportedWebAppAuthorityCommand(value: unknown): value is WebAppAuthorityCommand {
+  return (
+    isObjectRecord(value) && value.kind === "write-secret-field" && isObjectRecord(value.input)
+  );
+}
+
+function authorityCommandSuccessStatus(
+  command: WebAppAuthorityCommand,
+  result: WebAppAuthorityCommandResult,
+): number {
+  if (command.kind === "write-secret-field") {
+    return result.created ? 201 : 200;
+  }
+
+  return 200;
+}
+
+async function executeCommandRequest(
+  command: WebAppAuthorityCommand,
+  authority: WebAppAuthority,
+): Promise<Response> {
+  try {
+    const result = await authority.executeCommand(command);
+    return Response.json(result, {
+      status: authorityCommandSuccessStatus(command, result),
+      headers: {
+        "cache-control": "no-store",
+      },
+    });
+  } catch (error) {
+    if (isHttpError(error)) {
+      return errorResponse(error.message, error.status);
+    }
+    throw error;
+  }
+}
+
 export async function handleTransactionRequest(
   request: Request,
   authority: WebAppAuthority,
@@ -74,7 +118,7 @@ export async function handleTransactionRequest(
   }
 }
 
-export async function handleSecretFieldRequest(
+export async function handleCommandRequest(
   request: Request,
   authority: WebAppAuthority,
 ): Promise<Response> {
@@ -85,25 +129,16 @@ export async function handleSecretFieldRequest(
     });
   }
 
-  let body: WriteSecretFieldInput;
+  let body: unknown;
   try {
-    body = (await request.json()) as WriteSecretFieldInput;
+    body = await request.json();
   } catch {
     return errorResponse("Request body must be valid JSON.", 400);
   }
 
-  try {
-    const result = await authority.writeSecretField(body);
-    return Response.json(result, {
-      status: result.created ? 201 : 200,
-      headers: {
-        "cache-control": "no-store",
-      },
-    });
-  } catch (error) {
-    if (isHttpError(error)) {
-      return errorResponse(error.message, error.status);
-    }
-    throw error;
+  if (!isSupportedWebAppAuthorityCommand(body)) {
+    return errorResponse("Request body must be a supported web authority command.", 400);
   }
+
+  return executeCommandRequest(body, authority);
 }

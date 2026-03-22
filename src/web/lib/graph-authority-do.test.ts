@@ -352,18 +352,48 @@ async function postSecretField(
     readonly plaintext: string;
     readonly predicateId: string;
   },
+  expectedStatus = 201,
 ): Promise<SecretFieldResponse> {
   const response = await durableObject.fetch(
-    new Request("https://graph-authority.local/api/secret-fields", {
+    new Request("https://graph-authority.local/api/commands", {
       method: "POST",
       headers: {
         "content-type": "application/json",
       },
-      body: JSON.stringify(input),
+      body: JSON.stringify({
+        kind: "write-secret-field",
+        input,
+      }),
     }),
   );
 
-  expect(response.status).toBe(201);
+  expect(response.status).toBe(expectedStatus);
+  return (await response.json()) as SecretFieldResponse;
+}
+
+async function postCommand(
+  durableObject: WebGraphAuthorityDurableObject,
+  command: {
+    readonly kind: "write-secret-field";
+    readonly input: {
+      readonly entityId: string;
+      readonly plaintext: string;
+      readonly predicateId: string;
+    };
+  },
+  expectedStatus = 201,
+): Promise<SecretFieldResponse> {
+  const response = await durableObject.fetch(
+    new Request("https://graph-authority.local/api/commands", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+      },
+      body: JSON.stringify(command),
+    }),
+  );
+
+  expect(response.status).toBe(expectedStatus);
   return (await response.json()) as SecretFieldResponse;
 }
 
@@ -428,6 +458,186 @@ describe("web graph authority durable object", () => {
 
     await readSyncPayload(durableObject);
     expect(getBlockConcurrencyWhileCount()).toBe(1);
+  });
+
+  it("accepts secret-field command envelopes over /api/commands", async () => {
+    const { db, state } = createSqliteDurableObjectState();
+    const durableObject = new WebGraphAuthorityDurableObject(state);
+    const initialSync = await readSyncPayload(durableObject);
+    const createdEnvVar = buildTransactionFromSnapshot(
+      initialSync.snapshot ?? { edges: [], retracted: [] },
+      "tx:create-command-env-var",
+      (graph) =>
+        graph.envVar.create({
+          description: "Shared command route credential",
+          name: "OPENAI_API_KEY",
+        }),
+    );
+
+    await postTransaction(durableObject, createdEnvVar.transaction);
+    const commandResult = await postCommand(durableObject, {
+      kind: "write-secret-field",
+      input: {
+        entityId: createdEnvVar.result,
+        predicateId: envVarSecretPredicateId,
+        plaintext: "sk-live-command-route",
+      },
+    });
+    const txRows = queryAll<GraphTxRow>(
+      db,
+      `SELECT seq, tx_id, cursor, write_scope
+      FROM io_graph_tx
+      ORDER BY seq ASC`,
+    );
+    const restarted = new WebGraphAuthorityDurableObject(state);
+    const incremental = await readSyncPayload(restarted, initialSync.cursor);
+    const commandRow = txRows.at(-1);
+
+    if (!commandRow) {
+      throw new Error("Expected the shared command route to append a durable transaction.");
+    }
+
+    expect(commandResult).toMatchObject({
+      created: true,
+      entityId: createdEnvVar.result,
+      predicateId: envVarSecretPredicateId,
+      rotated: false,
+      secretVersion: 1,
+    });
+    expect(
+      queryAll<SecretValueRow>(
+        db,
+        `SELECT secret_id, value, version
+        FROM io_secret_value`,
+      ),
+    ).toEqual([
+      {
+        secret_id: commandResult.secretId,
+        value: "sk-live-command-route",
+        version: 1,
+      },
+    ]);
+    expect(commandRow).toEqual({
+      seq: 2,
+      tx_id: expect.stringContaining(
+        `secret-field:${createdEnvVar.result}:${envVarSecretPredicateId}:`,
+      ),
+      cursor: commandRow.cursor,
+      write_scope: "server-command",
+    });
+    expect(incremental.transactions).toEqual([
+      expect.objectContaining({
+        txId: "tx:create-command-env-var",
+        writeScope: "client-tx",
+      }),
+      expect.objectContaining({
+        txId: commandRow.tx_id,
+        writeScope: "server-command",
+      }),
+    ]);
+  });
+
+  it("returns 404 for the removed /api/secret-fields route", async () => {
+    const { state } = createSqliteDurableObjectState();
+    const durableObject = new WebGraphAuthorityDurableObject(state);
+
+    const response = await durableObject.fetch(
+      new Request("https://graph-authority.local/api/secret-fields", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          entityId: "entity-id",
+          predicateId: envVarSecretPredicateId,
+          plaintext: "sk-live-removed-route",
+        }),
+      }),
+    );
+
+    expect(response.status).toBe(404);
+  });
+
+  it("normalizes legacy SQL rows without write_scope to client-tx on restart", async () => {
+    const { db, state } = createSqliteDurableObjectState();
+    const durableObject = new WebGraphAuthorityDurableObject(state);
+    const initialSync = await readSyncPayload(durableObject);
+    const createdEnvVar = buildTransactionFromSnapshot(
+      initialSync.snapshot ?? { edges: [], retracted: [] },
+      "tx:create-env-var",
+      (graph) =>
+        graph.envVar.create({
+          description: "Legacy compatibility credential",
+          name: "OPENAI_API_KEY",
+        }),
+    );
+    const createdTx = await postTransaction(durableObject, createdEnvVar.transaction);
+    await postSecretField(durableObject, {
+      entityId: createdEnvVar.result,
+      predicateId: envVarSecretPredicateId,
+      plaintext: "sk-live-legacy",
+    });
+    const scopedRows = queryAll<GraphTxRow>(
+      db,
+      `SELECT seq, tx_id, cursor, write_scope
+      FROM io_graph_tx
+      ORDER BY seq ASC`,
+    );
+    const [clientTxRow, serverCommandRow] = scopedRows;
+
+    if (!clientTxRow || !serverCommandRow) {
+      throw new Error("Expected client and server-command history rows before legacy migration.");
+    }
+
+    expect(serverCommandRow.write_scope).toBe("server-command");
+
+    db.query(`ALTER TABLE io_graph_tx RENAME TO io_graph_tx_with_scope`).run();
+    db.query(
+      `CREATE TABLE io_graph_tx (
+        seq INTEGER PRIMARY KEY,
+        tx_id TEXT NOT NULL UNIQUE,
+        cursor TEXT NOT NULL UNIQUE,
+        committed_at TEXT NOT NULL
+      )`,
+    ).run();
+    db.query(
+      `INSERT INTO io_graph_tx (seq, tx_id, cursor, committed_at)
+      SELECT seq, tx_id, cursor, committed_at
+      FROM io_graph_tx_with_scope`,
+    ).run();
+    db.query(`DROP TABLE io_graph_tx_with_scope`).run();
+
+    const restarted = new WebGraphAuthorityDurableObject(state);
+    const graphTxColumns = queryAll<{ name: string }>(db, `PRAGMA table_info(io_graph_tx)`);
+    const legacyRows = queryAll<GraphTxRow>(
+      db,
+      `SELECT seq, tx_id, cursor, write_scope
+      FROM io_graph_tx
+      ORDER BY seq ASC`,
+    );
+    const incremental = await readSyncPayload(restarted, initialSync.cursor);
+
+    expect(graphTxColumns.map((column) => column.name)).toContain("write_scope");
+    expect(legacyRows).toEqual([
+      {
+        ...clientTxRow,
+        write_scope: "client-tx",
+      },
+      {
+        ...serverCommandRow,
+        write_scope: "client-tx",
+      },
+    ]);
+    expect(incremental.transactions).toEqual([
+      expect.objectContaining({
+        txId: createdTx.txId,
+        writeScope: "client-tx",
+      }),
+      expect.objectContaining({
+        txId: serverCommandRow.tx_id,
+        writeScope: "client-tx",
+      }),
+    ]);
   });
 
   it("preserves hidden-only cursor advances through SQL-backed incremental sync after restart", async () => {

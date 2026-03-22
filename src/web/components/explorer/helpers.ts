@@ -10,6 +10,7 @@ import {
 import { core, graphIconSeeds, resolvePredicateDefinitionIconId } from "@io/core/graph/modules";
 import { format as formatDate } from "date-fns";
 
+import type { WriteSecretFieldWebAppAuthorityCommand } from "../../lib/authority.js";
 import type {
   AnyPredicateRef,
   FieldStatus,
@@ -56,13 +57,18 @@ export function readMutationError(
 }
 
 export const postSecretFieldMutation: SubmitSecretFieldMutation = async (input) => {
-  const response = await fetch("/api/secret-fields", {
+  const command = {
+    kind: "write-secret-field",
+    input,
+  } satisfies WriteSecretFieldWebAppAuthorityCommand;
+
+  const response = await fetch("/api/commands", {
     method: "POST",
     headers: {
       accept: "application/json",
       "content-type": "application/json",
     },
-    body: JSON.stringify(input),
+    body: JSON.stringify(command),
   });
 
   const payload = (await response.json().catch(() => undefined)) as

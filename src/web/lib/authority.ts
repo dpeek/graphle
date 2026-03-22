@@ -1,4 +1,5 @@
 import {
+  type AuthoritativeWriteScope,
   bootstrap,
   createPersistedAuthoritativeGraph,
   createStore,
@@ -63,6 +64,19 @@ export type WebAppAuthoritySecretWrite = WebAppAuthoritySecretRecord & {
   readonly secretId: string;
 };
 
+export type WriteSecretFieldWebAppAuthorityCommand = {
+  readonly kind: "write-secret-field";
+  readonly input: WriteSecretFieldInput;
+};
+
+export type WebAppAuthorityCommand = WriteSecretFieldWebAppAuthorityCommand;
+export type WebAppAuthorityCommandResult = WriteSecretFieldResult;
+
+type WebAppAuthorityCommandRollback = () => void;
+type WebAppAuthorityCommandStageContext = {
+  addRollback(rollback: WebAppAuthorityCommandRollback): void;
+};
+
 export interface WebAppAuthorityStorage {
   load(): Promise<PersistedAuthoritativeGraphStorageLoadResult | null>;
   loadSecrets(): Promise<Record<string, WebAppAuthoritySecretRecord>>;
@@ -76,6 +90,7 @@ export interface WebAppAuthorityStorage {
 }
 
 export type WebAppAuthority = PersistedAuthoritativeGraph<WebAppGraph> & {
+  executeCommand(command: WebAppAuthorityCommand): Promise<WebAppAuthorityCommandResult>;
   writeSecretField(input: WriteSecretFieldInput): Promise<WriteSecretFieldResult>;
 };
 
@@ -258,6 +273,58 @@ function planAuthorityMutation<TResult>(
   };
 }
 
+function runAuthorityCommandRollbacks(rollbacks: readonly WebAppAuthorityCommandRollback[]): void {
+  const rollbackErrors: unknown[] = [];
+  for (let index = rollbacks.length - 1; index >= 0; index -= 1) {
+    const rollback = rollbacks[index];
+    if (!rollback) continue;
+    try {
+      rollback();
+    } catch (error) {
+      rollbackErrors.push(error);
+    }
+  }
+
+  if (rollbackErrors.length === 1) {
+    throw rollbackErrors[0];
+  }
+  if (rollbackErrors.length > 1) {
+    throw new AggregateError(rollbackErrors, "Authority command rollback failed.");
+  }
+}
+
+export async function executeAuthorityCommand<TResult>(input: {
+  readonly changed: boolean;
+  readonly result: TResult;
+  readonly writeScope: AuthoritativeWriteScope;
+  readonly commit: (writeScope: AuthoritativeWriteScope) => Promise<void>;
+  readonly stage?: (result: TResult, context: WebAppAuthorityCommandStageContext) => void;
+}): Promise<TResult> {
+  if (!input.changed) return input.result;
+
+  const rollbacks: WebAppAuthorityCommandRollback[] = [];
+  try {
+    input.stage?.(input.result, {
+      addRollback(rollback) {
+        rollbacks.push(rollback);
+      },
+    });
+    await input.commit(input.writeScope);
+  } catch (error) {
+    try {
+      runAuthorityCommandRollbacks(rollbacks);
+    } catch (rollbackError) {
+      throw new AggregateError(
+        [error, rollbackError],
+        "Authority command failed and rollback did not complete.",
+      );
+    }
+    throw error;
+  }
+
+  return input.result;
+}
+
 function createAuthorityStorage(
   storage: WebAppAuthorityStorage,
   pendingSecretWriteRef: { current: WebAppAuthoritySecretWrite | null },
@@ -319,7 +386,9 @@ export async function createWebAppAuthority(
     maxRetainedTransactions: options.maxRetainedTransactions,
   });
 
-  async function writeSecretField(input: WriteSecretFieldInput): Promise<WriteSecretFieldResult> {
+  async function runWriteSecretFieldCommand(
+    input: WriteSecretFieldInput,
+  ): Promise<WriteSecretFieldResult> {
     const entityId = trimOptionalString(input.entityId);
     const predicateId = trimOptionalString(input.predicateId);
     const plaintext = trimOptionalString(input.plaintext);
@@ -369,7 +438,6 @@ export async function createWebAppAuthority(
       getEntityLabel(authority.store, entityId),
       fieldDefinition.fieldLabel,
     );
-
     const planned = planAuthorityMutation(
       authority.store.snapshot(),
       `secret-field:${entityId}:${predicateId}:${Date.now()}`,
@@ -411,34 +479,54 @@ export async function createWebAppAuthority(
         } satisfies WriteSecretFieldResult;
       },
     );
-
-    const nextSecretValues = new Map(secretValuesRef.current);
-    nextSecretValues.set(planned.result.secretId, plaintext);
-
-    if (planned.changed) {
-      const previousSecretValues = secretValuesRef.current;
-      secretValuesRef.current = nextSecretValues;
-      pendingSecretWriteRef.current = {
-        secretId: planned.result.secretId,
-        value: plaintext,
-        version: planned.result.secretVersion,
-      };
-      try {
+    return executeAuthorityCommand({
+      changed: planned.changed,
+      result: planned.result,
+      writeScope: "server-command",
+      async commit(writeScope) {
         await authority.applyTransaction(planned.transaction, {
-          writeScope: "server-command",
+          writeScope,
         });
-      } catch (error) {
-        secretValuesRef.current = previousSecretValues;
-        pendingSecretWriteRef.current = null;
-        throw error;
-      }
+      },
+      stage(result, context) {
+        const previousSecretValues = secretValuesRef.current;
+        context.addRollback(() => {
+          secretValuesRef.current = previousSecretValues;
+          pendingSecretWriteRef.current = null;
+        });
+
+        const nextSecretValues = new Map(previousSecretValues);
+        nextSecretValues.set(result.secretId, plaintext);
+        secretValuesRef.current = nextSecretValues;
+        pendingSecretWriteRef.current = {
+          secretId: result.secretId,
+          value: plaintext,
+          version: result.secretVersion,
+        };
+      },
+    });
+  }
+
+  async function executeCommand(
+    command: WebAppAuthorityCommand,
+  ): Promise<WebAppAuthorityCommandResult> {
+    if (command.kind !== "write-secret-field") {
+      throw new Error("Unsupported web authority command.");
     }
 
-    return planned.result;
+    return runWriteSecretFieldCommand(command.input);
+  }
+
+  async function writeSecretField(input: WriteSecretFieldInput): Promise<WriteSecretFieldResult> {
+    return executeCommand({
+      kind: "write-secret-field",
+      input,
+    });
   }
 
   return {
     ...authority,
+    executeCommand,
     writeSecretField,
   };
 }

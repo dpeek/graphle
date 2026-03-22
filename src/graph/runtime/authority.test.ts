@@ -199,7 +199,7 @@ describe("persisted authoritative graph", () => {
     expect(restarted.createSyncPayload().cursor).toBe(authority.createSyncPayload().cursor);
   });
 
-  it("rewrites legacy persisted write history entries to include client-tx write scope", async () => {
+  it("normalizes legacy persisted write history entries to client-tx before rewrite", async () => {
     const snapshotPath = await createTempSnapshotPath();
     const store = createStore();
     bootstrap(store, core);

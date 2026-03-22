@@ -409,7 +409,8 @@ Today:
 - `envVar.secret -> secretHandle`
 - the web authority persists plaintext in the authority-only `io_secret_value`
   side table keyed by `secretId`
-- `POST /api/secret-fields` performs generic secret creation and rotation logic
+- canonical `POST /api/commands` performs generic secret creation and rotation
+  logic through `kind: "write-secret-field"`
 
 Under the proposed model:
 
