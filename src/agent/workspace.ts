@@ -401,6 +401,44 @@ export class CheckoutManager {
     return { commitSha: landing.landedCommitSha };
   }
 
+  async completeReview(workspace: PreparedWorkspace, issue: AgentIssue) {
+    if (await this.#isDirty(workspace.path)) {
+      throw new Error(`review_checkout_dirty:${issue.identifier}`);
+    }
+    const priorIssueState = await readIssueRuntimeState(this.#rootDir, issue.identifier);
+    const commitSha = priorIssueState?.landedCommitSha ?? priorIssueState?.commitSha;
+    if (!commitSha) {
+      throw new Error(`review_commit_missing:${issue.identifier}`);
+    }
+    await this.#writeIssueState(workspace, issue, "completed");
+    await this.#upsertStreamState(
+      {
+        baseBranchName: workspace.baseBranchName,
+        baseIssueId: workspace.baseIssueId,
+        baseIssueIdentifier: workspace.baseIssueIdentifier,
+        branchName: workspace.branchName,
+        parentIssueId: workspace.branchOwnerIssueId ?? issue.parentIssueId ?? issue.id,
+        parentIssueIdentifier:
+          workspace.branchOwnerIssueIdentifier ?? issue.parentIssueIdentifier ?? issue.identifier,
+        parentIssueTitle: issue.parentIssueTitle ?? issue.title,
+        streamIssueId:
+          workspace.streamIssueId ?? issue.streamIssueId ?? issue.parentIssueId ?? issue.id,
+        streamIssueIdentifier:
+          workspace.streamIssueIdentifier ??
+          issue.streamIssueIdentifier ??
+          issue.parentIssueIdentifier ??
+          issue.identifier,
+      },
+      {
+        activeIssue: issue.hasParent ? { id: issue.id, identifier: issue.identifier } : null,
+        latestLandedCommitSha: priorIssueState?.landedCommitSha,
+        status: "active",
+      },
+    );
+    await this.#writeState(workspace, "idle");
+    return { commitSha };
+  }
+
   async markBlocked(workspace: PreparedWorkspace, issue: AgentIssue, reason?: string) {
     await this.#writeIssueState(workspace, issue, "blocked", {
       blockedReason: reason,
@@ -1581,13 +1619,14 @@ export class CheckoutManager {
       workspace.issueRuntimePath ??
       workspace.runtimePath ??
       this.getIssueRuntimePath(issue.identifier);
+    const previousState = await readIssueRuntimeState(this.#rootDir, issue.identifier);
     const state: IssueRuntimeState = {
       baseBranchName: workspace.baseBranchName,
       baseIssueId: workspace.baseIssueId,
       baseIssueIdentifier: workspace.baseIssueIdentifier,
       blockedReason: options.blockedReason,
       branchName: workspace.branchName,
-      commitSha: options.commitSha,
+      commitSha: options.commitSha ?? previousState?.commitSha,
       controlPath: workspace.controlPath,
       finalizedAt: undefined,
       finalizedLinearState: undefined,
@@ -1595,8 +1634,8 @@ export class CheckoutManager {
       issueId: issue.id,
       issueIdentifier: issue.identifier,
       issueTitle: issue.title,
-      landedAt: options.landedAt,
-      landedCommitSha: options.landedCommitSha,
+      landedAt: options.landedAt ?? previousState?.landedAt,
+      landedCommitSha: options.landedCommitSha ?? previousState?.landedCommitSha,
       originPath: workspace.originPath,
       outputPath: workspace.outputPath ?? resolve(runtimePath, "output.log"),
       parentIssueId: issue.parentIssueId,

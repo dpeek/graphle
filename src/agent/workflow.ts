@@ -7,7 +7,11 @@ import { createLogger } from "@io/core/lib";
 import { IO_TS_FILE, loadIoConfig, type NormalizedIoConfig } from "@io/core/lib/config";
 import z from "zod";
 
-import { DEFAULT_BACKLOG_BUILTIN_DOC_IDS, DEFAULT_EXECUTE_BUILTIN_DOC_IDS } from "./builtins.js";
+import {
+  DEFAULT_BACKLOG_BUILTIN_DOC_IDS,
+  DEFAULT_EXECUTE_BUILTIN_DOC_IDS,
+  DEFAULT_REVIEW_BUILTIN_DOC_IDS,
+} from "./builtins.js";
 import type {
   AgentRole,
   IssueRoutingCondition,
@@ -36,7 +40,7 @@ const stateListSchema = z.union([
     ),
 ]);
 
-const agentRoleSchema: z.ZodType<AgentRole> = z.enum(["backlog", "execute"]);
+const agentRoleSchema: z.ZodType<AgentRole> = z.enum(["backlog", "execute", "review"]);
 
 const issueRoutingConditionSchema = z
   .object({
@@ -204,6 +208,10 @@ function normalizeIoExtensions(config: IoExtensions, baseDir: string) {
     },
     execute: {
       include: [...DEFAULT_EXECUTE_BUILTIN_DOC_IDS],
+      includeEntrypoint: true,
+    },
+    review: {
+      include: [...DEFAULT_REVIEW_BUILTIN_DOC_IDS],
       includeEntrypoint: true,
     },
   };

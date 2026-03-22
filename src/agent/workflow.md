@@ -27,7 +27,8 @@ Resolved workflow state already includes:
 
 ### Routing
 
-`../../src/agent/issue-routing.ts` currently picks backlog versus execute runs from:
+`../../src/agent/issue-routing.ts` currently picks backlog, execute, or review
+runs from:
 
 - first matching explicit routing rule
 - fallback repo defaults

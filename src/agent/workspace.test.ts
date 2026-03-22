@@ -503,6 +503,62 @@ test("WorkspaceManager preserves task worktree state when landing rebase conflic
   }
 });
 
+test("WorkspaceManager preserves landed task metadata across review reruns", async () => {
+  const root = await mkdtemp(resolve(tmpdir(), "agent-workspace-"));
+  const runtimeRoot = resolve(root, "runtime");
+  try {
+    const { repoRoot } = await createSourceRepo(root);
+    const manager = new WorkspaceManager({
+      hooks,
+      repoRoot,
+      rootDir: runtimeRoot,
+      workerId: "worker-1",
+    });
+    const childIssue = issue("OPE-13", "Implement child", {
+      hasParent: true,
+      id: "child-1",
+      parentIssueId: "feature-1",
+      parentIssueIdentifier: "OPE-12",
+      streamIssueId: "stream-1",
+      streamIssueIdentifier: "OPE-1",
+      title: "Implement child",
+    });
+    const workspace = await manager.prepare(childIssue);
+
+    await writeFile(join(workspace.path, "task.txt"), "task change\n");
+    const completion = await manager.complete(workspace, childIssue);
+    expect(await readIssueRuntimeState(runtimeRoot, "OPE-13")).toMatchObject({
+      commitSha: completion.commitSha,
+      landedCommitSha: completion.commitSha,
+      status: "completed",
+    });
+
+    const reviewWorkspace = await manager.prepare({
+      ...childIssue,
+      state: "In Review",
+    });
+    expect(reviewWorkspace.createdNow).toBe(false);
+    expect(await readIssueRuntimeState(runtimeRoot, "OPE-13")).toMatchObject({
+      commitSha: completion.commitSha,
+      landedCommitSha: completion.commitSha,
+      status: "running",
+    });
+
+    await manager.completeReview(reviewWorkspace, {
+      ...childIssue,
+      state: "In Review",
+    });
+
+    expect(await readIssueRuntimeState(runtimeRoot, "OPE-13")).toMatchObject({
+      commitSha: completion.commitSha,
+      landedCommitSha: completion.commitSha,
+      status: "completed",
+    });
+  } finally {
+    await rm(root, { force: true, recursive: true });
+  }
+});
+
 test("WorkspaceManager keeps child finalization separate from stream completion state", async () => {
   const root = await mkdtemp(resolve(tmpdir(), "agent-workspace-"));
   const runtimeRoot = resolve(root, "runtime");

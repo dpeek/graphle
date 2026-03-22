@@ -4,7 +4,11 @@ import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { DEFAULT_BACKLOG_BUILTIN_DOC_IDS, DEFAULT_EXECUTE_BUILTIN_DOC_IDS } from "./builtins.js";
+import {
+  DEFAULT_BACKLOG_BUILTIN_DOC_IDS,
+  DEFAULT_EXECUTE_BUILTIN_DOC_IDS,
+  DEFAULT_REVIEW_BUILTIN_DOC_IDS,
+} from "./builtins.js";
 import { renderContextBundle, resolveIssueContext } from "./context.js";
 import { resolveIssueRouting } from "./issue-routing.js";
 import type { AgentIssue, PreparedWorkspace, Workflow } from "./types.js";
@@ -39,6 +43,10 @@ function createWorkflow(root: string, promptPath: string): Workflow {
         },
         execute: {
           include: [...DEFAULT_EXECUTE_BUILTIN_DOC_IDS],
+          includeEntrypoint: true,
+        },
+        review: {
+          include: [...DEFAULT_REVIEW_BUILTIN_DOC_IDS],
           includeEntrypoint: true,
         },
       },
@@ -455,6 +463,56 @@ test("resolveIssueContext assembles the graph module bundle and keeps refs withi
     expect(resolved.warnings).toEqual([
       "Issue doc reference is outside module scope: ./agent/doc/outside.md",
     ]);
+  } finally {
+    await rm(root, { force: true, recursive: true });
+  }
+});
+
+test("resolveIssueContext uses review defaults for review-routed tasks", async () => {
+  const root = await mkdtemp(resolve(tmpdir(), "context-"));
+  const promptPath = resolve(root, "io.md");
+  await mkdir(resolve(root, "io", "context"), { recursive: true });
+  await writeFile(promptPath, "LOCAL {{ selection.agent }} {{ selection.profile }}\n");
+  await writeFile(resolve(root, "io", "context", "overview.md"), "OVERVIEW DOC\n");
+
+  try {
+    const workflow = createWorkflow(root, promptPath);
+    const resolved = await resolveIssueContext({
+      baseSelection: { agent: "review", profile: "review" },
+      issue: {
+        ...createIssue("Review the landed task"),
+        hasParent: true,
+        id: "task-1",
+        identifier: "OPE-88",
+        parentIssueIdentifier: "OPE-77",
+        state: "In Review",
+        streamIssueIdentifier: "OPE-70",
+      },
+      repoRoot: root,
+      workflow,
+    });
+    const rendered = renderPrompt(renderContextBundle(resolved.bundle), {
+      attempt: 1,
+      issue: resolved.issue,
+      selection: resolved.selection,
+      worker: { count: 1, id: "OPE-88", index: 0 },
+      workspace: createWorkspace(root),
+    });
+
+    expect(resolved.selection).toEqual({ agent: "review", profile: "review" });
+    expect(resolved.bundle.docs.map((doc) => doc.id)).toEqual([
+      "builtin:io.agent.review.default",
+      "builtin:io.context.discovery",
+      "builtin:io.linear.status-updates",
+      "builtin:io.core.validation",
+      "builtin:io.core.git-safety",
+      "context.entrypoint",
+      "issue.context",
+    ]);
+    expect(rendered).toContain("You are the IO Review Agent.");
+    expect(rendered).toContain("LOCAL review review");
+    expect(rendered).toContain("Feature: OPE-77");
+    expect(rendered).toContain("Stream: OPE-70");
   } finally {
     await rm(root, { force: true, recursive: true });
   }

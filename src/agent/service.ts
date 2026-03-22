@@ -105,6 +105,14 @@ function isInProgressState(state?: string) {
   return normalizeState(state) === "in progress";
 }
 
+function isInReviewState(state?: string) {
+  return normalizeState(state) === "in review";
+}
+
+function isTodoState(state?: string) {
+  return normalizeState(state) === "todo";
+}
+
 function isExecutionReleased(issue: AgentIssue) {
   if (!isTaskIssue(issue)) {
     return false;
@@ -116,6 +124,138 @@ function isExecutionReleased(issue: AgentIssue) {
     return false;
   }
   return true;
+}
+
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return undefined;
+  }
+  return value as Record<string, unknown>;
+}
+
+function asString(value: unknown): string | undefined {
+  return typeof value === "string" ? value.trim() || undefined : undefined;
+}
+
+function getToolResultData(result: unknown) {
+  const record = asRecord(result);
+  if (!record) {
+    return undefined;
+  }
+  if (record.structuredContent !== undefined && record.structuredContent !== null) {
+    return record.structuredContent;
+  }
+  const content = Array.isArray(record.content) ? record.content : [];
+  for (const entry of content) {
+    const contentRecord = asRecord(entry);
+    if (!contentRecord) {
+      continue;
+    }
+    if (contentRecord.type === "text" && typeof contentRecord.text === "string") {
+      try {
+        return JSON.parse(contentRecord.text);
+      } catch {
+        continue;
+      }
+    }
+    return contentRecord;
+  }
+  return undefined;
+}
+
+type LinearIssueCreateRecord = {
+  id?: string;
+  identifier?: string;
+  parentId?: string;
+  title?: string;
+};
+
+function collectSuccessfulLinearIssueCreates(stdout: string[]) {
+  const createdIssues: LinearIssueCreateRecord[] = [];
+  for (const line of stdout) {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    const message = asRecord(parsed);
+    if (message?.method !== "item/completed") {
+      continue;
+    }
+    const item = asRecord(asRecord(message.params)?.item);
+    if (
+      item?.type !== "mcpToolCall" ||
+      item.server !== "linear" ||
+      item.tool !== "save_issue" ||
+      item.error
+    ) {
+      continue;
+    }
+    const argumentsRecord = asRecord(item.arguments);
+    if (asString(argumentsRecord?.id)) {
+      continue;
+    }
+    const resultData = getToolResultData(item.result);
+    const resultRecord = asRecord(resultData);
+    const issueRecord = asRecord(resultRecord?.issue);
+    createdIssues.push({
+      id: asString(issueRecord?.id) ?? asString(resultRecord?.id),
+      identifier:
+        asString(issueRecord?.identifier) ??
+        asString(resultRecord?.identifier) ??
+        asString(argumentsRecord?.identifier),
+      parentId: asString(argumentsRecord?.parentId),
+      title:
+        asString(issueRecord?.title) ??
+        asString(resultRecord?.title) ??
+        asString(argumentsRecord?.title),
+    });
+  }
+  return createdIssues;
+}
+
+function didReviewCreateExpectedFollowUp(issue: AgentIssue, stdout: string[]) {
+  const createdIssues = collectSuccessfulLinearIssueCreates(stdout);
+  if (!createdIssues.length) {
+    return false;
+  }
+
+  const currentFeatureRefs = new Set(
+    [issue.parentIssueId, issue.parentIssueIdentifier].filter((value): value is string =>
+      Boolean(value),
+    ),
+  );
+  if (
+    createdIssues.some(
+      (createdIssue) => createdIssue.parentId && currentFeatureRefs.has(createdIssue.parentId),
+    )
+  ) {
+    return true;
+  }
+
+  const currentStreamRefs = new Set(
+    [issue.streamIssueId, issue.streamIssueIdentifier].filter((value): value is string =>
+      Boolean(value),
+    ),
+  );
+  const createdFeature = createdIssues.find(
+    (createdIssue) => createdIssue.parentId && currentStreamRefs.has(createdIssue.parentId),
+  );
+  if (!createdFeature) {
+    return false;
+  }
+  const createdFeatureRefs = new Set(
+    [createdFeature.id, createdFeature.identifier].filter((value): value is string =>
+      Boolean(value),
+    ),
+  );
+  if (!createdFeatureRefs.size) {
+    return false;
+  }
+  return createdIssues.some(
+    (createdIssue) => createdIssue.parentId && createdFeatureRefs.has(createdIssue.parentId),
+  );
 }
 
 function isResumableRunError(error: unknown) {
@@ -568,7 +708,11 @@ export class AgentService {
       const issues = await tracker.fetchCandidateIssues();
       const maxConcurrentAgents = Math.max(1, activeWorkflow.agent.maxConcurrentAgents);
       const availableSlots = Math.max(0, maxConcurrentAgents - this.#activeRuns.size);
-      const launchableIssues = this.#selectLaunchableIssues(issues, occupiedStreams);
+      const launchableIssues = this.#selectLaunchableIssues(
+        activeWorkflow,
+        issues,
+        occupiedStreams,
+      );
       this.#publishWorkflowDiagnosticLines(
         this.#buildWorkflowDiagnosticLines({
           availableSlots,
@@ -633,13 +777,27 @@ export class AgentService {
     return run;
   }
 
-  #shouldAutoScheduleIssue(issue: AgentIssue) {
-    return isTaskIssue(issue) && isExecutionReleased(issue);
+  #shouldAutoScheduleIssue(workflow: Workflow, issue: AgentIssue) {
+    if (!isTaskIssue(issue) || !isExecutionReleased(issue)) {
+      return false;
+    }
+    const selection = resolveIssueRouting(workflow.issues, issue, workflow.modules);
+    if (selection.agent === "execute") {
+      return isTodoState(issue.state);
+    }
+    if (selection.agent === "review") {
+      return isInReviewState(issue.state);
+    }
+    return false;
   }
 
-  #selectLaunchableIssues(issues: AgentIssue[], occupiedStreams: Map<string, string>) {
+  #selectLaunchableIssues(
+    workflow: Workflow,
+    issues: AgentIssue[],
+    occupiedStreams: Map<string, string>,
+  ) {
     return pickCandidateIssues(
-      issues.filter((issue) => this.#shouldAutoScheduleIssue(issue)),
+      issues.filter((issue) => this.#shouldAutoScheduleIssue(workflow, issue)),
       issues.length,
     )
       .filter((issue) => !this.#activeRuns.has(issue.identifier))
@@ -906,8 +1064,9 @@ export class AgentService {
       `${issue.identifier}: Starting agent in ${workspaceLabel}\n`,
     );
     let result: IssueRunResult | undefined;
+    let resolvedContext: Awaited<ReturnType<typeof resolveIssueContext>> | undefined;
     try {
-      const resolvedContext = await resolveIssueContext({
+      resolvedContext = await resolveIssueContext({
         baseSelection: resolveIssueRouting(workflow.issues, issue, workflow.modules),
         issue,
         repoRoot: this.#repoRoot,
@@ -940,7 +1099,9 @@ export class AgentService {
         new CodexAppServerRunner(workflow.codex, this.#log, {
           sessionEvents: this.#sessionEvents,
         });
-      await tracker.setIssueState(issue.id, "In Progress");
+      if (resolvedContext.selection.agent === "execute") {
+        await tracker.setIssueState(issue.id, "In Progress");
+      }
       for (let attempt = 1; attempt <= MAX_RUN_ATTEMPTS_PER_SUPERVISOR_CYCLE; attempt += 1) {
         let beforeRunCompleted = false;
         try {
@@ -1057,6 +1218,9 @@ export class AgentService {
     if (!result) {
       throw new Error("issue_run_missing_result");
     }
+    if (!resolvedContext) {
+      throw new Error("issue_context_missing");
+    }
     await workspaceManager.runAfterRunHook(workspace.path);
     if (!result.success) {
       const blockedSession = withSessionRuntime(
@@ -1087,6 +1251,101 @@ export class AgentService {
         issueIdentifier: issue.identifier,
         workspace: workspace.path,
       });
+      return result;
+    }
+
+    if (resolvedContext.selection.agent === "review") {
+      if (!didReviewCreateExpectedFollowUp(issue, result.stdout)) {
+        const reason = "review_follow_up_missing";
+        const blockedSession = withSessionRuntime(
+          session,
+          createSessionRuntime({
+            blocker: {
+              kind: "blocked",
+              reason,
+            },
+            state: "blocked",
+          }),
+        );
+        await workspaceManager.markBlocked(workspace, issue, reason);
+        await this.#appendIssueOutput(
+          workspace.outputPath,
+          `${issue.identifier}: blocked: ${reason}\n`,
+        );
+        this.#publishSupervisorIssueLine(
+          "issue-blocked",
+          issue,
+          "Blocked: review did not create the required follow-up issue set",
+          blockedSession,
+          workspace,
+        );
+        this.#sessionEvents.publish({
+          data: {
+            reason,
+          },
+          phase: "failed",
+          session: blockedSession,
+          type: "session",
+        });
+        return result;
+      }
+      try {
+        await workspaceManager.completeReview(workspace, issue);
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : String(error);
+        const blockedSession = withSessionRuntime(
+          session,
+          createSessionRuntime({
+            blocker: {
+              kind: "blocked",
+              reason,
+            },
+            state: "blocked",
+          }),
+        );
+        await workspaceManager.markBlocked(workspace, issue, reason);
+        await this.#appendIssueOutput(
+          workspace.outputPath,
+          `${issue.identifier}: blocked: ${reason}\n`,
+        );
+        this.#publishSupervisorIssueLine(
+          "issue-blocked",
+          issue,
+          `Blocked: ${reason}`,
+          blockedSession,
+          workspace,
+        );
+        this.#sessionEvents.publish({
+          data: {
+            reason,
+          },
+          phase: "failed",
+          session: blockedSession,
+          type: "session",
+        });
+        return result;
+      }
+      await this.#appendIssueOutput(
+        workspace.outputPath,
+        `${issue.identifier}: review complete; follow-up issue created\n`,
+      );
+      await tracker.setIssueState(issue.id, "Done");
+      await workspaceManager.reconcileTerminalIssues(tracker, workflow.tracker.terminalStates);
+      const finalizedIssueState = await readIssueRuntimeState(
+        workflow.workspace.root,
+        issue.identifier,
+      );
+      if (finalizedIssueState?.status === "finalized") {
+        this.#sessionEvents.publish({
+          data: {
+            commitSha: finalizedIssueState.landedCommitSha ?? finalizedIssueState.commitSha,
+            linearState: finalizedIssueState.finalizedLinearState,
+          },
+          phase: "completed",
+          session: createFinalizedSession(session, finalizedIssueState),
+          type: "session",
+        });
+      }
       return result;
     }
 
@@ -1183,7 +1442,7 @@ export class AgentService {
       issueIdentifier: issue.identifier,
       workspace: workspace.path,
     });
-    await tracker.setIssueState(issue.id, "Done");
+    await tracker.setIssueState(issue.id, "In Review");
     await workspaceManager.reconcileTerminalIssues(tracker, workflow.tracker.terminalStates);
     const finalizedIssueState = await readIssueRuntimeState(
       workflow.workspace.root,

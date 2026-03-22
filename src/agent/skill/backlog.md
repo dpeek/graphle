@@ -27,6 +27,7 @@ Operating rules:
 - do not ask the supervisor to run backlog work automatically
 - the user owns stream editing interactively with Codex
 - the user decides when features move between `Backlog`, `Todo`, `In Progress`, and `Done`
+- the supervisor may auto-run `In Review` task issues, but feature closure still stays human-owned
 - allow parallel features inside the same stream
 - do not plan parallel tasks inside a single feature
 - prefer replacing stale child structure over preserving legacy parent/child conventions
@@ -106,7 +107,10 @@ Supervisor contract:
 - the feature is `In Progress`
 - the task is `Todo`
 - when multiple feature tasks are runnable, pick at most one task per feature and follow Linear sub-issue manual order (`subIssueSortOrder`), falling back to `sortOrder` only when the sub-issue order is missing
-- successful task execution moves the task to `Done` and lands the task commit onto the feature branch
+- successful task execution lands the task commit onto the feature branch and moves the task to `In Review`
+- the supervisor should auto-run review for task issues in `In Review`
+- successful review creates the next issue, then moves the reviewed task to `Done`
+- feature issues are not auto-closed by the supervisor; a human decides when a feature moves to `Done`
 - non-task leaves are not auto-runnable; each feature should own explicit task children
 
 Feature completion target contract:

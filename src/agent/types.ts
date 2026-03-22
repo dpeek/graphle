@@ -1,7 +1,7 @@
 import type { AskForApproval, SandboxMode, SandboxPolicy } from "./codex-schema.js";
 
 export type TrackerKind = "linear";
-export type AgentRole = "backlog" | "execute";
+export type AgentRole = "backlog" | "execute" | "review";
 
 export interface AgentIssue {
   blockedBy: string[];

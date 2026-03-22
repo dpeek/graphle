@@ -7,6 +7,7 @@
 ## Entry Points
 
 - `./skill/backlog.md`: user-facing `Stream -> Feature -> Task` workflow and interactive backlog-editing contract
+- `./skill/review.md`: supervisor-run review contract for landed task work and next-issue creation
 - `./workflow.md`: workflow loading, context assembly, routing, and module scoping
 - `./tui/index.md`: operator-facing terminal layout, transcript shaping, and live/replay display behavior
 - `../../src/agent/service.ts`: supervisor scheduling and issue run orchestration
@@ -28,11 +29,12 @@ The preferred workflow is three levels: streams are maintained interactively,
 features own integration-sized branches under a stream, and the supervisor
 auto-runs released leaf tasks. Current code already gates task execution on the
 right parent states, rebases and merges successful task work onto the feature
-branch during the execution path, and reconciles `Done` features by squashing
-them back onto the stream branch while preserving recoverable branch state on
-conflicts. Supervisor-side follow-up after a task run is limited to cleanup and
-stale-state reconciliation. `./skill/backlog.md` remains the user-facing
-contract for when humans choose to release a feature or stream.
+branch during the execution path, moves successful tasks into `In Review`, and
+auto-runs a review pass that creates the next issue before the current task
+closes. Features still stay human-controlled: when a feature finally moves to
+`Done`, the engine squashes it back onto the stream branch while preserving
+recoverable branch state on conflicts. `./skill/backlog.md` remains the
+user-facing contract for stream and feature planning.
 
 ## Future Work Suggestions
 

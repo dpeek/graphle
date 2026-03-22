@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 
-import { DEFAULT_EXECUTE_BUILTIN_DOC_IDS } from "./builtins.js";
+import { DEFAULT_EXECUTE_BUILTIN_DOC_IDS, DEFAULT_REVIEW_BUILTIN_DOC_IDS } from "./builtins.js";
 import { resolveIssueRouting } from "./issue-routing.js";
 import { loadWorkflowFile, renderPrompt } from "./workflow.js";
 
@@ -37,6 +37,11 @@ test("loadWorkflowFile loads io.ts and io.md by default", async () => {
     issues: {
       defaultAgent: "execute",
       routing: [
+        {
+          agent: "review",
+          if: { hasChildren: false, hasParent: true, stateIn: ["In Review"] },
+          profile: "review",
+        },
         {
           agent: "backlog",
           if: { labelsAny: ["planning"] },
@@ -73,6 +78,15 @@ test("loadWorkflowFile loads io.ts and io.md by default", async () => {
       defaultProfile: "execute",
       routing: [
         {
+          agent: "review",
+          if: {
+            hasChildren: false,
+            hasParent: true,
+            stateIn: ["in review"],
+          },
+          profile: "review",
+        },
+        {
           agent: "backlog",
           if: {
             labelsAny: ["planning"],
@@ -86,6 +100,10 @@ test("loadWorkflowFile loads io.ts and io.md by default", async () => {
     });
     expect(result.value.context.profiles.execute).toEqual({
       include: ["builtin:io.agent.execute.default", "project.overview"],
+      includeEntrypoint: true,
+    });
+    expect(result.value.context.profiles.review).toEqual({
+      include: [...DEFAULT_REVIEW_BUILTIN_DOC_IDS],
       includeEntrypoint: true,
     });
     expect(result.value.tracker.apiKey).toBe("linear-token");
@@ -221,6 +239,10 @@ test("loadWorkflowFile resolves registered docs and merges default context profi
       include: [...DEFAULT_EXECUTE_BUILTIN_DOC_IDS],
       includeEntrypoint: true,
     });
+    expect(result.value.context.profiles.review).toEqual({
+      include: [...DEFAULT_REVIEW_BUILTIN_DOC_IDS],
+      includeEntrypoint: true,
+    });
   } finally {
     await rm(root, { force: true, recursive: true });
   }
@@ -273,6 +295,15 @@ test("loadWorkflowFile parses issue routing defaults and normalized rules from i
       defaultAgent: "execute",
       routing: [
         {
+          agent: "review",
+          if: {
+            hasChildren: false,
+            hasParent: true,
+            stateIn: ["In Review"],
+          },
+          profile: "review",
+        },
+        {
           agent: "backlog",
           if: {
             hasChildren: false,
@@ -307,6 +338,15 @@ test("loadWorkflowFile parses issue routing defaults and normalized rules from i
       defaultAgent: "execute",
       defaultProfile: "execute",
       routing: [
+        {
+          agent: "review",
+          if: {
+            hasChildren: false,
+            hasParent: true,
+            stateIn: ["in review"],
+          },
+          profile: "review",
+        },
         {
           agent: "backlog",
           if: {

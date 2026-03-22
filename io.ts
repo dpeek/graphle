@@ -21,6 +21,7 @@ export default defineIoConfig({
       "project.mcp": "./src/mcp.md",
       "project.module-stream-workflow-plan": "./src/agent/workflow.md",
       "project.overview": "./src/index.md",
+      "project.review": "./src/agent/skill/review.md",
       "project.workflow": "./src/agent/workflow.md",
     },
     profiles: {
@@ -45,6 +46,18 @@ export default defineIoConfig({
           "builtin:io.core.git-safety",
           "project.overview",
           "project.workflow",
+        ],
+      },
+      review: {
+        include: [
+          "builtin:io.agent.review.default",
+          "builtin:io.context.discovery",
+          "builtin:io.linear.status-updates",
+          "builtin:io.core.validation",
+          "builtin:io.core.git-safety",
+          "project.overview",
+          "project.workflow",
+          "project.review",
         ],
       },
     },
@@ -114,6 +127,15 @@ export default defineIoConfig({
     routing: [
       {
         if: {
+          hasChildren: false,
+          hasParent: true,
+          stateIn: ["In Review"],
+        },
+        agent: "review",
+        profile: "review",
+      },
+      {
+        if: {
           labelsAny: ["backlog", "planning"],
         },
         agent: "backlog",
@@ -122,7 +144,7 @@ export default defineIoConfig({
     ],
   },
   tracker: linearTracker({
-    activeStates: ["Todo", "In Progress"],
+    activeStates: ["Todo", "In Progress", "In Review"],
     apiKey: env.secret("LINEAR_API_KEY"),
     projectSlug: env.string("LINEAR_PROJECT_SLUG"),
   }),

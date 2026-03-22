@@ -4,6 +4,7 @@ import { isAbsolute, relative, resolve } from "node:path";
 import {
   DEFAULT_BACKLOG_BUILTIN_DOC_IDS,
   DEFAULT_EXECUTE_BUILTIN_DOC_IDS,
+  DEFAULT_REVIEW_BUILTIN_DOC_IDS,
   resolveBuiltinDoc,
 } from "./builtins.js";
 import { resolveIssueModule } from "./issue-routing.js";
@@ -74,9 +75,13 @@ function isPathWithinRoot(path: string, root: string) {
 }
 
 function getDefaultProfileInclude(agent: AgentRole) {
-  return agent === "backlog"
-    ? [...DEFAULT_BACKLOG_BUILTIN_DOC_IDS]
-    : [...DEFAULT_EXECUTE_BUILTIN_DOC_IDS];
+  if (agent === "backlog") {
+    return [...DEFAULT_BACKLOG_BUILTIN_DOC_IDS];
+  }
+  if (agent === "review") {
+    return [...DEFAULT_REVIEW_BUILTIN_DOC_IDS];
+  }
+  return [...DEFAULT_EXECUTE_BUILTIN_DOC_IDS];
 }
 
 function extractLinkedDocReferences(description: string) {

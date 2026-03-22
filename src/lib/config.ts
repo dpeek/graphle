@@ -83,7 +83,7 @@ export interface IoPollingConfigInput {
   intervalMs?: number;
 }
 
-export type IoAgentRole = "backlog" | "execute";
+export type IoAgentRole = "backlog" | "execute" | "review";
 
 export interface IoContextProfileInput {
   include?: string[];

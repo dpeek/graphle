@@ -4,8 +4,8 @@ import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 
 import {
-  DEFAULT_BACKLOG_BUILTIN_DOC_IDS,
   DEFAULT_EXECUTE_BUILTIN_DOC_IDS,
+  DEFAULT_REVIEW_BUILTIN_DOC_IDS,
   resolveBuiltinDoc,
 } from "./builtins.js";
 import { resolveIssueRouting } from "./issue-routing.js";
@@ -78,7 +78,9 @@ function buildExpectedPrompt(
       issue.description
         ? "<!-- issue.context -->\nIssue Description:\n\n{{ issue.description }}"
         : "",
-    ].join("\n\n"),
+    ]
+      .filter(Boolean)
+      .join("\n\n"),
     {
       attempt: 1,
       issue,
@@ -1128,7 +1130,7 @@ test("AgentService does not auto-run released feature leaves without task childr
   }
 });
 
-test("AgentService marks task issues Done after landing on the feature branch", async () => {
+test("AgentService moves successful task issues into In Review after landing on the feature branch", async () => {
   const root = await mkdtemp(resolve(tmpdir(), "agent-service-"));
   const workspacePath = resolve(root, "workspace", "workers", "OPE-58", "repo");
   const transitions: string[] = [];
@@ -1207,7 +1209,7 @@ test("AgentService marks task issues Done after landing on the feature branch", 
     });
 
     await service.start();
-    expect(transitions).toEqual(["task-1:In Progress", "task-1:Done"]);
+    expect(transitions).toEqual(["task-1:In Progress", "task-1:In Review"]);
   } finally {
     await rm(root, { force: true, recursive: true });
   }
@@ -1296,6 +1298,264 @@ test("AgentService blocks task issues when execution-owned landing fails", async
     await service.start();
     expect(events).toEqual(["blocked"]);
     expect(transitions).toEqual(["task-1:In Progress"]);
+  } finally {
+    await rm(root, { force: true, recursive: true });
+  }
+});
+
+test("AgentService closes review tasks only after the review agent creates a follow-up issue", async () => {
+  const root = await mkdtemp(resolve(tmpdir(), "agent-service-"));
+  const workspacePath = resolve(root, "workspace", "workers", "OPE-58", "repo");
+  const completions: string[] = [];
+  const transitions: string[] = [];
+
+  await writeIoTsConfig(root, {
+    agent: { maxConcurrentAgents: 1 },
+    issues: {
+      defaultAgent: "execute",
+      defaultProfile: "execute",
+      routing: [
+        {
+          agent: "review",
+          if: {
+            hasChildren: false,
+            hasParent: true,
+            stateIn: ["In Review"],
+          },
+          profile: "review",
+        },
+      ],
+    },
+    tracker: {
+      activeStates: ["In Review"],
+      apiKey: "$LINEAR_API_KEY",
+      kind: "linear",
+      projectSlug: "$LINEAR_PROJECT_SLUG",
+    },
+    workspace: {
+      root: resolve(root, "workspace"),
+    },
+  });
+  await writeFile(resolve(root, "io.md"), "Issue {{ issue.identifier }}\n");
+  process.env.LINEAR_API_KEY = "linear-token";
+  process.env.LINEAR_PROJECT_SLUG = "project-slug";
+
+  try {
+    const issue = createTaskIssue({
+      id: "task-1",
+      identifier: "OPE-58",
+      priority: 0,
+      state: "In Review",
+      title: "Review task",
+    });
+    const service = new AgentService({
+      once: true,
+      repoRoot: root,
+      runnerFactory: () => ({
+        run: async ({ issue, prompt, workspace }) => ({
+          issue,
+          prompt,
+          stderr: [],
+          stdout: [
+            JSON.stringify({
+              method: "item/completed",
+              params: {
+                item: {
+                  arguments: { parentId: "OPE-167", title: "Next task" },
+                  error: null,
+                  result: {
+                    structuredContent: {
+                      issue: {
+                        identifier: "OPE-59",
+                        title: "Next task",
+                      },
+                    },
+                  },
+                  server: "linear",
+                  tool: "save_issue",
+                  type: "mcpToolCall",
+                },
+              },
+            }),
+          ],
+          success: true,
+          workspace,
+        }),
+      }),
+      trackerFactory: () => ({
+        fetchCandidateIssues: async () => [issue],
+        fetchIssueStatesByIds: async () => new Map(),
+        setIssueState: async (issueId, stateName) => {
+          transitions.push(`${issueId}:${stateName}`);
+        },
+      }),
+      workspaceManagerFactory: (_workflow, issueIdentifier) =>
+        ({
+          cleanup: async () => undefined,
+          completeReview: async () => {
+            completions.push("review");
+            return { commitSha: "a".repeat(40) };
+          },
+          createIdleWorkspace: () => ({
+            branchName: "main",
+            controlPath: root,
+            createdNow: true,
+            originPath: root,
+            path: resolve(root, "workspace", "workers", issueIdentifier ?? "supervisor", "repo"),
+            sourceRepoPath: root,
+            workerId: issueIdentifier ?? "supervisor",
+          }),
+          ensureCheckout: async () => ({
+            createdNow: true,
+            path: workspacePath,
+          }),
+          ensureSessionStartState: async () => ({
+            createdNow: true,
+            path: resolve(root, "workspace", "workers"),
+          }),
+          listOccupiedStreams: async () => new Map(),
+          markBlocked: async () => undefined,
+          markInterrupted: async () => undefined,
+          prepare: async () => ({
+            branchName: "io/ope-167",
+            controlPath: root,
+            createdNow: true,
+            originPath: root,
+            path: workspacePath,
+            sourceRepoPath: root,
+            streamIssueId: "stream-1",
+            streamIssueIdentifier: "OPE-121",
+            workerId: "OPE-58",
+          }),
+          reconcileTerminalIssues: async () => undefined,
+          runAfterRunHook: async () => undefined,
+          runBeforeRunHook: async () => undefined,
+        }) as unknown as never,
+    });
+
+    await service.start();
+    expect(completions).toEqual(["review"]);
+    expect(transitions).toEqual(["task-1:Done"]);
+  } finally {
+    await rm(root, { force: true, recursive: true });
+  }
+});
+
+test("AgentService blocks review tasks that do not create a valid follow-up issue", async () => {
+  const root = await mkdtemp(resolve(tmpdir(), "agent-service-"));
+  const workspacePath = resolve(root, "workspace", "workers", "OPE-58", "repo");
+  const blocked: string[] = [];
+  const transitions: string[] = [];
+
+  await writeIoTsConfig(root, {
+    agent: { maxConcurrentAgents: 1 },
+    issues: {
+      defaultAgent: "execute",
+      defaultProfile: "execute",
+      routing: [
+        {
+          agent: "review",
+          if: {
+            hasChildren: false,
+            hasParent: true,
+            stateIn: ["In Review"],
+          },
+          profile: "review",
+        },
+      ],
+    },
+    tracker: {
+      activeStates: ["In Review"],
+      apiKey: "$LINEAR_API_KEY",
+      kind: "linear",
+      projectSlug: "$LINEAR_PROJECT_SLUG",
+    },
+    workspace: {
+      root: resolve(root, "workspace"),
+    },
+  });
+  await writeFile(resolve(root, "io.md"), "Issue {{ issue.identifier }}\n");
+  process.env.LINEAR_API_KEY = "linear-token";
+  process.env.LINEAR_PROJECT_SLUG = "project-slug";
+
+  try {
+    const issue = createTaskIssue({
+      id: "task-1",
+      identifier: "OPE-58",
+      priority: 0,
+      state: "In Review",
+      title: "Review task",
+    });
+    const service = new AgentService({
+      once: true,
+      repoRoot: root,
+      runnerFactory: () => ({
+        run: async ({ issue, prompt, workspace }) => ({
+          issue,
+          prompt,
+          stderr: [],
+          stdout: [],
+          success: true,
+          workspace,
+        }),
+      }),
+      trackerFactory: () => ({
+        fetchCandidateIssues: async () => [issue],
+        fetchIssueStatesByIds: async () => new Map(),
+        setIssueState: async (issueId, stateName) => {
+          transitions.push(`${issueId}:${stateName}`);
+        },
+      }),
+      workspaceManagerFactory: (_workflow, issueIdentifier) =>
+        ({
+          cleanup: async () => undefined,
+          completeReview: async () => ({ commitSha: "a".repeat(40) }),
+          createIdleWorkspace: () => ({
+            branchName: "main",
+            controlPath: root,
+            createdNow: true,
+            originPath: root,
+            path: resolve(root, "workspace", "workers", issueIdentifier ?? "supervisor", "repo"),
+            sourceRepoPath: root,
+            workerId: issueIdentifier ?? "supervisor",
+          }),
+          ensureCheckout: async () => ({
+            createdNow: true,
+            path: workspacePath,
+          }),
+          ensureSessionStartState: async () => ({
+            createdNow: true,
+            path: resolve(root, "workspace", "workers"),
+          }),
+          listOccupiedStreams: async () => new Map(),
+          markBlocked: async (
+            _workspace: PreparedWorkspace,
+            _issue: AgentIssue,
+            reason?: string,
+          ) => {
+            blocked.push(reason ?? "blocked");
+          },
+          markInterrupted: async () => undefined,
+          prepare: async () => ({
+            branchName: "io/ope-167",
+            controlPath: root,
+            createdNow: true,
+            originPath: root,
+            path: workspacePath,
+            sourceRepoPath: root,
+            streamIssueId: "stream-1",
+            streamIssueIdentifier: "OPE-121",
+            workerId: "OPE-58",
+          }),
+          reconcileTerminalIssues: async () => undefined,
+          runAfterRunHook: async () => undefined,
+          runBeforeRunHook: async () => undefined,
+        }) as unknown as never,
+    });
+
+    await service.start();
+    expect(blocked).toEqual(["review_follow_up_missing"]);
+    expect(transitions).toEqual([]);
   } finally {
     await rm(root, { force: true, recursive: true });
   }
@@ -1419,7 +1679,7 @@ test("AgentService proves the OPE-121 workflow by running only the leaf task", a
     await service.start();
     expect(prepared).toEqual(["OPE-172"]);
     expect(runs).toEqual(["OPE-172"]);
-    expect(transitions).toEqual(["task-1:In Progress", "task-1:Done"]);
+    expect(transitions).toEqual(["task-1:In Progress", "task-1:In Review"]);
   } finally {
     await rm(root, { force: true, recursive: true });
   }
@@ -1738,7 +1998,7 @@ test("AgentService retries timed out runs once per supervisor cycle", async () =
     expect(prompts).toHaveLength(2);
     expect(prompts[0]).toContain("- Attempt: 1");
     expect(prompts[1]).toContain("- Attempt: 2");
-    expect(transitions).toEqual(["1:In Progress", "1:Done"]);
+    expect(transitions).toEqual(["1:In Progress", "1:In Review"]);
     expect(events).toEqual(["before", "after", "before", "after", "complete"]);
   } finally {
     await rm(root, { force: true, recursive: true });
@@ -2734,7 +2994,7 @@ test("AgentService composes execute built-ins with io.md", async () => {
   }
 });
 
-test("AgentService uses backlog built-ins for routed issues", async () => {
+test("AgentService does not auto-run backlog-routed leaf issues", async () => {
   const root = await mkdtemp(resolve(tmpdir(), "agent-service-"));
   const ioPromptPath = resolve(root, "io.md");
   const localPrompt =
@@ -2881,30 +3141,168 @@ test("AgentService uses backlog built-ins for routed issues", async () => {
     });
 
     await service.start();
+    expect(capturedPrompt).toBe("");
+  } finally {
+    globalThis.fetch = originalFetch;
+    await rm(root, { force: true, recursive: true });
+  }
+});
+
+test("AgentService uses review built-ins for review-routed issues", async () => {
+  const root = await mkdtemp(resolve(tmpdir(), "agent-service-"));
+  const ioPromptPath = resolve(root, "io.md");
+  const localPrompt =
+    "LOCAL REVIEW {{ issue.identifier }} {{ selection.agent }} {{ selection.profile }}\n";
+  const workspacePath = resolve(root, "workspace", "workers", "OPE-56", "repo");
+  let capturedPrompt = "";
+
+  await writeIoTsConfig(root, {
+    agent: { maxConcurrentAgents: 1 },
+    issues: {
+      defaultAgent: "execute",
+      defaultProfile: "execute",
+      routing: [
+        {
+          agent: "review",
+          if: {
+            hasChildren: false,
+            hasParent: true,
+            stateIn: ["in review"],
+          },
+          profile: "review",
+        },
+      ],
+    },
+    tracker: {
+      activeStates: ["In Review"],
+      apiKey: "$LINEAR_API_KEY",
+      kind: "linear",
+      projectSlug: "$LINEAR_PROJECT_SLUG",
+    },
+    workspace: {
+      root: resolve(root, "workspace"),
+    },
+  });
+  await writeFile(ioPromptPath, localPrompt);
+  process.env.LINEAR_API_KEY = "linear-token";
+  process.env.LINEAR_PROJECT_SLUG = "project-slug";
+
+  try {
+    const issue = createTaskIssue({
+      description: "Review the landed task",
+      id: "1",
+      identifier: "OPE-56",
+      state: "In Review",
+      title: "Review agent",
+    });
+    const service = new AgentService({
+      once: true,
+      repoRoot: root,
+      runnerFactory: () => ({
+        run: async ({ issue, prompt, workspace }) => {
+          capturedPrompt = prompt;
+          return {
+            issue,
+            prompt,
+            stderr: [],
+            stdout: [
+              JSON.stringify({
+                method: "item/completed",
+                params: {
+                  item: {
+                    arguments: { parentId: "OPE-167", title: "Next task" },
+                    error: null,
+                    result: {
+                      structuredContent: {
+                        issue: {
+                          identifier: "OPE-57",
+                          title: "Next task",
+                        },
+                      },
+                    },
+                    server: "linear",
+                    tool: "save_issue",
+                    type: "mcpToolCall",
+                  },
+                },
+              }),
+            ],
+            success: true,
+            workspace,
+          };
+        },
+      }),
+      trackerFactory: () => ({
+        fetchCandidateIssues: async () => [issue],
+        fetchIssueStatesByIds: async () => new Map(),
+        setIssueState: async () => undefined,
+      }),
+      workspaceManagerFactory: (_workflow, issueIdentifier) =>
+        ({
+          cleanup: async () => undefined,
+          completeReview: async () => ({ commitSha: "a".repeat(40) }),
+          createIdleWorkspace: () => ({
+            branchName: "main",
+            controlPath: root,
+            createdNow: true,
+            originPath: root,
+            path: resolve(root, "workspace", "workers", issueIdentifier ?? "supervisor", "repo"),
+            sourceRepoPath: root,
+            workerId: issueIdentifier ?? "supervisor",
+          }),
+          ensureCheckout: async () => ({
+            createdNow: true,
+            path: workspacePath,
+          }),
+          ensureSessionStartState: async () => ({
+            createdNow: true,
+            path: resolve(root, "workspace", "workers"),
+          }),
+          listOccupiedStreams: async () => new Map(),
+          markBlocked: async () => undefined,
+          markInterrupted: async () => undefined,
+          prepare: async () => ({
+            branchName: "io/ope-167",
+            controlPath: root,
+            createdNow: true,
+            originPath: root,
+            path: workspacePath,
+            sourceRepoPath: root,
+            streamIssueId: "stream-1",
+            streamIssueIdentifier: "OPE-121",
+            workerId: "OPE-56",
+          }),
+          reconcileTerminalIssues: async () => undefined,
+          runAfterRunHook: async () => undefined,
+          runBeforeRunHook: async () => undefined,
+        }) as unknown as never,
+    });
+
+    await service.start();
     expect(capturedPrompt).toBe(
       buildExpectedPrompt(
-        DEFAULT_BACKLOG_BUILTIN_DOC_IDS,
+        DEFAULT_REVIEW_BUILTIN_DOC_IDS,
         ioPromptPath,
         localPrompt,
         {
           blockedBy: [],
           createdAt: "2024-01-01T00:00:00.000Z",
-          description: "Refine backlog item",
+          description: "Review the landed task",
           hasChildren: false,
           hasParent: true,
           id: "1",
-          identifier: "OPE-55",
-          labels: ["planning", "docs"],
+          identifier: "OPE-56",
+          labels: [],
           parentIssueId: "feature-1",
           parentIssueIdentifier: "OPE-167",
           parentIssueState: "In Progress",
           priority: 0,
-          projectSlug: "docs-project",
-          state: "Todo",
+          projectSlug: "io",
+          state: "In Review",
           streamIssueId: "stream-1",
           streamIssueIdentifier: "OPE-121",
           streamIssueState: "In Progress",
-          title: "Backlog agent",
+          title: "Review agent",
           updatedAt: "2024-01-01T00:00:00.000Z",
         },
         {
@@ -2913,19 +3311,21 @@ test("AgentService uses backlog built-ins for routed issues", async () => {
           createdNow: true,
           originPath: root,
           path: workspacePath,
-          workerId: "OPE-55",
+          streamIssueId: "stream-1",
+          streamIssueIdentifier: "OPE-121",
+          workerId: "OPE-56",
         },
         {
-          agent: "backlog",
-          profile: "backlog",
+          agent: "review",
+          profile: "review",
         },
       ),
     );
   } finally {
-    globalThis.fetch = originalFetch;
     await rm(root, { force: true, recursive: true });
   }
 });
+
 test("AgentService uses builtin override files from io.ts", async () => {
   const root = await mkdtemp(resolve(tmpdir(), "agent-service-"));
   const overridePath = resolve(root, "io", "context", "validation-override.md");

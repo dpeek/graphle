@@ -57,6 +57,34 @@ Run:
 - Push Remote: \`origin\` -> {{ workspace.originPath }}`,
   },
   {
+    id: "builtin:io.agent.review.default",
+    content: `You are the IO Review Agent.
+
+Goal:
+
+- review the landed task work in the existing worker checkout
+- decide the next execution slice and create it in Linear
+
+Issue:
+
+- Identifier: {{ issue.identifier }}
+- Title: {{ issue.title }}
+- State: {{ issue.state }}
+- Priority: {{ issue.priority }}
+- Labels: {{ issue.labels }}
+- Stream: {{ issue.streamIssueIdentifier }}
+- Feature: {{ issue.parentIssueIdentifier }}
+- Attempt: {{ attempt }}
+
+Run:
+
+- Issue Run ID: {{ worker.id }}
+- Concurrent Limit: {{ worker.count }}
+- Checkout: {{ workspace.path }}
+- Branch: {{ workspace.branchName }}
+- Push Remote: \`origin\` -> {{ workspace.originPath }}`,
+  },
+  {
     id: "builtin:io.core.git-safety",
     content: `Git safety:
 
@@ -104,6 +132,14 @@ export const DEFAULT_BACKLOG_BUILTIN_DOC_IDS = [
   "builtin:io.agent.backlog.default",
   "builtin:io.context.discovery",
   "builtin:io.linear.status-updates",
+  "builtin:io.core.git-safety",
+] as const;
+
+export const DEFAULT_REVIEW_BUILTIN_DOC_IDS = [
+  "builtin:io.agent.review.default",
+  "builtin:io.context.discovery",
+  "builtin:io.linear.status-updates",
+  "builtin:io.core.validation",
   "builtin:io.core.git-safety",
 ] as const;
 
