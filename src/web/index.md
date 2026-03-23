@@ -77,8 +77,9 @@ chrome comes from `@io/web`.
   history during authority init, commits graph and secret side-storage changes
   in one Durable Object storage transaction, and prunes old transaction rows
 - `../../src/web/lib/authority.ts`: shared web authority behavior, secret-field
-  mutation flow, and the storage abstraction consumed by both tests and the
-  Durable Object adapter
+  mutation flow, the shared write/command authorization seam, explicit
+  `policyVersion` fail-closed checks for `/api/tx` and `/api/commands`, and the
+  storage abstraction consumed by both tests and the Durable Object adapter
 - `../../src/web/lib/`: worker-backed graph authority, generic secret-field
   mutation contracts, seeded example data/runtime fixtures, and HTTP route
   helpers
@@ -88,4 +89,6 @@ chrome comes from `@io/web`.
   APIs. It now resolves a request-bound `AuthorizationContext` through the
   shared web auth bridge and forwards that stable contract to the Durable
   Object authority path, while the host-specific request/session parsing and
-  relay details remain provisional.
+  relay details remain provisional. Until Branch 7 supplies non-anonymous
+  browser principals, the write/command path intentionally fails closed for
+  callers that do not meet the current authority policy contract.

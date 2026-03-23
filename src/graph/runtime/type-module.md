@@ -80,8 +80,8 @@ Current fields:
 - `key`, `label`, and optional `subject`
 - `execution`: `localOnly`, `optimisticVerify`, or `serverOnly`
 - `input` and `output`
-- optional `policy.capabilities`
-- optional `policy.touchesPredicates`
+- optional `policy.capabilities`, reusing the shared authorization capability-key vocabulary
+- optional `policy.touchesPredicates`, where each entry names a touched `predicateId`
 
 The descriptor belongs in `@io/core/graph`. The authoritative implementation,
 transport wiring, and route ownership still belong in `app`.

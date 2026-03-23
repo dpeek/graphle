@@ -1,11 +1,13 @@
 import { describe, expect, it } from "bun:test";
 
+import { edgeId } from "./index.js";
 import {
   probeAuthSubject,
   probeAuthenticatedSession,
   probeAuthorizationContext,
   probeContractItem,
   probeContractObjectView,
+  probeContractSummaryPolicy,
   probeContractWorkflow,
   probeSaveContractItemCommand,
 } from "./runtime/contracts.probe.js";
@@ -54,6 +56,9 @@ const retiredGraphSubpaths = [
 ] as const;
 
 const requiredRootExports = [
+  "authorizeCommand",
+  "authorizeRead",
+  "authorizeWrite",
   "createIdMap",
   "defineNamespace",
   "defineReferenceField",
@@ -64,6 +69,9 @@ const requiredRootExports = [
 ] as const;
 
 const requiredRuntimeExports = [
+  "authorizeCommand",
+  "authorizeRead",
+  "authorizeWrite",
   "createPersistedAuthoritativeGraph",
   "createStore",
   "createTypeClient",
@@ -196,6 +204,26 @@ describe("@io/core/graph package entry surfaces", () => {
       entity: probeContractItem.values.key,
       commands: [probeSaveContractItemCommand.key],
     });
+    expect(probeContractItem.fields.summary).toMatchObject({
+      authority: {
+        write: "server-command",
+        policy: {
+          readAudience: "graph-member",
+          writeAudience: "module-command",
+          shareable: true,
+          requiredCapabilities: ["probe.contract.write"],
+        },
+      },
+    });
+    expect(probeContractSummaryPolicy).toMatchObject({
+      predicateId: edgeId(probeContractItem.fields.summary),
+      transportVisibility: "replicated",
+      requiredWriteScope: "server-command",
+      readAudience: "graph-member",
+      writeAudience: "module-command",
+      shareable: true,
+      requiredCapabilities: ["probe.contract.write"],
+    });
     expect(probeContractWorkflow).toMatchObject({
       subjects: [probeContractItem.values.key],
       commands: [probeSaveContractItemCommand.key],
@@ -233,8 +261,8 @@ describe("@io/core/graph package entry surfaces", () => {
       policy: {
         capabilities: ["probe.contract.write"],
         touchesPredicates: [
-          probeContractItem.fields.name.key,
-          probeContractItem.fields.summary.key,
+          { predicateId: edgeId(probeContractItem.fields.name) },
+          { predicateId: probeContractSummaryPolicy.predicateId },
         ],
       },
     });

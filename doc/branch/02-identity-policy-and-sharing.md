@@ -217,6 +217,11 @@ interface PredicatePolicyDescriptor {
   requiredCapabilities?: readonly string[];
 }
 
+Schema authors attach the audience, sharing, and capability metadata under
+`GraphFieldAuthority.policy`; the shared graph runtime resolves the full
+`PredicatePolicyDescriptor` by combining that metadata with the field id,
+transport visibility, and required write scope.
+
 type CapabilityResource =
   | { kind: "predicate-read"; predicateId: string }
   | { kind: "predicate-write"; predicateId: string }
@@ -399,6 +404,14 @@ Contract rules:
   existing Branch 1 write-scope check
 - `authorizeCommand(...)` uses command policy plus predicate policy; either may
   deny
+- authority-owned write and command paths must fail closed with
+  `policy.stale_context` when the request-bound `AuthorizationContext` carries
+  an older `policyVersion` than the authority currently serves
+- until every current web-graph predicate publishes an explicit
+  `PredicatePolicyDescriptor`, the current web authority proof may lower
+  predicates without schema-authored policy metadata to an authority-only
+  descriptor so deny behavior stays explicit and Branch 3 / Branch 7 can target
+  one contract instead of route-local fallbacks
 - grant creation and revocation are authoritative writes and therefore reuse the
   normal Branch 1 transaction guarantees
 
@@ -444,6 +457,9 @@ Process and trust boundaries:
 - Durable Object authority remains the authoritative write point
 - future remote-graph access must terminate in the same policy evaluator, not a
   separate bypass path
+- current web proof note: `/api/tx` and `/api/commands` already apply that
+  rule, surface stable deny codes on failure, and use `policyVersion` as the
+  coherence token Branch 3 and Branch 7 should refresh against
 
 Authoritative versus derived state:
 

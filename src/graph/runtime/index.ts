@@ -1,4 +1,5 @@
 export * from "./persisted-authority";
+export * from "./authorization";
 export * from "./bootstrap";
 export * from "./client";
 export * from "./contracts";

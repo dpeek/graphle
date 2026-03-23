@@ -69,6 +69,13 @@ That means the client should only ever query over the graph slice it is allowed
 to hold. Hidden predicates are not "false" on the client. They are simply not
 part of the client's authoritative view.
 
+The shared runtime evaluator now lives in `../../src/graph/runtime/authorization.ts`.
+It exposes `authorizeRead(...)`, `authorizeWrite(...)`, and
+`authorizeCommand(...)` as fail-closed helpers that take an
+`AuthorizationContext`, predicate policy, command policy, and touched-predicate
+metadata and return a stable allow-or-deny result with Branch 2 policy error
+codes.
+
 ## Type-Local Business Methods
 
 We still want excellent type DX for business logic.

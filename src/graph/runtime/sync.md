@@ -93,6 +93,7 @@ authoritative sync events:
 - Consumer packages own transport and endpoint policy: when to call `createSyncPayload()` or `getIncrementalSyncResult(...)`, how to expose them over HTTP or another transport, and what auth wraps those endpoints.
 - The web Worker is one such consumer: `src/web/lib/graph-authority-do.ts` now owns the SQLite-backed Durable Object storage path, while `src/web/lib/authority.ts` stays focused on the shared web authority behavior and request handlers.
 - The current web authority layer now includes a thin named command dispatcher over a shared scoped command seam so routes can invoke authority-owned commands without binding directly to one bespoke method entrypoint, each command declares its authoritative write scope explicitly, and staged authority-local side effects registered there are unwound for any failure before durable commit.
+- That same web authority write and command path now consumes the shared `authorizeWrite(...)` and `authorizeCommand(...)` evaluators, fails closed on stale `AuthorizationContext.policyVersion`, and treats predicates without an explicit current web-graph policy descriptor as authority-only for the current proof so downstream sync/UI work can target one stable deny contract.
 
 ## Current Behavior
 

@@ -133,6 +133,22 @@ const testAuthorization = createAnonymousAuthorizationContext({
   policyVersion: 0,
 });
 
+const testAuthorityAuthorization = {
+  ...testAuthorization,
+  principalId: "principal:authority",
+  principalKind: "service" as const,
+  roleKeys: ["graph:authority"],
+  sessionId: "session:authority",
+};
+
+const testHumanAuthorization = {
+  ...testAuthorization,
+  principalId: "principal:human",
+  principalKind: "human" as const,
+  roleKeys: ["graph:member"],
+  sessionId: "session:human",
+};
+
 function createCursor<T extends Record<string, unknown>>(
   rows: readonly T[],
 ): DurableObjectSqlCursor<T> {
@@ -158,7 +174,7 @@ function createCursor<T extends Record<string, unknown>>(
 function createAuthorizedRequest(
   input: string,
   init: RequestInit = {},
-  authorization: AuthorizationContext = testAuthorization,
+  authorization: AuthorizationContext = testAuthorityAuthorization,
 ): Request {
   const request = new Request(input, init);
   const headers = new Headers(request.headers);
@@ -607,6 +623,83 @@ describe("web graph authority durable object", () => {
         writeScope: "server-command",
       }),
     ]);
+  });
+
+  it("surfaces stable deny vocabulary for unauthorized transaction requests", async () => {
+    const { state } = createSqliteDurableObjectState();
+    const durableObject = new WebGraphAuthorityDurableObject(state);
+    const initialSync = await readSyncPayload(durableObject);
+    const createdEnvVar = buildTransactionFromSnapshot(
+      initialSync.snapshot ?? { edges: [], retracted: [] },
+      "tx:forbidden-env-var",
+      (graph) =>
+        graph.envVar.create({
+          description: "Blocked without authority access",
+          name: "OPENAI_API_KEY",
+        }),
+    );
+
+    const response = await durableObject.fetch(
+      createAuthorizedRequest(
+        "https://graph-authority.local/api/tx",
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify(createdEnvVar.transaction),
+        },
+        testHumanAuthorization,
+      ),
+    );
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: expect.stringContaining("policy.write.forbidden"),
+    });
+  });
+
+  it("surfaces stable deny vocabulary for unauthorized command requests", async () => {
+    const { state } = createSqliteDurableObjectState();
+    const durableObject = new WebGraphAuthorityDurableObject(state);
+    const initialSync = await readSyncPayload(durableObject);
+    const createdEnvVar = buildTransactionFromSnapshot(
+      initialSync.snapshot ?? { edges: [], retracted: [] },
+      "tx:create-forbidden-command-env-var",
+      (graph) =>
+        graph.envVar.create({
+          description: "Shared command route credential",
+          name: "OPENAI_API_KEY",
+        }),
+    );
+
+    await postTransaction(durableObject, createdEnvVar.transaction);
+
+    const response = await durableObject.fetch(
+      createAuthorizedRequest(
+        "https://graph-authority.local/api/commands",
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            kind: "write-secret-field",
+            input: {
+              entityId: createdEnvVar.result,
+              predicateId: envVarSecretPredicateId,
+              plaintext: "sk-live-command-route",
+            },
+          }),
+        },
+        testHumanAuthorization,
+      ),
+    );
+
+    expect(response.status).toBe(403);
+    expect(await response.json()).toEqual({
+      error: expect.stringContaining("policy.command.forbidden"),
+    });
   });
 
   it("returns 404 for the removed /api/secret-fields route", async () => {

@@ -293,7 +293,7 @@ const rotateSecretCommand: GraphCommandSpec<
   output: undefined as never,
   policy: {
     capabilities: ["secret:rotate"],
-    touchesPredicates: ["ops:envVar:secret"],
+    touchesPredicates: [{ predicateId: "ops:envVar:secret" }],
   },
 };
 ```

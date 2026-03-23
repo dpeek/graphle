@@ -5,8 +5,10 @@ import type {
   AuthorizationContext,
   GraphCommandSpec,
   ObjectViewSpec,
+  PredicatePolicyDescriptor,
   WorkflowSpec,
 } from "../index.js";
+import { fieldPolicyDescriptor } from "../index.js";
 import { core, stringTypeModule } from "../modules/index.js";
 
 // Test-only root-safe contract probes that feature work can copy from.
@@ -14,8 +16,29 @@ export const probeContractItem = defineType({
   values: { key: "probe:contractItem", name: "Probe Contract Item" },
   fields: {
     ...core.node.fields,
+    name: {
+      ...core.node.fields.name,
+      authority: {
+        write: "server-command",
+        policy: {
+          readAudience: "graph-member",
+          writeAudience: "module-command",
+          shareable: true,
+          requiredCapabilities: ["probe.contract.write"],
+        },
+      },
+    },
     summary: stringTypeModule.field({
       cardinality: "one?",
+      authority: {
+        write: "server-command",
+        policy: {
+          readAudience: "graph-member",
+          writeAudience: "module-command",
+          shareable: true,
+          requiredCapabilities: ["probe.contract.write"],
+        },
+      },
       meta: {
         label: "Summary",
         editor: {
@@ -67,6 +90,21 @@ export const probeAuthorizationContext = {
   policyVersion: 7,
 } satisfies AuthorizationContext;
 
+const resolvedProbeContractSummaryPolicy = fieldPolicyDescriptor(probeContractItem.fields.summary);
+const resolvedProbeContractNamePolicy = fieldPolicyDescriptor(probeContractItem.fields.name);
+
+if (!resolvedProbeContractSummaryPolicy) {
+  throw new Error("Probe contract summary field must resolve a predicate policy descriptor.");
+}
+if (!resolvedProbeContractNamePolicy) {
+  throw new Error("Probe contract name field must resolve a predicate policy descriptor.");
+}
+
+export const probeContractSummaryPolicy =
+  resolvedProbeContractSummaryPolicy satisfies PredicatePolicyDescriptor;
+export const probeContractNamePolicy =
+  resolvedProbeContractNamePolicy satisfies PredicatePolicyDescriptor;
+
 export const probeContractObjectView = {
   key: "probe:contractItem:summary",
   entity: probeContractItem.values.key,
@@ -108,7 +146,10 @@ export const probeSaveContractItemCommand = {
   },
   policy: {
     capabilities: ["probe.contract.write"],
-    touchesPredicates: [probeContractItem.fields.name.key, probeContractItem.fields.summary.key],
+    touchesPredicates: [
+      { predicateId: probeContractNamePolicy.predicateId },
+      { predicateId: probeContractSummaryPolicy.predicateId },
+    ],
   },
 } satisfies GraphCommandSpec<{ name: string; summary?: string }, { itemId: string }>;
 

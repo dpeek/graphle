@@ -2,18 +2,28 @@ import type {
   AuthSubjectRef as AuthSubjectRefFromRoot,
   AuthenticatedSession as AuthenticatedSessionFromRoot,
   AuthorizationContext as AuthorizationContextFromRoot,
+  CapabilityVersion as CapabilityVersionFromRoot,
+  GraphCommandPolicy as GraphCommandPolicyFromRoot,
   GraphCommandSpec as GraphCommandSpecFromRoot,
+  GraphCommandTouchedPredicate as GraphCommandTouchedPredicateFromRoot,
   ObjectViewSpec as ObjectViewSpecFromRoot,
+  PolicyVersion as PolicyVersionFromRoot,
   PrincipalKind as PrincipalKindFromRoot,
+  PredicatePolicyDescriptor as PredicatePolicyDescriptorFromRoot,
   WorkflowSpec as WorkflowSpecFromRoot,
 } from "../index.js";
 import type {
   AuthSubjectRef,
   AuthenticatedSession,
   AuthorizationContext,
+  CapabilityVersion,
+  GraphCommandPolicy,
   GraphCommandSpec,
+  GraphCommandTouchedPredicate,
   ObjectViewSpec,
+  PolicyVersion,
   PrincipalKind,
+  PredicatePolicyDescriptor,
   WorkflowSpec,
 } from "./index.js";
 
@@ -63,6 +73,24 @@ const topicReviewWorkflow = {
   commands: ["pkm:topic:save"],
 } satisfies WorkflowSpec;
 
+const topicContentPolicy = {
+  predicateId: "pkm:topic.content",
+  transportVisibility: "replicated",
+  requiredWriteScope: "server-command",
+  readAudience: "graph-member",
+  writeAudience: "module-command",
+  shareable: true,
+  requiredCapabilities: ["topic.write"],
+} satisfies PredicatePolicyDescriptor;
+
+const topicNameTouch = {
+  predicateId: "pkm:topic.name",
+} satisfies GraphCommandTouchedPredicate;
+
+const topicContentTouch = {
+  predicateId: topicContentPolicy.predicateId,
+} satisfies GraphCommandTouchedPredicate;
+
 const saveTopicCommand = {
   key: "pkm:topic:save",
   label: "Save topic",
@@ -76,7 +104,7 @@ const saveTopicCommand = {
   },
   policy: {
     capabilities: ["topic.write"],
-    touchesPredicates: ["pkm:topic.name", "pkm:topic.content"],
+    touchesPredicates: [topicNameTouch, topicContentTouch],
   },
 } satisfies GraphCommandSpec<{ title: string }, { topicId: string }>;
 
@@ -111,7 +139,17 @@ const authorizationContext = {
 const rootAuthSubject: AuthSubjectRefFromRoot = authSubject;
 const rootAuthenticatedSession: AuthenticatedSessionFromRoot = authenticatedSession;
 const rootAuthorizationContext: AuthorizationContextFromRoot = authorizationContext;
+const rootPredicatePolicy: PredicatePolicyDescriptorFromRoot = topicContentPolicy;
+const rootCommandPolicy: GraphCommandPolicyFromRoot = saveTopicCommand.policy!;
+const rootTouchedPredicate: GraphCommandTouchedPredicateFromRoot = topicContentTouch;
+const rootCapabilityVersion: CapabilityVersionFromRoot = authorizationContext.capabilityVersion;
+const rootPolicyVersion: PolicyVersionFromRoot = authorizationContext.policyVersion;
 const rootPrincipalKind: PrincipalKindFromRoot = "remoteGraph";
+const runtimeCapabilityVersion: CapabilityVersion = rootCapabilityVersion;
+const runtimePolicyVersion: PolicyVersion = rootPolicyVersion;
+const runtimePredicatePolicy: PredicatePolicyDescriptor = rootPredicatePolicy;
+const runtimeCommandPolicy: GraphCommandPolicy = rootCommandPolicy;
+const runtimeTouchedPredicate: GraphCommandTouchedPredicate = rootTouchedPredicate;
 const runtimePrincipalKind: PrincipalKind = rootPrincipalKind;
 
 void rootObjectView;
@@ -120,7 +158,17 @@ void rootCommand;
 void rootAuthSubject;
 void rootAuthenticatedSession;
 void rootAuthorizationContext;
+void rootPredicatePolicy;
+void rootCommandPolicy;
+void rootTouchedPredicate;
+void rootCapabilityVersion;
+void rootPolicyVersion;
 void rootPrincipalKind;
+void runtimeCapabilityVersion;
+void runtimePolicyVersion;
+void runtimePredicatePolicy;
+void runtimeCommandPolicy;
+void runtimeTouchedPredicate;
 void runtimePrincipalKind;
 
 void ({
@@ -168,6 +216,26 @@ void ({
     topicId: "topic-1",
   },
 } satisfies GraphCommandSpec);
+
+void ({
+  predicateId: "pkm:topic.content",
+  transportVisibility: "replicated",
+  requiredWriteScope: "server-command",
+  // @ts-expect-error predicate policy audiences follow the shared authorization contract
+  readAudience: "member",
+  writeAudience: "module-command",
+  shareable: true,
+} satisfies PredicatePolicyDescriptor);
+
+void ({
+  capabilities: ["topic.write"],
+  touchesPredicates: [
+    {
+      // @ts-expect-error touched predicates must use the shared predicateId shape
+      id: "pkm:topic.content",
+    },
+  ],
+} satisfies GraphCommandPolicy);
 
 void ({
   graphId: "graph-1",

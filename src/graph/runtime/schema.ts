@@ -1,15 +1,35 @@
 export type Cardinality = "one" | "one?" | "many";
 export type GraphFieldVisibility = "replicated" | "authority-only";
 export type GraphFieldWritePolicy = "client-tx" | "server-command" | "authority-only";
+export type PolicyCapabilityKey = string;
+export type PolicyAudience = "owner" | "graph-member" | "capability" | "public" | "authority";
+export type PolicyMutationMode =
+  | "owner-edit"
+  | "graph-member-edit"
+  | "capability"
+  | "module-command"
+  | "authority";
+export type PredicatePolicyDefinition = {
+  readonly readAudience: PolicyAudience;
+  readonly writeAudience: PolicyMutationMode;
+  readonly shareable: boolean;
+  readonly requiredCapabilities?: readonly PolicyCapabilityKey[];
+};
+export type PredicatePolicyDescriptor = PredicatePolicyDefinition & {
+  readonly predicateId: string;
+  readonly transportVisibility: GraphFieldVisibility;
+  readonly requiredWriteScope: GraphFieldWritePolicy;
+};
 export type GraphSecretFieldAuthority = {
   kind: "sealed-handle";
   metadataVisibility?: GraphFieldVisibility;
-  revealCapability?: string;
-  rotateCapability?: string;
+  revealCapability?: PolicyCapabilityKey;
+  rotateCapability?: PolicyCapabilityKey;
 };
 export type GraphFieldAuthority = {
   visibility?: GraphFieldVisibility;
   write?: GraphFieldWritePolicy;
+  policy?: PredicatePolicyDefinition;
   secret?: GraphSecretFieldAuthority;
 };
 export type DefinitionIconRef = string | { id: string };
@@ -162,6 +182,31 @@ export function fieldVisibility(field: { authority?: GraphFieldAuthority } | und
 
 export function fieldWritePolicy(field: { authority?: GraphFieldAuthority } | undefined) {
   return field?.authority?.write ?? "client-tx";
+}
+
+type FieldWithAuthorityPolicy = {
+  key: string;
+  id?: string;
+  authority?: GraphFieldAuthority;
+};
+
+export function fieldPolicyDescriptor(
+  field: FieldWithAuthorityPolicy | undefined,
+): PredicatePolicyDescriptor | undefined {
+  const policy = field?.authority?.policy;
+  if (!field || !policy) return undefined;
+
+  return {
+    predicateId: edgeId(field),
+    transportVisibility: fieldVisibility(field),
+    requiredWriteScope: fieldWritePolicy(field),
+    readAudience: policy.readAudience,
+    writeAudience: policy.writeAudience,
+    shareable: policy.shareable,
+    ...(policy.requiredCapabilities
+      ? { requiredCapabilities: [...policy.requiredCapabilities] }
+      : {}),
+  } satisfies PredicatePolicyDescriptor;
 }
 
 export function isSecretBackedField(field: { authority?: GraphFieldAuthority } | undefined) {

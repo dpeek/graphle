@@ -45,6 +45,30 @@ function createTestAuthorizationContext(
   };
 }
 
+function createAuthorityAuthorizationContext(
+  overrides: Partial<AuthorizationContext> = {},
+): AuthorizationContext {
+  return createTestAuthorizationContext({
+    principalId: "principal:authority",
+    principalKind: "service",
+    roleKeys: ["graph:authority"],
+    sessionId: "session:authority",
+    ...overrides,
+  });
+}
+
+function createHumanAuthorizationContext(
+  overrides: Partial<AuthorizationContext> = {},
+): AuthorizationContext {
+  return createTestAuthorizationContext({
+    principalId: "principal:human",
+    principalKind: "human",
+    roleKeys: ["graph:member"],
+    sessionId: "session:human",
+    ...overrides,
+  });
+}
+
 function buildGraphWriteTransaction(
   before: StoreSnapshot,
   after: StoreSnapshot,
@@ -119,7 +143,7 @@ describe("web authority", () => {
   });
 
   it("allows authority-only commands to reuse the shared authority command seam", async () => {
-    const authorization = createTestAuthorizationContext();
+    const authorization = createAuthorityAuthorizationContext();
     const storage = createInMemoryTestWebAppAuthorityStorage();
     const authority = await createWebAppAuthority(storage.storage);
     const envVarId = authority.graph.envVar.create({
@@ -166,7 +190,7 @@ describe("web authority", () => {
   });
 
   it("stores secret plaintext outside sync and reloads it across restart", async () => {
-    const authorization = createTestAuthorizationContext();
+    const authorization = createAuthorityAuthorizationContext();
     const storage = createInMemoryTestWebAppAuthorityStorage();
     const authority = await createWebAppAuthority(storage.storage);
     const envVarId = authority.graph.envVar.create({
@@ -240,7 +264,7 @@ describe("web authority", () => {
   });
 
   it("rejects ordinary transactions that directly rewrite secret-backed refs", async () => {
-    const authorization = createTestAuthorizationContext();
+    const authorization = createAuthorityAuthorizationContext();
     const storage = createInMemoryTestWebAppAuthorityStorage();
     const authority = await createWebAppAuthority(storage.storage);
 
@@ -294,14 +318,21 @@ describe("web authority", () => {
       "tx:direct-secret",
     );
 
-    await expect(authority.applyTransaction(transaction, { authorization })).rejects.toThrow(
-      'Field "ops:envVar:secret" requires "server-command" writes and cannot be changed through an ordinary transaction.',
-    );
+    await expect(authority.applyTransaction(transaction, { authorization })).rejects.toMatchObject({
+      result: expect.objectContaining({
+        issues: expect.arrayContaining([
+          expect.objectContaining({
+            code: "policy.write.forbidden",
+            message: expect.stringContaining('requires "server-command" writes'),
+          }),
+        ]),
+      }),
+    });
     expect(authority.graph.envVar.get(primaryEnvVarId).secret).toBe(primarySecretId);
   });
 
   it("rolls back staged secret state when a server-command commit fails", async () => {
-    const authorization = createTestAuthorizationContext();
+    const authorization = createAuthorityAuthorizationContext();
     const backingStorage = createInMemoryTestWebAppAuthorityStorage();
     let failServerCommandCommit = false;
     const storage = {
@@ -380,7 +411,7 @@ describe("web authority", () => {
   });
 
   it("routes generic secret-field writes through the web server helper", async () => {
-    const authorization = createTestAuthorizationContext();
+    const authorization = createAuthorityAuthorizationContext();
     const storage = createInMemoryTestWebAppAuthorityStorage();
     const authority = await createWebAppAuthority(storage.storage);
     const envVarId = authority.graph.envVar.create({
@@ -413,7 +444,7 @@ describe("web authority", () => {
   });
 
   it("routes shared authority commands through the web server helper", async () => {
-    const authorization = createTestAuthorizationContext();
+    const authorization = createAuthorityAuthorizationContext();
     const storage = createInMemoryTestWebAppAuthorityStorage();
     const authority = await createWebAppAuthority(storage.storage);
     const envVarId = authority.graph.envVar.create({
@@ -461,6 +492,109 @@ describe("web authority", () => {
     expect(JSON.stringify(authority.createSyncPayload({ authorization }))).not.toContain(
       "sk-live-command-route",
     );
+  });
+
+  it("denies direct transactions without authority access by default", async () => {
+    const authorization = createHumanAuthorizationContext();
+    const storage = createInMemoryTestWebAppAuthorityStorage();
+    const authority = await createWebAppAuthority(storage.storage);
+    const mutationStore = createStore();
+    bootstrap(mutationStore, core);
+    bootstrap(mutationStore, pkm);
+    bootstrap(mutationStore, ops);
+    mutationStore.replace(authority.store.snapshot());
+    const mutationGraph = createTypeClient(mutationStore, productGraph);
+    const before = mutationStore.snapshot();
+
+    mutationGraph.envVar.create({
+      description: "Blocked without authority access",
+      name: "OPENAI_API_KEY",
+    });
+
+    const transaction = buildGraphWriteTransaction(
+      before,
+      mutationStore.snapshot(),
+      "tx:forbidden",
+    );
+
+    await expect(authority.applyTransaction(transaction, { authorization })).rejects.toMatchObject({
+      result: expect.objectContaining({
+        issues: expect.arrayContaining([
+          expect.objectContaining({
+            code: "policy.write.forbidden",
+            message: expect.stringContaining("policy.write.forbidden"),
+          }),
+        ]),
+      }),
+    });
+    expect(storage.read()?.writeHistory.results.length ?? 0).toBe(0);
+  });
+
+  it("denies authority commands without authority access and surfaces stable vocabulary", async () => {
+    const authorization = createHumanAuthorizationContext();
+    const storage = createInMemoryTestWebAppAuthorityStorage();
+    const authority = await createWebAppAuthority(storage.storage);
+    const envVarId = authority.graph.envVar.create({
+      description: "Shared command credential",
+      name: "OPENAI_API_KEY",
+    });
+
+    await expect(
+      authority.executeCommand(
+        {
+          kind: "write-secret-field",
+          input: {
+            entityId: envVarId,
+            predicateId: envVarSecretPredicateId,
+            plaintext: "sk-live-command",
+          },
+        },
+        { authorization },
+      ),
+    ).rejects.toMatchObject({
+      code: "policy.command.forbidden",
+      message: expect.stringContaining("policy.command.forbidden"),
+      status: 403,
+    });
+    expect(storage.read()?.writeHistory.results.length ?? 0).toBe(0);
+  });
+
+  it("rejects stale policy versions before authoritative writes commit", async () => {
+    const authorization = createAuthorityAuthorizationContext({
+      policyVersion: 1,
+    });
+    const storage = createInMemoryTestWebAppAuthorityStorage();
+    const authority = await createWebAppAuthority(storage.storage);
+    const mutationStore = createStore();
+    bootstrap(mutationStore, core);
+    bootstrap(mutationStore, pkm);
+    bootstrap(mutationStore, ops);
+    mutationStore.replace(authority.store.snapshot());
+    const mutationGraph = createTypeClient(mutationStore, productGraph);
+    const before = mutationStore.snapshot();
+
+    mutationGraph.envVar.create({
+      description: "Blocked by stale policy version",
+      name: "OPENAI_API_KEY",
+    });
+
+    const transaction = buildGraphWriteTransaction(
+      before,
+      mutationStore.snapshot(),
+      "tx:stale-policy",
+    );
+
+    await expect(authority.applyTransaction(transaction, { authorization })).rejects.toMatchObject({
+      result: expect.objectContaining({
+        issues: expect.arrayContaining([
+          expect.objectContaining({
+            code: "policy.stale_context",
+            message: expect.stringContaining("policy.stale_context"),
+          }),
+        ]),
+      }),
+    });
+    expect(storage.read()?.writeHistory.results.length ?? 0).toBe(0);
   });
 
   it("passes explicit authorization context through sync and transaction helpers", async () => {

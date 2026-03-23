@@ -1,8 +1,23 @@
+import type { PolicyCapabilityKey, PredicatePolicyDescriptor } from "./schema";
+
 /**
  * Stable graph-owned principal kinds. These match the canonical
  * `core:principalKind` options.
  */
 export type PrincipalKind = "human" | "service" | "agent" | "anonymous" | "remoteGraph";
+
+/**
+ * Monotonic principal-scoped capability snapshot version.
+ */
+export type CapabilityVersion = number;
+
+/**
+ * Monotonic graph-scoped authorization policy snapshot version. Authority-owned
+ * write and command paths are expected to fail closed with
+ * `policy.stale_context` when a request-bound context does not match the
+ * authority's current policy version.
+ */
+export type PolicyVersion = number;
 
 /**
  * Stable provider-neutral auth subject tuple mirrored by
@@ -37,8 +52,72 @@ export type AuthorizationContext = {
   readonly sessionId: string | null;
   readonly roleKeys: readonly string[];
   readonly capabilityGrantIds: readonly string[];
-  readonly capabilityVersion: number;
-  readonly policyVersion: number;
+  readonly capabilityVersion: CapabilityVersion;
+  readonly policyVersion: PolicyVersion;
+};
+
+export type PolicyErrorCode =
+  | "auth.unauthenticated"
+  | "auth.principal_missing"
+  | "policy.read.forbidden"
+  | "policy.write.forbidden"
+  | "policy.command.forbidden"
+  | "policy.stale_context"
+  | "grant.invalid"
+  | "share.surface_invalid";
+
+export type PolicyError = {
+  readonly code: PolicyErrorCode;
+  readonly message: string;
+  readonly retryable: boolean;
+  /**
+   * When true, callers should refresh their request-bound authorization context
+   * before retrying because the current policy snapshot is no longer current.
+   */
+  readonly refreshRequired?: boolean;
+};
+
+export type AuthorizationDecision =
+  | {
+      readonly allowed: true;
+    }
+  | {
+      readonly allowed: false;
+      readonly error: PolicyError;
+    };
+
+export type AuthorizationSubject = {
+  readonly subjectId: string;
+  readonly ownerPrincipalId?: string | null;
+};
+
+export type AuthorizationPredicateTarget = AuthorizationSubject & {
+  readonly predicateId: string;
+  readonly policy?: PredicatePolicyDescriptor | null;
+};
+
+export type AuthorizeReadInput = {
+  readonly authorization: AuthorizationContext;
+  readonly target: AuthorizationPredicateTarget;
+  readonly capabilityKeys?: readonly PolicyCapabilityKey[];
+};
+
+export type AuthorizeWriteIntent = "transaction" | "command";
+
+export type AuthorizeWriteInput = AuthorizeReadInput & {
+  readonly writeScope: PredicatePolicyDescriptor["requiredWriteScope"];
+  readonly intent?: AuthorizeWriteIntent;
+};
+
+export type AuthorizationCommandTouchedPredicate = AuthorizationPredicateTarget;
+
+export type AuthorizeCommandInput = {
+  readonly authorization: AuthorizationContext;
+  readonly commandKey: string;
+  readonly commandPolicy?: GraphCommandPolicy | null;
+  readonly touchedPredicates?: readonly AuthorizationCommandTouchedPredicate[];
+  readonly capabilityKeys?: readonly PolicyCapabilityKey[];
+  readonly writeScope?: PredicatePolicyDescriptor["requiredWriteScope"];
 };
 
 export type ObjectViewFieldSpec = {
@@ -91,9 +170,11 @@ export type WorkflowSpec = {
 
 export type GraphCommandExecution = "localOnly" | "optimisticVerify" | "serverOnly";
 
+export type GraphCommandTouchedPredicate = Pick<PredicatePolicyDescriptor, "predicateId">;
+
 export type GraphCommandPolicy = {
-  readonly capabilities?: readonly string[];
-  readonly touchesPredicates?: readonly string[];
+  readonly capabilities?: readonly PolicyCapabilityKey[];
+  readonly touchesPredicates?: readonly GraphCommandTouchedPredicate[];
 };
 
 export type GraphCommandSpec<Input = unknown, Output = unknown> = {
