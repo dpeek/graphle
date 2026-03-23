@@ -124,12 +124,15 @@ Stability target for this branch:
 
 - `stable`: ids, facts, field-authority metadata, write-scope semantics,
   transaction envelopes, write sessions, total sync, incremental sync,
-  persisted-authority APIs, secret-handle split
+  persisted-authority APIs, the `core:secretHandle` plus
+  `defineSecretField(...)` contract, and the secret-handle/plaintext split
 - `provisional`: consumer-owned command envelopes and dispatch in the current
-  web authority proof, single-graph Worker HTTP routes, and the SQLite table
-  layout
-- `future`: scoped sync, directory/shard topology, principal-aware policy, and
-  federation
+  web authority proof, single-graph Worker HTTP routes, the SQLite table
+  layout, and the cross-branch meaning of optional provider metadata columns on
+  `io_secret_value`
+- `future`: scoped sync, directory/shard topology, principal-aware policy,
+  reveal flows, external KMS integration, and principal-aware enforcement of
+  `revealCapability` / `rotateCapability`
 
 ## 2. Scope
 
@@ -331,6 +334,10 @@ or dispatch interface. Consumer-owned command layers must lower to
 `GraphWriteTransaction` plus any adapter-local side effects behind the
 published write-scope boundary.
 
+`revealCapability` and `rotateCapability` are Branch 1 schema metadata only.
+This branch publishes their presence on secret-backed fields, but it does not
+publish a reveal API, provider protocol, or principal-aware enforcement model.
+
 ### Lifecycle states
 
 Facts:
@@ -354,6 +361,8 @@ Secret-backed fields:
 2. handle created with safe metadata
 3. plaintext stored in authority-only storage
 4. handle metadata rotated when plaintext changes
+5. replicated reference may later retract while the authority-only side row
+   stays retained until later lifecycle work defines cleanup
 
 ### Relationships
 
@@ -450,7 +459,8 @@ Secret-backed fields:
 - Name: `executeCommand({ kind: "write-secret-field", input })`,
   `writeSecretField(...)`, and canonical `POST /api/commands`
 - Purpose: current consumer-owned web proof for creating or rotating a
-  secret-backed field through an explicit authority command
+  secret-backed field through an explicit authority command; `ops:envVar` is
+  the primary shipped consumer, but the command is not env-var-specific
 - Caller: web operator surfaces
 - Callee: web authority runtime
 - Inputs: `entityId`, `predicateId`, and plaintext
@@ -459,6 +469,8 @@ Secret-backed fields:
   `writeScope: "server-command"`, `GraphWriteTransaction`, and the
   persisted-authority commit path; the command envelope, dispatcher, route
   shape, and result payload are web-owned for now
+- Current behavior note: submitting the same plaintext keeps the existing
+  `secretHandle.version`; the proof may still normalize the handle name
 - Failure shape: `400` for invalid input or non-secret predicate, `404` for
   unknown entity or predicate, storage failure on durable commit
 - Stability: `provisional`
@@ -567,7 +579,10 @@ This branch owns persistent state.
 `io_secret_value`
 
 - authority-only side table keyed by `secret_id`
-- stores plaintext, version, timestamps, and optional provider metadata
+- stores plaintext, version, timestamps, and optional provider metadata columns
+- current Branch 1 contract does not assign stable cross-branch semantics to
+  `provider`, `fingerprint`, or `external_key_id`; they remain adapter-owned
+  placeholders for later provider and KMS work
 
 ### Current authoritative state rules
 
@@ -811,9 +826,13 @@ Unknown retract target:
   through explicit server-side command paths.
 - Clients may know a secret exists and observe safe metadata such as version and
   last rotation time, but they may not infer plaintext from sync.
-- `revealCapability` and `rotateCapability` metadata exist on secret fields, but
-  principal-aware enforcement belongs to Branch 2. This branch only guarantees
-  the authority boundary and plaintext split.
+- Branch 1 does not publish a reveal flow. `revealCapability` and
+  `rotateCapability` exist as schema metadata only, and principal-aware
+  enforcement belongs to Branch 2. This branch only guarantees the authority
+  boundary and plaintext split.
+- Adapter-specific provider metadata may be durably retained with a secret row,
+  but the semantics of that metadata and any external KMS integration remain
+  provisional.
 - The current Worker routes are trusted internal adapters. They must remain
   wrapped by auth/session policy once Branch 2 lands, but that policy is not
   owned here.

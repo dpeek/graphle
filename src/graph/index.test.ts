@@ -63,6 +63,7 @@ const requiredRootExports = [
   "createIdMap",
   "defineNamespace",
   "defineReferenceField",
+  "defineSecretField",
   "defineType",
   "existingEntityReferenceField",
   "existingEntityReferenceFieldMeta",
@@ -81,6 +82,7 @@ const requiredRuntimeExports = [
   "createPersistedAuthoritativeGraph",
   "createStore",
   "createTypeClient",
+  "defineSecretField",
   "validateGraphStore",
 ] as const;
 

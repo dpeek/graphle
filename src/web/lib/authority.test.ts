@@ -1,9 +1,14 @@
 import { describe, expect, it, setDefaultTimeout } from "bun:test";
 
 import {
+  createIdMap,
   createStore,
   createTypeClient,
+  defineNamespace,
+  defineSecretField,
+  defineType,
   edgeId,
+  type AnyTypeOutput,
   type AuthorizationContext,
   type GraphWriteTransaction,
   type StoreSnapshot,
@@ -38,6 +43,26 @@ const envVarDescriptionPredicateId = edgeId(ops.envVar.fields.description);
 const envVarSecretPredicateId = edgeId(ops.envVar.fields.secret);
 const principalHomeGraphIdPredicateId = edgeId(core.principal.fields.homeGraphId);
 const secretHandleVersionPredicateId = edgeId(core.secretHandle.fields.version);
+const secretNote = defineType({
+  values: { key: "test:secretNote", name: "Secret Note" },
+  fields: {
+    ...core.node.fields,
+    secret: defineSecretField({
+      range: core.secretHandle,
+      cardinality: "one?",
+      meta: {
+        label: "Credential",
+      },
+      revealCapability: "secret:reveal",
+      rotateCapability: "secret:rotate",
+    }),
+  },
+});
+const secretNoteNamespace = defineNamespace(createIdMap({ secretNote }).map, {
+  secretNote,
+});
+const secretNoteGraph = { ...productGraph, ...secretNoteNamespace } as const;
+const secretNoteSecretPredicateId = edgeId(secretNote.fields.secret);
 
 setDefaultTimeout(20_000);
 
@@ -101,12 +126,19 @@ function buildGraphWriteTransaction(
   };
 }
 
-function createProductMutationStore(snapshot: StoreSnapshot) {
+function createMutationStoreForGraph<TGraph extends Record<string, AnyTypeOutput>>(
+  snapshot: StoreSnapshot,
+  graph: TGraph,
+) {
   const mutationStore = createStore(snapshot);
   return {
-    mutationGraph: createTypeClient(mutationStore, productGraph),
+    mutationGraph: createTypeClient(mutationStore, graph),
     mutationStore,
   };
+}
+
+function createProductMutationStore(snapshot: StoreSnapshot) {
+  return createMutationStoreForGraph(snapshot, productGraph);
 }
 
 async function createEnvVar(
@@ -127,6 +159,32 @@ async function createEnvVar(
 
   await authority.applyTransaction(transaction, { authorization });
   return envVarId;
+}
+
+async function applyServerCommandTransaction(
+  authority: WebAppAuthority,
+  authorization: AuthorizationContext,
+  transaction: GraphWriteTransaction,
+): Promise<void> {
+  await authority.applyTransaction(transaction, {
+    authorization,
+    writeScope: "server-command",
+  });
+}
+
+function buildRetractSecretReferenceTransaction(
+  snapshot: StoreSnapshot,
+  entityId: string,
+  txId: string,
+): GraphWriteTransaction {
+  const mutationStore = createStore(snapshot);
+  const before = mutationStore.snapshot();
+
+  for (const edge of mutationStore.facts(entityId, envVarSecretPredicateId)) {
+    mutationStore.retract(edge.id);
+  }
+
+  return buildGraphWriteTransaction(before, mutationStore.snapshot(), txId);
 }
 
 function readStringPredicateValue(
@@ -352,6 +410,106 @@ describe("web authority", () => {
     });
   });
 
+  it("retains plaintext side rows when a secret-backed reference is retracted", async () => {
+    const authorization = createAuthorityAuthorizationContext();
+    const storage = createInMemoryTestWebAppAuthorityStorage();
+    const authority = await createTestWebAppAuthority(storage.storage);
+    const envVarId = await createEnvVar(
+      authority,
+      authorization,
+      {
+        description: "Primary model credential",
+        name: "OPENAI_API_KEY",
+      },
+      "tx:create-env-var:secret-retract-reference",
+    );
+    const created = await authority.writeSecretField(
+      {
+        entityId: envVarId,
+        predicateId: envVarSecretPredicateId,
+        plaintext: "sk-live-first",
+      },
+      { authorization },
+    );
+
+    const retractTransaction = buildRetractSecretReferenceTransaction(
+      authority.readSnapshot({ authorization }),
+      envVarId,
+      "tx:retract-env-var-secret",
+    );
+
+    await applyServerCommandTransaction(authority, authorization, retractTransaction);
+
+    expect(
+      readStringPredicateValue(authority, authorization, envVarId, envVarSecretPredicateId),
+    ).toBeUndefined();
+    expect(storage.read()?.secrets?.[created.secretId]?.value).toBe("sk-live-first");
+    expect(JSON.stringify(authority.createSyncPayload({ authorization }))).not.toContain(
+      "sk-live-first",
+    );
+
+    const restarted = await createTestWebAppAuthority(storage.storage);
+
+    expect(
+      readStringPredicateValue(restarted, authorization, envVarId, envVarSecretPredicateId),
+    ).toBeUndefined();
+    expect(storage.read()?.secrets?.[created.secretId]?.value).toBe("sk-live-first");
+    expect(JSON.stringify(restarted.createSyncPayload({ authorization }))).not.toContain(
+      "sk-live-first",
+    );
+  });
+
+  it("retains plaintext side rows when retracting an entity that owns a secret-backed reference", async () => {
+    const authorization = createAuthorityAuthorizationContext();
+    const storage = createInMemoryTestWebAppAuthorityStorage();
+    const authority = await createTestWebAppAuthority(storage.storage);
+    const envVarId = await createEnvVar(
+      authority,
+      authorization,
+      {
+        description: "Primary model credential",
+        name: "OPENAI_API_KEY",
+      },
+      "tx:create-env-var:secret-retract-entity",
+    );
+    const created = await authority.writeSecretField(
+      {
+        entityId: envVarId,
+        predicateId: envVarSecretPredicateId,
+        plaintext: "sk-live-first",
+      },
+      { authorization },
+    );
+    const { mutationGraph, mutationStore } = createProductMutationStore(
+      authority.readSnapshot({ authorization }),
+    );
+    const before = mutationStore.snapshot();
+
+    mutationGraph.envVar.delete(envVarId);
+
+    const deleteTransaction = buildGraphWriteTransaction(
+      before,
+      mutationStore.snapshot(),
+      "tx:delete-env-var-with-secret",
+    );
+
+    await applyServerCommandTransaction(authority, authorization, deleteTransaction);
+
+    expect(createStore(authority.readSnapshot({ authorization })).facts(envVarId)).toHaveLength(0);
+    expect(storage.read()?.secrets?.[created.secretId]?.value).toBe("sk-live-first");
+    expect(JSON.stringify(authority.createSyncPayload({ authorization }))).not.toContain(
+      "sk-live-first",
+    );
+
+    const restarted = await createTestWebAppAuthority(storage.storage);
+
+    expect(createStore(restarted.readSnapshot({ authorization })).facts(envVarId)).toHaveLength(0);
+    expect(storage.read()?.secrets?.[created.secretId]?.value).toBe("sk-live-first");
+    expect(JSON.stringify(restarted.createSyncPayload({ authorization }))).not.toContain(
+      "sk-live-first",
+    );
+  });
+
   it("rejects ordinary transactions that directly rewrite secret-backed refs", async () => {
     const authorization = createAuthorityAuthorizationContext();
     const storage = createInMemoryTestWebAppAuthorityStorage();
@@ -574,6 +732,56 @@ describe("web authority", () => {
     expect(storage.read()?.writeHistory.results.at(-1)?.writeScope).toBe("server-command");
     expect(JSON.stringify(authority.createSyncPayload({ authorization }))).not.toContain(
       "sk-live-command",
+    );
+  });
+
+  it("accepts secret-field commands for non-env-var secret-backed predicates", async () => {
+    const authorization = createAuthorityAuthorizationContext();
+    const storage = createInMemoryTestWebAppAuthorityStorage();
+    const authority = await createTestWebAppAuthority(storage.storage, {
+      graph: secretNoteGraph,
+    });
+    const { mutationGraph, mutationStore } = createMutationStoreForGraph(
+      authority.readSnapshot({ authorization }),
+      secretNoteGraph,
+    );
+    const before = mutationStore.snapshot();
+    const secretNoteId = mutationGraph.secretNote.create({
+      name: "Shared command note",
+    });
+    const transaction = buildGraphWriteTransaction(
+      before,
+      mutationStore.snapshot(),
+      "tx:create-secret-note",
+    );
+
+    await authority.applyTransaction(transaction, { authorization });
+
+    const result = await authority.executeCommand(
+      {
+        kind: "write-secret-field",
+        input: {
+          entityId: secretNoteId,
+          predicateId: secretNoteSecretPredicateId,
+          plaintext: "shared-note-secret",
+        },
+      },
+      { authorization },
+    );
+
+    expect(result).toMatchObject({
+      created: true,
+      entityId: secretNoteId,
+      predicateId: secretNoteSecretPredicateId,
+      rotated: false,
+      secretVersion: 1,
+    });
+    expect(
+      readStringPredicateValue(authority, authorization, secretNoteId, secretNoteSecretPredicateId),
+    ).toBe(result.secretId);
+    expect(storage.read()?.writeHistory.results.at(-1)?.writeScope).toBe("server-command");
+    expect(JSON.stringify(authority.createSyncPayload({ authorization }))).not.toContain(
+      "shared-note-secret",
     );
   });
 

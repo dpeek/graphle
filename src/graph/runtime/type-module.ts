@@ -4,6 +4,9 @@ import type {
   EnumTypeOutput,
   GraphFieldAuthority,
   GraphFieldVisibility,
+  GraphFieldWritePolicy,
+  GraphSecretFieldAuthority,
+  PolicyCapabilityKey,
   RangeRef,
   ScalarTypeOutput,
 } from "./schema";
@@ -404,37 +407,58 @@ export type SecretFieldInput = {
   cardinality: Cardinality;
   authority?: Omit<GraphFieldAuthority, "secret">;
   metadataVisibility?: GraphFieldVisibility;
-  revealCapability?: string;
-  rotateCapability?: string;
+  revealCapability?: PolicyCapabilityKey;
+  rotateCapability?: PolicyCapabilityKey;
 } & Record<string, unknown>;
+
+const defaultSecretFieldAuthority = {
+  visibility: "replicated",
+  write: "server-command",
+} as const satisfies Pick<GraphFieldAuthority, "visibility" | "write">;
 
 export function defineSecretField<const Input extends SecretFieldInput>(
   input: Input,
 ): Omit<Input, "authority" | "metadataVisibility" | "revealCapability" | "rotateCapability"> & {
-  authority: GraphFieldAuthority;
+  authority: GraphFieldAuthority & {
+    visibility: GraphFieldVisibility;
+    write: GraphFieldWritePolicy;
+    secret: GraphSecretFieldAuthority;
+  };
 } {
   const { authority, metadataVisibility, revealCapability, rotateCapability, ...rest } = input;
 
+  const secret = {
+    kind: "sealed-handle",
+    metadataVisibility:
+      metadataVisibility ?? authority?.visibility ?? defaultSecretFieldAuthority.visibility,
+    ...(revealCapability ? { revealCapability } : {}),
+    ...(rotateCapability ? { rotateCapability } : {}),
+  } satisfies GraphSecretFieldAuthority;
+
+  const resolvedAuthority = {
+    ...defaultSecretFieldAuthority,
+    ...authority,
+    secret,
+  } satisfies GraphFieldAuthority & {
+    visibility: GraphFieldVisibility;
+    write: GraphFieldWritePolicy;
+    secret: GraphSecretFieldAuthority;
+  };
+
   const field = {
     ...rest,
-    authority: {
-      visibility: "replicated",
-      write: "server-command",
-      ...authority,
-      secret: {
-        kind: "sealed-handle",
-        metadataVisibility: metadataVisibility ?? authority?.visibility ?? "replicated",
-        ...(revealCapability ? { revealCapability } : {}),
-        ...(rotateCapability ? { rotateCapability } : {}),
-      },
-    },
+    authority: resolvedAuthority,
   } as unknown as ReferenceFieldInput<RangeRef, Record<string, unknown>, Cardinality>;
 
   return defineReferenceField(field) as unknown as Omit<
     Input,
     "authority" | "metadataVisibility" | "revealCapability" | "rotateCapability"
   > & {
-    authority: GraphFieldAuthority;
+    authority: GraphFieldAuthority & {
+      visibility: GraphFieldVisibility;
+      write: GraphFieldWritePolicy;
+      secret: GraphSecretFieldAuthority;
+    };
   };
 }
 

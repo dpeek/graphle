@@ -262,9 +262,14 @@ Columns:
 
 Purpose:
 
-- plaintext or sealed secret payload storage
+- plaintext or sealed payload storage for secret-backed fields
 - future migration path toward an external secret provider
 - separation between graph metadata and secret material
+- current Branch 1 retract rule: removing a secret-backed reference or
+  retracting its owning entity does not delete the `io_secret_value` row;
+  current graph state forgets the relationship, while the retained plaintext
+  row survives commit, restart, replay, and baseline rewrites until later
+  lifecycle work defines cleanup
 
 The graph should continue to store only `secretHandle` identity and safe
 metadata. This table owns the actual secret value lifecycle.
@@ -342,7 +347,8 @@ For every accepted mutation:
 5. For each `retract` op:
    - insert one `io_graph_tx_op` row
    - update `io_graph_edge.retracted_tx_seq`
-6. It writes any secret side-data updates in the same transaction.
+6. It writes any secret side-data updates in the same transaction; retract-only
+   graph commits intentionally leave prior `io_secret_value` rows untouched.
 7. It updates `io_graph_meta.head_seq`, `head_cursor`, and `updated_at`.
 8. It commits.
 
@@ -471,8 +477,8 @@ Important point:
   lets adapters durably retain `client-tx` versus `server-command` origin
   without inventing a second source of truth
 
-The web authority can then layer secret side-data writes on top of that graph
-commit.
+The web authority can then layer generic secret-backed field side-data writes
+on top of that graph commit.
 
 ## Implementation Status
 

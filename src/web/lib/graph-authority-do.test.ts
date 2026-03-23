@@ -8,6 +8,7 @@ import {
   createStore,
   createTypeClient,
   defineNamespace,
+  defineSecretField,
   defineType,
   edgeId,
   type AnyTypeOutput,
@@ -88,6 +89,26 @@ const visibilityProbeNamespace = defineNamespace(createIdMap({ visibilityProbe }
 });
 const visibilityProofGraph = { ...productGraph, ...visibilityProbeNamespace } as const;
 const visibilityProbeMemberNotePredicateId = edgeId(visibilityProbe.fields.memberNote);
+const secretNote = defineType({
+  values: { key: "test:secretNote", name: "Secret Note" },
+  fields: {
+    ...core.node.fields,
+    secret: defineSecretField({
+      range: core.secretHandle,
+      cardinality: "one?",
+      meta: {
+        label: "Credential",
+      },
+      revealCapability: "secret:reveal",
+      rotateCapability: "secret:rotate",
+    }),
+  },
+});
+const secretNoteNamespace = defineNamespace(createIdMap({ secretNote }).map, {
+  secretNote,
+});
+const secretNoteGraph = { ...productGraph, ...secretNoteNamespace } as const;
+const secretNoteSecretPredicateId = edgeId(secretNote.fields.secret);
 
 type SqliteMasterRow = {
   name: string;
@@ -356,6 +377,21 @@ function buildTransactionFromSnapshot<TResult>(
   return buildTransactionFromGraphSnapshot(snapshot, productGraph, id, mutate);
 }
 
+function buildRetractSecretReferenceTransaction(
+  snapshot: StoreSnapshot,
+  entityId: string,
+  txId: string,
+): GraphWriteTransaction {
+  const mutationStore = createStore(snapshot);
+  const before = mutationStore.snapshot();
+
+  for (const edge of mutationStore.facts(entityId, envVarSecretPredicateId)) {
+    mutationStore.retract(edge.id);
+  }
+
+  return buildGraphWriteTransaction(before, mutationStore.snapshot(), txId);
+}
+
 function buildTransactionFromGraphSnapshot<TGraph extends Record<string, AnyTypeOutput>, TResult>(
   snapshot: StoreSnapshot,
   graph: TGraph,
@@ -544,6 +580,16 @@ async function getDurableAuthority<
       getAuthority(): Promise<T>;
     }
   ).getAuthority();
+}
+
+async function applyServerCommandTransaction(
+  authority: WebAppAuthority,
+  transaction: GraphWriteTransaction,
+): Promise<void> {
+  await authority.applyTransaction(transaction, {
+    authorization: testAuthorityAuthorization,
+    writeScope: "server-command",
+  });
 }
 
 describe("web graph authority durable object", () => {
@@ -847,6 +893,105 @@ describe("web graph authority durable object", () => {
     expect(incremental.transactions).toEqual([
       expect.objectContaining({
         txId: "tx:create-command-env-var",
+        writeScope: "client-tx",
+      }),
+      expect.objectContaining({
+        txId: commandRow.tx_id,
+        writeScope: "server-command",
+      }),
+    ]);
+  });
+
+  it("accepts secret-field command envelopes for non-env-var secret-backed predicates", async () => {
+    const { db, state } = createSqliteDurableObjectState();
+    const durableObject = createTestDurableObject(
+      state,
+      {},
+      {
+        createAuthority(storage, options) {
+          return createWebAppAuthority(storage, {
+            ...options,
+            graph: secretNoteGraph,
+          });
+        },
+      },
+    );
+    const initialSync = await readSyncPayload(durableObject);
+    const createdSecretNote = buildTransactionFromGraphSnapshot(
+      initialSync.snapshot ?? { edges: [], retracted: [] },
+      secretNoteGraph,
+      "tx:create-command-secret-note",
+      (graph) =>
+        graph.secretNote.create({
+          name: "Shared command note",
+        }),
+    );
+
+    await postTransaction(durableObject, createdSecretNote.transaction);
+    const commandResult = await postCommand(durableObject, {
+      kind: "write-secret-field",
+      input: {
+        entityId: createdSecretNote.result,
+        predicateId: secretNoteSecretPredicateId,
+        plaintext: "shared-note-secret",
+      },
+    });
+    const txRows = queryAll<GraphTxRow>(
+      db,
+      `SELECT seq, tx_id, cursor, write_scope
+      FROM io_graph_tx
+      ORDER BY seq ASC`,
+    );
+    const restarted = createTestDurableObject(
+      state,
+      {},
+      {
+        createAuthority(storage, options) {
+          return createWebAppAuthority(storage, {
+            ...options,
+            graph: secretNoteGraph,
+          });
+        },
+      },
+    );
+    const incremental = await readSyncPayload(restarted, initialSync.cursor);
+    const commandRow = txRows.at(-1);
+
+    if (!commandRow) {
+      throw new Error("Expected the shared command route to append a durable transaction.");
+    }
+
+    expect(commandResult).toMatchObject({
+      created: true,
+      entityId: createdSecretNote.result,
+      predicateId: secretNoteSecretPredicateId,
+      rotated: false,
+      secretVersion: 1,
+    });
+    expect(
+      queryAll<SecretValueRow>(
+        db,
+        `SELECT secret_id, value, version
+        FROM io_secret_value`,
+      ),
+    ).toEqual([
+      {
+        secret_id: commandResult.secretId,
+        value: "shared-note-secret",
+        version: 1,
+      },
+    ]);
+    expect(commandRow).toEqual({
+      seq: 2,
+      tx_id: expect.stringContaining(
+        `secret-field:${createdSecretNote.result}:${secretNoteSecretPredicateId}:`,
+      ),
+      cursor: commandRow.cursor,
+      write_scope: "server-command",
+    });
+    expect(incremental.transactions).toEqual([
+      expect.objectContaining({
+        txId: "tx:create-command-secret-note",
         writeScope: "client-tx",
       }),
       expect.objectContaining({
@@ -1576,6 +1721,147 @@ describe("web graph authority durable object", () => {
     ]);
     expect(secretRowsAfterGraphUpdate).toEqual(secretRowsBeforeGraphUpdate);
     expect(secretRowsAfterPersist).toEqual(secretRowsBeforeGraphUpdate);
+  });
+
+  it("retains plaintext rows when a secret-backed reference is retracted", async () => {
+    const { db, state } = createSqliteDurableObjectState();
+    const durableObject = createTestDurableObject(state);
+    const initialSync = await readSyncPayload(durableObject);
+    const createdEnvVar = buildTransactionFromSnapshot(
+      initialSync.snapshot ?? { edges: [], retracted: [] },
+      "tx:create-env-var",
+      (graph) =>
+        graph.envVar.create({
+          description: "Primary model credential",
+          name: "OPENAI_API_KEY",
+        }),
+    );
+
+    await postTransaction(durableObject, createdEnvVar.transaction);
+    const secretWrite = await postSecretField(durableObject, {
+      entityId: createdEnvVar.result,
+      predicateId: envVarSecretPredicateId,
+      plaintext: "sk-live-first",
+    });
+    const afterSecretSync = await readSyncPayload(durableObject);
+    const secretEdge = afterSecretSync.snapshot?.edges.find(
+      (edge) => edge.s === createdEnvVar.result && edge.p === envVarSecretPredicateId,
+    );
+    const authority = await getDurableAuthority<WebAppAuthority>(durableObject);
+
+    if (!secretEdge) {
+      throw new Error("Expected the current env var secret edge before retraction.");
+    }
+
+    const retractTransaction = buildRetractSecretReferenceTransaction(
+      afterSecretSync.snapshot ?? { edges: [], retracted: [] },
+      createdEnvVar.result,
+      "tx:retract-env-var-secret",
+    );
+
+    await applyServerCommandTransaction(authority, retractTransaction);
+
+    const currentSync = await readSyncPayload(durableObject);
+    const incremental = await readSyncPayload(durableObject, afterSecretSync.cursor);
+    const secretRows = queryAll<SecretValueRow>(
+      db,
+      `SELECT secret_id, value, version
+      FROM io_secret_value`,
+    );
+    const restarted = createTestDurableObject(state);
+    const restartedSync = await readSyncPayload(restarted);
+    const restartedIncremental = await readSyncPayload(restarted, afterSecretSync.cursor);
+
+    expect(
+      createStore(currentSync.snapshot ?? { edges: [], retracted: [] }).facts(
+        createdEnvVar.result,
+        envVarSecretPredicateId,
+      ),
+    ).toHaveLength(0);
+    expect(JSON.stringify(currentSync)).not.toContain("sk-live-first");
+    expect(secretRows).toEqual([
+      {
+        secret_id: secretWrite.secretId,
+        value: "sk-live-first",
+        version: 1,
+      },
+    ]);
+    expect(incremental.transactions).toEqual([
+      expect.objectContaining({
+        txId: "tx:retract-env-var-secret",
+        writeScope: "server-command",
+        transaction: expect.objectContaining({
+          ops: [expect.objectContaining({ op: "retract", edgeId: secretEdge.id })],
+        }),
+      }),
+    ]);
+    expect(JSON.stringify(incremental)).not.toContain("sk-live-first");
+    expect(
+      createStore(restartedSync.snapshot ?? { edges: [], retracted: [] }).facts(
+        createdEnvVar.result,
+        envVarSecretPredicateId,
+      ),
+    ).toHaveLength(0);
+    expect(restartedIncremental.transactions).toEqual(incremental.transactions);
+    expect(JSON.stringify(restartedSync)).not.toContain("sk-live-first");
+  });
+
+  it("retains plaintext rows when retracting an entity that owns a secret-backed reference", async () => {
+    const { db, state } = createSqliteDurableObjectState();
+    const durableObject = createTestDurableObject(state);
+    const initialSync = await readSyncPayload(durableObject);
+    const createdEnvVar = buildTransactionFromSnapshot(
+      initialSync.snapshot ?? { edges: [], retracted: [] },
+      "tx:create-env-var",
+      (graph) =>
+        graph.envVar.create({
+          description: "Primary model credential",
+          name: "OPENAI_API_KEY",
+        }),
+    );
+
+    await postTransaction(durableObject, createdEnvVar.transaction);
+    const secretWrite = await postSecretField(durableObject, {
+      entityId: createdEnvVar.result,
+      predicateId: envVarSecretPredicateId,
+      plaintext: "sk-live-first",
+    });
+    const afterSecretSync = await readSyncPayload(durableObject);
+    const authority = await getDurableAuthority<WebAppAuthority>(durableObject);
+    const deleteTransaction = buildTransactionFromSnapshot(
+      afterSecretSync.snapshot ?? { edges: [], retracted: [] },
+      "tx:delete-env-var-with-secret",
+      (graph) => graph.envVar.delete(createdEnvVar.result),
+    ).transaction;
+
+    await applyServerCommandTransaction(authority, deleteTransaction);
+
+    const currentSync = await readSyncPayload(durableObject);
+    const secretRows = queryAll<SecretValueRow>(
+      db,
+      `SELECT secret_id, value, version
+      FROM io_secret_value`,
+    );
+    const restarted = createTestDurableObject(state);
+    const restartedSync = await readSyncPayload(restarted);
+
+    expect(
+      createStore(currentSync.snapshot ?? { edges: [], retracted: [] }).facts(createdEnvVar.result),
+    ).toHaveLength(0);
+    expect(secretRows).toEqual([
+      {
+        secret_id: secretWrite.secretId,
+        value: "sk-live-first",
+        version: 1,
+      },
+    ]);
+    expect(JSON.stringify(currentSync)).not.toContain("sk-live-first");
+    expect(
+      createStore(restartedSync.snapshot ?? { edges: [], retracted: [] }).facts(
+        createdEnvVar.result,
+      ),
+    ).toHaveLength(0);
+    expect(JSON.stringify(restartedSync)).not.toContain("sk-live-first");
   });
 
   it("rolls back graph and secret rows together when the secret side-table write fails", async () => {

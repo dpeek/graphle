@@ -5,7 +5,7 @@ import { graphIconSeeds } from "../icon/index.js";
 import { node } from "../node/index.js";
 import { numberTypeModule } from "../number/index.js";
 
-const replicatedAuthority = {
+const secretHandleMetadataAuthority = {
   visibility: "replicated",
   write: "server-command",
 } as const;
@@ -16,29 +16,29 @@ export const secretHandle = defineType({
     ...node.fields,
     name: {
       ...node.fields.name,
-      authority: replicatedAuthority,
+      authority: secretHandleMetadataAuthority,
     },
     createdAt: {
       ...node.fields.createdAt,
-      authority: replicatedAuthority,
+      authority: secretHandleMetadataAuthority,
     },
     updatedAt: {
       ...node.fields.updatedAt,
-      authority: replicatedAuthority,
+      authority: secretHandleMetadataAuthority,
     },
     version: numberTypeModule.field({
       cardinality: "one",
       meta: {
         label: "Secret version",
       },
-      authority: replicatedAuthority,
+      authority: secretHandleMetadataAuthority,
     }),
     lastRotatedAt: dateTypeModule.field({
       cardinality: "one?",
       meta: {
         label: "Last rotated",
       },
-      authority: replicatedAuthority,
+      authority: secretHandleMetadataAuthority,
     }),
   },
 });

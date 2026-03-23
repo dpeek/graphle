@@ -37,6 +37,29 @@ Exported building blocks in `../../src/graph/runtime/type-module.ts` include:
 `../../src/graph/runtime/contracts.typecheck.ts` shows the intended usage in
 real code.
 
+## Secret-Field Contract
+
+`defineSecretField(...)` is the shared Branch 1 helper for authoring
+secret-backed predicates without importing consumer transport code.
+
+The frozen contract is:
+
+- the field range points at the core-owned `core:secretHandle` type
+- the helper publishes the shared secret-field contract consumed by
+  `ops:envVar` and any other secret-backed slice; no consumer type owns that
+  contract
+- the returned field authority always includes `visibility: "replicated"` and
+  `write: "server-command"` unless the caller narrows those shared field-policy
+  values explicitly
+- `authority.secret` is the stable `GraphSecretFieldAuthority` shape with
+  `kind: "sealed-handle"` plus optional metadata visibility and capability keys
+- those capability keys are opaque Branch 1 schema metadata, not a published
+  reveal flow or principal-aware enforcement surface
+- command routing, request envelopes, and secret-storage adapters stay outside
+  this helper and belong to consumer packages such as `web`
+- provider metadata semantics and external KMS bindings are outside this helper
+  and remain provisional
+
 ## `ObjectViewSpec`
 
 Use `ObjectViewSpec` for reusable, host-independent object presentation

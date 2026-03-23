@@ -596,6 +596,8 @@ function rewritePersistedState(
   sql.exec("DELETE FROM io_graph_tx_op");
   sql.exec("DELETE FROM io_graph_tx");
   sql.exec("DELETE FROM io_graph_edge");
+  // Baseline rewrites rebuild graph state only. Branch 1 intentionally retains
+  // authority-only secret rows even after graph references are retracted.
   insertTransactionHistoryRows(sql, input.writeHistory, now);
   insertSnapshotEdges(sql, input.snapshot, input.writeHistory);
   writeGraphMetaRow(sql, {
@@ -682,6 +684,8 @@ function applyCommittedTransaction(
     }
   });
 
+  // Retract-only graph commits leave prior plaintext rows intact. The current
+  // proof updates this table only for explicit secret-backed field writes.
   if (secretWrite) {
     upsertSecretValue(sql, secretWrite, now);
   }

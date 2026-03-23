@@ -100,6 +100,11 @@ const validationContext = {
   changedPredicateKeys: new Set<string>([envVar.fields.name.key]),
 };
 
+const replicatedServerCommandAuthority = {
+  visibility: "replicated",
+  write: "server-command",
+} as const;
+
 describe("module entry surfaces", () => {
   it("keeps built-in modules aligned with the canonical core contracts", () => {
     expect(node).toBe(core.node);
@@ -197,6 +202,35 @@ describe("module entry surfaces", () => {
     expect(canonicalOps.contextBundleEntry.values.key).toBe(contextBundleEntry.values.key);
   });
 
+  it("freezes the shared secret-handle contract on the canonical core namespace", () => {
+    expect(canonicalCore.secretHandle.values).toMatchObject({
+      key: "core:secretHandle",
+      name: "Secret Handle",
+      icon: graphIconSeeds.secret,
+    });
+    expect(String(canonicalCore.secretHandle.fields.version.range)).toBe(
+      resolvedTypeId(core.number),
+    );
+    expect(String(canonicalCore.secretHandle.fields.lastRotatedAt.range)).toBe(
+      resolvedTypeId(core.date),
+    );
+    expect(canonicalCore.secretHandle.fields.name.authority).toEqual(
+      replicatedServerCommandAuthority,
+    );
+    expect(canonicalCore.secretHandle.fields.createdAt.authority).toEqual(
+      replicatedServerCommandAuthority,
+    );
+    expect(canonicalCore.secretHandle.fields.updatedAt.authority).toEqual(
+      replicatedServerCommandAuthority,
+    );
+    expect(canonicalCore.secretHandle.fields.version.authority).toEqual(
+      replicatedServerCommandAuthority,
+    );
+    expect(canonicalCore.secretHandle.fields.lastRotatedAt.authority).toEqual(
+      replicatedServerCommandAuthority,
+    );
+  });
+
   it("exports the env-var slice from the canonical ops module tree", () => {
     expect(envVarSchema).toEqual({
       envVar,
@@ -212,10 +246,7 @@ describe("module entry surfaces", () => {
         rotateCapability: "secret:rotate",
       },
     });
-    expect(secretHandle.fields.version.authority).toEqual({
-      visibility: "replicated",
-      write: "server-command",
-    });
+    expect(secretHandle.fields.version.authority).toEqual(replicatedServerCommandAuthority);
     expect(envVarNamePattern.test("OPENAI_API_KEY")).toBe(true);
     expect(
       envVar.fields.name.validate?.({

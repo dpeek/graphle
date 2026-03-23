@@ -142,6 +142,11 @@ type WebAuthorityMutationStageContext = {
  */
 export interface WebAppAuthorityStorage {
   load(): Promise<PersistedAuthoritativeGraphStorageLoadResult | null>;
+  /**
+   * Branch 1 retains authority-only plaintext rows even after the replicated
+   * secret-backed reference or its owning entity is retracted. Cleanup policy
+   * stays deferred to later lifecycle work.
+   */
   loadSecrets(): Promise<Record<string, WebAppAuthoritySecretRecord>>;
   commit(
     input: PersistedAuthoritativeGraphStorageCommitInput,
@@ -233,17 +238,14 @@ const graphWriteTransactionValidationKey = "$sync:tx";
 const webAppAuthorityPolicyVersion = 0;
 const webAppAuthorityCapabilityKeys: readonly string[] = [];
 const writeSecretFieldCommandKey = "write-secret-field";
-const writeSecretFieldCommandPolicy = {
-  touchesPredicates: [
-    { predicateId: typePredicateId },
-    { predicateId: createdAtPredicateId },
-    { predicateId: namePredicateId },
-    { predicateId: updatedAtPredicateId },
-    { predicateId: secretHandleVersionPredicateId },
-    { predicateId: secretHandleLastRotatedAtPredicateId },
-    { predicateId: edgeId(ops.envVar.fields.secret) },
-  ],
-} satisfies GraphCommandPolicy;
+const writeSecretFieldCommandBasePredicateIds = [
+  typePredicateId,
+  createdAtPredicateId,
+  namePredicateId,
+  updatedAtPredicateId,
+  secretHandleVersionPredicateId,
+  secretHandleLastRotatedAtPredicateId,
+] as const;
 
 let authorityCursorEpoch = 0;
 
@@ -715,6 +717,21 @@ function buildWriteSecretFieldCommandTargets(
   ];
 }
 
+function createWriteSecretFieldCommandPolicy(predicateId: string): GraphCommandPolicy {
+  return {
+    // Branch 1 publishes a generic secret-backed field boundary here. The web
+    // command envelope stays consumer-owned, but the touched predicate must be
+    // the concrete secret-backed field being written rather than an env-var
+    // proof-specific predicate id.
+    touchesPredicates: [
+      ...writeSecretFieldCommandBasePredicateIds.map((touchedPredicateId) => ({
+        predicateId: touchedPredicateId,
+      })),
+      { predicateId },
+    ],
+  };
+}
+
 function assertCommandAuthorized(input: {
   readonly authorization: AuthorizationContext;
   readonly commandKey: string;
@@ -843,6 +860,8 @@ export async function createWebAppAuthority(
     getCompiledGraphArtifacts(graph);
   const store = createStore(bootstrappedSnapshot);
 
+  // Load every retained plaintext row. The current proof does not garbage
+  // collect side-table entries when graph references are retracted.
   const persistedSecrets = await storage.loadSecrets();
   const secretValuesRef = {
     current: new Map(
@@ -1039,7 +1058,7 @@ export async function createWebAppAuthority(
     assertCommandAuthorized({
       authorization: options.authorization,
       commandKey: writeSecretFieldCommandKey,
-      commandPolicy: writeSecretFieldCommandPolicy,
+      commandPolicy: createWriteSecretFieldCommandPolicy(predicateId),
       touchedPredicates: buildWriteSecretFieldCommandTargets(
         {
           entityId,

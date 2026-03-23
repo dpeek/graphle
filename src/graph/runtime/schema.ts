@@ -57,9 +57,9 @@ export function isGraphFieldWritePolicy(value: unknown): value is GraphFieldWrit
 /**
  * Stable metadata for secret-backed predicates.
  *
- * This describes the graph-visible secret handle boundary only. Plaintext
- * storage, reveal flows, and adapter-specific durability stay outside this
- * contract.
+ * This describes the graph-visible sealed-handle boundary for predicates that
+ * reference `core:secretHandle`. Plaintext storage, reveal flows, and
+ * adapter-specific durability stay outside this contract.
  */
 export type GraphSecretFieldAuthority = {
   kind: "sealed-handle";
@@ -261,7 +261,9 @@ export function fieldSecretMetadataVisibility(
 ) {
   return field?.authority?.secret?.metadataVisibility ?? fieldVisibility(field);
 }
-export function isSecretBackedField(field: { authority?: GraphFieldAuthority } | undefined) {
+export function isSecretBackedField<Field extends { authority?: GraphFieldAuthority }>(
+  field: Field | undefined,
+): field is Field & { authority: GraphFieldAuthority & { secret: GraphSecretFieldAuthority } } {
   return field?.authority?.secret?.kind === "sealed-handle";
 }
 
