@@ -1,4 +1,5 @@
 export * from "./type.js";
+export * from "./command.js";
 
 import {
   agentSession,

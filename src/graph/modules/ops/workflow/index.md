@@ -17,9 +17,11 @@ The canonical workflow slice lives alongside this doc under
 The exported surface is:
 
 - `schema.ts`: backs `@io/core/graph/modules/ops/workflow` and re-exports the
-  workflow entity and enum definitions
+  workflow entity, enum, and command definitions
 - `type.ts`: owns the entity families, state enums, reference wiring, key
   validators, and default lifecycle values
+- `command.ts`: defines the stable `workflow-mutation` command envelope,
+  summary shapes, and failure codes consumed by the authority layer
 
 The first workflow slice currently defines:
 
@@ -68,6 +70,36 @@ directly:
 Cross-entity count invariants such as "one inferred project per graph" and
 "one attached repository per project" remain authority-command concerns because
 they depend on the current graph store rather than one field in isolation.
+
+## Authority Command
+
+Workflow mutations now cross the shared web authority command seam with
+`kind: "workflow-mutation"`.
+
+The command contract is intentionally one envelope with action-specific payloads
+for:
+
+- project and repository create/update
+- branch and commit create/update
+- branch and commit state transitions
+- logical-to-repository branch attachment
+- repository-commit creation and finalization
+
+The stable failure codes exposed by the command contract are:
+
+- `repository-missing`
+- `branch-lock-conflict`
+- `commit-lock-conflict`
+- `invalid-transition`
+- `subject-not-found`
+
+The authority implementation keeps the first Branch 6 assumptions explicit:
+
+- exactly one inferred workflow project per graph
+- exactly one attached workflow repository per graph
+- one managed repository branch per workflow branch
+- one repository commit result per workflow commit
+- one active commit per workflow branch
 
 ## Field Conventions
 

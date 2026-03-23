@@ -148,20 +148,23 @@ export function handleSyncRequest(
   });
 }
 
-function errorResponse(message: string, status: number): Response {
-  return Response.json(
-    { error: message },
-    {
-      status,
-      headers: {
-        "cache-control": "no-store",
-      },
+function errorResponse(message: string, status: number, code?: string): Response {
+  return Response.json(code ? { error: message, code } : { error: message }, {
+    status,
+    headers: {
+      "cache-control": "no-store",
     },
-  );
+  });
 }
 
 function isHttpError(error: unknown): error is Error & { readonly status: number } {
   return error instanceof Error && typeof (error as { status?: unknown }).status === "number";
+}
+
+function httpErrorCode(error: unknown): string | undefined {
+  return typeof (error as { code?: unknown })?.code === "string"
+    ? (error as { code: string }).code
+    : undefined;
 }
 
 function formatGraphValidationError(error: GraphValidationError): string {
@@ -174,7 +177,9 @@ function isObjectRecord(value: unknown): value is Record<string, unknown> {
 
 function isSupportedWebAppAuthorityCommand(value: unknown): value is WebAppAuthorityCommand {
   return (
-    isObjectRecord(value) && value.kind === "write-secret-field" && isObjectRecord(value.input)
+    isObjectRecord(value) &&
+    ((value.kind === "write-secret-field" && isObjectRecord(value.input)) ||
+      (value.kind === "workflow-mutation" && isObjectRecord(value.input)))
   );
 }
 
@@ -183,6 +188,9 @@ function authorityCommandSuccessStatus(
   result: WebAppAuthorityCommandResult,
 ): number {
   if (command.kind === "write-secret-field") {
+    return result.created ? 201 : 200;
+  }
+  if (command.kind === "workflow-mutation") {
     return result.created ? 201 : 200;
   }
 
@@ -204,7 +212,10 @@ async function executeCommandRequest(
     });
   } catch (error) {
     if (isHttpError(error)) {
-      return errorResponse(error.message, error.status);
+      return errorResponse(error.message, error.status, httpErrorCode(error));
+    }
+    if (error instanceof GraphValidationError) {
+      return errorResponse(formatGraphValidationError(error), 400);
     }
     throw error;
   }

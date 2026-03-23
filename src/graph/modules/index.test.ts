@@ -62,6 +62,7 @@ import {
   contextBundleEntry,
   repositoryBranch,
   repositoryCommit,
+  workflowMutationCommand,
   workflowArtifact,
   workflowBranch,
   workflowCommit,
@@ -299,6 +300,10 @@ describe("module entry surfaces", () => {
     expect(String(workflowArtifact.fields.session.range)).toBe(resolvedTypeId(agentSession));
     expect(String(workflowDecision.fields.session.range)).toBe(resolvedTypeId(agentSession));
     expect(String(contextBundleEntry.fields.bundle.range)).toBe(resolvedTypeId(contextBundle));
+    expect(workflowMutationCommand).toMatchObject({
+      key: "ops:workflow:mutation",
+      execution: "serverOnly",
+    });
   });
 
   it("exposes canonical namespaces and representative built-ins from the module root", () => {
@@ -322,6 +327,7 @@ describe("module entry surfaces", () => {
       "workflowDecision",
       "contextBundle",
       "contextBundleEntry",
+      "workflowMutationCommand",
       "secretHandle",
       "principal",
       "authSubjectProjection",
@@ -356,6 +362,7 @@ describe("module entry surfaces", () => {
     expect(canonicalOps.workflowDecision.values.key).toBe(workflowDecision.values.key);
     expect(canonicalOps.contextBundle.values.key).toBe(contextBundle.values.key);
     expect(canonicalOps.contextBundleEntry.values.key).toBe(contextBundleEntry.values.key);
+    expect(moduleExports.workflowMutationCommand).toBe(workflowMutationCommand);
     expect(canonicalPkm.topic.values.key).toBe(topic.values.key);
     expect(canonicalPkm.topicKind.values.key).toBe(topicKind.values.key);
     expect(String(canonicalCore.type.fields.icon.range)).toBe(resolvedTypeId(icon));

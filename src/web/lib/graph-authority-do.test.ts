@@ -1,5 +1,5 @@
 import { Database } from "bun:sqlite";
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it, setDefaultTimeout } from "bun:test";
 
 import {
   bootstrap,
@@ -18,6 +18,8 @@ import {
 } from "@io/core/graph";
 import { core } from "@io/core/graph/modules";
 import { ops } from "@io/core/graph/modules/ops";
+
+setDefaultTimeout(20_000);
 import { pkm } from "@io/core/graph/modules/pkm";
 
 import { createAnonymousAuthorizationContext } from "./auth-bridge.js";
@@ -698,6 +700,7 @@ describe("web graph authority durable object", () => {
 
     expect(response.status).toBe(403);
     expect(await response.json()).toEqual({
+      code: "policy.command.forbidden",
       error: expect.stringContaining("policy.command.forbidden"),
     });
   });

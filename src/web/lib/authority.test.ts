@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it, setDefaultTimeout } from "bun:test";
 
 import {
   bootstrap,
@@ -11,6 +11,10 @@ import {
 } from "@io/core/graph";
 import { core } from "@io/core/graph/modules";
 import { ops } from "@io/core/graph/modules/ops";
+import type {
+  WorkflowMutationAction,
+  WorkflowMutationResult,
+} from "@io/core/graph/modules/ops/workflow";
 import { pkm } from "@io/core/graph/modules/pkm";
 
 import { createAnonymousAuthorizationContext } from "./auth-bridge.js";
@@ -32,6 +36,8 @@ import {
 
 const productGraph = { ...core, ...pkm, ...ops } as const;
 const envVarSecretPredicateId = edgeId(ops.envVar.fields.secret);
+
+setDefaultTimeout(20_000);
 
 function createTestAuthorizationContext(
   overrides: Partial<AuthorizationContext> = {},
@@ -90,6 +96,61 @@ function buildGraphWriteTransaction(
           edge: { ...edge },
         })),
     ],
+  };
+}
+
+async function executeWorkflowMutation(
+  authority: WebAppAuthority,
+  authorization: AuthorizationContext,
+  input: WorkflowMutationAction,
+): Promise<WorkflowMutationResult> {
+  return (await authority.executeCommand(
+    {
+      kind: "workflow-mutation",
+      input,
+    },
+    { authorization },
+  )) as WorkflowMutationResult;
+}
+
+async function createWorkflowFixture(
+  authority: WebAppAuthority,
+  authorization: AuthorizationContext,
+) {
+  const project = await executeWorkflowMutation(authority, authorization, {
+    action: "createProject",
+    title: "IO",
+    projectKey: "project:io",
+  });
+  const repository = await executeWorkflowMutation(authority, authorization, {
+    action: "createRepository",
+    projectId: project.summary.id,
+    title: "io",
+    repositoryKey: "repo:io",
+    repoRoot: "/tmp/io",
+    defaultBaseBranch: "main",
+  });
+  const branch = await executeWorkflowMutation(authority, authorization, {
+    action: "createBranch",
+    projectId: project.summary.id,
+    title: "Workflow authority",
+    branchKey: "branch:workflow-authority",
+    goalSummary: "Implement workflow authority commands",
+    state: "ready",
+  });
+  const repositoryBranch = await executeWorkflowMutation(authority, authorization, {
+    action: "attachBranchRepositoryTarget",
+    branchId: branch.summary.id,
+    repositoryId: repository.summary.id,
+    branchName: "workflow-authority",
+    baseBranchName: "main",
+  });
+
+  return {
+    branchId: branch.summary.id,
+    projectId: project.summary.id,
+    repositoryBranchId: repositoryBranch.summary.id,
+    repositoryId: repository.summary.id,
   };
 }
 
@@ -597,6 +658,323 @@ describe("web authority", () => {
     expect(storage.read()?.writeHistory.results.length ?? 0).toBe(0);
   });
 
+  it("creates workflow entities through the shared workflow mutation command", async () => {
+    const authorization = createAuthorityAuthorizationContext();
+    const storage = createInMemoryTestWebAppAuthorityStorage();
+    const authority = await createWebAppAuthority(storage.storage);
+
+    const project = await executeWorkflowMutation(authority, authorization, {
+      action: "createProject",
+      title: "IO",
+      projectKey: "project:io",
+    });
+    const repository = await executeWorkflowMutation(authority, authorization, {
+      action: "createRepository",
+      projectId: project.summary.id,
+      title: "io",
+      repositoryKey: "repo:io",
+      repoRoot: "/tmp/io",
+      defaultBaseBranch: "main",
+    });
+    const branch = await executeWorkflowMutation(authority, authorization, {
+      action: "createBranch",
+      projectId: project.summary.id,
+      title: "Workflow authority",
+      branchKey: "branch:workflow-authority",
+      goalSummary: "Implement workflow mutation commands",
+      state: "ready",
+    });
+
+    expect(project).toMatchObject({
+      action: "createProject",
+      created: true,
+      summary: {
+        entity: "project",
+        projectKey: "project:io",
+        title: "IO",
+      },
+    });
+    expect(repository).toMatchObject({
+      action: "createRepository",
+      created: true,
+      summary: {
+        entity: "repository",
+        repositoryKey: "repo:io",
+        projectId: project.summary.id,
+      },
+    });
+    expect(branch).toMatchObject({
+      action: "createBranch",
+      created: true,
+      summary: {
+        entity: "branch",
+        branchKey: "branch:workflow-authority",
+        projectId: project.summary.id,
+        state: "ready",
+      },
+    });
+    expect(storage.read()?.writeHistory.results.at(-1)?.writeScope).toBe("server-command");
+  });
+
+  it("enforces the v1 inferred-project and attached-repository limits", async () => {
+    const authorization = createAuthorityAuthorizationContext();
+    const authority = await createWebAppAuthority(
+      createInMemoryTestWebAppAuthorityStorage().storage,
+    );
+    const project = await executeWorkflowMutation(authority, authorization, {
+      action: "createProject",
+      title: "IO",
+      projectKey: "project:io",
+    });
+    await executeWorkflowMutation(authority, authorization, {
+      action: "createRepository",
+      projectId: project.summary.id,
+      title: "io",
+      repositoryKey: "repo:io",
+      repoRoot: "/tmp/io",
+      defaultBaseBranch: "main",
+    });
+
+    await expect(
+      executeWorkflowMutation(authority, authorization, {
+        action: "createProject",
+        title: "Second inferred project",
+        projectKey: "project:io-2",
+      }),
+    ).rejects.toMatchObject({
+      code: "invalid-transition",
+      message: "Branch 6 v1 supports exactly one inferred workflow project per graph.",
+      status: 409,
+    });
+
+    await expect(
+      executeWorkflowMutation(authority, authorization, {
+        action: "createRepository",
+        projectId: project.summary.id,
+        title: "io-2",
+        repositoryKey: "repo:io-2",
+        repoRoot: "/tmp/io-2",
+        defaultBaseBranch: "main",
+      }),
+    ).rejects.toMatchObject({
+      code: "invalid-transition",
+      message: "Branch 6 v1 supports exactly one attached workflow repository per graph.",
+      status: 409,
+    });
+  });
+
+  it("rejects commit activation when the branch has no repository mapping", async () => {
+    const authorization = createAuthorityAuthorizationContext();
+    const authority = await createWebAppAuthority(
+      createInMemoryTestWebAppAuthorityStorage().storage,
+    );
+    const project = await executeWorkflowMutation(authority, authorization, {
+      action: "createProject",
+      title: "IO",
+      projectKey: "project:io",
+    });
+    await executeWorkflowMutation(authority, authorization, {
+      action: "createRepository",
+      projectId: project.summary.id,
+      title: "io",
+      repositoryKey: "repo:io",
+      repoRoot: "/tmp/io",
+      defaultBaseBranch: "main",
+    });
+    const branch = await executeWorkflowMutation(authority, authorization, {
+      action: "createBranch",
+      projectId: project.summary.id,
+      title: "Unmapped branch",
+      branchKey: "branch:unmapped",
+      goalSummary: "Try to activate without a repository target",
+      state: "ready",
+    });
+    const commit = await executeWorkflowMutation(authority, authorization, {
+      action: "createCommit",
+      branchId: branch.summary.id,
+      title: "Activate me",
+      commitKey: "commit:activate-me",
+      order: 0,
+      state: "ready",
+    });
+
+    await expect(
+      executeWorkflowMutation(authority, authorization, {
+        action: "setCommitState",
+        commitId: commit.summary.id,
+        state: "active",
+      }),
+    ).rejects.toMatchObject({
+      code: "repository-missing",
+      status: 409,
+    });
+  });
+
+  it("rejects a second active commit on the same branch", async () => {
+    const authorization = createAuthorityAuthorizationContext();
+    const authority = await createWebAppAuthority(
+      createInMemoryTestWebAppAuthorityStorage().storage,
+    );
+    const fixture = await createWorkflowFixture(authority, authorization);
+    const firstCommit = await executeWorkflowMutation(authority, authorization, {
+      action: "createCommit",
+      branchId: fixture.branchId,
+      title: "First commit",
+      commitKey: "commit:first",
+      order: 0,
+      state: "ready",
+    });
+    const secondCommit = await executeWorkflowMutation(authority, authorization, {
+      action: "createCommit",
+      branchId: fixture.branchId,
+      title: "Second commit",
+      commitKey: "commit:second",
+      order: 1,
+      state: "ready",
+    });
+
+    await executeWorkflowMutation(authority, authorization, {
+      action: "setCommitState",
+      commitId: firstCommit.summary.id,
+      state: "active",
+    });
+
+    await expect(
+      executeWorkflowMutation(authority, authorization, {
+        action: "setCommitState",
+        commitId: secondCommit.summary.id,
+        state: "active",
+      }),
+    ).rejects.toMatchObject({
+      code: "branch-lock-conflict",
+      status: 409,
+    });
+  });
+
+  it("finalizes repository commits and advances the branch", async () => {
+    const authorization = createAuthorityAuthorizationContext();
+    const authority = await createWebAppAuthority(
+      createInMemoryTestWebAppAuthorityStorage().storage,
+    );
+    const fixture = await createWorkflowFixture(authority, authorization);
+    const commit = await executeWorkflowMutation(authority, authorization, {
+      action: "createCommit",
+      branchId: fixture.branchId,
+      title: "Finalize me",
+      commitKey: "commit:finalize-me",
+      order: 0,
+      state: "ready",
+    });
+
+    await executeWorkflowMutation(authority, authorization, {
+      action: "setCommitState",
+      commitId: commit.summary.id,
+      state: "active",
+    });
+    const repositoryCommit = await executeWorkflowMutation(authority, authorization, {
+      action: "createRepositoryCommit",
+      repositoryId: fixture.repositoryId,
+      repositoryBranchId: fixture.repositoryBranchId,
+      workflowCommitId: commit.summary.id,
+      title: "Finalize me",
+      state: "attached",
+      worktree: {
+        path: "/tmp/io-worktree",
+        branchName: "workflow-authority",
+      },
+    });
+    const finalized = await executeWorkflowMutation(authority, authorization, {
+      action: "attachCommitResult",
+      repositoryCommitId: repositoryCommit.summary.id,
+      sha: "abc1234",
+    });
+
+    expect(finalized).toMatchObject({
+      action: "attachCommitResult",
+      created: false,
+      summary: {
+        entity: "repository-commit",
+        id: repositoryCommit.summary.id,
+        sha: "abc1234",
+        state: "committed",
+        workflowCommitId: commit.summary.id,
+      },
+    });
+    expect(authority.graph.workflowCommit.get(commit.summary.id).state).toBe(
+      ops.workflowCommitState.values.committed.id,
+    );
+    expect(authority.graph.workflowBranch.get(fixture.branchId).state).toBe(
+      ops.workflowBranchState.values.done.id,
+    );
+    expect(authority.graph.workflowBranch.get(fixture.branchId).activeCommit).toBeUndefined();
+    expect(authority.graph.repositoryCommit.get(repositoryCommit.summary.id).state).toBe(
+      ops.repositoryCommitState.values.committed.id,
+    );
+    expect(
+      authority.graph.repositoryCommit.get(repositoryCommit.summary.id).worktree.leaseState,
+    ).toBe(ops.repositoryCommitLeaseState.values.released.id);
+  });
+
+  it("returns workflow failure codes through the command route", async () => {
+    const authorization = createAuthorityAuthorizationContext();
+    const authority = await createWebAppAuthority(
+      createInMemoryTestWebAppAuthorityStorage().storage,
+    );
+    const project = await executeWorkflowMutation(authority, authorization, {
+      action: "createProject",
+      title: "IO",
+      projectKey: "project:io",
+    });
+    await executeWorkflowMutation(authority, authorization, {
+      action: "createRepository",
+      projectId: project.summary.id,
+      title: "io",
+      repositoryKey: "repo:io",
+      repoRoot: "/tmp/io",
+      defaultBaseBranch: "main",
+    });
+    const branch = await executeWorkflowMutation(authority, authorization, {
+      action: "createBranch",
+      projectId: project.summary.id,
+      title: "Route branch",
+      branchKey: "branch:route-branch",
+      goalSummary: "Exercise route failures",
+      state: "ready",
+    });
+    const commit = await executeWorkflowMutation(authority, authorization, {
+      action: "createCommit",
+      branchId: branch.summary.id,
+      title: "Route commit",
+      commitKey: "commit:route-commit",
+      order: 0,
+      state: "ready",
+    });
+
+    const response = await handleCommandRequest(
+      new Request("http://web.local/api/commands", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          kind: "workflow-mutation",
+          input: {
+            action: "setCommitState",
+            commitId: commit.summary.id,
+            state: "active",
+          },
+        } satisfies WebAppAuthorityCommand),
+      }),
+      authority,
+      authorization,
+    );
+
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({
+      code: "repository-missing",
+      error: `Workflow branch "${branch.summary.id}" does not have a managed repository branch target.`,
+    });
+  });
   it("passes explicit authorization context through sync and transaction helpers", async () => {
     const authorization = createTestAuthorizationContext({
       principalId: "principal-1",

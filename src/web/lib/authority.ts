@@ -29,6 +29,10 @@ import {
 } from "@io/core/graph";
 import { core } from "@io/core/graph/modules";
 import { ops } from "@io/core/graph/modules/ops";
+import type {
+  WorkflowMutationAction,
+  WorkflowMutationResult,
+} from "@io/core/graph/modules/ops/workflow";
 import { pkm } from "@io/core/graph/modules/pkm";
 
 import { seedExampleGraph } from "./example-data.js";
@@ -40,6 +44,7 @@ import {
   type WriteSecretFieldInput,
   type WriteSecretFieldResult,
 } from "./secret-fields.js";
+import { runWorkflowMutationCommand } from "./workflow-authority.js";
 
 const webAppGraph = { ...core, ...pkm, ...ops } as const;
 
@@ -79,8 +84,23 @@ export type WriteSecretFieldWebAppAuthorityCommand = {
   readonly input: WriteSecretFieldInput;
 };
 
-export type WebAppAuthorityCommand = WriteSecretFieldWebAppAuthorityCommand;
-export type WebAppAuthorityCommandResult = WriteSecretFieldResult;
+export type WorkflowMutationWebAppAuthorityCommand = {
+  readonly kind: "workflow-mutation";
+  readonly input: WorkflowMutationAction;
+};
+
+export type WebAppAuthorityCommand =
+  | WriteSecretFieldWebAppAuthorityCommand
+  | WorkflowMutationWebAppAuthorityCommand;
+
+type WebAppAuthorityCommandResultMap = {
+  "write-secret-field": WriteSecretFieldResult;
+  "workflow-mutation": WorkflowMutationResult;
+};
+
+export type WebAppAuthorityCommandResult<
+  Kind extends WebAppAuthorityCommand["kind"] = WebAppAuthorityCommand["kind"],
+> = WebAppAuthorityCommandResultMap[Kind];
 
 type WebAppAuthorityCommandRollback = () => void;
 type WebAppAuthorityCommandStageContext = {
@@ -139,10 +159,10 @@ export type WebAppAuthority = Omit<
     after: string | undefined,
     options: WebAppAuthoritySyncOptions,
   ): ReturnType<PersistedWebAppAuthority["getIncrementalSyncResult"]>;
-  executeCommand(
-    command: WebAppAuthorityCommand,
+  executeCommand<Command extends WebAppAuthorityCommand>(
+    command: Command,
     options: WebAppAuthorityCommandOptions,
-  ): Promise<WebAppAuthorityCommandResult>;
+  ): Promise<WebAppAuthorityCommandResult<Command["kind"]>>;
   writeSecretField(
     input: WriteSecretFieldInput,
     options: WebAppAuthoritySecretFieldOptions,
@@ -854,15 +874,26 @@ export async function createWebAppAuthority(
     });
   }
 
-  async function executeCommand(
-    command: WebAppAuthorityCommand,
+  async function executeCommand<Command extends WebAppAuthorityCommand>(
+    command: Command,
     options: WebAppAuthorityCommandOptions,
-  ): Promise<WebAppAuthorityCommandResult> {
-    if (command.kind !== "write-secret-field") {
-      throw new Error("Unsupported web authority command.");
+  ): Promise<WebAppAuthorityCommandResult<Command["kind"]>> {
+    if (command.kind === "write-secret-field") {
+      return runWriteSecretFieldCommand(command.input, options) as Promise<
+        WebAppAuthorityCommandResult<Command["kind"]>
+      >;
     }
-
-    return runWriteSecretFieldCommand(command.input, options);
+    if (command.kind === "workflow-mutation") {
+      return runWorkflowMutationCommand(
+        command.input,
+        {
+          store: authority.store,
+          applyTransaction,
+        },
+        options,
+      ) as Promise<WebAppAuthorityCommandResult<Command["kind"]>>;
+    }
+    throw new Error("Unsupported web authority command.");
   }
 
   async function writeSecretField(
