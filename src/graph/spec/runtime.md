@@ -89,6 +89,13 @@ The current implementation keeps ids stable per key and treats rename as an expl
 - the SQLite row layout, Durable Object transaction wiring, and secret side-table
   shape are current web-adapter details rather than part of the shared runtime
   contract
+- the stable command-related shared surface stops at field-authority metadata,
+  `writeScope`, graph write envelopes, sync payloads, and
+  `PersistedAuthoritativeGraphStorage`; generic command envelopes, dispatch
+  registries, and routes remain consumer-owned
+- `../../src/web/lib/authority.ts` is the current web proof of that
+  consumer-owned lowering boundary rather than a published `graph` command
+  registry
 - `AuthoritativeGraphWriteResult` now retains `writeScope`, so persisted-authority storage keeps accepted `client-tx` versus `server-command` origin alongside cursor and transaction data
 - `GraphWriteTransaction.id` is the stable idempotency key; replaying the same canonical transaction reuses the accepted cursor with `replayed: true`, while reusing the id for different operations is rejected
 - graph-scoped incremental sync treats `transactions: []` without `fallback` as a successful no-op or cursor-advanced result; only explicit `fallback` requires total-sync recovery
@@ -111,7 +118,9 @@ The current implementation keeps ids stable per key and treats rename as an expl
 - Reference fields should be authored through `defineReferenceField(...)` or helpers layered on top of it.
 - Store indexes remain an internal implementation detail; the public surface is still pattern lookups.
 - The package owns the persisted-authority contract and JSON adapter, but consumers still choose storage paths, bootstrap order, seed data, and process lifecycle, including the web package's SQLite Durable Object adapter.
-- Transport is still outside the runtime core; persisted authority helpers only produce and consume graph sync/session primitives.
+- Transport and generic command dispatch are still outside the runtime core;
+  persisted authority helpers only produce and consume graph sync/session
+  primitives.
 
 ## Roadmap
 

@@ -7,9 +7,9 @@ core-owned `secretHandle` type, and the authority boundary that keeps plaintext
 secret material out of the replicated graph.
 
 Environment variables are created as ordinary graph entities through the shared
-explorer and delegate secret-aware writes to the generic web authority command
-at the canonical `POST /api/commands` route using the `write-secret-field`
-envelope.
+explorer and delegate secret-aware writes to the current web-owned
+`POST /api/commands` proof using the `write-secret-field` envelope. That route
+is consumer-owned today rather than a graph-published command surface.
 
 ## Graph Shape
 

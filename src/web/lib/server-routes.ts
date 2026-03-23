@@ -6,8 +6,8 @@ import {
 
 import type {
   WebAppAuthority,
-  WebAppAuthorityCommand,
-  WebAppAuthorityCommandResult,
+  WebAuthorityCommand,
+  WebAuthorityCommandResult,
 } from "./authority.js";
 
 const supportedPrincipalKinds = new Set([
@@ -175,7 +175,7 @@ function isObjectRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object";
 }
 
-function isSupportedWebAppAuthorityCommand(value: unknown): value is WebAppAuthorityCommand {
+function isSupportedWebCommandPayload(value: unknown): value is WebAuthorityCommand {
   return (
     isObjectRecord(value) &&
     ((value.kind === "write-secret-field" && isObjectRecord(value.input)) ||
@@ -183,9 +183,9 @@ function isSupportedWebAppAuthorityCommand(value: unknown): value is WebAppAutho
   );
 }
 
-function authorityCommandSuccessStatus(
-  command: WebAppAuthorityCommand,
-  result: WebAppAuthorityCommandResult,
+function webCommandSuccessStatus(
+  command: WebAuthorityCommand,
+  result: WebAuthorityCommandResult,
 ): number {
   if (command.kind === "write-secret-field") {
     return result.created ? 201 : 200;
@@ -197,15 +197,15 @@ function authorityCommandSuccessStatus(
   return 200;
 }
 
-async function executeCommandRequest(
-  command: WebAppAuthorityCommand,
+async function executeWebCommandRequest(
+  command: WebAuthorityCommand,
   authority: WebAppAuthority,
   authorization: AuthorizationContext,
 ): Promise<Response> {
   try {
     const result = await authority.executeCommand(command, { authorization });
     return Response.json(result, {
-      status: authorityCommandSuccessStatus(command, result),
+      status: webCommandSuccessStatus(command, result),
       headers: {
         "cache-control": "no-store",
       },
@@ -255,7 +255,14 @@ export async function handleTransactionRequest(
   }
 }
 
-export async function handleCommandRequest(
+/**
+ * Transport helper for the current web-owned `/api/commands` proof.
+ *
+ * This route only accepts the shipped web command envelopes; the shared graph
+ * runtime boundary remains `GraphWriteTransaction`, sync payloads, and
+ * persisted-authority APIs.
+ */
+export async function handleWebCommandRequest(
   request: Request,
   authority: WebAppAuthority,
   authorization: AuthorizationContext,
@@ -274,9 +281,9 @@ export async function handleCommandRequest(
     return errorResponse("Request body must be valid JSON.", 400);
   }
 
-  if (!isSupportedWebAppAuthorityCommand(body)) {
-    return errorResponse("Request body must be a supported web authority command.", 400);
+  if (!isSupportedWebCommandPayload(body)) {
+    return errorResponse("Request body must be a supported /api/commands payload.", 400);
   }
 
-  return executeCommandRequest(body, authority, authorization);
+  return executeWebCommandRequest(body, authority, authorization);
 }

@@ -47,8 +47,10 @@ graph-native workflow.
 ### Consumer-owned seams
 
 The graph package treats transport, bootstrap ordering, config resolution, and
-process lifecycle as consumer-owned. `graph` owns payload contracts and replay
-rules.
+process lifecycle as consumer-owned. `graph` owns field-authority metadata,
+write-scope semantics, transaction and sync payload contracts, replay rules,
+and persisted-authority APIs. It does not currently own a generic authoritative
+command registry.
 
 ## Data Model and Storage
 
@@ -91,9 +93,12 @@ The synced client can capture local diffs as pending graph write transactions,
 `flush()` queued writes, `sync()` authoritative state, and expose queue and sync
 state.
 
-The web Worker exposes thin graph APIs, including `GET /api/sync`,
-`POST /api/commands`, and there is an explicit proposal for a read-first
-MCP server on top of one synced HTTP graph client.
+The web Worker exposes thin graph APIs, including `GET /api/sync`, `POST /api/tx`,
+and a provisional consumer-owned `POST /api/commands` route. That command route
+lowers web-owned command envelopes into the stable graph write and
+persisted-authority boundary; it does not imply a graph-wide command registry.
+There is also an explicit proposal for a read-first MCP server on top of one
+synced HTTP graph client.
 
 ## Frontend Architecture
 
@@ -139,7 +144,8 @@ fully productized policy runtime.
 Sensitive areas already called out in the roadmap:
 
 - predicate-level visibility
-- authority boundaries for writes and business methods
+- authority boundaries for writes and business methods, with command lowering
+  remaining consumer-owned today
 - secret-backed predicates represented as handles rather than plaintext values
 - execution modes such as `localOnly`, `optimisticVerify`, and `serverOnly`
 - server-only access to hidden predicates, secret values, authoritative clocks,

@@ -32,6 +32,11 @@ types, move it to `@io/web`. If it is deciding how a graph predicate validates,
 mutates, or previews, leave that code in `graph` even when the surrounding
 chrome comes from `@io/web`.
 
+The current `POST /api/commands` route is part of that same package boundary.
+It is a web-owned proof for the shipped `write-secret-field` envelope and its
+authority-local staging path, not a published graph-owned command registry or
+generic shared command transport.
+
 ## Docs
 
 - `../index.md`
@@ -76,10 +81,11 @@ chrome comes from `@io/web`.
   adapter that bootstraps graph tables in the constructor, hydrates retained
   history during authority init, commits graph and secret side-storage changes
   in one Durable Object storage transaction, and prunes old transaction rows
-- `../../src/web/lib/authority.ts`: shared web authority behavior, secret-field
-  mutation flow, the shared write/command authorization seam, explicit
-  `policyVersion` fail-closed checks for `/api/tx` and `/api/commands`, and the
-  storage abstraction consumed by both tests and the Durable Object adapter
+- `../../src/web/lib/authority.ts`: shared web authority behavior, the current
+  web-owned `/api/commands` envelope plus staged secret-field mutation flow,
+  the shared write/command authorization seam with explicit `policyVersion`
+  fail-closed checks, and the storage abstraction consumed by both tests and
+  the Durable Object adapter
 - `../../src/web/lib/`: worker-backed graph authority, generic secret-field
   mutation contracts, seeded example data/runtime fixtures, and HTTP route
   helpers

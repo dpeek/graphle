@@ -20,16 +20,16 @@ import { pkm } from "@io/core/graph/modules/pkm";
 import { createAnonymousAuthorizationContext } from "./auth-bridge.js";
 import { createInMemoryTestWebAppAuthorityStorage } from "./authority-test-storage.js";
 import {
+  applyStagedWebAuthorityMutation,
   type WebAppAuthority,
-  type WebAppAuthorityCommand,
+  createWebAppAuthority,
+  type WebAuthorityCommand,
   type WebAppAuthorityStorage,
   type WebAppAuthoritySyncOptions,
   type WebAppAuthorityTransactionOptions,
-  createWebAppAuthority,
-  executeAuthorityCommand,
 } from "./authority.js";
 import {
-  handleCommandRequest,
+  handleWebCommandRequest,
   handleSyncRequest,
   handleTransactionRequest,
 } from "./server-routes.js";
@@ -168,7 +168,7 @@ describe("web authority", () => {
     let commitCalls = 0;
 
     await expect(
-      executeAuthorityCommand({
+      applyStagedWebAuthorityMutation({
         changed: true,
         result: {
           secretId: "secret:existing",
@@ -228,7 +228,7 @@ describe("web authority", () => {
       mutationStore.snapshot(),
       "tx:authority-only-command",
     );
-    const result = await executeAuthorityCommand({
+    const result = await applyStagedWebAuthorityMutation({
       changed: transaction.ops.length > 0,
       result: {
         description: "Rotated by the authority command",
@@ -486,7 +486,7 @@ describe("web authority", () => {
         predicateId: envVarSecretPredicateId,
         plaintext: "sk-live-command",
       },
-    } satisfies WebAppAuthorityCommand;
+    } satisfies WebAuthorityCommand;
 
     const result = await authority.executeCommand(command, { authorization });
 
@@ -504,6 +504,24 @@ describe("web authority", () => {
     );
   });
 
+  it("rejects unsupported command kinds before mutating the web authority", async () => {
+    const authorization = createAuthorityAuthorizationContext();
+    const storage = createInMemoryTestWebAppAuthorityStorage();
+    const authority = await createWebAppAuthority(storage.storage);
+    const before = authority.store.snapshot();
+
+    await expect(
+      authority.executeCommand(
+        {
+          kind: "unsupported-web-proof",
+        } as unknown as WebAuthorityCommand,
+        { authorization },
+      ),
+    ).rejects.toThrow("Unsupported web authority command.");
+
+    expect(authority.store.snapshot()).toEqual(before);
+  });
+
   it("routes shared authority commands through the web server helper", async () => {
     const authorization = createAuthorityAuthorizationContext();
     const storage = createInMemoryTestWebAppAuthorityStorage();
@@ -513,7 +531,7 @@ describe("web authority", () => {
       name: "OPENAI_API_KEY",
     });
 
-    const response = await handleCommandRequest(
+    const response = await handleWebCommandRequest(
       new Request("http://web.local/api/commands", {
         method: "POST",
         headers: {
@@ -526,7 +544,7 @@ describe("web authority", () => {
             predicateId: envVarSecretPredicateId,
             plaintext: "sk-live-command-route",
           },
-        } satisfies WebAppAuthorityCommand),
+        } satisfies WebAuthorityCommand),
       }),
       authority,
       authorization,
@@ -950,7 +968,7 @@ describe("web authority", () => {
       state: "ready",
     });
 
-    const response = await handleCommandRequest(
+    const response = await handleWebCommandRequest(
       new Request("http://web.local/api/commands", {
         method: "POST",
         headers: {
@@ -963,7 +981,7 @@ describe("web authority", () => {
             commitId: commit.summary.id,
             state: "active",
           },
-        } satisfies WebAppAuthorityCommand),
+        } satisfies WebAuthorityCommand),
       }),
       authority,
       authorization,
@@ -1033,5 +1051,32 @@ describe("web authority", () => {
     expect(transactionResponse.status).toBe(200);
     expect(syncAuthorizations).toEqual([authorization]);
     expect(transactionAuthorizations).toEqual([authorization]);
+  });
+
+  it("rejects unsupported /api/commands payloads before dispatching the web proof", async () => {
+    const authorization = createAuthorityAuthorizationContext();
+    const storage = createInMemoryTestWebAppAuthorityStorage();
+    const authority = await createWebAppAuthority(storage.storage);
+    const before = authority.store.snapshot();
+
+    const response = await handleWebCommandRequest(
+      new Request("http://web.local/api/commands", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          kind: "unsupported-web-proof",
+        }),
+      }),
+      authority,
+      authorization,
+    );
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: "Request body must be a supported /api/commands payload.",
+    });
+    expect(authority.store.snapshot()).toEqual(before);
   });
 });

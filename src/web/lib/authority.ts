@@ -79,7 +79,7 @@ export type WebAppAuthoritySecretWrite = WebAppAuthoritySecretRecord & {
   readonly secretId: string;
 };
 
-export type WriteSecretFieldWebAppAuthorityCommand = {
+export type WriteSecretFieldWebAuthorityCommand = {
   readonly kind: "write-secret-field";
   readonly input: WriteSecretFieldInput;
 };
@@ -90,7 +90,7 @@ export type WorkflowMutationWebAppAuthorityCommand = {
 };
 
 export type WebAppAuthorityCommand =
-  | WriteSecretFieldWebAppAuthorityCommand
+  | WriteSecretFieldWebAuthorityCommand
   | WorkflowMutationWebAppAuthorityCommand;
 
 type WebAppAuthorityCommandResultMap = {
@@ -102,9 +102,21 @@ export type WebAppAuthorityCommandResult<
   Kind extends WebAppAuthorityCommand["kind"] = WebAppAuthorityCommand["kind"],
 > = WebAppAuthorityCommandResultMap[Kind];
 
-type WebAppAuthorityCommandRollback = () => void;
-type WebAppAuthorityCommandStageContext = {
-  addRollback(rollback: WebAppAuthorityCommandRollback): void;
+/**
+ * Consumer-owned `/api/commands` proof envelope.
+ *
+ * Branch 1 keeps the shared surface below this union at graph write
+ * transactions, authoritative write scopes, sync payloads, and persisted
+ * authority APIs.
+ */
+export type WebAuthorityCommand = WebAppAuthorityCommand;
+export type WebAuthorityCommandResult<
+  Kind extends WebAuthorityCommand["kind"] = WebAuthorityCommand["kind"],
+> = WebAppAuthorityCommandResult<Kind>;
+
+type WebAuthorityMutationRollback = () => void;
+type WebAuthorityMutationStageContext = {
+  addRollback(rollback: WebAuthorityMutationRollback): void;
 };
 
 /**
@@ -599,7 +611,9 @@ function assertCommandAuthorized(input: {
   }
 }
 
-function runAuthorityCommandRollbacks(rollbacks: readonly WebAppAuthorityCommandRollback[]): void {
+function runWebAuthorityMutationRollbacks(
+  rollbacks: readonly WebAuthorityMutationRollback[],
+): void {
   const rollbackErrors: unknown[] = [];
   for (let index = rollbacks.length - 1; index >= 0; index -= 1) {
     const rollback = rollbacks[index];
@@ -615,20 +629,24 @@ function runAuthorityCommandRollbacks(rollbacks: readonly WebAppAuthorityCommand
     throw rollbackErrors[0];
   }
   if (rollbackErrors.length > 1) {
-    throw new AggregateError(rollbackErrors, "Authority command rollback failed.");
+    throw new AggregateError(rollbackErrors, "Web authority mutation rollback failed.");
   }
 }
 
-export async function executeAuthorityCommand<TResult>(input: {
+/**
+ * Applies a staged web authority mutation and unwinds any authority-local side
+ * effects if the authoritative commit fails.
+ */
+export async function applyStagedWebAuthorityMutation<TResult>(input: {
   readonly changed: boolean;
   readonly result: TResult;
   readonly writeScope: AuthoritativeWriteScope;
   readonly commit: (writeScope: AuthoritativeWriteScope) => Promise<void>;
-  readonly stage?: (result: TResult, context: WebAppAuthorityCommandStageContext) => void;
+  readonly stage?: (result: TResult, context: WebAuthorityMutationStageContext) => void;
 }): Promise<TResult> {
   if (!input.changed) return input.result;
 
-  const rollbacks: WebAppAuthorityCommandRollback[] = [];
+  const rollbacks: WebAuthorityMutationRollback[] = [];
   try {
     input.stage?.(input.result, {
       addRollback(rollback) {
@@ -638,11 +656,11 @@ export async function executeAuthorityCommand<TResult>(input: {
     await input.commit(input.writeScope);
   } catch (error) {
     try {
-      runAuthorityCommandRollbacks(rollbacks);
+      runWebAuthorityMutationRollbacks(rollbacks);
     } catch (rollbackError) {
       throw new AggregateError(
         [error, rollbackError],
-        "Authority command failed and rollback did not complete.",
+        "Web authority mutation failed and rollback did not complete.",
       );
     }
     throw error;
@@ -852,7 +870,7 @@ export async function createWebAppAuthority(
       }),
       writeScope: "server-command",
     });
-    return executeAuthorityCommand({
+    return applyStagedWebAuthorityMutation({
       changed: planned.changed,
       result: planned.result,
       writeScope: "server-command",
@@ -907,13 +925,7 @@ export async function createWebAppAuthority(
     input: WriteSecretFieldInput,
     options: WebAppAuthoritySecretFieldOptions,
   ): Promise<WriteSecretFieldResult> {
-    return executeCommand(
-      {
-        kind: "write-secret-field",
-        input,
-      },
-      options,
-    );
+    return runWriteSecretFieldCommand(input, options);
   }
 
   return {

@@ -3,7 +3,7 @@ import { describe, expect, it } from "bun:test";
 import worker from "./index.js";
 
 describe("web worker route forwarding", () => {
-  it("forwards the shared command route to the graph authority durable object", async () => {
+  it("forwards the canonical web-owned /api/commands proof to the graph authority durable object", async () => {
     const authorityPaths: string[] = [];
     const env = {
       ASSETS: {

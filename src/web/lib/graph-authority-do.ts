@@ -14,7 +14,7 @@ import type {
 } from "./authority.js";
 import { createWebAppAuthority } from "./authority.js";
 import {
-  handleCommandRequest,
+  handleWebCommandRequest,
   RequestAuthorizationContextError,
   handleSyncRequest,
   handleTransactionRequest,
@@ -924,7 +924,7 @@ export class WebGraphAuthorityDurableObject {
     }
 
     if (url.pathname === "/api/commands") {
-      return handleCommandRequest(request, authority, authorization);
+      return handleWebCommandRequest(request, authority, authorization);
     }
 
     return new Response("Not Found", { status: 404 });

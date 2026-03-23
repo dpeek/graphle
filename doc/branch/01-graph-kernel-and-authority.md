@@ -35,8 +35,9 @@ moving, all downstream branches will thrash.
 ### Durable Contracts Owned
 
 - `Edge` or fact model
-- transaction and cursor envelopes
-- authoritative write session model
+- field-authority metadata and write-scope semantics
+- transaction, cursor, and sync envelopes
+- authoritative write session and persisted-authority APIs
 - persistence backend boundary
 - secret handle versus plaintext boundary
 
@@ -121,9 +122,12 @@ Platform outcomes this branch must deliver:
 
 Stability target for this branch:
 
-- `stable`: ids, facts, transactions, write sessions, total sync, incremental
-  sync, write-policy metadata, secret-handle split
-- `provisional`: single-graph Worker HTTP routes and the SQLite table layout
+- `stable`: ids, facts, field-authority metadata, write-scope semantics,
+  transaction envelopes, write sessions, total sync, incremental sync,
+  persisted-authority APIs, secret-handle split
+- `provisional`: consumer-owned command envelopes and dispatch in the current
+  web authority proof, single-graph Worker HTTP routes, and the SQLite table
+  layout
 - `future`: scoped sync, directory/shard topology, principal-aware policy, and
   federation
 
@@ -145,6 +149,7 @@ In scope:
 
 Out of scope:
 
+- generic authoritative command envelope or graph-owned dispatch registry
 - principal, membership, role, and capability resolution
 - Better Auth integration
 - scoped sync, query planning, materialized projections, and subscription
@@ -161,6 +166,20 @@ Assumptions inherited from upstream repo docs:
 - current product proof is one logical graph with one authoritative runtime
 - downstream branches may depend on these contracts but must not couple
   directly to internal SQL rows or Worker route details unless marked stable
+
+### Published command boundary
+
+Branch 1 publishes the lowering boundary for authoritative commands. It does
+not publish a generic graph-owned command envelope, registry, or dispatcher.
+
+- Stable here: `GraphFieldAuthority`, write-scope semantics,
+  `GraphWriteTransaction`, `AuthoritativeGraphWriteResult`, sync payloads,
+  persisted-authority APIs, and the secret-handle versus plaintext split
+- Consumer-owned for now: command ids and payloads, dispatch tables, transport
+  routes such as `POST /api/commands`, and adapter-specific command results
+- Required lowering rule: any server-owned command must lower to the Branch 1
+  write boundary before durable commit, using the published write scopes and
+  persisted-authority APIs rather than inventing a parallel authority protocol
 
 ## 3. Core Model
 
@@ -307,6 +326,11 @@ type GraphFieldAuthority = {
 };
 ```
 
+Branch 1 intentionally does not publish a shared `GraphAuthorityCommand` type
+or dispatch interface. Consumer-owned command layers must lower to
+`GraphWriteTransaction` plus any adapter-local side effects behind the
+published write-scope boundary.
+
 ### Lifecycle states
 
 Facts:
@@ -425,12 +449,16 @@ Secret-backed fields:
 
 - Name: `executeCommand({ kind: "write-secret-field", input })`,
   `writeSecretField(...)`, and canonical `POST /api/commands`
-- Purpose: create or rotate a secret-backed field through an explicit authority
-  command
+- Purpose: current consumer-owned web proof for creating or rotating a
+  secret-backed field through an explicit authority command
 - Caller: web operator surfaces
 - Callee: web authority runtime
 - Inputs: `entityId`, `predicateId`, and plaintext
 - Outputs: created/rotated result with `secretId` and `secretVersion`
+- Contract note: the stable dependency is the lowering boundary to
+  `writeScope: "server-command"`, `GraphWriteTransaction`, and the
+  persisted-authority commit path; the command envelope, dispatcher, route
+  shape, and result payload are web-owned for now
 - Failure shape: `400` for invalid input or non-secret predicate, `404` for
   unknown entity or predicate, storage failure on durable commit
 - Stability: `provisional`
@@ -444,7 +472,12 @@ Secret-backed fields:
 - Callee: web authority runtime
 - Inputs: optional `after` cursor, `GraphWriteTransaction`, or supported web
   authority command envelopes
-- Outputs: sync payloads or authoritative write results
+- Outputs: sync payloads, authoritative write results, or provisional web-owned
+  command results
+- Contract note: `GET /api/sync` and `POST /api/tx` are transport proofs for
+  Branch 1-owned contracts. `POST /api/commands` is a consumer-owned adapter
+  route that lowers supported commands into those contracts rather than a
+  published graph command protocol
 - Failure shape: `400` for invalid JSON or graph validation failures
 - Stability: `provisional`
 
@@ -582,7 +615,7 @@ This branch owns persistent state.
 
 - Dependency direction: Branch 2 depends on Branch 1
 - Imported contracts: `GraphFieldAuthority`, write scopes, visibility filtering,
-  authoritative command boundary
+  authoritative command lowering boundary
 - Exported contracts: field visibility/write metadata and authoritative write
   hooks
 - Mockable or provisional: principal resolution and capability enforcement
@@ -623,7 +656,7 @@ This branch owns persistent state.
 
 - Dependency direction: Branch 6 depends on Branch 1
 - Imported contracts: graph-native entity persistence, tx replay, cursor
-  semantics, and authority command boundary
+  semantics, and authority command lowering boundary
 - Exported contracts: workflow entities are ordinary graph state above this
   branch
 - Mockable or provisional: workflow planner and artifact execution model
@@ -634,7 +667,8 @@ This branch owns persistent state.
 
 - Dependency direction: Branch 7 depends on Branch 1
 - Imported contracts: synced client behavior, `/api/sync` and `/api/tx` proof
-  routes, secret-field command, replicated predicate filtering
+  routes, the provisional web secret-field command proof, replicated predicate
+  filtering
 - Exported contracts: none back into Branch 1 beyond transport composition
 - Mockable or provisional: exact HTTP routes and shell UX
 - Must be stable first: payload shapes, validation behavior, and secret
@@ -687,10 +721,10 @@ This branch owns persistent state.
 ### 5. Secret-backed field write
 
 1. Initiator: operator client posts `entityId`, `predicateId`, and plaintext
-2. Components involved: web authority command, graph mutation planner,
-   authoritative tx apply, `io_secret_value` side write
-3. Contract boundaries crossed: explicit authority command -> graph tx plus
-   secret side storage
+2. Components involved: consumer-owned web authority command adapter, graph
+   mutation planner, authoritative tx apply, `io_secret_value` side write
+3. Contract boundaries crossed: consumer-owned command envelope -> Branch 1
+   graph tx plus secret side storage
 4. Authoritative write point: same durable storage transaction that writes the
    graph commit and secret plaintext
 5. Failure or fallback behavior: invalid entity/predicate/plaintext rejects the
@@ -807,8 +841,8 @@ Unknown retract target:
 
 ### Slice 3: Secret-handle authority flow
 
-- Goal: standardize secret-backed writes as explicit authority commands backed
-  by `core:secretHandle`
+- Goal: standardize secret-backed writes as explicit consumer-owned authority
+  commands backed by `core:secretHandle`
 - Prerequisite contracts: field-authority metadata and server-command writes
 - What it proves: replicated-safe secret metadata with authority-only plaintext
 - What it deliberately postpones: reveal flows, external KMS integration, and
@@ -828,9 +862,12 @@ Resolved for Branch 1: cursor strings are opaque outside the shared runtime;
 only ordering, equality, and fallback behavior are stable for downstream
 callers.
 
-- Does the branch eventually own a generic authoritative command envelope in
-  `graph`, or should secret and other server commands stay consumer-owned until
-  Branch 2 and Branch 4 stabilize?
+Resolved for Branch 1: generic authoritative command envelopes, dispatch
+registries, and transport shapes stay consumer-owned for now. This branch owns
+field-authority metadata, write-scope semantics, transaction envelopes, sync
+payloads, and persisted-authority APIs as the stable lowering boundary those
+commands target.
+
 - How much of the current SQLite row layout should remain an implementation
   detail once the authority runtime splits into directory and shard packages?
 - Should retained history pruning be purely count-based, or should it gain a

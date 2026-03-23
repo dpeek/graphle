@@ -21,6 +21,10 @@ function createTestAuthorizationContext(
       graphId: "graph:test",
       policyVersion: 0,
     }),
+    principalId: "principal:authority",
+    principalKind: "service",
+    roleKeys: ["graph:authority"],
+    sessionId: "session:authority",
     ...overrides,
   };
 }

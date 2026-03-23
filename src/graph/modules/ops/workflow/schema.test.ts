@@ -73,11 +73,11 @@ describe("ops workflow schema", () => {
     ]);
     expect(workflowMutationCommand.policy.touchesPredicates).toEqual(
       expect.arrayContaining([
-        ops.workflowProject.fields.projectKey.key,
-        ops.workflowRepository.fields.repositoryKey.key,
-        ops.workflowBranch.fields.state.key,
-        ops.workflowBranch.fields.activeCommit.key,
-        ops.workflowCommit.fields.state.key,
+        { predicateId: ops.workflowProject.fields.projectKey.key },
+        { predicateId: ops.workflowRepository.fields.repositoryKey.key },
+        { predicateId: ops.workflowBranch.fields.state.key },
+        { predicateId: ops.workflowBranch.fields.activeCommit.key },
+        { predicateId: ops.workflowCommit.fields.state.key },
       ]),
     );
   });

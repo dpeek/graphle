@@ -48,6 +48,26 @@ The working approach is:
 That gives us one conceptual model without pretending every runtime has the
 same rights or the same data.
 
+## Published Boundary Today
+
+Branch 1 publishes the shared write boundary for authoritative operations. It
+does not currently publish a graph-owned command envelope, registry, or
+dispatcher.
+
+Stable shared surface:
+
+- field-authority metadata and write-scope values
+- graph write transactions and authoritative write results
+- sync payloads and persisted-authority APIs
+- secret-handle versus plaintext split
+
+Consumer-owned for now:
+
+- generic command envelopes and result payloads
+- dispatch registries and command naming
+- HTTP or RPC routes such as `POST /api/commands`
+- per-type method lowering APIs above the shared write boundary
+
 ## Predicate-Level Visibility
 
 Permissions should start at the predicate level.
@@ -91,8 +111,9 @@ The API should feel like methods on typed business objects:
 - `workspace.ref(id).inviteMember(...)`
 
 But that surface should not be a direct in-process method call. It should lower
-to a serialized method invocation or command envelope that the server can
-inspect, authorize, replay, audit, and execute authoritatively.
+through a consumer-owned command envelope or adapter seam that the server can
+inspect, authorize, replay, audit, and execute authoritatively against the
+shared Branch 1 write boundary.
 
 This is the main compromise:
 
@@ -101,12 +122,16 @@ This is the main compromise:
 
 ## Why Not A Giant Registry
 
-The registry can stay very compact if it is mostly a composition step rather
-than the place where methods are authored.
+Branch 1 intentionally does not publish a graph-owned command registry or
+dispatch table. That keeps the stable shared runtime surface small while policy
+and module composition are still moving in downstream branches.
+
+Consumer packages can still keep their own registry compact if it is mostly a
+composition step rather than the place where methods are authored.
 
 The important authoring unit is the type module.
 
-Each type should define, in one place:
+Each consumer-owned command layer can define, in one place:
 
 - the method name
 - input and output types
@@ -115,7 +140,8 @@ Each type should define, in one place:
 - the authoritative implementation
 - optional optimistic behavior
 
-Then the runtime can aggregate those per-type definitions into a dispatch table.
+Then a consumer package can aggregate those per-type definitions into a
+dispatch table.
 
 That keeps the registry mechanical while the real logic stays local to the
 subject type.
