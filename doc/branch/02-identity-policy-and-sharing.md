@@ -415,6 +415,15 @@ Contract rules:
 - grant creation and revocation are authoritative writes and therefore reuse the
   normal Branch 1 transaction guarantees
 
+Current Branch 2 read baseline in the single-graph proof:
+
+- total and incremental sync apply transport visibility first, then omit
+  predicates the current principal is not allowed to read; the sync cursor may
+  still advance with fewer or zero visible operations
+- explicit direct predicate reads fail with `policy.read.forbidden`
+- the end-to-end proof for that divergence lives in
+  `src/web/lib/graph-authority-do.test.ts`
+
 ## 5. Runtime Architecture
 
 The runtime boundary is intentionally split into three layers.
@@ -591,7 +600,8 @@ Authoritative write point:
 
 Failure and fallback behavior:
 
-- denied predicates are omitted from sync payloads
+- denied predicates are omitted from total sync snapshots and incremental sync
+  transaction operations
 - explicit direct reads over denied predicates return `policy.read.forbidden`
 - stale request context refreshes once, then fails closed
 

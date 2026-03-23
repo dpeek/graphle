@@ -136,16 +136,23 @@ export function handleSyncRequest(
     });
   }
 
-  const after = new URL(request.url).searchParams.get("after")?.trim();
-  const payload = after
-    ? authority.getIncrementalSyncResult(after, { authorization })
-    : authority.createSyncPayload({ authorization });
+  try {
+    const after = new URL(request.url).searchParams.get("after")?.trim();
+    const payload = after
+      ? authority.getIncrementalSyncResult(after, { authorization })
+      : authority.createSyncPayload({ authorization });
 
-  return Response.json(payload, {
-    headers: {
-      "cache-control": "no-store",
-    },
-  });
+    return Response.json(payload, {
+      headers: {
+        "cache-control": "no-store",
+      },
+    });
+  } catch (error) {
+    if (isHttpError(error)) {
+      return errorResponse(error.message, error.status);
+    }
+    throw error;
+  }
 }
 
 function errorResponse(message: string, status: number, code?: string): Response {

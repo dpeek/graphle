@@ -1,5 +1,6 @@
 import {
   type AuthorizationContext,
+  type AnyTypeOutput,
   type AuthoritativeWriteScope,
   authorizeCommand,
   authorizeRead,
@@ -54,6 +55,7 @@ const webAppGraph = { ...core, ...pkm, ...ops } as const;
 
 type WebAppGraph = typeof webAppGraph;
 type PersistedWebAppAuthority = PersistedAuthoritativeGraph<WebAppGraph>;
+type WebAppAuthorityGraph = WebAppGraph & Record<string, AnyTypeOutput>;
 type CompiledFieldDefinition = {
   readonly field: {
     readonly authority?: GraphFieldAuthority;
@@ -205,6 +207,7 @@ export type WebAppAuthority = Omit<
 };
 
 export type WebAppAuthorityOptions = {
+  readonly graph?: WebAppAuthorityGraph;
   readonly maxRetainedTransactions?: number;
 };
 
@@ -218,8 +221,6 @@ const secretHandleLastRotatedAtPredicateId = edgeId(core.secretHandle.fields.las
 const graphWriteTransactionValidationKey = "$sync:tx";
 const webAppAuthorityPolicyVersion = 0;
 const webAppAuthorityCapabilityKeys: readonly string[] = [];
-const webAppScalarByKey = collectScalarCodecs(webAppGraph);
-const webAppTypeByKey = collectTypeIndex(webAppGraph);
 const writeSecretFieldCommandKey = "write-secret-field";
 const writeSecretFieldCommandPolicy = {
   touchesPredicates: [
@@ -364,23 +365,19 @@ function flattenSecretFieldDefinitions(
   return entries;
 }
 
-function buildCompiledFieldIndex(): ReadonlyMap<string, CompiledFieldDefinition> {
+function buildCompiledFieldIndex(
+  graph: Record<string, AnyTypeOutput>,
+): ReadonlyMap<string, CompiledFieldDefinition> {
   const entries = new Map<string, CompiledFieldDefinition>();
 
-  for (const typeDef of Object.values(webAppGraph)) {
+  for (const typeDef of Object.values(graph)) {
     if (!isEntityType(typeDef)) continue;
-    flattenSecretFieldDefinitions(
-      typeDef.fields,
-      typeDef.values.id ?? typeDef.values.key,
-      [],
-      entries,
-    );
+    const typeValues = typeDef.values as { readonly key: string; readonly id?: string };
+    flattenSecretFieldDefinitions(typeDef.fields, typeValues.id ?? typeValues.key, [], entries);
   }
 
   return entries;
 }
-
-const compiledFieldIndex = buildCompiledFieldIndex();
 
 function buildTransactionValidationError(
   transaction: GraphWriteTransaction,
@@ -542,6 +539,34 @@ function createTransactionEdgeIndex(
   return new Map(snapshot.edges.map((edge) => [edge.id, edge]));
 }
 
+function createStoreEdgeIndex(store: Store): ReadonlyMap<string, StoreSnapshot["edges"][number]> {
+  return new Map(store.find().map((edge) => [edge.id, edge]));
+}
+
+function resolveOperationTarget(
+  operation: GraphWriteTransaction["ops"][number],
+  edgeById: ReadonlyMap<string, StoreSnapshot["edges"][number]>,
+):
+  | {
+      readonly subjectId: string;
+      readonly predicateId: string;
+    }
+  | undefined {
+  if (operation.op === "assert") {
+    return {
+      subjectId: operation.edge.s,
+      predicateId: operation.edge.p,
+    };
+  }
+
+  const edge = edgeById.get(operation.edgeId);
+  if (!edge) return undefined;
+  return {
+    subjectId: edge.s,
+    predicateId: edge.p,
+  };
+}
+
 function resolveTransactionTarget(
   transaction: GraphWriteTransaction,
   snapshot: StoreSnapshot,
@@ -558,28 +583,23 @@ function resolveTransactionTarget(
   }> = [];
 
   for (const [index, operation] of transaction.ops.entries()) {
-    if (operation.op === "assert") {
-      targets.push({
-        path: [`ops[${index}]`],
-        subjectId: operation.edge.s,
-        predicateId: operation.edge.p,
-      });
-      continue;
-    }
-
-    const edge = edgeById.get(operation.edgeId);
-    if (!edge) continue;
+    const target = resolveOperationTarget(operation, edgeById);
+    if (!target) continue;
     targets.push({
       path: [`ops[${index}]`],
-      subjectId: edge.s,
-      predicateId: edge.p,
+      subjectId: target.subjectId,
+      predicateId: target.predicateId,
     });
   }
 
   return targets;
 }
 
-function createAuthorizationTarget(subjectId: string, predicateId: string) {
+function createAuthorizationTarget(
+  compiledFieldIndex: ReadonlyMap<string, CompiledFieldDefinition>,
+  subjectId: string,
+  predicateId: string,
+) {
   return {
     subjectId,
     predicateId,
@@ -590,6 +610,7 @@ function createAuthorizationTarget(subjectId: string, predicateId: string) {
 function filterReadableSnapshot(
   snapshot: StoreSnapshot,
   authorization: AuthorizationContext,
+  compiledFieldIndex: ReadonlyMap<string, CompiledFieldDefinition>,
 ): StoreSnapshot {
   const staleContextError = assertCurrentPolicyVersion(authorization);
   if (staleContextError) {
@@ -602,7 +623,7 @@ function filterReadableSnapshot(
         authorizeRead({
           authorization,
           capabilityKeys: webAppAuthorityCapabilityKeys,
-          target: createAuthorizationTarget(edge.s, edge.p),
+          target: createAuthorizationTarget(compiledFieldIndex, edge.s, edge.p),
         }).allowed,
     )
     .map((edge) => ({ ...edge }));
@@ -619,6 +640,7 @@ function assertTransactionAuthorized(
   snapshot: StoreSnapshot,
   authorization: AuthorizationContext,
   writeScope: AuthoritativeWriteScope,
+  compiledFieldIndex: ReadonlyMap<string, CompiledFieldDefinition>,
 ): void {
   const staleContextError = assertCurrentPolicyVersion(authorization);
   if (staleContextError) {
@@ -636,7 +658,7 @@ function assertTransactionAuthorized(
       const decision = authorizeWrite({
         authorization,
         capabilityKeys: webAppAuthorityCapabilityKeys,
-        target: createAuthorizationTarget(target.subjectId, target.predicateId),
+        target: createAuthorizationTarget(compiledFieldIndex, target.subjectId, target.predicateId),
         writeScope,
       });
       if (decision.allowed) return undefined;
@@ -653,19 +675,26 @@ function assertTransactionAuthorized(
   }
 }
 
-function buildWriteSecretFieldCommandTargets(input: {
-  readonly entityId: string;
-  readonly predicateId: string;
-  readonly secretId: string;
-}) {
+function buildWriteSecretFieldCommandTargets(
+  input: {
+    readonly entityId: string;
+    readonly predicateId: string;
+    readonly secretId: string;
+  },
+  compiledFieldIndex: ReadonlyMap<string, CompiledFieldDefinition>,
+) {
   return [
-    createAuthorizationTarget(input.secretId, typePredicateId),
-    createAuthorizationTarget(input.secretId, createdAtPredicateId),
-    createAuthorizationTarget(input.secretId, namePredicateId),
-    createAuthorizationTarget(input.secretId, updatedAtPredicateId),
-    createAuthorizationTarget(input.secretId, secretHandleVersionPredicateId),
-    createAuthorizationTarget(input.secretId, secretHandleLastRotatedAtPredicateId),
-    createAuthorizationTarget(input.entityId, input.predicateId),
+    createAuthorizationTarget(compiledFieldIndex, input.secretId, typePredicateId),
+    createAuthorizationTarget(compiledFieldIndex, input.secretId, createdAtPredicateId),
+    createAuthorizationTarget(compiledFieldIndex, input.secretId, namePredicateId),
+    createAuthorizationTarget(compiledFieldIndex, input.secretId, updatedAtPredicateId),
+    createAuthorizationTarget(compiledFieldIndex, input.secretId, secretHandleVersionPredicateId),
+    createAuthorizationTarget(
+      compiledFieldIndex,
+      input.secretId,
+      secretHandleLastRotatedAtPredicateId,
+    ),
+    createAuthorizationTarget(compiledFieldIndex, input.entityId, input.predicateId),
   ];
 }
 
@@ -752,6 +781,71 @@ export async function applyStagedWebAuthorityMutation<TResult>(input: {
   return input.result;
 }
 
+function filterReadableIncrementalSyncResult(
+  result: ReturnType<PersistedWebAppAuthority["getIncrementalSyncResult"]>,
+  authorization: AuthorizationContext,
+  store: Store,
+  compiledFieldIndex: ReadonlyMap<string, CompiledFieldDefinition>,
+): ReturnType<PersistedWebAppAuthority["getIncrementalSyncResult"]> {
+  const staleContextError = assertCurrentPolicyVersion(authorization);
+  if (staleContextError) {
+    throw createReadPolicyError(staleContextError);
+  }
+  if ("fallback" in result) {
+    return result;
+  }
+
+  const edgeById = createStoreEdgeIndex(store);
+  const transactions = result.transactions.flatMap((transaction) => {
+    const ops = transaction.transaction.ops.flatMap((operation) => {
+      const target = resolveOperationTarget(operation, edgeById);
+      if (!target) {
+        // Fail closed if retained history can no longer resolve the touched predicate.
+        return [];
+      }
+
+      const decision = authorizeRead({
+        authorization,
+        capabilityKeys: webAppAuthorityCapabilityKeys,
+        target: createAuthorizationTarget(compiledFieldIndex, target.subjectId, target.predicateId),
+      });
+      if (!decision.allowed) {
+        return [];
+      }
+
+      return [
+        operation.op === "assert"
+          ? {
+              op: "assert" as const,
+              edge: { ...operation.edge },
+            }
+          : {
+              op: "retract" as const,
+              edgeId: operation.edgeId,
+            },
+      ];
+    });
+    if (ops.length === 0) {
+      return [];
+    }
+
+    return [
+      {
+        ...transaction,
+        transaction: {
+          ...transaction.transaction,
+          ops,
+        },
+      },
+    ];
+  });
+
+  return {
+    ...result,
+    transactions,
+  };
+}
+
 function createAuthorityStorage(
   storage: WebAppAuthorityStorage,
   pendingSecretWriteRef: { current: WebAppAuthoritySecretWrite | null },
@@ -792,10 +886,12 @@ export async function createWebAppAuthority(
   storage: WebAppAuthorityStorage,
   options: WebAppAuthorityOptions = {},
 ): Promise<WebAppAuthority> {
+  const graph = options.graph ?? webAppGraph;
+  const scalarByKey = collectScalarCodecs(graph);
+  const typeByKey = collectTypeIndex(graph);
+  const compiledFieldIndex = buildCompiledFieldIndex(graph);
   const store = createStore();
-  bootstrap(store, core);
-  bootstrap(store, pkm);
-  bootstrap(store, ops);
+  bootstrap(store, graph);
 
   const persistedSecrets = await storage.loadSecrets();
   const secretValuesRef = {
@@ -806,7 +902,7 @@ export async function createWebAppAuthority(
   const pendingSecretWriteRef = {
     current: null as WebAppAuthoritySecretWrite | null,
   };
-  const authority = await createPersistedAuthoritativeGraph(store, webAppGraph, {
+  const authority = await createPersistedAuthoritativeGraph(store, graph, {
     storage: createAuthorityStorage(storage, pendingSecretWriteRef),
     seed() {
       seedExampleGraph(createTypeClient(store, webAppGraph));
@@ -816,7 +912,11 @@ export async function createWebAppAuthority(
   });
 
   function readSnapshot(options: WebAppAuthorityReadOptions): StoreSnapshot {
-    return filterReadableSnapshot(authority.store.snapshot(), options.authorization);
+    return filterReadableSnapshot(
+      authority.store.snapshot(),
+      options.authorization,
+      compiledFieldIndex,
+    );
   }
 
   function readPredicateValue(
@@ -837,7 +937,7 @@ export async function createWebAppAuthority(
     const decision = authorizeRead({
       authorization: options.authorization,
       capabilityKeys: webAppAuthorityCapabilityKeys,
-      target: createAuthorizationTarget(subjectId, predicateId),
+      target: createAuthorizationTarget(compiledFieldIndex, subjectId, predicateId),
     });
     if (!decision.allowed) {
       throw createReadPolicyError(decision.error);
@@ -847,8 +947,8 @@ export async function createWebAppAuthority(
       authority.store,
       subjectId,
       fieldDefinition.field,
-      webAppScalarByKey,
-      webAppTypeByKey,
+      scalarByKey,
+      typeByKey,
       {
         strictRequired: options.strictRequired,
       },
@@ -856,10 +956,13 @@ export async function createWebAppAuthority(
   }
 
   function createSyncPayload(options: WebAppAuthoritySyncOptions) {
-    void options.authorization;
-    return authority.createSyncPayload({
+    const payload = authority.createSyncPayload({
       freshness: options.freshness,
     });
+    return {
+      ...payload,
+      snapshot: filterReadableSnapshot(payload.snapshot, options.authorization, compiledFieldIndex),
+    };
   }
 
   async function applyTransaction(
@@ -872,6 +975,7 @@ export async function createWebAppAuthority(
       authority.store.snapshot(),
       options.authorization,
       writeScope,
+      compiledFieldIndex,
     );
     return authority.applyTransaction(transaction, {
       writeScope,
@@ -882,10 +986,14 @@ export async function createWebAppAuthority(
     after: string | undefined,
     options: WebAppAuthoritySyncOptions,
   ) {
-    void options.authorization;
-    return authority.getIncrementalSyncResult(after, {
-      freshness: options.freshness,
-    });
+    return filterReadableIncrementalSyncResult(
+      authority.getIncrementalSyncResult(after, {
+        freshness: options.freshness,
+      }),
+      options.authorization,
+      authority.store,
+      compiledFieldIndex,
+    );
   }
 
   async function runWriteSecretFieldCommand(
@@ -986,11 +1094,14 @@ export async function createWebAppAuthority(
       authorization: options.authorization,
       commandKey: writeSecretFieldCommandKey,
       commandPolicy: writeSecretFieldCommandPolicy,
-      touchedPredicates: buildWriteSecretFieldCommandTargets({
-        entityId,
-        predicateId,
-        secretId: planned.result.secretId,
-      }),
+      touchedPredicates: buildWriteSecretFieldCommandTargets(
+        {
+          entityId,
+          predicateId,
+          secretId: planned.result.secretId,
+        },
+        compiledFieldIndex,
+      ),
       writeScope: "server-command",
     });
     return applyStagedWebAuthorityMutation({

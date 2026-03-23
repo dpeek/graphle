@@ -10,6 +10,7 @@ import {
   defineNamespace,
   defineType,
   edgeId,
+  type AnyTypeOutput,
   type AuthorizationContext,
   type GraphWriteTransaction,
   type NamespaceClient,
@@ -58,6 +59,34 @@ const hiddenCursorProbeNamespace = defineNamespace(createIdMap({ hiddenCursorPro
   hiddenCursorProbe,
 });
 const hiddenCursorGraph = { ...core, ...hiddenCursorProbeNamespace } as const;
+const visibilityProbe = defineType({
+  values: { key: "test:visibilityProbe", name: "Visibility Probe" },
+  fields: {
+    ...core.node.fields,
+    memberNote: {
+      ...core.node.fields.description,
+      key: "test:visibilityProbe:memberNote",
+      authority: {
+        visibility: "replicated",
+        write: "client-tx",
+        policy: {
+          readAudience: "graph-member",
+          writeAudience: "authority",
+          shareable: false,
+        },
+      },
+      meta: {
+        ...core.node.fields.description.meta,
+        label: "Member note",
+      },
+    },
+  },
+});
+const visibilityProbeNamespace = defineNamespace(createIdMap({ visibilityProbe }).map, {
+  visibilityProbe,
+});
+const visibilityProofGraph = { ...productGraph, ...visibilityProbeNamespace } as const;
+const visibilityProbeMemberNotePredicateId = edgeId(visibilityProbe.fields.memberNote);
 
 type SqliteMasterRow = {
   name: string;
@@ -104,6 +133,24 @@ type SyncPayload = {
   readonly transactions?: readonly {
     readonly cursor: string;
     readonly replayed: boolean;
+    readonly transaction: {
+      readonly id: string;
+      readonly ops: readonly (
+        | {
+            readonly op: "assert";
+            readonly edge: {
+              readonly id: string;
+              readonly o: string;
+              readonly p: string;
+              readonly s: string;
+            };
+          }
+        | {
+            readonly edgeId: string;
+            readonly op: "retract";
+          }
+      )[];
+    };
     readonly txId: string;
     readonly writeScope: "authority-only" | "client-tx" | "server-command";
   }[];
@@ -149,6 +196,14 @@ const testHumanAuthorization = {
   principalKind: "human" as const,
   roleKeys: ["graph:member"],
   sessionId: "session:human",
+};
+
+const testOutsiderAuthorization = {
+  ...testAuthorization,
+  principalId: "principal:outsider",
+  principalKind: "human" as const,
+  roleKeys: [],
+  sessionId: "session:outsider",
 };
 
 function createCursor<T extends Record<string, unknown>>(
@@ -275,12 +330,22 @@ function buildTransactionFromSnapshot<TResult>(
   readonly result: TResult;
   readonly transaction: GraphWriteTransaction;
 } {
+  return buildTransactionFromGraphSnapshot(snapshot, productGraph, id, mutate);
+}
+
+function buildTransactionFromGraphSnapshot<TGraph extends Record<string, AnyTypeOutput>, TResult>(
+  snapshot: StoreSnapshot,
+  graph: TGraph,
+  id: string,
+  mutate: (graph: NamespaceClient<TGraph>) => TResult,
+): {
+  readonly result: TResult;
+  readonly transaction: GraphWriteTransaction;
+} {
   const mutationStore = createStore();
-  bootstrap(mutationStore, core);
-  bootstrap(mutationStore, pkm);
-  bootstrap(mutationStore, ops);
+  bootstrap(mutationStore, graph);
   mutationStore.replace(snapshot);
-  const mutationGraph = createTypeClient(mutationStore, productGraph);
+  const mutationGraph = createTypeClient(mutationStore, graph);
   const before = mutationStore.snapshot();
   const result = mutate(mutationGraph);
 
@@ -363,10 +428,13 @@ function buildHiddenCursorAdvanceTransaction(
 async function readSyncPayload(
   durableObject: WebGraphAuthorityDurableObject,
   after?: string,
+  authorization: AuthorizationContext = testAuthorityAuthorization,
 ): Promise<SyncPayload> {
   const url = new URL("https://graph-authority.local/api/sync");
   if (after) url.searchParams.set("after", after);
-  const response = await durableObject.fetch(createAuthorizedRequest(url.toString()));
+  const response = await durableObject.fetch(
+    createAuthorizedRequest(url.toString(), {}, authorization),
+  );
 
   expect(response.status).toBe(200);
   return (await response.json()) as SyncPayload;
@@ -496,7 +564,7 @@ describe("web graph authority durable object", () => {
     );
     const authorization = createAnonymousAuthorizationContext({
       graphId: "graph:durable",
-      policyVersion: 3,
+      policyVersion: 0,
     });
     const response = await durableObject.fetch(
       createAuthorizedRequest("https://graph-authority.local/api/sync", {}, authorization),
@@ -504,6 +572,153 @@ describe("web graph authority durable object", () => {
 
     expect(response.status).toBe(200);
     expect(captured).toEqual([authorization]);
+  });
+
+  it("fails closed on stale policy versions when serving sync reads", async () => {
+    const { state } = createSqliteDurableObjectState();
+    const durableObject = new WebGraphAuthorityDurableObject(state);
+    const response = await durableObject.fetch(
+      createAuthorizedRequest(
+        "https://graph-authority.local/api/sync",
+        {},
+        {
+          ...testAuthorityAuthorization,
+          policyVersion: 1,
+        },
+      ),
+    );
+
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({
+      error: expect.stringContaining("policy.stale_context"),
+    });
+  });
+
+  it("proves two principals receive different sync payloads and direct-read outcomes for the same entity", async () => {
+    const { state } = createSqliteDurableObjectState();
+    const durableObject = new WebGraphAuthorityDurableObject(
+      state,
+      {},
+      {
+        createAuthority(storage, options) {
+          return createWebAppAuthority(storage, {
+            ...options,
+            graph: visibilityProofGraph,
+          });
+        },
+      },
+    );
+    const memberBaseline = await readSyncPayload(durableObject, undefined, testHumanAuthorization);
+    const outsiderBaseline = await readSyncPayload(
+      durableObject,
+      undefined,
+      testOutsiderAuthorization,
+    );
+
+    expect(memberBaseline.mode).toBe("total");
+    expect(outsiderBaseline.mode).toBe("total");
+    expect(memberBaseline.cursor).toBe(outsiderBaseline.cursor);
+
+    const createdProbe = buildTransactionFromGraphSnapshot(
+      memberBaseline.snapshot ?? { edges: [], retracted: [] },
+      visibilityProofGraph,
+      "tx:create-visibility-probe",
+      (graph) =>
+        graph.visibilityProbe.create({
+          memberNote: "Visible only to graph members",
+          name: "Read divergence proof",
+        }),
+    );
+
+    await postTransaction(durableObject, createdProbe.transaction);
+
+    const memberTotal = await readSyncPayload(durableObject, undefined, testHumanAuthorization);
+    const outsiderTotal = await readSyncPayload(
+      durableObject,
+      undefined,
+      testOutsiderAuthorization,
+    );
+    const memberIncremental = await readSyncPayload(
+      durableObject,
+      memberBaseline.cursor,
+      testHumanAuthorization,
+    );
+    const outsiderIncremental = await readSyncPayload(
+      durableObject,
+      outsiderBaseline.cursor,
+      testOutsiderAuthorization,
+    );
+
+    if (memberTotal.mode !== "total" || outsiderTotal.mode !== "total") {
+      throw new Error("Expected total sync payloads for the visibility proof baseline.");
+    }
+    if (memberIncremental.mode !== "incremental" || "fallback" in memberIncremental) {
+      throw new Error("Expected a data-bearing incremental sync payload for the graph member.");
+    }
+    if (outsiderIncremental.mode !== "incremental" || "fallback" in outsiderIncremental) {
+      throw new Error("Expected a data-bearing incremental sync payload for the outsider.");
+    }
+    const memberSnapshot = memberTotal.snapshot;
+    const outsiderSnapshot = outsiderTotal.snapshot;
+    const memberTransactions = memberIncremental.transactions;
+    const outsiderTransactions = outsiderIncremental.transactions;
+
+    if (!memberSnapshot || !outsiderSnapshot || !memberTransactions || !outsiderTransactions) {
+      throw new Error("Expected sync proof payloads to include snapshots and transactions.");
+    }
+
+    expect(
+      memberSnapshot.edges.some(
+        (edge) => edge.s === createdProbe.result && edge.p === visibilityProbeMemberNotePredicateId,
+      ),
+    ).toBe(true);
+    expect(
+      outsiderSnapshot.edges.some(
+        (edge) => edge.s === createdProbe.result && edge.p === visibilityProbeMemberNotePredicateId,
+      ),
+    ).toBe(false);
+    expect(outsiderSnapshot.edges.some((edge) => edge.s === createdProbe.result)).toBe(true);
+    expect(
+      memberTransactions[0]?.transaction.ops.some(
+        (operation) =>
+          operation.op === "assert" &&
+          operation.edge.s === createdProbe.result &&
+          operation.edge.p === visibilityProbeMemberNotePredicateId,
+      ),
+    ).toBe(true);
+    expect(
+      outsiderTransactions[0]?.transaction.ops.some(
+        (operation) =>
+          operation.op === "assert" &&
+          operation.edge.s === createdProbe.result &&
+          operation.edge.p === visibilityProbeMemberNotePredicateId,
+      ),
+    ).toBe(false);
+    expect(
+      outsiderTransactions[0]?.transaction.ops.some(
+        (operation) => operation.op === "assert" && operation.edge.s === createdProbe.result,
+      ),
+    ).toBe(true);
+
+    const authority = await getDurableAuthority<WebAppAuthority>(durableObject);
+    expect(
+      authority.readPredicateValue(createdProbe.result, visibilityProbeMemberNotePredicateId, {
+        authorization: testHumanAuthorization,
+      }),
+    ).toBe("Visible only to graph members");
+
+    try {
+      authority.readPredicateValue(createdProbe.result, visibilityProbeMemberNotePredicateId, {
+        authorization: testOutsiderAuthorization,
+      });
+      throw new Error("Expected direct protected reads to fail for the outsider principal.");
+    } catch (error) {
+      expect(error).toMatchObject({
+        code: "policy.read.forbidden",
+        message: expect.stringContaining("policy.read.forbidden"),
+        status: 403,
+      });
+    }
   });
 
   it("bootstraps the graph tables and indexes in the constructor", () => {
