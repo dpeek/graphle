@@ -659,18 +659,18 @@ Context bundles:
 
 ### Surface summary
 
-| Name                      | Purpose                                                                                                 | Caller                                                    | Callee                                             | Inputs                                                               | Outputs                                            | Failure shape                                                | Stability                                               |
-| ------------------------- | ------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- | -------------------------------------------------- | -------------------------------------------------------------------- | -------------------------------------------------- | ------------------------------------------------------------ | ------------------------------------------------------- |
-| `WorkflowGraphSchema`     | Defines canonical graph types and predicates for project, repository, branch, commit, and session state | Branch 4 module installer, Branch 1 bootstrap, web, agent | built-in `ops/workflow` module                     | schema package and migrations                                        | stable type and predicate ids                      | schema conflict, incompatible migration                      | `stable`                                                |
-| `ProjectBranchScope`      | Returns backlog, in-flight, and repository-observed branch rows for one project                         | TUI, Branch 7 operator UI, MCP                            | Branch 3 scope planner and projections             | project id, filters, cursor                                          | ordered branch rows and repository summaries       | policy denied, scope changed, projection unavailable         | `stable` for shape, `provisional` for ranking           |
-| `CommitQueueScope`        | Returns the ordered commit queue for one branch plus repository execution summaries                     | TUI, session launcher                                     | Branch 3 scope planner and projections             | branch id, cursor                                                    | ordered commit rows                                | branch missing, projection lag                               | `stable`                                                |
-| `ContextBundleRequest`    | Resolves the immutable branch-specific or commit-specific context bundle for one session                | agent runtime                                             | context retrieval engine plus Branch 3 scope reads | subject, session id, retrieval mode, budget                          | `ContextBundle` and ordered `ContextBundleEntry[]` | missing inputs, policy denied, incomplete scope, over-budget | `stable`                                                |
-| `WorkflowMutationCommand` | Creates and transitions projects, repositories, branches, commits, and their execution mappings         | operator tooling, session launcher, worker runtime        | authoritative workflow runtime                     | create, reorder, attach, activate, block, complete, archive commands | updated summary rows and cursor                    | lock conflict, invalid transition, policy denied             | `stable`                                                |
-| `CodexSessionLaunch`      | Starts a branch-scoped or commit-scoped interactive Codex session                                       | TUI, future web operator surface                          | session launcher plus workspace manager            | project id, subject, actor, mode                                     | session summary and launch metadata                | subject locked, workspace missing, git mismatch              | `stable`                                                |
-| `AgentSessionAppend`      | Creates sessions and appends ordered session events                                                     | worker runtime, Codex runner bridge                       | authoritative workflow runtime                     | session metadata or event envelopes                                  | accepted record ids, optional summaries            | missing subject, bad sequence, payload rejected              | `stable` for envelope, `provisional` for storage layout |
-| `ArtifactWrite`           | Persists text or blob-backed artifacts for a session                                                    | worker runtime, future ingest jobs                        | artifact writer                                    | session id, metadata, body or blob ref                               | `WorkflowArtifact` record                          | missing session, blob missing, policy denied                 | `stable`                                                |
-| `DecisionWrite`           | Persists durable decisions and blockers                                                                 | worker runtime, operator UI                               | decision writer                                    | session id, decision payload                                         | `WorkflowDecision` record                          | missing session, policy denied                               | `stable`                                                |
-| `GitReconcileView`        | Reconciles local git branch and worktree observations into repository-facing summaries                  | local supervisor, TUI attach flow                         | git inspection layer plus derived write path       | repository id or repo root, branch filters                           | observed branch rows and drift summaries           | repo missing, git command failure, stale observation         | `provisional`                                           |
+| Name                      | Purpose                                                                                                 | Caller                                                    | Callee                                             | Inputs                                                               | Outputs                                                          | Failure shape                                                | Stability                                               |
+| ------------------------- | ------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- | -------------------------------------------------- | -------------------------------------------------------------------- | ---------------------------------------------------------------- | ------------------------------------------------------------ | ------------------------------------------------------- |
+| `WorkflowGraphSchema`     | Defines canonical graph types and predicates for project, repository, branch, commit, and session state | Branch 4 module installer, Branch 1 bootstrap, web, agent | built-in `ops/workflow` module                     | schema package and migrations                                        | stable type and predicate ids                                    | schema conflict, incompatible migration                      | `stable`                                                |
+| `ProjectBranchScope`      | Returns backlog, in-flight, and repository-observed branch rows for one project                         | TUI, Branch 7 operator UI, MCP                            | Branch 3 scope planner and projections             | project id, filters, ordering, cursor                                | managed branch rows, separate repository observations, freshness | `project-not-found`, `policy-denied`, `projection-stale`     | `stable` for shape, `provisional` for ranking           |
+| `CommitQueueScope`        | Returns the canonical branch-detail view and ordered commit queue for one selected branch               | TUI, session launcher                                     | Branch 3 scope planner and projections             | branch id, cursor                                                    | branch detail, ordered commit rows, freshness                    | `branch-not-found`, `policy-denied`, `projection-stale`      | `stable`                                                |
+| `ContextBundleRequest`    | Resolves the immutable branch-specific or commit-specific context bundle for one session                | agent runtime                                             | context retrieval engine plus Branch 3 scope reads | subject, session id, retrieval mode, budget                          | `ContextBundle` and ordered `ContextBundleEntry[]`               | missing inputs, policy denied, incomplete scope, over-budget | `stable`                                                |
+| `WorkflowMutationCommand` | Creates and transitions projects, repositories, branches, commits, and their execution mappings         | operator tooling, session launcher, worker runtime        | authoritative workflow runtime                     | create, reorder, attach, activate, block, complete, archive commands | updated summary rows and cursor                                  | lock conflict, invalid transition, policy denied             | `stable`                                                |
+| `CodexSessionLaunch`      | Starts a branch-scoped or commit-scoped interactive Codex session                                       | TUI, future web operator surface                          | session launcher plus workspace manager            | project id, subject, actor, mode                                     | session summary and launch metadata                              | subject locked, workspace missing, git mismatch              | `stable`                                                |
+| `AgentSessionAppend`      | Creates sessions and appends ordered session events                                                     | worker runtime, Codex runner bridge                       | authoritative workflow runtime                     | session metadata or event envelopes                                  | accepted record ids, optional summaries                          | missing subject, bad sequence, payload rejected              | `stable` for envelope, `provisional` for storage layout |
+| `ArtifactWrite`           | Persists text or blob-backed artifacts for a session                                                    | worker runtime, future ingest jobs                        | artifact writer                                    | session id, metadata, body or blob ref                               | `WorkflowArtifact` record                                        | missing session, blob missing, policy denied                 | `stable`                                                |
+| `DecisionWrite`           | Persists durable decisions and blockers                                                                 | worker runtime, operator UI                               | decision writer                                    | session id, decision payload                                         | `WorkflowDecision` record                                        | missing session, policy denied                               | `stable`                                                |
+| `GitReconcileView`        | Reconciles local git branch and worktree observations into repository-facing summaries                  | local supervisor, TUI attach flow                         | git inspection layer plus derived write path       | repository id or repo root, branch filters                           | observed branch rows and drift summaries                         | repo missing, git command failure, stale observation         | `provisional`                                           |
 
 ### `ProjectBranchScope`
 
@@ -678,15 +678,64 @@ Context bundles:
   in-flight branches, and attached repository branch inventory together
 - caller: TUI branch board, Branch 7 operator UI, future MCP views
 - callee: Branch 3 scope and projection layer
-- inputs:
-  - `projectId`
-  - filters such as `state`, `hasActiveCommit`, or
-    `showUnmanagedRepositoryBranches`
-  - optional cursor
-- outputs:
-  - managed branch rows with attached repository execution summaries
-  - unmanaged repository branch summaries for the current project
-  - freshness metadata for the last repository reconciliation
+- canonical query:
+
+```ts
+type ProjectBranchScopeOrderField = "queue-rank" | "updated-at" | "created-at" | "title" | "state";
+
+type ProjectBranchScopeOrderDirection = "asc" | "desc";
+
+interface ProjectBranchScopeQuery {
+  projectId: string;
+  filter?: {
+    states?: readonly WorkflowBranchStateValue[];
+    hasActiveCommit?: boolean;
+    showUnmanagedRepositoryBranches?: boolean;
+  };
+  order?: readonly {
+    field: ProjectBranchScopeOrderField;
+    direction: ProjectBranchScopeOrderDirection;
+  }[];
+  cursor?: string;
+  limit?: number;
+}
+
+interface ProjectBranchScopeRepositoryObservation {
+  repositoryBranch: RepositoryBranchSummary;
+  freshness: "fresh" | "stale" | "missing";
+}
+
+interface ProjectBranchScopeManagedRow {
+  workflowBranch: WorkflowBranchSummary;
+  repositoryBranch?: ProjectBranchScopeRepositoryObservation;
+}
+
+interface ProjectBranchScopeResult {
+  project: WorkflowProjectSummary;
+  repository?: WorkflowRepositorySummary;
+  rows: readonly ProjectBranchScopeManagedRow[];
+  unmanagedRepositoryBranches: readonly ProjectBranchScopeRepositoryObservation[];
+  freshness: {
+    projectedAt: string;
+    projectionCursor?: string;
+    repositoryFreshness: "fresh" | "stale" | "missing";
+    repositoryReconciledAt?: string;
+  };
+  nextCursor?: string;
+}
+```
+
+- contract rules:
+  - `rows` contains only managed `WorkflowBranch` rows; unmanaged observed git
+    branches never appear there
+  - repository observation data stays nested under `repositoryBranch` so
+    `WorkflowBranch` identity does not collapse into repository branch identity
+  - `filter.*` applies to managed workflow rows; unmanaged repository branch
+    inclusion is controlled only by `showUnmanagedRepositoryBranches`
+  - the default row ordering is `queue-rank asc`, then `updated-at desc`, then
+    `title asc`
+  - `freshness.repositoryReconciledAt` records the latest successful attached
+    repository reconcile used by the scope
 - failure shape:
   - `project-not-found`
   - `policy-denied`
@@ -700,18 +749,105 @@ Context bundles:
   loop, including the attached repository realization when one exists
 - caller: TUI branch detail panel and session launcher
 - callee: Branch 3 scope and projection layer
-- inputs:
-  - `branchId`
-  - optional cursor
-- outputs:
-  - ordered commit rows
-  - current active commit if one exists
-  - attached repository-commit summaries when present
+- canonical query:
+
+```ts
+type CommitQueueScopeSessionKind = "planning" | "execution" | "review";
+
+type CommitQueueScopeSessionRuntimeState =
+  | "running"
+  | "awaiting-user-input"
+  | "blocked"
+  | "completed"
+  | "failed"
+  | "cancelled";
+
+type CommitQueueScopeSessionSubject = { kind: "branch" } | { kind: "commit"; commitId: string };
+
+interface CommitQueueScopeQuery {
+  branchId: string;
+  cursor?: string;
+  limit?: number;
+}
+
+type CommitQueueScopeRepositoryObservation = ProjectBranchScopeRepositoryObservation;
+
+interface CommitQueueScopeCommitRow {
+  workflowCommit: WorkflowCommitSummary;
+  repositoryCommit?: RepositoryCommitSummary;
+}
+
+interface CommitQueueScopeSessionSummary {
+  id: string;
+  sessionKey: string;
+  kind: CommitQueueScopeSessionKind;
+  runtimeState: CommitQueueScopeSessionRuntimeState;
+  subject: CommitQueueScopeSessionSubject;
+  startedAt: string;
+  endedAt?: string;
+}
+
+interface CommitQueueScopeBranchDetail {
+  workflowBranch: WorkflowBranchSummary;
+  repositoryBranch?: CommitQueueScopeRepositoryObservation;
+  activeCommit?: CommitQueueScopeCommitRow;
+  latestSession?: CommitQueueScopeSessionSummary;
+}
+
+type CommitQueueScopeFreshness = ProjectBranchScopeFreshness;
+
+interface CommitQueueScopeResult {
+  branch: CommitQueueScopeBranchDetail;
+  rows: readonly CommitQueueScopeCommitRow[];
+  freshness: CommitQueueScopeFreshness;
+  nextCursor?: string;
+}
+```
+
+- contract rules:
+  - `branch.workflowBranch.goalSummary` is the canonical branch goal field for
+    the first TUI shell; the query does not duplicate that summary elsewhere
+  - `rows` are ordered by `workflowCommit.order asc`; projections may add
+    deterministic tie-breakers but cannot change queue-order semantics
+  - `branch.activeCommit` may duplicate one row from `rows` so the active
+    commit remains available even when pagination excludes it
+  - `branch.latestSession` summarizes the most recent branch-targeted or
+    commit-targeted session attached to the selected branch
+  - `freshness` reuses `ProjectBranchScopeFreshness`, including
+    `projectedAt`, optional `projectionCursor`, repository freshness state, and
+    `repositoryReconciledAt`
+  - repository execution state stays nested under `repositoryCommit` and
+    `branch.repositoryBranch` so workflow identity remains distinct from git
+    realization metadata
 - failure shape:
   - `branch-not-found`
   - `policy-denied`
   - `projection-stale`
 - stability: `stable`
+
+### Freshness And Rebuild Rules
+
+- `ProjectBranchScope` and `CommitQueueScope` rebuild from authoritative
+  workflow lineage plus retained execution state:
+  `WorkflowProject`, `WorkflowRepository`, `WorkflowBranch`,
+  `WorkflowCommit`, `RepositoryBranch`, `RepositoryCommit`, and
+  `AgentSession`
+- stale or missing `RepositoryBranch.latestReconciledAt` data downgrades the
+  returned freshness envelope, but does not suppress managed workflow rows,
+  `branch.activeCommit`, or ordered commit rows
+- `repositoryFreshness: "missing"` means no attached repository summary or
+  repository-branch observation is currently materialized for the project;
+  callers fall back to workflow-only rendering
+- `repositoryFreshness: "stale"` means at least one observed repository branch
+  in the project lacks `latestReconciledAt`; callers may keep workflow lineage
+  and retained `RepositoryCommit` summaries while treating attached repository
+  branch observations as advisory
+- per-row repository freshness stays nested under `repositoryBranch` so stale
+  git observations remain distinct from the authoritative workflow branch and
+  commit queue identity
+- `projection-stale` is reserved for lagged or rebuilt projections and invalid
+  cursor reuse; callers discard pagination cursors and restart the scope from
+  the first page after refreshing the projection
 
 ### `ContextBundleRequest`
 

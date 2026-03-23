@@ -1,5 +1,6 @@
 export * from "./type.js";
 export * from "./command.js";
+export * from "./query.js";
 
 import {
   agentSession,

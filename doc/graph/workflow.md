@@ -17,11 +17,16 @@ The canonical workflow slice lives alongside this doc under
 The exported surface is:
 
 - `schema.ts`: backs `@io/core/graph/modules/ops/workflow` and re-exports the
-  workflow entity, enum, and command definitions
+  workflow entity, enum, mutation, and read-contract definitions
 - `type.ts`: owns the entity families, state enums, reference wiring, key
   validators, and default lifecycle values
 - `command.ts`: defines the stable `workflow-mutation` command envelope,
   summary shapes, and failure codes consumed by the authority layer
+- `query.ts`: defines the stable `ProjectBranchScope` branch-board contract and
+  the stable `CommitQueueScope` branch-detail and commit-queue contract,
+  plus the rebuildable in-memory projection helpers that materialize those
+  reads from workflow, repository, and session records
+  consumed by projections and operator surfaces
 
 The first workflow slice currently defines:
 
@@ -100,6 +105,140 @@ The authority implementation keeps the first Branch 6 assumptions explicit:
 - one managed repository branch per workflow branch
 - one repository commit result per workflow commit
 - one active commit per workflow branch
+
+## Branch Board Query
+
+The first stable workflow read contract in this slice is `ProjectBranchScope`.
+
+It defines one project-scoped branch-board view with two distinct collections:
+
+- `rows`: workflow-managed `WorkflowBranch` rows for the operator-facing board
+- `unmanagedRepositoryBranches`: observed `RepositoryBranch` rows that are not
+  the identity of a workflow row and must stay visually separate
+
+The canonical request shape is:
+
+- `projectId`: required workflow project id
+- `filter.states?`: optional `WorkflowBranchStateValue[]` filter applied to managed
+  workflow rows
+- `filter.hasActiveCommit?`: optional active-commit filter applied to managed
+  workflow rows
+- `filter.showUnmanagedRepositoryBranches?`: opt-in inclusion of the separate
+  unmanaged repository branch collection
+- `order?`: optional ordered clauses over `queue-rank`, `updated-at`,
+  `created-at`, `title`, or `state`
+- `cursor?` and `limit?`: optional pagination inputs for the managed rows
+
+The canonical result shape is:
+
+- `project` and optional `repository` summaries for the current workflow root
+- `rows[]`, where each row nests `workflowBranch` and an optional
+  `repositoryBranch` observation instead of flattening repository state onto
+  workflow identity
+- `unmanagedRepositoryBranches[]`, returned separately from `rows`
+- `freshness`, including `projectedAt`, optional `projectionCursor`, project
+  repository freshness state, and the last successful repository reconcile time
+- `nextCursor?` for additional managed rows
+
+The stable failure codes exposed by the query contract are:
+
+- `project-not-found`
+- `policy-denied`
+- `projection-stale`
+
+The workflow slice now also exports `createWorkflowProjectionIndex(graph, options?)`.
+It builds a rebuildable read index from the current graph client and exposes
+`readProjectBranchScope(...)` and `readCommitQueueScope(...)` so downstream TUI
+work can consume stable workflow read helpers without reaching into raw
+workflow, repository, and session records directly.
+
+## Branch Detail And Commit Queue Query
+
+The branch-detail view paired with the TUI commit queue uses
+`CommitQueueScope`.
+
+It defines one branch-scoped detail surface with:
+
+- `branch.workflowBranch`: the canonical `WorkflowBranchSummary`, including the
+  branch goal summary and `activeCommitId`
+- `branch.repositoryBranch?`: the attached repository-branch observation when
+  one exists, reusing the same freshness envelope as the branch board
+- `branch.activeCommit?`: the active commit row promoted into branch detail so
+  the first TUI shell does not depend on the current page including it
+- `branch.latestSession?`: the most recent branch-scoped or commit-scoped
+  session summary for the selected branch
+- `rows`: ordered `WorkflowCommit` queue rows with optional attached
+  `RepositoryCommit` summaries
+- `freshness` and `nextCursor?`: the same projection freshness and pagination
+  semantics used by `ProjectBranchScope`
+
+The canonical request shape is:
+
+- `branchId`: required workflow branch id
+- `cursor?` and `limit?`: optional pagination inputs for the ordered commit
+  rows
+
+The canonical result shape is:
+
+- `branch`, with nested `workflowBranch`, optional `repositoryBranch`,
+  optional `activeCommit`, and optional `latestSession`
+- `rows[]`, where each row nests `workflowCommit` and an optional
+  `repositoryCommit` realization summary
+- `freshness`, reusing `projectedAt`, optional `projectionCursor`, repository
+  freshness state, and the last successful repository reconcile time
+- `nextCursor?` for additional commit rows
+
+Contract rules:
+
+- `branch.workflowBranch.goalSummary` is the canonical branch goal field for
+  the first TUI shell; the query does not duplicate that summary elsewhere
+- `rows` are ordered by `workflowCommit.order asc`; projections may add
+  deterministic tie-breakers but cannot change queue-order semantics
+- `branch.activeCommit` may duplicate one row from `rows` so the active commit
+  remains available even when pagination excludes it
+- `branch.latestSession` summarizes the most recent branch-targeted or
+  commit-targeted session attached to the selected branch
+- repository execution state stays nested under `repositoryCommit` and
+  `branch.repositoryBranch` so workflow identity remains distinct from git
+  realization metadata
+
+The stable failure codes exposed by the query contract are:
+
+- `branch-not-found`
+- `policy-denied`
+- `projection-stale`
+
+## Freshness And Rebuild Rules
+
+- `createWorkflowProjectionIndex(graph, options?)` rebuilds the workflow read
+  model from authoritative `WorkflowProject`, `WorkflowRepository`,
+  `WorkflowBranch`, `WorkflowCommit`, `RepositoryBranch`, `RepositoryCommit`,
+  and `AgentSession` records. No TUI-local state is required to recover the
+  branch board or commit queue.
+- workflow lineage remains authoritative when repository observations are not
+  current. `rows[]`, `branch.workflowBranch`, `branch.activeCommit`, and
+  `branch.latestSession` still return from retained workflow state even when
+  repository freshness is `stale` or `missing`.
+- `ProjectBranchScopeRepositoryObservation.freshness` is per observed
+  repository branch. `result.freshness.repositoryFreshness` is the
+  project-level aggregate reused by both `ProjectBranchScope` and
+  `CommitQueueScope`.
+- `repositoryFreshness: "fresh"` means every observed `RepositoryBranch` in the
+  project has `latestReconciledAt`.
+- `repositoryFreshness: "stale"` means at least one observed
+  `RepositoryBranch` lacks `latestReconciledAt`. Reads still succeed; callers
+  keep workflow rows and retained `RepositoryCommit` summaries while treating
+  attached repository-branch observations as advisory.
+- `repositoryFreshness: "missing"` means there is no attached repository
+  summary or no repository-branch observation materialized yet. Reads still
+  succeed with workflow-only rows and no `repositoryReconciledAt`.
+- `unmanagedRepositoryBranches[]` and `branch.repositoryBranch` rebuild from
+  `RepositoryBranch` summaries and stay separate from workflow identity so
+  stale git observations cannot overwrite managed workflow lineage.
+- cursors are projection-scoped. `projection-stale` is the fail-closed result
+  for lagged pagination, scope mismatch, or reuse after a projection rebuild.
+  Callers discard the cursor and restart from the first page against a fresh
+  projection.
 
 ## Field Conventions
 

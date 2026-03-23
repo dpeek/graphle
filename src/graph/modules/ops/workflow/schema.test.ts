@@ -7,7 +7,15 @@ import { core } from "../../core.js";
 import { ops } from "../../ops.js";
 import {
   agentSessionKeyPattern,
+  commitQueueScopeFailureCodes,
+  type CommitQueueScopeQuery,
+  type CommitQueueScopeResult,
   contextBundleKeyPattern,
+  defaultProjectBranchScopeOrder,
+  projectBranchScopeFailureCodes,
+  projectBranchScopeOrderDirectionValues,
+  projectBranchScopeOrderFieldValues,
+  projectBranchScopeRepositoryFreshnessValues,
   workflowBranchKeyPattern,
   workflowCommitKeyPattern,
   workflowMutationCommand,
@@ -71,6 +79,30 @@ describe("ops workflow schema", () => {
       "invalid-transition",
       "subject-not-found",
     ]);
+    expect(projectBranchScopeFailureCodes).toEqual([
+      "project-not-found",
+      "policy-denied",
+      "projection-stale",
+    ]);
+    expect(commitQueueScopeFailureCodes).toEqual([
+      "branch-not-found",
+      "policy-denied",
+      "projection-stale",
+    ]);
+    expect(projectBranchScopeOrderFieldValues).toEqual([
+      "queue-rank",
+      "updated-at",
+      "created-at",
+      "title",
+      "state",
+    ]);
+    expect(projectBranchScopeOrderDirectionValues).toEqual(["asc", "desc"]);
+    expect(projectBranchScopeRepositoryFreshnessValues).toEqual(["fresh", "stale", "missing"]);
+    expect(defaultProjectBranchScopeOrder).toEqual([
+      { field: "queue-rank", direction: "asc" },
+      { field: "updated-at", direction: "desc" },
+      { field: "title", direction: "asc" },
+    ]);
     expect(workflowMutationCommand.policy.touchesPredicates).toEqual(
       expect.arrayContaining([
         { predicateId: ops.workflowProject.fields.projectKey.key },
@@ -80,6 +112,164 @@ describe("ops workflow schema", () => {
         { predicateId: ops.workflowCommit.fields.state.key },
       ]),
     );
+  });
+
+  it("defines the canonical branch-detail and commit-queue query shape", () => {
+    const query = {
+      branchId: "workflow-branch-1",
+      cursor: "cursor:branch-1",
+      limit: 25,
+    } satisfies CommitQueueScopeQuery;
+
+    const result = {
+      branch: {
+        workflowBranch: {
+          entity: "branch",
+          id: "workflow-branch-1",
+          title: "Workflow runtime contract",
+          projectId: "workflow-project-1",
+          branchKey: "branch:workflow-runtime-contract",
+          state: "active",
+          goalSummary: "Define the canonical branch detail and commit queue contract.",
+          activeCommitId: "workflow-commit-2",
+          queueRank: 1,
+          createdAt: "2026-01-01T00:00:00.000Z",
+          updatedAt: "2026-01-02T00:00:00.000Z",
+        },
+        repositoryBranch: {
+          freshness: "fresh",
+          repositoryBranch: {
+            entity: "repository-branch",
+            id: "repository-branch-1",
+            title: "workflow/runtime-contract",
+            projectId: "workflow-project-1",
+            repositoryId: "workflow-repository-1",
+            workflowBranchId: "workflow-branch-1",
+            managed: true,
+            branchName: "workflow/runtime-contract",
+            baseBranchName: "main",
+            latestReconciledAt: "2026-01-02T00:00:00.000Z",
+            createdAt: "2026-01-01T00:00:00.000Z",
+            updatedAt: "2026-01-02T00:00:00.000Z",
+          },
+        },
+        activeCommit: {
+          workflowCommit: {
+            entity: "commit",
+            id: "workflow-commit-2",
+            title: "Document commit queue shape",
+            branchId: "workflow-branch-1",
+            commitKey: "commit:document-commit-queue-shape",
+            state: "active",
+            order: 2,
+            createdAt: "2026-01-01T00:00:00.000Z",
+            updatedAt: "2026-01-02T00:00:00.000Z",
+          },
+          repositoryCommit: {
+            entity: "repository-commit",
+            id: "repository-commit-1",
+            title: "Document commit queue shape",
+            repositoryId: "workflow-repository-1",
+            repositoryBranchId: "repository-branch-1",
+            workflowCommitId: "workflow-commit-2",
+            state: "attached",
+            worktree: {
+              branchName: "workflow/runtime-contract",
+              leaseState: "attached",
+              path: "/tmp/worktree-1",
+            },
+            createdAt: "2026-01-01T00:00:00.000Z",
+            updatedAt: "2026-01-02T00:00:00.000Z",
+          },
+        },
+        latestSession: {
+          id: "agent-session-1",
+          sessionKey: "session:workflow-runtime-contract-execution-01",
+          kind: "execution",
+          runtimeState: "running",
+          subject: {
+            kind: "commit",
+            commitId: "workflow-commit-2",
+          },
+          startedAt: "2026-01-02T00:00:00.000Z",
+        },
+      },
+      rows: [
+        {
+          workflowCommit: {
+            entity: "commit",
+            id: "workflow-commit-1",
+            title: "Define branch scope",
+            branchId: "workflow-branch-1",
+            commitKey: "commit:define-branch-scope",
+            state: "committed",
+            order: 1,
+            createdAt: "2026-01-01T00:00:00.000Z",
+            updatedAt: "2026-01-02T00:00:00.000Z",
+          },
+          repositoryCommit: {
+            entity: "repository-commit",
+            id: "repository-commit-0",
+            title: "Define branch scope",
+            repositoryId: "workflow-repository-1",
+            repositoryBranchId: "repository-branch-1",
+            workflowCommitId: "workflow-commit-1",
+            state: "committed",
+            sha: "abcdef1234567",
+            committedAt: "2026-01-02T00:00:00.000Z",
+            worktree: {
+              leaseState: "released",
+            },
+            createdAt: "2026-01-01T00:00:00.000Z",
+            updatedAt: "2026-01-02T00:00:00.000Z",
+          },
+        },
+        {
+          workflowCommit: {
+            entity: "commit",
+            id: "workflow-commit-2",
+            title: "Document commit queue shape",
+            branchId: "workflow-branch-1",
+            commitKey: "commit:document-commit-queue-shape",
+            state: "active",
+            order: 2,
+            createdAt: "2026-01-01T00:00:00.000Z",
+            updatedAt: "2026-01-02T00:00:00.000Z",
+          },
+          repositoryCommit: {
+            entity: "repository-commit",
+            id: "repository-commit-1",
+            title: "Document commit queue shape",
+            repositoryId: "workflow-repository-1",
+            repositoryBranchId: "repository-branch-1",
+            workflowCommitId: "workflow-commit-2",
+            state: "attached",
+            worktree: {
+              branchName: "workflow/runtime-contract",
+              leaseState: "attached",
+              path: "/tmp/worktree-1",
+            },
+            createdAt: "2026-01-01T00:00:00.000Z",
+            updatedAt: "2026-01-02T00:00:00.000Z",
+          },
+        },
+      ],
+      freshness: {
+        projectedAt: "2026-01-02T00:00:00.000Z",
+        projectionCursor: "cursor:branch-1",
+        repositoryFreshness: "fresh",
+        repositoryReconciledAt: "2026-01-02T00:00:00.000Z",
+      },
+      nextCursor: "cursor:branch-2",
+    } satisfies CommitQueueScopeResult;
+
+    expect(query.branchId).toBe("workflow-branch-1");
+    expect(result.branch.workflowBranch.goalSummary).toBe(
+      "Define the canonical branch detail and commit queue contract.",
+    );
+    expect(result.branch.activeCommit?.workflowCommit.id).toBe("workflow-commit-2");
+    expect(result.branch.latestSession?.subject.kind).toBe("commit");
+    expect(result.rows[1]?.repositoryCommit?.state).toBe("attached");
   });
 
   it("owns stable keys for workflow lineage, retained execution, and repository execution records", () => {
