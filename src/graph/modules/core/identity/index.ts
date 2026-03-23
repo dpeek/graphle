@@ -6,6 +6,11 @@ import { defineDefaultEnumTypeModule } from "../enum-module.js";
 import { node } from "../node/index.js";
 import { stringTypeModule } from "../string/index.js";
 
+const authorityOwnedIdentityFieldAuthority = {
+  visibility: "authority-only",
+  write: "authority-only",
+} as const;
+
 function validateRequiredString(label: string, value: unknown) {
   return typeof value === "string" && value.trim().length > 0
     ? undefined
@@ -26,6 +31,7 @@ function requiredIdentityStringField(label: string) {
       operators: ["equals", "prefix"] as const,
       defaultOperator: "equals",
     },
+    authority: authorityOwnedIdentityFieldAuthority,
   });
 }
 
@@ -41,6 +47,7 @@ function optionalIdentityStringField(label: string) {
       operators: ["equals", "prefix"] as const,
       defaultOperator: "equals",
     },
+    authority: authorityOwnedIdentityFieldAuthority,
   });
 }
 

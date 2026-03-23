@@ -2,8 +2,11 @@ import {
   type AuthorizationContext,
   type AuthoritativeWriteScope,
   authorizeCommand,
+  authorizeRead,
   authorizeWrite,
   bootstrap,
+  collectScalarCodecs,
+  collectTypeIndex,
   createPersistedAuthoritativeGraph,
   createStore,
   createTypeClient,
@@ -24,6 +27,7 @@ import {
   type PersistedAuthoritativeGraphStorageLoadResult,
   type PolicyError,
   type PredicatePolicyDescriptor,
+  readPredicateValue as decodePredicateValue,
   type Store,
   type StoreSnapshot,
 } from "@io/core/graph";
@@ -148,6 +152,14 @@ export type WebAppAuthoritySyncOptions = {
   readonly freshness?: WebAppAuthoritySyncFreshness;
 };
 
+export type WebAppAuthorityReadOptions = {
+  readonly authorization: AuthorizationContext;
+};
+
+export type WebAppAuthorityPredicateReadOptions = WebAppAuthorityReadOptions & {
+  readonly strictRequired?: boolean;
+};
+
 export type WebAppAuthorityTransactionOptions = {
   readonly authorization: AuthorizationContext;
   readonly writeScope?: WebAppAuthorityWriteScope;
@@ -163,8 +175,14 @@ export type WebAppAuthorityCommandOptions = {
 
 export type WebAppAuthority = Omit<
   PersistedWebAppAuthority,
-  "applyTransaction" | "createSyncPayload" | "getIncrementalSyncResult"
+  "applyTransaction" | "createSyncPayload" | "getIncrementalSyncResult" | "graph" | "store"
 > & {
+  readSnapshot(options: WebAppAuthorityReadOptions): StoreSnapshot;
+  readPredicateValue(
+    subjectId: string,
+    predicateId: string,
+    options: WebAppAuthorityPredicateReadOptions,
+  ): unknown;
   createSyncPayload(
     options: WebAppAuthoritySyncOptions,
   ): ReturnType<PersistedWebAppAuthority["createSyncPayload"]>;
@@ -200,6 +218,8 @@ const secretHandleLastRotatedAtPredicateId = edgeId(core.secretHandle.fields.las
 const graphWriteTransactionValidationKey = "$sync:tx";
 const webAppAuthorityPolicyVersion = 0;
 const webAppAuthorityCapabilityKeys: readonly string[] = [];
+const webAppScalarByKey = collectScalarCodecs(webAppGraph);
+const webAppTypeByKey = collectTypeIndex(webAppGraph);
 const writeSecretFieldCommandKey = "write-secret-field";
 const writeSecretFieldCommandPolicy = {
   touchesPredicates: [
@@ -398,9 +418,45 @@ function resolveCommandErrorStatus(error: PolicyError): number {
   }
 }
 
+function resolveReadErrorStatus(error: PolicyError): number {
+  return resolveCommandErrorStatus(error);
+}
+
 function createCommandPolicyError(error: PolicyError): WebAppAuthorityMutationError {
   return new WebAppAuthorityMutationError(
     resolveCommandErrorStatus(error),
+    formatPolicyErrorMessage(error),
+    {
+      code: error.code,
+      retryable: error.retryable,
+      refreshRequired: error.refreshRequired,
+    },
+  );
+}
+
+class WebAppAuthorityReadError extends Error {
+  readonly status: number;
+  readonly code?: PolicyError["code"];
+  readonly retryable?: boolean;
+  readonly refreshRequired?: boolean;
+
+  constructor(
+    status: number,
+    message: string,
+    options: Partial<Pick<PolicyError, "code" | "retryable" | "refreshRequired">> = {},
+  ) {
+    super(message);
+    this.name = "WebAppAuthorityReadError";
+    this.status = status;
+    this.code = options.code;
+    this.retryable = options.retryable;
+    this.refreshRequired = options.refreshRequired;
+  }
+}
+
+function createReadPolicyError(error: PolicyError): WebAppAuthorityReadError {
+  return new WebAppAuthorityReadError(
+    resolveReadErrorStatus(error),
     formatPolicyErrorMessage(error),
     {
       code: error.code,
@@ -528,6 +584,33 @@ function createAuthorizationTarget(subjectId: string, predicateId: string) {
     subjectId,
     predicateId,
     policy: compiledFieldIndex.get(predicateId)?.policy,
+  };
+}
+
+function filterReadableSnapshot(
+  snapshot: StoreSnapshot,
+  authorization: AuthorizationContext,
+): StoreSnapshot {
+  const staleContextError = assertCurrentPolicyVersion(authorization);
+  if (staleContextError) {
+    throw createReadPolicyError(staleContextError);
+  }
+
+  const edges = snapshot.edges
+    .filter(
+      (edge) =>
+        authorizeRead({
+          authorization,
+          capabilityKeys: webAppAuthorityCapabilityKeys,
+          target: createAuthorizationTarget(edge.s, edge.p),
+        }).allowed,
+    )
+    .map((edge) => ({ ...edge }));
+  const visibleEdgeIds = new Set(edges.map((edge) => edge.id));
+
+  return {
+    edges,
+    retracted: snapshot.retracted.filter((edgeId) => visibleEdgeIds.has(edgeId)),
   };
 }
 
@@ -732,6 +815,46 @@ export async function createWebAppAuthority(
     maxRetainedTransactions: options.maxRetainedTransactions,
   });
 
+  function readSnapshot(options: WebAppAuthorityReadOptions): StoreSnapshot {
+    return filterReadableSnapshot(authority.store.snapshot(), options.authorization);
+  }
+
+  function readPredicateValue(
+    subjectId: string,
+    predicateId: string,
+    options: WebAppAuthorityPredicateReadOptions,
+  ): unknown {
+    const fieldDefinition = compiledFieldIndex.get(predicateId);
+    if (!fieldDefinition) {
+      throw new WebAppAuthorityReadError(404, `Predicate "${predicateId}" was not found.`);
+    }
+
+    const staleContextError = assertCurrentPolicyVersion(options.authorization);
+    if (staleContextError) {
+      throw createReadPolicyError(staleContextError);
+    }
+
+    const decision = authorizeRead({
+      authorization: options.authorization,
+      capabilityKeys: webAppAuthorityCapabilityKeys,
+      target: createAuthorizationTarget(subjectId, predicateId),
+    });
+    if (!decision.allowed) {
+      throw createReadPolicyError(decision.error);
+    }
+
+    return decodePredicateValue(
+      authority.store,
+      subjectId,
+      fieldDefinition.field,
+      webAppScalarByKey,
+      webAppTypeByKey,
+      {
+        strictRequired: options.strictRequired,
+      },
+    );
+  }
+
   function createSyncPayload(options: WebAppAuthoritySyncOptions) {
     void options.authorization;
     return authority.createSyncPayload({
@@ -928,12 +1051,16 @@ export async function createWebAppAuthority(
     return runWriteSecretFieldCommand(input, options);
   }
 
+  const { graph: _graph, store: _store, ...authorityApi } = authority;
+
   return {
-    ...authority,
+    ...authorityApi,
     executeCommand,
     applyTransaction,
     createSyncPayload,
     getIncrementalSyncResult,
+    readPredicateValue,
+    readSnapshot,
     writeSecretField,
   };
 }

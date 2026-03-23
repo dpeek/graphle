@@ -64,4 +64,14 @@ describe("core identity family", () => {
     expect(typeof core.principalRoleBinding.fields.roleKey.id).toBe("string");
     expect(typeof core.principalKind.values.remoteGraph.id).toBe("string");
   });
+
+  it("keeps authority-owned identity strings off current replicated read surfaces", () => {
+    expect(core.principal.fields.homeGraphId.authority?.visibility).toBe("authority-only");
+    expect(core.principal.fields.homeGraphId.authority?.write).toBe("authority-only");
+    expect(core.principal.fields.personId.authority?.visibility).toBe("authority-only");
+    expect(core.authSubjectProjection.fields.providerAccountId.authority?.visibility).toBe(
+      "authority-only",
+    );
+    expect(core.principalRoleBinding.fields.roleKey.authority?.visibility).toBe("authority-only");
+  });
 });

@@ -81,11 +81,14 @@ generic shared command transport.
   adapter that bootstraps graph tables in the constructor, hydrates retained
   history during authority init, commits graph and secret side-storage changes
   in one Durable Object storage transaction, and prunes old transaction rows
-- `../../src/web/lib/authority.ts`: shared web authority behavior, the current
-  web-owned `/api/commands` envelope plus staged secret-field mutation flow,
-  the shared write/command authorization seam with explicit `policyVersion`
-  fail-closed checks, and the storage abstraction consumed by both tests and
-  the Durable Object adapter
+- `../../src/web/lib/authority.ts`: shared web authority behavior, secret-field
+  mutation flow, the current web-owned `/api/commands` envelope, the shared
+  write/command authorization seam, principal-aware direct-read helpers that
+  omit denied predicates from snapshot-style reads and fail explicit protected
+  predicate reads with stable `policy.read.forbidden` errors, explicit
+  `policyVersion` fail-closed checks for authority-owned read, `/api/tx`, and
+  `/api/commands` paths, and the storage abstraction consumed by both tests
+  and the Durable Object adapter
 - `../../src/web/lib/`: worker-backed graph authority, generic secret-field
   mutation contracts, seeded example data/runtime fixtures, and HTTP route
   helpers

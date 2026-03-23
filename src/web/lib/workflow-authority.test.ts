@@ -1,17 +1,25 @@
 import { describe, expect, it } from "bun:test";
 
-import type { AuthorizationContext } from "@io/core/graph";
+import {
+  bootstrap,
+  createStore,
+  createTypeClient,
+  type AuthorizationContext,
+} from "@io/core/graph";
+import { core } from "@io/core/graph/modules";
 import { ops } from "@io/core/graph/modules/ops";
 import type {
   WorkflowMutationAction,
   WorkflowMutationResult,
 } from "@io/core/graph/modules/ops/workflow";
+import { pkm } from "@io/core/graph/modules/pkm";
 
 import { createAnonymousAuthorizationContext } from "./auth-bridge.js";
 import { createInMemoryTestWebAppAuthorityStorage } from "./authority-test-storage.js";
 import { type WebAppAuthority, createWebAppAuthority } from "./authority.js";
 
 const workflowAuthorityTimeout = 20_000;
+const productGraph = { ...core, ...pkm, ...ops } as const;
 
 function createTestAuthorizationContext(
   overrides: Partial<AuthorizationContext> = {},
@@ -82,6 +90,16 @@ async function createWorkflowFixture(
     repositoryBranchId: repositoryBranch.summary.id,
     repositoryId: repository.summary.id,
   };
+}
+
+function readProductGraph(authority: WebAppAuthority, authorization: AuthorizationContext) {
+  const store = createStore();
+  bootstrap(store, core);
+  bootstrap(store, pkm);
+  bootstrap(store, ops);
+  store.replace(authority.readSnapshot({ authorization }));
+
+  return createTypeClient(store, productGraph);
 }
 
 describe("workflow authority", () => {
@@ -201,7 +219,9 @@ describe("workflow authority", () => {
         worktreePath: null,
         latestReconciledAt: null,
       });
-      const persisted = authority.graph.repositoryBranch.get(created.summary.id);
+      const persisted = readProductGraph(authority, authorization).repositoryBranch.get(
+        created.summary.id,
+      );
 
       expect(updated).toMatchObject({
         action: "attachBranchRepositoryTarget",
@@ -295,9 +315,9 @@ describe("workflow authority", () => {
         message: `Workflow branch "${fixture.branchId}" cannot be marked done while it still has open commits.`,
         status: 409,
       });
-      expect(authority.graph.workflowBranch.get(fixture.branchId).state).toBe(
-        ops.workflowBranchState.values.active.id,
-      );
+      expect(
+        readProductGraph(authority, authorization).workflowBranch.get(fixture.branchId).state,
+      ).toBe(ops.workflowBranchState.values.active.id);
     },
     workflowAuthorityTimeout,
   );
@@ -334,12 +354,13 @@ describe("workflow authority", () => {
           state: "active",
         },
       });
-      expect(authority.graph.workflowBranch.get(fixture.branchId).state).toBe(
-        ops.workflowBranchState.values.active.id,
-      );
-      expect(authority.graph.workflowBranch.get(fixture.branchId).activeCommit).toBe(
-        commit.summary.id,
-      );
+      expect(
+        readProductGraph(authority, authorization).workflowBranch.get(fixture.branchId).state,
+      ).toBe(ops.workflowBranchState.values.active.id);
+      expect(
+        readProductGraph(authority, authorization).workflowBranch.get(fixture.branchId)
+          .activeCommit,
+      ).toBe(commit.summary.id);
 
       const blocked = await executeWorkflowMutation(authority, authorization, {
         action: "setCommitState",
@@ -352,10 +373,13 @@ describe("workflow authority", () => {
         id: commit.summary.id,
         state: "blocked",
       });
-      expect(authority.graph.workflowBranch.get(fixture.branchId).state).toBe(
-        ops.workflowBranchState.values.blocked.id,
-      );
-      expect(authority.graph.workflowBranch.get(fixture.branchId).activeCommit).toBeUndefined();
+      expect(
+        readProductGraph(authority, authorization).workflowBranch.get(fixture.branchId).state,
+      ).toBe(ops.workflowBranchState.values.blocked.id);
+      expect(
+        readProductGraph(authority, authorization).workflowBranch.get(fixture.branchId)
+          .activeCommit,
+      ).toBeUndefined();
 
       const ready = await executeWorkflowMutation(authority, authorization, {
         action: "setCommitState",
@@ -368,10 +392,13 @@ describe("workflow authority", () => {
         id: commit.summary.id,
         state: "ready",
       });
-      expect(authority.graph.workflowBranch.get(fixture.branchId).state).toBe(
-        ops.workflowBranchState.values.ready.id,
-      );
-      expect(authority.graph.workflowBranch.get(fixture.branchId).activeCommit).toBeUndefined();
+      expect(
+        readProductGraph(authority, authorization).workflowBranch.get(fixture.branchId).state,
+      ).toBe(ops.workflowBranchState.values.ready.id);
+      expect(
+        readProductGraph(authority, authorization).workflowBranch.get(fixture.branchId)
+          .activeCommit,
+      ).toBeUndefined();
     },
     workflowAuthorityTimeout,
   );

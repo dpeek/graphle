@@ -444,17 +444,13 @@ async function postCommand(
 
 async function getDurableAuthority(durableObject: WebGraphAuthorityDurableObject): Promise<{
   persist(): Promise<void>;
-  store: {
-    snapshot(): StoreSnapshot;
-  };
+  readSnapshot(options: { authorization: AuthorizationContext }): StoreSnapshot;
 }>;
 async function getDurableAuthority<T>(durableObject: WebGraphAuthorityDurableObject): Promise<T>;
 async function getDurableAuthority<
   T = {
     persist(): Promise<void>;
-    store: {
-      snapshot(): StoreSnapshot;
-    };
+    readSnapshot(options: { authorization: AuthorizationContext }): StoreSnapshot;
   },
 >(durableObject: WebGraphAuthorityDurableObject): Promise<T> {
   return (
@@ -1490,7 +1486,9 @@ describe("web graph authority durable object", () => {
     await postTransaction(durableObject, renameEnvVar.transaction);
 
     const authority = await getDurableAuthority(durableObject);
-    const snapshotBeforeRestart = authority.store.snapshot();
+    const snapshotBeforeRestart = authority.readSnapshot({
+      authorization: testAuthorityAuthorization,
+    });
     const restarted = new WebGraphAuthorityDurableObject(state);
     const restartedSync = await readSyncPayload(restarted);
 
@@ -1526,7 +1524,9 @@ describe("web graph authority durable object", () => {
 
     const updatedTx = await postTransaction(durableObject, renameEnvVar.transaction);
     const authority = await getDurableAuthority(durableObject);
-    const snapshotBeforePersist = authority.store.snapshot();
+    const snapshotBeforePersist = authority.readSnapshot({
+      authorization: testAuthorityAuthorization,
+    });
 
     expect(snapshotBeforePersist.retracted.length).toBeGreaterThan(0);
 

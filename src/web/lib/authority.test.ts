@@ -35,7 +35,10 @@ import {
 } from "./server-routes.js";
 
 const productGraph = { ...core, ...pkm, ...ops } as const;
+const envVarDescriptionPredicateId = edgeId(ops.envVar.fields.description);
 const envVarSecretPredicateId = edgeId(ops.envVar.fields.secret);
+const principalHomeGraphIdPredicateId = edgeId(core.principal.fields.homeGraphId);
+const secretHandleVersionPredicateId = edgeId(core.secretHandle.fields.version);
 
 setDefaultTimeout(20_000);
 
@@ -99,6 +102,69 @@ function buildGraphWriteTransaction(
   };
 }
 
+function createProductMutationStore(snapshot: StoreSnapshot) {
+  const mutationStore = createStore();
+  bootstrap(mutationStore, core);
+  bootstrap(mutationStore, pkm);
+  bootstrap(mutationStore, ops);
+  mutationStore.replace(snapshot);
+
+  return {
+    mutationGraph: createTypeClient(mutationStore, productGraph),
+    mutationStore,
+  };
+}
+
+async function createEnvVar(
+  authority: WebAppAuthority,
+  authorization: AuthorizationContext,
+  input: {
+    readonly description: string;
+    readonly name: string;
+  },
+  txId: string,
+): Promise<string> {
+  const { mutationGraph, mutationStore } = createProductMutationStore(
+    authority.readSnapshot({ authorization }),
+  );
+  const before = mutationStore.snapshot();
+  const envVarId = mutationGraph.envVar.create(input);
+  const transaction = buildGraphWriteTransaction(before, mutationStore.snapshot(), txId);
+
+  await authority.applyTransaction(transaction, { authorization });
+  return envVarId;
+}
+
+function readStringPredicateValue(
+  authority: WebAppAuthority,
+  authorization: AuthorizationContext,
+  subjectId: string,
+  predicateId: string,
+): string | undefined {
+  const value = authority.readPredicateValue(subjectId, predicateId, { authorization });
+  if (value !== undefined && typeof value !== "string") {
+    throw new Error(`Expected predicate "${predicateId}" on "${subjectId}" to decode to a string.`);
+  }
+  return value;
+}
+
+function readNumberPredicateValue(
+  authority: WebAppAuthority,
+  authorization: AuthorizationContext,
+  subjectId: string,
+  predicateId: string,
+): number | undefined {
+  const value = authority.readPredicateValue(subjectId, predicateId, { authorization });
+  if (value !== undefined && typeof value !== "number") {
+    throw new Error(`Expected predicate "${predicateId}" on "${subjectId}" to decode to a number.`);
+  }
+  return value;
+}
+
+function readProductGraph(authority: WebAppAuthority, authorization: AuthorizationContext) {
+  return createProductMutationStore(authority.readSnapshot({ authorization })).mutationGraph;
+}
+
 async function executeWorkflowMutation(
   authority: WebAppAuthority,
   authorization: AuthorizationContext,
@@ -153,7 +219,6 @@ async function createWorkflowFixture(
     repositoryId: repository.summary.id,
   };
 }
-
 describe("web authority", () => {
   it("rolls back staged side effects when staging fails before commit", async () => {
     const secretValuesRef = {
@@ -207,16 +272,18 @@ describe("web authority", () => {
     const authorization = createAuthorityAuthorizationContext();
     const storage = createInMemoryTestWebAppAuthorityStorage();
     const authority = await createWebAppAuthority(storage.storage);
-    const envVarId = authority.graph.envVar.create({
-      description: "Managed by the authority",
-      name: "OPENAI_API_KEY",
-    });
-    const mutationStore = createStore();
-    bootstrap(mutationStore, core);
-    bootstrap(mutationStore, pkm);
-    bootstrap(mutationStore, ops);
-    const mutationGraph = createTypeClient(mutationStore, productGraph);
-    mutationStore.replace(authority.store.snapshot());
+    const envVarId = await createEnvVar(
+      authority,
+      authorization,
+      {
+        description: "Managed by the authority",
+        name: "OPENAI_API_KEY",
+      },
+      "tx:create-env-var:authority-only-command",
+    );
+    const { mutationGraph, mutationStore } = createProductMutationStore(
+      authority.readSnapshot({ authorization }),
+    );
     const before = mutationStore.snapshot();
 
     mutationGraph.envVar.update(envVarId, {
@@ -244,9 +311,9 @@ describe("web authority", () => {
       description: "Rotated by the authority command",
       entityId: envVarId,
     });
-    expect(authority.graph.envVar.get(envVarId).description).toBe(
-      "Rotated by the authority command",
-    );
+    expect(
+      readStringPredicateValue(authority, authorization, envVarId, envVarDescriptionPredicateId),
+    ).toBe("Rotated by the authority command");
     expect(storage.read()?.writeHistory.results.at(-1)?.writeScope).toBe("authority-only");
   });
 
@@ -254,10 +321,15 @@ describe("web authority", () => {
     const authorization = createAuthorityAuthorizationContext();
     const storage = createInMemoryTestWebAppAuthorityStorage();
     const authority = await createWebAppAuthority(storage.storage);
-    const envVarId = authority.graph.envVar.create({
-      description: "Primary model credential",
-      name: "OPENAI_API_KEY",
-    });
+    const envVarId = await createEnvVar(
+      authority,
+      authorization,
+      {
+        description: "Primary model credential",
+        name: "OPENAI_API_KEY",
+      },
+      "tx:create-env-var:secret-storage",
+    );
 
     const created = await authority.writeSecretField(
       {
@@ -267,7 +339,12 @@ describe("web authority", () => {
       },
       { authorization },
     );
-    const createdSecretId = authority.graph.envVar.get(envVarId).secret;
+    const createdSecretId = readStringPredicateValue(
+      authority,
+      authorization,
+      envVarId,
+      envVarSecretPredicateId,
+    );
     if (!createdSecretId) throw new Error("Expected created env var secret.");
 
     expect(created.created).toBe(true);
@@ -294,7 +371,12 @@ describe("web authority", () => {
       { authorization },
     );
     const restarted = await createWebAppAuthority(storage.storage);
-    const restartedSecretId = restarted.graph.envVar.get(envVarId).secret;
+    const restartedSecretId = readStringPredicateValue(
+      restarted,
+      authorization,
+      envVarId,
+      envVarSecretPredicateId,
+    );
     if (!restartedSecretId) throw new Error("Expected restarted env var secret.");
 
     expect(rotated.created).toBe(false);
@@ -302,7 +384,14 @@ describe("web authority", () => {
     expect(rotated.secretVersion).toBe(2);
     expect(storage.read()?.secrets?.[createdSecretId]?.value).toBe("sk-live-second");
     expect(restartedSecretId).toBe(createdSecretId);
-    expect(restarted.graph.secretHandle.get(restartedSecretId)?.version).toBe(2);
+    expect(
+      readNumberPredicateValue(
+        restarted,
+        authorization,
+        restartedSecretId,
+        secretHandleVersionPredicateId,
+      ),
+    ).toBe(2);
     expect(JSON.stringify(restarted.createSyncPayload({ authorization }))).not.toContain(
       "sk-live-second",
     );
@@ -329,14 +418,24 @@ describe("web authority", () => {
     const storage = createInMemoryTestWebAppAuthorityStorage();
     const authority = await createWebAppAuthority(storage.storage);
 
-    const primaryEnvVarId = authority.graph.envVar.create({
-      description: "Primary model credential",
-      name: "OPENAI_API_KEY",
-    });
-    const secondaryEnvVarId = authority.graph.envVar.create({
-      description: "Notifications integration",
-      name: "SLACK_BOT_TOKEN",
-    });
+    const primaryEnvVarId = await createEnvVar(
+      authority,
+      authorization,
+      {
+        description: "Primary model credential",
+        name: "OPENAI_API_KEY",
+      },
+      "tx:create-env-var:primary",
+    );
+    const secondaryEnvVarId = await createEnvVar(
+      authority,
+      authorization,
+      {
+        description: "Notifications integration",
+        name: "SLACK_BOT_TOKEN",
+      },
+      "tx:create-env-var:secondary",
+    );
 
     await authority.writeSecretField(
       {
@@ -355,18 +454,25 @@ describe("web authority", () => {
       { authorization },
     );
 
-    const primarySecretId = authority.graph.envVar.get(primaryEnvVarId).secret;
-    const secondarySecretId = authority.graph.envVar.get(secondaryEnvVarId).secret;
+    const primarySecretId = readStringPredicateValue(
+      authority,
+      authorization,
+      primaryEnvVarId,
+      envVarSecretPredicateId,
+    );
+    const secondarySecretId = readStringPredicateValue(
+      authority,
+      authorization,
+      secondaryEnvVarId,
+      envVarSecretPredicateId,
+    );
     if (!primarySecretId || !secondarySecretId) {
       throw new Error("Expected both env vars to reference secrets.");
     }
 
-    const mutationStore = createStore();
-    bootstrap(mutationStore, core);
-    bootstrap(mutationStore, pkm);
-    bootstrap(mutationStore, ops);
-    const mutationGraph = createTypeClient(mutationStore, productGraph);
-    mutationStore.replace(authority.store.snapshot());
+    const { mutationGraph, mutationStore } = createProductMutationStore(
+      authority.readSnapshot({ authorization }),
+    );
     const before = mutationStore.snapshot();
 
     mutationGraph.envVar.update(primaryEnvVarId, {
@@ -389,7 +495,9 @@ describe("web authority", () => {
         ]),
       }),
     });
-    expect(authority.graph.envVar.get(primaryEnvVarId).secret).toBe(primarySecretId);
+    expect(
+      readStringPredicateValue(authority, authorization, primaryEnvVarId, envVarSecretPredicateId),
+    ).toBe(primarySecretId);
   });
 
   it("rolls back staged secret state when a server-command commit fails", async () => {
@@ -414,10 +522,15 @@ describe("web authority", () => {
       },
     } satisfies WebAppAuthorityStorage;
     const authority = await createWebAppAuthority(storage);
-    const envVarId = authority.graph.envVar.create({
-      description: "Primary model credential",
-      name: "OPENAI_API_KEY",
-    });
+    const envVarId = await createEnvVar(
+      authority,
+      authorization,
+      {
+        description: "Primary model credential",
+        name: "OPENAI_API_KEY",
+      },
+      "tx:create-env-var:server-command-rollback",
+    );
 
     const created = await authority.writeSecretField(
       {
@@ -442,7 +555,14 @@ describe("web authority", () => {
     ).rejects.toThrow("forced server-command commit failure");
 
     expect(backingStorage.read()?.secrets?.[created.secretId]?.value).toBe("sk-live-first");
-    expect(authority.graph.secretHandle.get(created.secretId)?.version).toBe(1);
+    expect(
+      readNumberPredicateValue(
+        authority,
+        authorization,
+        created.secretId,
+        secretHandleVersionPredicateId,
+      ),
+    ).toBe(1);
 
     failServerCommandCommit = false;
 
@@ -467,7 +587,14 @@ describe("web authority", () => {
       secretVersion: 2,
     });
     expect(backingStorage.read()?.secrets?.[created.secretId]?.value).toBe("sk-live-second");
-    expect(authority.graph.secretHandle.get(created.secretId)?.version).toBe(2);
+    expect(
+      readNumberPredicateValue(
+        authority,
+        authorization,
+        created.secretId,
+        secretHandleVersionPredicateId,
+      ),
+    ).toBe(2);
     expect(backingStorage.read()?.writeHistory.results.at(-1)?.writeScope).toBe("server-command");
   });
 
@@ -475,10 +602,15 @@ describe("web authority", () => {
     const authorization = createAuthorityAuthorizationContext();
     const storage = createInMemoryTestWebAppAuthorityStorage();
     const authority = await createWebAppAuthority(storage.storage);
-    const envVarId = authority.graph.envVar.create({
-      description: "Shared command credential",
-      name: "OPENAI_API_KEY",
-    });
+    const envVarId = await createEnvVar(
+      authority,
+      authorization,
+      {
+        description: "Shared command credential",
+        name: "OPENAI_API_KEY",
+      },
+      "tx:create-env-var:generic-command",
+    );
     const command = {
       kind: "write-secret-field",
       input: {
@@ -497,7 +629,9 @@ describe("web authority", () => {
       rotated: false,
       secretVersion: 1,
     });
-    expect(authority.graph.envVar.get(envVarId).secret).toBe(result.secretId);
+    expect(
+      readStringPredicateValue(authority, authorization, envVarId, envVarSecretPredicateId),
+    ).toBe(result.secretId);
     expect(storage.read()?.writeHistory.results.at(-1)?.writeScope).toBe("server-command");
     expect(JSON.stringify(authority.createSyncPayload({ authorization }))).not.toContain(
       "sk-live-command",
@@ -508,7 +642,7 @@ describe("web authority", () => {
     const authorization = createAuthorityAuthorizationContext();
     const storage = createInMemoryTestWebAppAuthorityStorage();
     const authority = await createWebAppAuthority(storage.storage);
-    const before = authority.store.snapshot();
+    const before = authority.readSnapshot({ authorization });
 
     await expect(
       authority.executeCommand(
@@ -519,17 +653,22 @@ describe("web authority", () => {
       ),
     ).rejects.toThrow("Unsupported web authority command.");
 
-    expect(authority.store.snapshot()).toEqual(before);
+    expect(authority.readSnapshot({ authorization })).toEqual(before);
   });
 
   it("routes shared authority commands through the web server helper", async () => {
     const authorization = createAuthorityAuthorizationContext();
     const storage = createInMemoryTestWebAppAuthorityStorage();
     const authority = await createWebAppAuthority(storage.storage);
-    const envVarId = authority.graph.envVar.create({
-      description: "Shared command route credential",
-      name: "OPENAI_API_KEY",
-    });
+    const envVarId = await createEnvVar(
+      authority,
+      authorization,
+      {
+        description: "Shared command route credential",
+        name: "OPENAI_API_KEY",
+      },
+      "tx:create-env-var:command-route",
+    );
 
     const response = await handleWebCommandRequest(
       new Request("http://web.local/api/commands", {
@@ -566,23 +705,87 @@ describe("web authority", () => {
       rotated: false,
       secretVersion: 1,
     });
-    expect(authority.graph.envVar.get(envVarId).secret).toBe(payload.secretId);
+    expect(
+      readStringPredicateValue(authority, authorization, envVarId, envVarSecretPredicateId),
+    ).toBe(payload.secretId);
     expect(storage.read()?.writeHistory.results.at(-1)?.writeScope).toBe("server-command");
     expect(JSON.stringify(authority.createSyncPayload({ authorization }))).not.toContain(
       "sk-live-command-route",
     );
   });
 
+  it("omits protected predicates from snapshot reads and rejects explicit direct reads", async () => {
+    const authorityAuthorization = createAuthorityAuthorizationContext();
+    const humanAuthorization = createHumanAuthorizationContext();
+    const storage = createInMemoryTestWebAppAuthorityStorage();
+    const authority = await createWebAppAuthority(storage.storage);
+    const { mutationGraph, mutationStore } = createProductMutationStore(
+      authority.readSnapshot({ authorization: authorityAuthorization }),
+    );
+    const before = mutationStore.snapshot();
+    const principalId = mutationGraph.principal.create({
+      homeGraphId: "graph:global",
+      kind: core.principalKind.values.human.id,
+      name: "Direct Read Principal",
+      status: core.principalStatus.values.active.id,
+    });
+    const transaction = buildGraphWriteTransaction(
+      before,
+      mutationStore.snapshot(),
+      "tx:create-principal:direct-read-contract",
+    );
+
+    await authority.applyTransaction(transaction, {
+      authorization: authorityAuthorization,
+      writeScope: "authority-only",
+    });
+
+    const authoritySnapshot = authority.readSnapshot({ authorization: authorityAuthorization });
+    const humanSnapshot = authority.readSnapshot({ authorization: humanAuthorization });
+
+    expect(
+      authoritySnapshot.edges.some(
+        (edge) =>
+          edge.s === principalId &&
+          edge.p === principalHomeGraphIdPredicateId &&
+          edge.o === "graph:global",
+      ),
+    ).toBe(true);
+    expect(
+      humanSnapshot.edges.some(
+        (edge) => edge.s === principalId && edge.p === principalHomeGraphIdPredicateId,
+      ),
+    ).toBe(false);
+    expect(
+      readStringPredicateValue(
+        authority,
+        authorityAuthorization,
+        principalId,
+        principalHomeGraphIdPredicateId,
+      ),
+    ).toBe("graph:global");
+
+    try {
+      authority.readPredicateValue(principalId, principalHomeGraphIdPredicateId, {
+        authorization: humanAuthorization,
+      });
+      throw new Error("Expected direct protected reads to fail.");
+    } catch (error) {
+      expect(error).toMatchObject({
+        code: "policy.read.forbidden",
+        message: expect.stringContaining("policy.read.forbidden"),
+        status: 403,
+      });
+    }
+  });
+
   it("denies direct transactions without authority access by default", async () => {
     const authorization = createHumanAuthorizationContext();
     const storage = createInMemoryTestWebAppAuthorityStorage();
     const authority = await createWebAppAuthority(storage.storage);
-    const mutationStore = createStore();
-    bootstrap(mutationStore, core);
-    bootstrap(mutationStore, pkm);
-    bootstrap(mutationStore, ops);
-    mutationStore.replace(authority.store.snapshot());
-    const mutationGraph = createTypeClient(mutationStore, productGraph);
+    const { mutationGraph, mutationStore } = createProductMutationStore(
+      authority.readSnapshot({ authorization }),
+    );
     const before = mutationStore.snapshot();
 
     mutationGraph.envVar.create({
@@ -613,10 +816,16 @@ describe("web authority", () => {
     const authorization = createHumanAuthorizationContext();
     const storage = createInMemoryTestWebAppAuthorityStorage();
     const authority = await createWebAppAuthority(storage.storage);
-    const envVarId = authority.graph.envVar.create({
-      description: "Shared command credential",
-      name: "OPENAI_API_KEY",
-    });
+    const envVarId = await createEnvVar(
+      authority,
+      createAuthorityAuthorizationContext(),
+      {
+        description: "Shared command credential",
+        name: "OPENAI_API_KEY",
+      },
+      "tx:create-env-var:forbidden-command",
+    );
+    const writeCountBeforeForbiddenCommand = storage.read()?.writeHistory.results.length ?? 0;
 
     await expect(
       authority.executeCommand(
@@ -635,7 +844,7 @@ describe("web authority", () => {
       message: expect.stringContaining("policy.command.forbidden"),
       status: 403,
     });
-    expect(storage.read()?.writeHistory.results.length ?? 0).toBe(0);
+    expect(storage.read()?.writeHistory.results.length ?? 0).toBe(writeCountBeforeForbiddenCommand);
   });
 
   it("rejects stale policy versions before authoritative writes commit", async () => {
@@ -644,12 +853,11 @@ describe("web authority", () => {
     });
     const storage = createInMemoryTestWebAppAuthorityStorage();
     const authority = await createWebAppAuthority(storage.storage);
-    const mutationStore = createStore();
-    bootstrap(mutationStore, core);
-    bootstrap(mutationStore, pkm);
-    bootstrap(mutationStore, ops);
-    mutationStore.replace(authority.store.snapshot());
-    const mutationGraph = createTypeClient(mutationStore, productGraph);
+    const { mutationGraph, mutationStore } = createProductMutationStore(
+      authority.readSnapshot({
+        authorization: createAuthorityAuthorizationContext(),
+      }),
+    );
     const before = mutationStore.snapshot();
 
     mutationGraph.envVar.create({
@@ -918,18 +1126,20 @@ describe("web authority", () => {
         workflowCommitId: commit.summary.id,
       },
     });
-    expect(authority.graph.workflowCommit.get(commit.summary.id).state).toBe(
+    const persistedGraph = readProductGraph(authority, authorization);
+
+    expect(persistedGraph.workflowCommit.get(commit.summary.id).state).toBe(
       ops.workflowCommitState.values.committed.id,
     );
-    expect(authority.graph.workflowBranch.get(fixture.branchId).state).toBe(
+    expect(persistedGraph.workflowBranch.get(fixture.branchId).state).toBe(
       ops.workflowBranchState.values.done.id,
     );
-    expect(authority.graph.workflowBranch.get(fixture.branchId).activeCommit).toBeUndefined();
-    expect(authority.graph.repositoryCommit.get(repositoryCommit.summary.id).state).toBe(
+    expect(persistedGraph.workflowBranch.get(fixture.branchId).activeCommit).toBeUndefined();
+    expect(persistedGraph.repositoryCommit.get(repositoryCommit.summary.id).state).toBe(
       ops.repositoryCommitState.values.committed.id,
     );
     expect(
-      authority.graph.repositoryCommit.get(repositoryCommit.summary.id).worktree.leaseState,
+      persistedGraph.repositoryCommit.get(repositoryCommit.summary.id).worktree.leaseState,
     ).toBe(ops.repositoryCommitLeaseState.values.released.id);
   });
 
@@ -1057,7 +1267,7 @@ describe("web authority", () => {
     const authorization = createAuthorityAuthorizationContext();
     const storage = createInMemoryTestWebAppAuthorityStorage();
     const authority = await createWebAppAuthority(storage.storage);
-    const before = authority.store.snapshot();
+    const before = authority.readSnapshot({ authorization });
 
     const response = await handleWebCommandRequest(
       new Request("http://web.local/api/commands", {
@@ -1077,6 +1287,6 @@ describe("web authority", () => {
     expect(await response.json()).toEqual({
       error: "Request body must be a supported /api/commands payload.",
     });
-    expect(authority.store.snapshot()).toEqual(before);
+    expect(authority.readSnapshot({ authorization })).toEqual(before);
   });
 });
