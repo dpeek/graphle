@@ -1,4 +1,5 @@
-import { projectSessionToPrincipal } from "../lib/auth-bridge.js";
+import type { AuthorizationContext } from "@io/core/graph";
+
 import { WebGraphAuthorityDurableObject } from "../lib/graph-authority-do.js";
 import {
   encodeRequestAuthorizationContext,
@@ -23,6 +24,16 @@ export { WebGraphAuthorityDurableObject };
 
 const webAppGraphId = "graph:global";
 const webAppPolicyVersion = 0;
+const provisionalOperatorAuthorization = Object.freeze({
+  graphId: webAppGraphId,
+  principalId: "principal:web-operator",
+  principalKind: "service",
+  sessionId: "session:web-operator",
+  roleKeys: ["graph:authority"],
+  capabilityGrantIds: [],
+  capabilityVersion: 0,
+  policyVersion: webAppPolicyVersion,
+} satisfies AuthorizationContext);
 
 function isHtmlNavigationRequest(request: Request): boolean {
   return request.method === "GET" && (request.headers.get("accept") ?? "").includes("text/html");
@@ -46,17 +57,10 @@ function getGraphAuthorityFetcher(env: Env): Fetcher {
 async function createRequestAuthorizationContext(request: Request) {
   void request;
 
-  // The worker already owns the request-to-session boundary. Until Better Auth
-  // session parsing lands here, route all requests through the shared
-  // projection seam as anonymous.
-  return projectSessionToPrincipal({
-    graphId: webAppGraphId,
-    policyVersion: webAppPolicyVersion,
-    session: null,
-    lookupPrincipal() {
-      throw new Error("lookupPrincipal should not run without an authenticated session.");
-    },
-  });
+  // The built-in web shell is currently an operator proof surface. Until the
+  // Worker owns Better Auth session parsing, keep that surface usable by
+  // forwarding requests as a static operator principal.
+  return provisionalOperatorAuthorization;
 }
 
 async function createAuthorizedGraphAuthorityRequest(request: Request): Promise<Request> {

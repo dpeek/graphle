@@ -583,6 +583,7 @@ Current repo anchors:
 
 - `src/web/lib/graph-authority-do.ts`
 - `src/web/lib/authority.ts`
+- `src/web/worker/index.ts`
 - `src/agent/tui-runtime.ts`
 - `src/agent/server.ts`
 
@@ -590,6 +591,9 @@ Responsibilities:
 
 - Branch 1 authority: graph sync, transactions, secret-field mutations
 - Branch 6 runtime or current adapter: workflow and operator session feeds
+- current web proof: the Worker forwards built-in operator routes through a
+  provisional static operator principal until Better Auth session projection
+  lands
 
 Branch 7 consumes these backends. It does not own their durable records.
 
