@@ -1,15 +1,23 @@
 import { describe, expect, it } from "bun:test";
 
+import { bootstrap, createStore, createTypeClient } from "@io/core/graph";
+
 import { createIdMap } from "../../../runtime/identity.js";
+import { core } from "../../core.js";
 import { ops } from "../../ops.js";
 import {
   agentSessionKeyPattern,
   contextBundleKeyPattern,
   workflowBranchKeyPattern,
+  workflowCommitKeyPattern,
+  workflowMutationCommand,
+  workflowMutationFailureCodes,
   workflowProjectKeyPattern,
   workflowRepositoryKeyPattern,
   workflowSchema,
 } from "./schema.js";
+
+const productGraph = { ...core, ...ops } as const;
 
 const lifecycleContext = {
   event: "create" as const,
@@ -21,6 +29,59 @@ const lifecycleContext = {
 };
 
 describe("ops workflow schema", () => {
+  it("exports the full workflow entity, enum, and mutation contract surface", () => {
+    expect(Object.keys(workflowSchema).sort()).toEqual(
+      [
+        "agentSession",
+        "agentSessionEvent",
+        "agentSessionEventPhase",
+        "agentSessionEventType",
+        "agentSessionKind",
+        "agentSessionRawLineEncoding",
+        "agentSessionRuntimeState",
+        "agentSessionStatusCode",
+        "agentSessionStatusFormat",
+        "agentSessionStream",
+        "agentSessionSubjectKind",
+        "contextBundle",
+        "contextBundleEntry",
+        "contextBundleEntrySource",
+        "repositoryBranch",
+        "repositoryCommit",
+        "repositoryCommitLeaseState",
+        "repositoryCommitState",
+        "workflowArtifact",
+        "workflowArtifactKind",
+        "workflowBranch",
+        "workflowBranchState",
+        "workflowCommit",
+        "workflowCommitState",
+        "workflowDecision",
+        "workflowDecisionKind",
+        "workflowProject",
+        "workflowRepository",
+      ].sort(),
+    );
+
+    expect(workflowMutationCommand.key).toBe("ops:workflow:mutation");
+    expect(workflowMutationFailureCodes).toEqual([
+      "repository-missing",
+      "branch-lock-conflict",
+      "commit-lock-conflict",
+      "invalid-transition",
+      "subject-not-found",
+    ]);
+    expect(workflowMutationCommand.policy.touchesPredicates).toEqual(
+      expect.arrayContaining([
+        ops.workflowProject.fields.projectKey.key,
+        ops.workflowRepository.fields.repositoryKey.key,
+        ops.workflowBranch.fields.state.key,
+        ops.workflowBranch.fields.activeCommit.key,
+        ops.workflowCommit.fields.state.key,
+      ]),
+    );
+  });
+
   it("owns stable keys for workflow lineage, retained execution, and repository execution records", () => {
     const { map } = createIdMap(workflowSchema);
 
@@ -148,6 +209,7 @@ describe("ops workflow schema", () => {
     expect(workflowProjectKeyPattern.test("project:io")).toBe(true);
     expect(workflowRepositoryKeyPattern.test("repo:io")).toBe(true);
     expect(workflowBranchKeyPattern.test("branch:workflow-graph-native")).toBe(true);
+    expect(workflowCommitKeyPattern.test("commit:branch-runtime-view")).toBe(true);
     expect(agentSessionKeyPattern.test("session:branch-runtime-view-plan-01")).toBe(true);
     expect(contextBundleKeyPattern.test("bundle:branch-runtime-view-plan-01")).toBe(true);
 
@@ -215,5 +277,176 @@ describe("ops workflow schema", () => {
     expect(ops.agentSessionEvent.fields.timestamp.onCreate?.(lifecycleContext)).toBe(
       lifecycleContext.now,
     );
+  });
+
+  it("preserves retained execution provenance across sessions, artifacts, decisions, and bundles", () => {
+    const store = createStore();
+    bootstrap(store, core);
+    bootstrap(store, ops);
+    const graph = createTypeClient(store, productGraph);
+
+    const projectId = graph.workflowProject.create({
+      name: "IO",
+      projectKey: "project:io",
+    });
+    const repositoryId = graph.workflowRepository.create({
+      name: "io",
+      project: projectId,
+      repositoryKey: "repo:io",
+      repoRoot: "/tmp/io",
+      defaultBaseBranch: "main",
+    });
+    const branchId = graph.workflowBranch.create({
+      name: "Workflow authority",
+      project: projectId,
+      branchKey: "branch:workflow-authority",
+      state: ops.workflowBranchState.values.ready.id,
+      goalSummary: "Protect workflow contracts with direct regression coverage.",
+    });
+    const commitId = graph.workflowCommit.create({
+      name: "Add contract tests",
+      branch: branchId,
+      commitKey: "commit:add-contract-tests",
+      state: ops.workflowCommitState.values.active.id,
+      order: 0,
+    });
+    const repositoryBranchId = graph.repositoryBranch.create({
+      name: "workflow-authority",
+      project: projectId,
+      repository: repositoryId,
+      workflowBranch: branchId,
+      managed: true,
+      branchName: "workflow-authority",
+      baseBranchName: "main",
+    });
+    const repositoryCommitId = graph.repositoryCommit.create({
+      name: "Add contract tests",
+      repository: repositoryId,
+      repositoryBranch: repositoryBranchId,
+      workflowCommit: commitId,
+      state: ops.repositoryCommitState.values.attached.id,
+      worktree: {
+        path: "/tmp/io-worktree",
+        branchName: "workflow-authority",
+        leaseState: ops.repositoryCommitLeaseState.values.attached.id,
+      },
+    });
+    const sessionId = graph.agentSession.create({
+      name: "Execute workflow contracts",
+      project: projectId,
+      repository: repositoryId,
+      subjectKind: ops.agentSessionSubjectKind.values.commit.id,
+      branch: branchId,
+      commit: commitId,
+      sessionKey: "session:workflow-authority-execution-01",
+      kind: ops.agentSessionKind.values.execution.id,
+      workerId: "worker-1",
+    });
+    const bundleId = graph.contextBundle.create({
+      name: "Workflow execution bundle",
+      session: sessionId,
+      subjectKind: ops.agentSessionSubjectKind.values.commit.id,
+      branch: branchId,
+      commit: commitId,
+      bundleKey: "bundle:workflow-authority-execution-01",
+      sourceHash: "sha256:workflow-authority",
+    });
+    graph.agentSession.update(sessionId, {
+      contextBundle: bundleId,
+    });
+    const eventId = graph.agentSessionEvent.create({
+      name: "Commit selected",
+      session: sessionId,
+      type: ops.agentSessionEventType.values.status.id,
+      sequence: 0,
+      statusCode: ops.agentSessionStatusCode.values["commit-selected"].id,
+      format: ops.agentSessionStatusFormat.values.line.id,
+      text: "Commit selected",
+    });
+    const artifactId = graph.workflowArtifact.create({
+      name: "Patch summary",
+      project: projectId,
+      repository: repositoryId,
+      branch: branchId,
+      commit: commitId,
+      session: sessionId,
+      kind: ops.workflowArtifactKind.values.patch.id,
+      bodyText: "Summarize the contract coverage.",
+    });
+    const decisionId = graph.workflowDecision.create({
+      name: "Keep singleton repository scope",
+      project: projectId,
+      repository: repositoryId,
+      branch: branchId,
+      commit: commitId,
+      session: sessionId,
+      kind: ops.workflowDecisionKind.values.assumption.id,
+      details: "Branch 6 v1 keeps one attached repository per graph.",
+    });
+    const entryId = graph.contextBundleEntry.create({
+      name: "Branch 6 workflow contract",
+      bundle: bundleId,
+      order: 0,
+      source: ops.contextBundleEntrySource.values["repo-path"].id,
+      path: "doc/branch/06-workflow-and-agent-runtime.md",
+      bodyText: "Workflow contract reference",
+    });
+
+    expect(graph.repositoryCommit.get(repositoryCommitId)).toMatchObject({
+      repository: repositoryId,
+      repositoryBranch: repositoryBranchId,
+      workflowCommit: commitId,
+      state: ops.repositoryCommitState.values.attached.id,
+      worktree: {
+        path: "/tmp/io-worktree",
+        branchName: "workflow-authority",
+        leaseState: ops.repositoryCommitLeaseState.values.attached.id,
+      },
+    });
+    expect(graph.agentSession.get(sessionId)).toMatchObject({
+      project: projectId,
+      repository: repositoryId,
+      branch: branchId,
+      commit: commitId,
+      contextBundle: bundleId,
+      sessionKey: "session:workflow-authority-execution-01",
+      subjectKind: ops.agentSessionSubjectKind.values.commit.id,
+      kind: ops.agentSessionKind.values.execution.id,
+    });
+    expect(graph.agentSessionEvent.get(eventId)).toMatchObject({
+      session: sessionId,
+      type: ops.agentSessionEventType.values.status.id,
+      statusCode: ops.agentSessionStatusCode.values["commit-selected"].id,
+      format: ops.agentSessionStatusFormat.values.line.id,
+    });
+    expect(graph.workflowArtifact.get(artifactId)).toMatchObject({
+      project: projectId,
+      repository: repositoryId,
+      branch: branchId,
+      commit: commitId,
+      session: sessionId,
+      kind: ops.workflowArtifactKind.values.patch.id,
+    });
+    expect(graph.workflowDecision.get(decisionId)).toMatchObject({
+      project: projectId,
+      repository: repositoryId,
+      branch: branchId,
+      commit: commitId,
+      session: sessionId,
+      kind: ops.workflowDecisionKind.values.assumption.id,
+    });
+    expect(graph.contextBundle.get(bundleId)).toMatchObject({
+      session: sessionId,
+      branch: branchId,
+      commit: commitId,
+      bundleKey: "bundle:workflow-authority-execution-01",
+      subjectKind: ops.agentSessionSubjectKind.values.commit.id,
+    });
+    expect(graph.contextBundleEntry.get(entryId)).toMatchObject({
+      bundle: bundleId,
+      order: 0,
+      source: ops.contextBundleEntrySource.values["repo-path"].id,
+      path: "doc/branch/06-workflow-and-agent-runtime.md",
+    });
   });
 });
