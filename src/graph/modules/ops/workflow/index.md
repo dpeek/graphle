@@ -23,16 +23,21 @@ The exported surface is:
 
 The first workflow slice currently defines:
 
-- `WorkflowProject`
-- `WorkflowRepository`
-- `WorkflowBranch`
-- `WorkflowCommit`
-- `RepositoryBranch`
-- `RepositoryCommit`
-- `WorkflowBranchState`
-- `WorkflowCommitState`
-- `RepositoryCommitState`
-- `RepositoryCommitLeaseState`
+- workflow lineage entities:
+  `WorkflowProject`, `WorkflowRepository`, `WorkflowBranch`, and
+  `WorkflowCommit`
+- repository execution entities: `RepositoryBranch` and `RepositoryCommit`
+- retained execution entities:
+  `AgentSession`, `AgentSessionEvent`, `WorkflowArtifact`,
+  `WorkflowDecision`, `ContextBundle`, and `ContextBundleEntry`
+- workflow and retained enums:
+  `WorkflowBranchState`, `WorkflowCommitState`, `RepositoryCommitState`,
+  `RepositoryCommitLeaseState`, `AgentSessionSubjectKind`,
+  `AgentSessionKind`, `AgentSessionRuntimeState`, `AgentSessionEventType`,
+  `AgentSessionEventPhase`, `AgentSessionStatusCode`,
+  `AgentSessionStatusFormat`, `AgentSessionStream`,
+  `AgentSessionRawLineEncoding`, `WorkflowArtifactKind`,
+  `WorkflowDecisionKind`, and `ContextBundleEntrySource`
 
 ## Modeling Notes
 
@@ -43,6 +48,12 @@ repository-backed execution entities:
   `WorkflowCommit` model the operator-facing workflow lineage
 - `RepositoryBranch` and `RepositoryCommit` model the concrete git execution
   substrate that can realize that lineage
+- `AgentSession` and `AgentSessionEvent` preserve retained execution history
+  with a graph-native subject model while keeping the current
+  `session | status | raw-line | codex-notification` event envelope
+- `WorkflowArtifact`, `WorkflowDecision`, `ContextBundle`, and
+  `ContextBundleEntry` keep direct branch, commit, repository, and session
+  provenance on durable outputs and immutable context snapshots
 
 The slice also encodes the Branch 6 v1 assumptions where schema can own them
 directly:
@@ -64,6 +75,11 @@ they depend on the current graph store rather than one field in isolation.
   existing explorer and serialization surfaces keep a stable summary field
 - workflow keys stay on dedicated predicates so commands and read models can
   join on stable human-readable identifiers without depending on display names
+- session and bundle keys extend the same stable-key convention with `session:`
+  and `bundle:` prefixes
 - `RepositoryCommit.worktree.*` stays nested to preserve the worktree lease
   envelope from the Branch 6 spec without splitting it into unrelated top-level
   fields
+- retained event payloads keep optional typed fields for lifecycle, status,
+  raw-line, and Codex-notification variants rather than splitting the envelope
+  into separate entity families

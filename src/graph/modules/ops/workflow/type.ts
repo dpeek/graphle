@@ -5,6 +5,7 @@ import { core } from "../../core.js";
 import { booleanTypeModule } from "../../core/boolean/index.js";
 import { dateTypeModule } from "../../core/date/index.js";
 import { defineDefaultEnumTypeModule } from "../../core/enum-module.js";
+import { jsonTypeModule } from "../../core/json/index.js";
 import { numberTypeModule } from "../../core/number/index.js";
 import { stringTypeModule } from "../../core/string/index.js";
 
@@ -101,7 +102,9 @@ function optionalStringField(
   label: string,
   input?: {
     description?: string;
-    defaultOperator?: "equals" | "prefix";
+    multiline?: boolean;
+    defaultOperator?: "contains" | "equals" | "prefix";
+    operators?: readonly ["contains", "equals"] | readonly ["equals", "prefix"];
   },
 ) {
   return stringTypeModule.field({
@@ -110,9 +113,17 @@ function optionalStringField(
     meta: {
       label,
       ...(input?.description ? { description: input.description } : {}),
+      ...(input?.multiline
+        ? {
+            editor: {
+              kind: "textarea",
+              multiline: true,
+            },
+          }
+        : {}),
     },
     filter: {
-      operators: ["equals", "prefix"] as const,
+      operators: input?.operators ?? (["equals", "prefix"] as const),
       defaultOperator: input?.defaultOperator ?? "equals",
     },
   });
@@ -150,6 +161,8 @@ export const workflowProjectKeyPattern = buildWorkflowKeyPattern("project");
 export const workflowRepositoryKeyPattern = buildWorkflowKeyPattern("repo");
 export const workflowBranchKeyPattern = buildWorkflowKeyPattern("branch");
 export const workflowCommitKeyPattern = buildWorkflowKeyPattern("commit");
+export const agentSessionKeyPattern = buildWorkflowKeyPattern("session");
+export const contextBundleKeyPattern = buildWorkflowKeyPattern("bundle");
 
 export const workflowProject = defineType({
   values: { key: "ops:workflowProject", name: "Workflow Project" },
@@ -511,5 +524,754 @@ export const repositoryCommit = defineType({
         label: "Committed at",
       },
     }),
+  },
+});
+
+export const agentSessionSubjectKind = defineEnum({
+  values: {
+    key: "ops:agentSessionSubjectKind",
+    name: "Agent Session Subject Kind",
+  },
+  options: {
+    branch: {
+      name: "Branch",
+    },
+    commit: {
+      name: "Commit",
+    },
+  },
+});
+
+export const agentSessionSubjectKindTypeModule =
+  defineDefaultEnumTypeModule(agentSessionSubjectKind);
+
+export const agentSessionKind = defineEnum({
+  values: { key: "ops:agentSessionKind", name: "Agent Session Kind" },
+  options: {
+    planning: {
+      name: "Planning",
+    },
+    execution: {
+      name: "Execution",
+    },
+    review: {
+      name: "Review",
+    },
+  },
+});
+
+export const agentSessionKindTypeModule = defineDefaultEnumTypeModule(agentSessionKind);
+
+export const agentSessionRuntimeState = defineEnum({
+  values: {
+    key: "ops:agentSessionRuntimeState",
+    name: "Agent Session Runtime State",
+  },
+  options: {
+    running: {
+      name: "Running",
+    },
+    "awaiting-user-input": {
+      name: "Awaiting User Input",
+    },
+    blocked: {
+      name: "Blocked",
+    },
+    completed: {
+      name: "Completed",
+    },
+    failed: {
+      name: "Failed",
+    },
+    cancelled: {
+      name: "Cancelled",
+    },
+  },
+});
+
+export const agentSessionRuntimeStateTypeModule =
+  defineDefaultEnumTypeModule(agentSessionRuntimeState);
+
+export const agentSession = defineType({
+  values: { key: "ops:agentSession", name: "Agent Session" },
+  fields: {
+    ...titleNodeFields("Session title"),
+    project: existingEntityReferenceField(workflowProject, {
+      cardinality: "one",
+      label: "Project",
+    }),
+    repository: existingEntityReferenceField(workflowRepository, {
+      cardinality: "one?",
+      label: "Repository",
+    }),
+    subjectKind: agentSessionSubjectKindTypeModule.field({
+      cardinality: "one",
+      meta: {
+        label: "Subject kind",
+        display: {
+          kind: "badge",
+        },
+      },
+      filter: {
+        operators: ["is", "oneOf"] as const,
+        defaultOperator: "is",
+      },
+    }),
+    branch: existingEntityReferenceField(workflowBranch, {
+      cardinality: "one",
+      label: "Branch",
+    }),
+    commit: existingEntityReferenceField(workflowCommit, {
+      cardinality: "one?",
+      label: "Commit",
+    }),
+    sessionKey: workflowKeyField(
+      "Session key",
+      "session",
+      "Stable session key within one workflow project.",
+    ),
+    kind: agentSessionKindTypeModule.field({
+      cardinality: "one",
+      meta: {
+        label: "Kind",
+        display: {
+          kind: "badge",
+        },
+      },
+      filter: {
+        operators: ["is", "oneOf"] as const,
+        defaultOperator: "is",
+      },
+    }),
+    workerId: requiredStringField("Worker id"),
+    threadId: optionalStringField("Thread id"),
+    turnId: optionalStringField("Turn id"),
+    runtimeState: {
+      ...agentSessionRuntimeStateTypeModule.field({
+        cardinality: "one",
+        onCreate: ({ incoming }) =>
+          incoming ?? resolvedEnumValue(agentSessionRuntimeState.values.running),
+        meta: {
+          label: "Runtime state",
+          display: {
+            kind: "badge",
+          },
+        },
+        filter: {
+          operators: ["is", "oneOf"] as const,
+          defaultOperator: "is",
+        },
+      }),
+      createOptional: true as const,
+    },
+    contextBundle: existingEntityReferenceField("ops:contextBundle", {
+      cardinality: "one?",
+      label: "Context bundle",
+    }),
+    startedAt: {
+      ...dateTypeModule.field({
+        cardinality: "one",
+        onCreate: ({ incoming, now }) => incoming ?? now,
+        meta: {
+          label: "Started at",
+        },
+      }),
+      createOptional: true as const,
+    },
+    endedAt: dateTypeModule.field({
+      cardinality: "one?",
+      meta: {
+        label: "Ended at",
+      },
+    }),
+  },
+});
+
+export const agentSessionEventType = defineEnum({
+  values: { key: "ops:agentSessionEventType", name: "Agent Session Event Type" },
+  options: {
+    session: {
+      name: "Session",
+    },
+    status: {
+      name: "Status",
+    },
+    "raw-line": {
+      name: "Raw line",
+    },
+    "codex-notification": {
+      name: "Codex notification",
+    },
+  },
+});
+
+export const agentSessionEventTypeTypeModule = defineDefaultEnumTypeModule(agentSessionEventType);
+
+export const agentSessionEventPhase = defineEnum({
+  values: {
+    key: "ops:agentSessionEventPhase",
+    name: "Agent Session Event Phase",
+  },
+  options: {
+    scheduled: {
+      name: "Scheduled",
+    },
+    started: {
+      name: "Started",
+    },
+    completed: {
+      name: "Completed",
+    },
+    failed: {
+      name: "Failed",
+    },
+    stopped: {
+      name: "Stopped",
+    },
+  },
+});
+
+export const agentSessionEventPhaseTypeModule = defineDefaultEnumTypeModule(agentSessionEventPhase);
+
+export const agentSessionStatusCode = defineEnum({
+  values: { key: "ops:agentSessionStatusCode", name: "Agent Session Status Code" },
+  options: {
+    ready: {
+      name: "Ready",
+    },
+    idle: {
+      name: "Idle",
+    },
+    "workflow-diagnostic": {
+      name: "Workflow diagnostic",
+    },
+    "issue-assigned": {
+      name: "Issue assigned",
+    },
+    "issue-blocked": {
+      name: "Issue blocked",
+    },
+    "issue-committed": {
+      name: "Issue committed",
+    },
+    "branch-selected": {
+      name: "Branch selected",
+    },
+    "commit-selected": {
+      name: "Commit selected",
+    },
+    "branch-blocked": {
+      name: "Branch blocked",
+    },
+    "commit-blocked": {
+      name: "Commit blocked",
+    },
+    "commit-created": {
+      name: "Commit created",
+    },
+    "commit-finalized": {
+      name: "Commit finalized",
+    },
+    "thread-started": {
+      name: "Thread started",
+    },
+    "turn-started": {
+      name: "Turn started",
+    },
+    "turn-completed": {
+      name: "Turn completed",
+    },
+    "turn-cancelled": {
+      name: "Turn cancelled",
+    },
+    "turn-failed": {
+      name: "Turn failed",
+    },
+    "waiting-on-user-input": {
+      name: "Waiting on user input",
+    },
+    "agent-message-delta": {
+      name: "Agent message delta",
+    },
+    "agent-message-completed": {
+      name: "Agent message completed",
+    },
+    command: {
+      name: "Command",
+    },
+    "command-output": {
+      name: "Command output",
+    },
+    "command-failed": {
+      name: "Command failed",
+    },
+    "approval-required": {
+      name: "Approval required",
+    },
+    tool: {
+      name: "Tool",
+    },
+    "tool-failed": {
+      name: "Tool failed",
+    },
+    error: {
+      name: "Error",
+    },
+  },
+});
+
+export const agentSessionStatusCodeTypeModule = defineDefaultEnumTypeModule(agentSessionStatusCode);
+
+export const agentSessionStatusFormat = defineEnum({
+  values: {
+    key: "ops:agentSessionStatusFormat",
+    name: "Agent Session Status Format",
+  },
+  options: {
+    line: {
+      name: "Line",
+    },
+    chunk: {
+      name: "Chunk",
+    },
+    close: {
+      name: "Close",
+    },
+  },
+});
+
+export const agentSessionStatusFormatTypeModule =
+  defineDefaultEnumTypeModule(agentSessionStatusFormat);
+
+export const agentSessionStream = defineEnum({
+  values: { key: "ops:agentSessionStream", name: "Agent Session Stream" },
+  options: {
+    stdout: {
+      name: "Stdout",
+    },
+    stderr: {
+      name: "Stderr",
+    },
+  },
+});
+
+export const agentSessionStreamTypeModule = defineDefaultEnumTypeModule(agentSessionStream);
+
+export const agentSessionRawLineEncoding = defineEnum({
+  values: {
+    key: "ops:agentSessionRawLineEncoding",
+    name: "Agent Session Raw Line Encoding",
+  },
+  options: {
+    jsonl: {
+      name: "JSONL",
+    },
+    text: {
+      name: "Text",
+    },
+  },
+});
+
+export const agentSessionRawLineEncodingTypeModule = defineDefaultEnumTypeModule(
+  agentSessionRawLineEncoding,
+);
+
+export const agentSessionEvent = defineType({
+  values: { key: "ops:agentSessionEvent", name: "Agent Session Event" },
+  fields: {
+    ...titleNodeFields("Event title"),
+    session: existingEntityReferenceField(agentSession, {
+      cardinality: "one",
+      label: "Session",
+    }),
+    type: agentSessionEventTypeTypeModule.field({
+      cardinality: "one",
+      meta: {
+        label: "Type",
+        display: {
+          kind: "badge",
+        },
+      },
+      filter: {
+        operators: ["is", "oneOf"] as const,
+        defaultOperator: "is",
+      },
+    }),
+    sequence: numberTypeModule.field({
+      cardinality: "one",
+      validate: ({ value }) => validateNonNegativeInteger("Event sequence", value),
+      meta: {
+        label: "Sequence",
+      },
+    }),
+    timestamp: {
+      ...dateTypeModule.field({
+        cardinality: "one",
+        onCreate: ({ incoming, now }) => incoming ?? now,
+        meta: {
+          label: "Timestamp",
+        },
+      }),
+      createOptional: true as const,
+    },
+    phase: agentSessionEventPhaseTypeModule.field({
+      cardinality: "one?",
+      meta: {
+        label: "Phase",
+        display: {
+          kind: "badge",
+        },
+      },
+      filter: {
+        operators: ["is", "oneOf"] as const,
+        defaultOperator: "is",
+      },
+    }),
+    statusCode: agentSessionStatusCodeTypeModule.field({
+      cardinality: "one?",
+      meta: {
+        label: "Status code",
+        display: {
+          kind: "badge",
+        },
+      },
+      filter: {
+        operators: ["is", "oneOf"] as const,
+        defaultOperator: "is",
+      },
+    }),
+    format: agentSessionStatusFormatTypeModule.field({
+      cardinality: "one?",
+      meta: {
+        label: "Format",
+        display: {
+          kind: "badge",
+        },
+      },
+      filter: {
+        operators: ["is", "oneOf"] as const,
+        defaultOperator: "is",
+      },
+    }),
+    stream: agentSessionStreamTypeModule.field({
+      cardinality: "one?",
+      meta: {
+        label: "Stream",
+        display: {
+          kind: "badge",
+        },
+      },
+      filter: {
+        operators: ["is", "oneOf"] as const,
+        defaultOperator: "is",
+      },
+    }),
+    encoding: agentSessionRawLineEncodingTypeModule.field({
+      cardinality: "one?",
+      meta: {
+        label: "Encoding",
+        display: {
+          kind: "badge",
+        },
+      },
+      filter: {
+        operators: ["is", "oneOf"] as const,
+        defaultOperator: "is",
+      },
+    }),
+    itemId: optionalStringField("Item id"),
+    text: optionalStringField("Text", {
+      multiline: true,
+      operators: ["contains", "equals"] as const,
+      defaultOperator: "contains",
+    }),
+    line: optionalStringField("Line", {
+      multiline: true,
+      operators: ["contains", "equals"] as const,
+      defaultOperator: "contains",
+    }),
+    data: jsonTypeModule.field({
+      cardinality: "one?",
+      meta: {
+        label: "Data",
+      },
+    }),
+    method: optionalStringField("Method"),
+    params: jsonTypeModule.field({
+      cardinality: "one?",
+      meta: {
+        label: "Params",
+      },
+    }),
+  },
+});
+
+export const workflowArtifactKind = defineEnum({
+  values: { key: "ops:workflowArtifactKind", name: "Workflow Artifact Kind" },
+  options: {
+    "branch-plan": {
+      name: "Branch plan",
+    },
+    "commit-plan": {
+      name: "Commit plan",
+    },
+    patch: {
+      name: "Patch",
+    },
+    doc: {
+      name: "Document",
+    },
+    summary: {
+      name: "Summary",
+    },
+    "command-log": {
+      name: "Command log",
+    },
+    screenshot: {
+      name: "Screenshot",
+    },
+    file: {
+      name: "File",
+    },
+    transcript: {
+      name: "Transcript",
+    },
+  },
+});
+
+export const workflowArtifactKindTypeModule = defineDefaultEnumTypeModule(workflowArtifactKind);
+
+export const workflowArtifact = defineType({
+  values: { key: "ops:workflowArtifact", name: "Workflow Artifact" },
+  fields: {
+    ...titleNodeFields("Artifact title"),
+    project: existingEntityReferenceField(workflowProject, {
+      cardinality: "one",
+      label: "Project",
+    }),
+    repository: existingEntityReferenceField(workflowRepository, {
+      cardinality: "one?",
+      label: "Repository",
+    }),
+    branch: existingEntityReferenceField(workflowBranch, {
+      cardinality: "one",
+      label: "Branch",
+    }),
+    commit: existingEntityReferenceField(workflowCommit, {
+      cardinality: "one?",
+      label: "Commit",
+    }),
+    session: existingEntityReferenceField(agentSession, {
+      cardinality: "one",
+      label: "Session",
+    }),
+    kind: workflowArtifactKindTypeModule.field({
+      cardinality: "one",
+      meta: {
+        label: "Kind",
+        display: {
+          kind: "badge",
+        },
+      },
+      filter: {
+        operators: ["is", "oneOf"] as const,
+        defaultOperator: "is",
+      },
+    }),
+    mimeType: optionalStringField("MIME type"),
+    bodyText: optionalStringField("Body text", {
+      multiline: true,
+      operators: ["contains", "equals"] as const,
+      defaultOperator: "contains",
+    }),
+    blobId: optionalStringField("Blob id"),
+  },
+});
+
+export const workflowDecisionKind = defineEnum({
+  values: { key: "ops:workflowDecisionKind", name: "Workflow Decision Kind" },
+  options: {
+    plan: {
+      name: "Plan",
+    },
+    question: {
+      name: "Question",
+    },
+    assumption: {
+      name: "Assumption",
+    },
+    blocker: {
+      name: "Blocker",
+    },
+    resolution: {
+      name: "Resolution",
+    },
+  },
+});
+
+export const workflowDecisionKindTypeModule = defineDefaultEnumTypeModule(workflowDecisionKind);
+
+export const workflowDecision = defineType({
+  values: { key: "ops:workflowDecision", name: "Workflow Decision" },
+  fields: {
+    ...titleNodeFields("Decision summary"),
+    project: existingEntityReferenceField(workflowProject, {
+      cardinality: "one",
+      label: "Project",
+    }),
+    repository: existingEntityReferenceField(workflowRepository, {
+      cardinality: "one?",
+      label: "Repository",
+    }),
+    branch: existingEntityReferenceField(workflowBranch, {
+      cardinality: "one",
+      label: "Branch",
+    }),
+    commit: existingEntityReferenceField(workflowCommit, {
+      cardinality: "one?",
+      label: "Commit",
+    }),
+    session: existingEntityReferenceField(agentSession, {
+      cardinality: "one",
+      label: "Session",
+    }),
+    kind: workflowDecisionKindTypeModule.field({
+      cardinality: "one",
+      meta: {
+        label: "Kind",
+        display: {
+          kind: "badge",
+        },
+      },
+      filter: {
+        operators: ["is", "oneOf"] as const,
+        defaultOperator: "is",
+      },
+    }),
+    details: optionalStringField("Details", {
+      multiline: true,
+      operators: ["contains", "equals"] as const,
+      defaultOperator: "contains",
+    }),
+  },
+});
+
+export const contextBundle = defineType({
+  values: { key: "ops:contextBundle", name: "Context Bundle" },
+  fields: {
+    ...titleNodeFields("Context bundle title"),
+    session: existingEntityReferenceField(agentSession, {
+      cardinality: "one",
+      label: "Session",
+    }),
+    subjectKind: agentSessionSubjectKindTypeModule.field({
+      cardinality: "one",
+      meta: {
+        label: "Subject kind",
+        display: {
+          kind: "badge",
+        },
+      },
+      filter: {
+        operators: ["is", "oneOf"] as const,
+        defaultOperator: "is",
+      },
+    }),
+    branch: existingEntityReferenceField(workflowBranch, {
+      cardinality: "one",
+      label: "Branch",
+    }),
+    commit: existingEntityReferenceField(workflowCommit, {
+      cardinality: "one?",
+      label: "Commit",
+    }),
+    bundleKey: workflowKeyField(
+      "Bundle key",
+      "bundle",
+      "Immutable bundle key that is unique within one session.",
+    ),
+    renderedPrompt: optionalStringField("Rendered prompt", {
+      multiline: true,
+      operators: ["contains", "equals"] as const,
+      defaultOperator: "contains",
+    }),
+    sourceHash: requiredStringField("Source hash"),
+  },
+});
+
+export const contextBundleEntrySource = defineEnum({
+  values: {
+    key: "ops:contextBundleEntrySource",
+    name: "Context Bundle Entry Source",
+  },
+  options: {
+    builtin: {
+      name: "Built-in",
+    },
+    entrypoint: {
+      name: "Entrypoint",
+    },
+    registered: {
+      name: "Registered",
+    },
+    "repo-path": {
+      name: "Repo path",
+    },
+    synthesized: {
+      name: "Synthesized",
+    },
+    graph: {
+      name: "Graph",
+    },
+    artifact: {
+      name: "Artifact",
+    },
+    decision: {
+      name: "Decision",
+    },
+  },
+});
+
+export const contextBundleEntrySourceTypeModule =
+  defineDefaultEnumTypeModule(contextBundleEntrySource);
+
+export const contextBundleEntry = defineType({
+  values: { key: "ops:contextBundleEntry", name: "Context Bundle Entry" },
+  fields: {
+    ...titleNodeFields("Context entry title"),
+    bundle: existingEntityReferenceField(contextBundle, {
+      cardinality: "one",
+      label: "Bundle",
+    }),
+    order: numberTypeModule.field({
+      cardinality: "one",
+      validate: ({ value }) => validateNonNegativeInteger("Context entry order", value),
+      meta: {
+        label: "Order",
+      },
+    }),
+    source: contextBundleEntrySourceTypeModule.field({
+      cardinality: "one",
+      meta: {
+        label: "Source",
+        display: {
+          kind: "badge",
+        },
+      },
+      filter: {
+        operators: ["is", "oneOf"] as const,
+        defaultOperator: "is",
+      },
+    }),
+    refId: optionalStringField("Reference id"),
+    path: optionalStringField("Path", {
+      defaultOperator: "prefix",
+    }),
+    bodyText: optionalStringField("Body text", {
+      multiline: true,
+      operators: ["contains", "equals"] as const,
+      defaultOperator: "contains",
+    }),
+    blobId: optionalStringField("Blob id"),
   },
 });

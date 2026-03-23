@@ -56,10 +56,16 @@ import {
   envVarSchema,
 } from "./ops/env-var/schema.js";
 import {
+  agentSession,
+  agentSessionEvent,
+  contextBundle,
+  contextBundleEntry,
   repositoryBranch,
   repositoryCommit,
+  workflowArtifact,
   workflowBranch,
   workflowCommit,
+  workflowDecision,
   workflowProject,
   workflowRepository,
   workflowSchema,
@@ -182,6 +188,12 @@ describe("module entry surfaces", () => {
     expect(canonicalOps.workflowCommit.values.key).toBe(workflowCommit.values.key);
     expect(canonicalOps.repositoryBranch.values.key).toBe(repositoryBranch.values.key);
     expect(canonicalOps.repositoryCommit.values.key).toBe(repositoryCommit.values.key);
+    expect(canonicalOps.agentSession.values.key).toBe(agentSession.values.key);
+    expect(canonicalOps.agentSessionEvent.values.key).toBe(agentSessionEvent.values.key);
+    expect(canonicalOps.workflowArtifact.values.key).toBe(workflowArtifact.values.key);
+    expect(canonicalOps.workflowDecision.values.key).toBe(workflowDecision.values.key);
+    expect(canonicalOps.contextBundle.values.key).toBe(contextBundle.values.key);
+    expect(canonicalOps.contextBundleEntry.values.key).toBe(contextBundleEntry.values.key);
   });
 
   it("exports the env-var slice from the canonical ops module tree", () => {
@@ -253,6 +265,24 @@ describe("module entry surfaces", () => {
       repositoryCommitLeaseState: canonicalOps.repositoryCommitLeaseState,
       repositoryBranch,
       repositoryCommit,
+      agentSessionSubjectKind: canonicalOps.agentSessionSubjectKind,
+      agentSessionKind: canonicalOps.agentSessionKind,
+      agentSessionRuntimeState: canonicalOps.agentSessionRuntimeState,
+      agentSession,
+      agentSessionEventType: canonicalOps.agentSessionEventType,
+      agentSessionEventPhase: canonicalOps.agentSessionEventPhase,
+      agentSessionStatusCode: canonicalOps.agentSessionStatusCode,
+      agentSessionStatusFormat: canonicalOps.agentSessionStatusFormat,
+      agentSessionStream: canonicalOps.agentSessionStream,
+      agentSessionRawLineEncoding: canonicalOps.agentSessionRawLineEncoding,
+      agentSessionEvent,
+      workflowArtifactKind: canonicalOps.workflowArtifactKind,
+      workflowArtifact,
+      workflowDecisionKind: canonicalOps.workflowDecisionKind,
+      workflowDecision,
+      contextBundle,
+      contextBundleEntrySource: canonicalOps.contextBundleEntrySource,
+      contextBundleEntry,
     });
     expect(String(workflowRepository.fields.project.range)).toBe(resolvedTypeId(workflowProject));
     expect(String(workflowBranch.fields.project.range)).toBe(resolvedTypeId(workflowProject));
@@ -263,6 +293,12 @@ describe("module entry surfaces", () => {
     expect(String(repositoryCommit.fields.workflowCommit.range)).toBe(
       resolvedTypeId(workflowCommit),
     );
+    expect(String(agentSession.fields.branch.range)).toBe(resolvedTypeId(workflowBranch));
+    expect(String(agentSession.fields.contextBundle.range)).toBe(resolvedTypeId(contextBundle));
+    expect(String(agentSessionEvent.fields.session.range)).toBe(resolvedTypeId(agentSession));
+    expect(String(workflowArtifact.fields.session.range)).toBe(resolvedTypeId(agentSession));
+    expect(String(workflowDecision.fields.session.range)).toBe(resolvedTypeId(agentSession));
+    expect(String(contextBundleEntry.fields.bundle.range)).toBe(resolvedTypeId(contextBundle));
   });
 
   it("exposes canonical namespaces and representative built-ins from the module root", () => {
@@ -280,6 +316,12 @@ describe("module entry surfaces", () => {
       "workflowCommit",
       "repositoryBranch",
       "repositoryCommit",
+      "agentSession",
+      "agentSessionEvent",
+      "workflowArtifact",
+      "workflowDecision",
+      "contextBundle",
+      "contextBundleEntry",
       "secretHandle",
       "principal",
       "authSubjectProjection",
@@ -308,6 +350,12 @@ describe("module entry surfaces", () => {
     expect(canonicalOps.workflowCommit.values.key).toBe(workflowCommit.values.key);
     expect(canonicalOps.repositoryBranch.values.key).toBe(repositoryBranch.values.key);
     expect(canonicalOps.repositoryCommit.values.key).toBe(repositoryCommit.values.key);
+    expect(canonicalOps.agentSession.values.key).toBe(agentSession.values.key);
+    expect(canonicalOps.agentSessionEvent.values.key).toBe(agentSessionEvent.values.key);
+    expect(canonicalOps.workflowArtifact.values.key).toBe(workflowArtifact.values.key);
+    expect(canonicalOps.workflowDecision.values.key).toBe(workflowDecision.values.key);
+    expect(canonicalOps.contextBundle.values.key).toBe(contextBundle.values.key);
+    expect(canonicalOps.contextBundleEntry.values.key).toBe(contextBundleEntry.values.key);
     expect(canonicalPkm.topic.values.key).toBe(topic.values.key);
     expect(canonicalPkm.topicKind.values.key).toBe(topicKind.values.key);
     expect(String(canonicalCore.type.fields.icon.range)).toBe(resolvedTypeId(icon));
@@ -316,6 +364,7 @@ describe("module entry surfaces", () => {
     expect(typeof moduleExports.core.principal.values.id).toBe("string");
     expect(typeof moduleExports.ops.envVar.values.id).toBe("string");
     expect(typeof moduleExports.ops.workflowProject.values.id).toBe("string");
+    expect(typeof moduleExports.ops.agentSession.values.id).toBe("string");
     expect(typeof moduleExports.pkm.topic.values.id).toBe("string");
     expect(moduleExports.node.values.key).toBe(canonicalCore.node.values.key);
     expect(moduleExports.icon.values.key).toBe(canonicalCore.icon.values.key);
