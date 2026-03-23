@@ -1,27 +1,163 @@
 "use client";
 
+import type { SyncScope, SyncScopeRequest } from "@io/core/graph";
+import { Badge } from "@io/web/badge";
+import { Button } from "@io/web/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@io/web/card";
+import { Link } from "@tanstack/react-router";
 
+import {
+  resolveWebSyncProofRequestedScope,
+  resolveWebSyncProofScopeKey,
+  webSyncProofScopeOptions,
+  type WebSyncProofScopeKey,
+} from "../lib/sync-scopes.js";
 import { ExplorerSyncInspector } from "./explorer/index.js";
+import { useExplorerSyncSnapshot } from "./explorer/sync.js";
 import {
   GraphRuntimeBootstrap,
   useGraphRuntime,
   type GraphRuntime,
 } from "./graph-runtime-bootstrap.js";
 
-export function SyncPageSurface({ runtime }: { runtime: GraphRuntime }) {
+function describeRequestedScope(scope: SyncScopeRequest): string {
+  if (scope.kind === "graph") {
+    return "Whole graph";
+  }
+
+  return `${scope.moduleId} / ${scope.scopeId}`;
+}
+
+function describeDeliveredScope(scope: SyncScope): string {
+  if (scope.kind === "graph") {
+    return "Whole graph";
+  }
+
+  return `${scope.moduleId} / ${scope.scopeId}`;
+}
+
+function ScopeSelection({ activeScopeKey }: { activeScopeKey: WebSyncProofScopeKey }) {
+  return (
+    <div className="flex flex-wrap gap-2">
+      {webSyncProofScopeOptions.map((option) => (
+        <Button
+          key={option.key}
+          render={<Link search={{ scope: option.key }} to="/sync" />}
+          size="sm"
+          variant={option.key === activeScopeKey ? "default" : "outline"}
+        >
+          {option.label}
+        </Button>
+      ))}
+    </div>
+  );
+}
+
+function SyncPageSurface({
+  runtime,
+  scopeKey,
+}: {
+  runtime: GraphRuntime;
+  scopeKey: WebSyncProofScopeKey;
+}) {
+  const { state } = useExplorerSyncSnapshot(runtime.sync);
+  const activeScopeKey = resolveWebSyncProofScopeKey(state.scope);
+
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4" data-sync-page="">
       <Card className="border-border/70 bg-card/95 border shadow-sm">
-        <CardHeader>
-          <CardTitle>Graph Sync</CardTitle>
-          <CardDescription>
-            Inspect the authority cursor, pending local writes, and recent authoritative activity.
-          </CardDescription>
+        <CardHeader className="gap-3">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="space-y-1">
+              <CardTitle>Scoped Sync Proof</CardTitle>
+              <CardDescription>
+                Exercise whole-graph recovery and the first named module scope over the current
+                `/api/sync` transport.
+              </CardDescription>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              <Badge variant="outline">{state.status}</Badge>
+              <Badge variant="outline">{state.freshness}</Badge>
+              <Badge variant="outline">{state.completeness}</Badge>
+              {state.fallback ? <Badge variant="destructive">{state.fallback}</Badge> : null}
+            </div>
+          </div>
         </CardHeader>
-        <CardContent className="text-muted-foreground text-sm">
-          The graph explorer owns graph browsing and editing. This page stays focused on the shared
-          sync stream diagnostics.
+        <CardContent className="grid gap-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <ScopeSelection activeScopeKey={scopeKey} />
+            <Button
+              onClick={() => {
+                void runtime.sync.sync().catch(() => undefined);
+              }}
+              size="sm"
+              type="button"
+              variant="outline"
+            >
+              {state.status === "syncing" ? "Refreshing..." : "Pull latest"}
+            </Button>
+            {scopeKey !== "graph" ? (
+              <Button
+                render={<Link search={{ scope: "graph" }} to="/sync" />}
+                size="sm"
+                type="button"
+                variant="outline"
+              >
+                Recover with whole graph
+              </Button>
+            ) : null}
+          </div>
+
+          <div className="grid gap-3 text-sm">
+            <div className="grid gap-1">
+              <span className="text-muted-foreground text-xs font-medium tracking-[0.16em] uppercase">
+                Requested scope
+              </span>
+              <div className="flex flex-wrap items-center gap-2">
+                <span>{describeRequestedScope(state.requestedScope)}</span>
+                <Badge variant={scopeKey === "graph" ? "secondary" : "outline"}>
+                  {webSyncProofScopeOptions.find((option) => option.key === scopeKey)?.label ??
+                    "Whole graph"}
+                </Badge>
+              </div>
+            </div>
+
+            <div className="grid gap-1">
+              <span className="text-muted-foreground text-xs font-medium tracking-[0.16em] uppercase">
+                Delivered scope
+              </span>
+              <div className="flex flex-wrap items-center gap-2">
+                <span>{describeDeliveredScope(state.scope)}</span>
+                <Badge variant={activeScopeKey === "graph" ? "secondary" : "outline"}>
+                  {webSyncProofScopeOptions.find((option) => option.key === activeScopeKey)
+                    ?.label ?? "Whole graph"}
+                </Badge>
+              </div>
+            </div>
+
+            {state.scope.kind === "module" ? (
+              <>
+                <div className="grid gap-1">
+                  <span className="text-muted-foreground text-xs font-medium tracking-[0.16em] uppercase">
+                    Definition hash
+                  </span>
+                  <code className="text-xs">{state.scope.definitionHash}</code>
+                </div>
+                <div className="grid gap-1">
+                  <span className="text-muted-foreground text-xs font-medium tracking-[0.16em] uppercase">
+                    Policy filter version
+                  </span>
+                  <code className="text-xs">{state.scope.policyFilterVersion}</code>
+                </div>
+              </>
+            ) : null}
+          </div>
+
+          <p className="text-muted-foreground text-xs">
+            The workflow-review scope keeps whole-graph sync available as the explicit recovery path
+            when the scoped cursor reports `scope-changed`, `policy-changed`, or other fallback-only
+            incremental results.
+          </p>
         </CardContent>
       </Card>
 
@@ -32,15 +168,17 @@ export function SyncPageSurface({ runtime }: { runtime: GraphRuntime }) {
   );
 }
 
-function SyncPageSurfaceFromRuntime() {
+function SyncPageSurfaceFromRuntime({ scopeKey }: { scopeKey: WebSyncProofScopeKey }) {
   const runtime = useGraphRuntime();
-  return <SyncPageSurface runtime={runtime} />;
+  return <SyncPageSurface runtime={runtime} scopeKey={scopeKey} />;
 }
 
-export function SyncPage() {
+export function SyncPage({ scopeKey = "graph" }: { scopeKey?: WebSyncProofScopeKey }) {
+  const requestedScope = resolveWebSyncProofRequestedScope(scopeKey);
+
   return (
-    <GraphRuntimeBootstrap>
-      <SyncPageSurfaceFromRuntime />
+    <GraphRuntimeBootstrap requestedScope={requestedScope}>
+      <SyncPageSurfaceFromRuntime scopeKey={scopeKey} />
     </GraphRuntimeBootstrap>
   );
 }

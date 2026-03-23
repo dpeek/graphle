@@ -11,6 +11,7 @@ type ExplorerStreamActivity = ReturnType<ExplorerSync["getState"]>["recentActivi
 function createSyncFixture(recentActivities: readonly ExplorerStreamActivity[]): ExplorerSync {
   const state: ReturnType<ExplorerSync["getState"]> = {
     mode: "total",
+    requestedScope: { kind: "graph" },
     scope: { kind: "graph" },
     status: "ready",
     completeness: "complete",

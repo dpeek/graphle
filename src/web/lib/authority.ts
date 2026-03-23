@@ -8,6 +8,9 @@ import {
   bootstrap,
   collectScalarCodecs,
   collectTypeIndex,
+  createIncrementalSyncFallback,
+  createIncrementalSyncPayload,
+  createModuleSyncScope,
   createPersistedAuthoritativeGraph,
   createStore,
   createTypeClient,
@@ -18,6 +21,7 @@ import {
   type GraphFieldAuthority,
   isEntityType,
   isSecretBackedField,
+  type ModuleSyncScope,
   type Cardinality,
   type GraphWriteTransaction,
   type NamespaceClient,
@@ -32,12 +36,14 @@ import {
   type ReplicationReadAuthorizer,
   type Store,
   type StoreSnapshot,
+  type AuthoritativeGraphWriteResult,
 } from "@io/core/graph";
 import { core } from "@io/core/graph/modules";
 import { ops } from "@io/core/graph/modules/ops";
-import type {
-  WorkflowMutationAction,
-  WorkflowMutationResult,
+import {
+  workflowSchema,
+  type WorkflowMutationAction,
+  type WorkflowMutationResult,
 } from "@io/core/graph/modules/ops/workflow";
 import { pkm } from "@io/core/graph/modules/pkm";
 
@@ -51,6 +57,11 @@ import {
   type WriteSecretFieldInput,
   type WriteSecretFieldResult,
 } from "./secret-fields.js";
+import {
+  workflowModuleId,
+  workflowReviewScopeDefinitionHash,
+  workflowReviewScopeId,
+} from "./sync-scopes.js";
 import { runWorkflowMutationCommand } from "./workflow-authority.js";
 
 const webAppGraph = { ...core, ...pkm, ...ops } as const;
@@ -92,6 +103,20 @@ export type WebAppAuthoritySecretRecord = {
 export type WebAppAuthoritySecretWrite = WebAppAuthoritySecretRecord & {
   readonly secretId: string;
 };
+
+export type WebAppAuthorityGraphSyncScopeRequest = {
+  readonly kind?: "graph";
+};
+
+export type WebAppAuthorityModuleSyncScopeRequest = {
+  readonly kind: "module";
+  readonly moduleId: string;
+  readonly scopeId: string;
+};
+
+export type WebAppAuthoritySyncScopeRequest =
+  | WebAppAuthorityGraphSyncScopeRequest
+  | WebAppAuthorityModuleSyncScopeRequest;
 
 export type WriteSecretFieldWebAuthorityCommand = {
   readonly kind: "write-secret-field";
@@ -167,6 +192,7 @@ type WebAppAuthorityWriteScope = NonNullable<
 export type WebAppAuthoritySyncOptions = {
   readonly authorization: AuthorizationContext;
   readonly freshness?: WebAppAuthoritySyncFreshness;
+  readonly scope?: WebAppAuthoritySyncScopeRequest;
 };
 
 export type WebAppAuthorityReadOptions = {
@@ -246,6 +272,15 @@ const writeSecretFieldCommandBasePredicateIds = [
   secretHandleVersionPredicateId,
   secretHandleLastRotatedAtPredicateId,
 ] as const;
+const moduleScopeCursorPrefix = "scope:";
+const workflowModuleEntityTypeIds = new Set(
+  Object.values(workflowSchema)
+    .filter(isEntityType)
+    .map((typeDef) => {
+      const values = typeDef.values as { readonly id?: string; readonly key: string };
+      return values.id ?? values.key;
+    }),
+);
 
 let authorityCursorEpoch = 0;
 
@@ -491,6 +526,142 @@ function createReadPolicyError(error: PolicyError): WebAppAuthorityReadError {
       refreshRequired: error.refreshRequired,
     },
   );
+}
+
+type PlannedWebAppAuthorityScope = {
+  readonly scope: ModuleSyncScope;
+  readonly typeIds: ReadonlySet<string>;
+};
+
+function isGraphScopeRequest(
+  scope: WebAppAuthoritySyncScopeRequest | undefined,
+): scope is WebAppAuthorityGraphSyncScopeRequest | undefined {
+  return scope === undefined || scope.kind === undefined || scope.kind === "graph";
+}
+
+function createPolicyFilterVersion(policyVersion: number): string {
+  return `policy:${policyVersion}`;
+}
+
+function formatScopedModuleCursor(scope: ModuleSyncScope, cursor: string): string {
+  const params = new URLSearchParams();
+  params.set("kind", scope.kind);
+  params.set("moduleId", scope.moduleId);
+  params.set("scopeId", scope.scopeId);
+  params.set("definitionHash", scope.definitionHash);
+  params.set("policyFilterVersion", scope.policyFilterVersion);
+  params.set("cursor", cursor);
+  return `${moduleScopeCursorPrefix}${params.toString()}`;
+}
+
+function parseScopedModuleCursor(
+  cursor: string,
+): (ModuleSyncScope & { readonly cursor: string }) | null {
+  if (!cursor.startsWith(moduleScopeCursorPrefix)) return null;
+
+  const params = new URLSearchParams(cursor.slice(moduleScopeCursorPrefix.length));
+  if (params.get("kind") !== "module") return null;
+  const moduleId = params.get("moduleId");
+  const scopeId = params.get("scopeId");
+  const definitionHash = params.get("definitionHash");
+  const policyFilterVersion = params.get("policyFilterVersion");
+  const graphCursor = params.get("cursor");
+  if (!moduleId || !scopeId || !definitionHash || !policyFilterVersion || !graphCursor) {
+    return null;
+  }
+
+  return {
+    ...createModuleSyncScope({
+      moduleId,
+      scopeId,
+      definitionHash,
+      policyFilterVersion,
+    }),
+    cursor: graphCursor,
+  };
+}
+
+function resolveScopedSubjectId(
+  operation: GraphWriteTransaction["ops"][number],
+  edgeById: Map<string, StoreSnapshot["edges"][number]>,
+): string | undefined {
+  if (operation.op === "assert") return operation.edge.s;
+  return edgeById.get(operation.edgeId)?.s;
+}
+
+function subjectTypeId(store: Store, subjectId: string): string | undefined {
+  return store.get(subjectId, typePredicateId) ?? store.find(subjectId, typePredicateId)[0]?.o;
+}
+
+function scopeIncludesSubject(
+  store: Store,
+  typeIds: ReadonlySet<string>,
+  subjectId: string,
+): boolean {
+  const currentTypeId = subjectTypeId(store, subjectId);
+  return currentTypeId !== undefined && typeIds.has(currentTypeId);
+}
+
+function filterModuleScopedSnapshot(
+  snapshot: StoreSnapshot,
+  store: Store,
+  plannedScope: PlannedWebAppAuthorityScope,
+): StoreSnapshot {
+  const edges = snapshot.edges
+    .filter((edge) => scopeIncludesSubject(store, plannedScope.typeIds, edge.s))
+    .map((edge) => ({ ...edge }));
+  const visibleEdgeIds = new Set(edges.map((edge) => edge.id));
+
+  return {
+    edges,
+    retracted: snapshot.retracted.filter((edgeId) => visibleEdgeIds.has(edgeId)),
+  };
+}
+
+function filterModuleScopedWriteResult(
+  result: AuthoritativeGraphWriteResult,
+  store: Store,
+  edgeById: Map<string, StoreSnapshot["edges"][number]>,
+  plannedScope: PlannedWebAppAuthorityScope,
+): AuthoritativeGraphWriteResult | undefined {
+  const ops = result.transaction.ops.filter((operation) => {
+    const scopedSubjectId = resolveScopedSubjectId(operation, edgeById);
+    if (!scopedSubjectId) return true;
+    return scopeIncludesSubject(store, plannedScope.typeIds, scopedSubjectId);
+  });
+  if (ops.length === 0) return undefined;
+
+  return {
+    ...result,
+    transaction: {
+      ...result.transaction,
+      ops,
+    },
+  };
+}
+
+function planSyncScope(
+  scope: WebAppAuthoritySyncScopeRequest | undefined,
+  authorization: AuthorizationContext,
+): PlannedWebAppAuthorityScope | undefined {
+  if (isGraphScopeRequest(scope)) return undefined;
+
+  if (scope.moduleId !== workflowModuleId || scope.scopeId !== workflowReviewScopeId) {
+    throw new WebAppAuthorityReadError(
+      404,
+      `Scope "${scope.scopeId}" was not found for module "${scope.moduleId}".`,
+    );
+  }
+
+  return {
+    scope: createModuleSyncScope({
+      moduleId: scope.moduleId,
+      scopeId: scope.scopeId,
+      definitionHash: workflowReviewScopeDefinitionHash,
+      policyFilterVersion: createPolicyFilterVersion(authorization.policyVersion),
+    }),
+    typeIds: workflowModuleEntityTypeIds,
+  };
 }
 
 function getFirstObject(store: Store, subjectId: string, predicateId: string): string | undefined {
@@ -928,10 +1099,25 @@ export async function createWebAppAuthority(
   }
 
   function createSyncPayload(options: WebAppAuthoritySyncOptions) {
-    return authority.createSyncPayload({
-      authorizeRead: createReadableReplicationAuthorizer(options.authorization, compiledFieldIndex),
+    const authorizeRead = createReadableReplicationAuthorizer(
+      options.authorization,
+      compiledFieldIndex,
+    );
+    const plannedScope = planSyncScope(options.scope, options.authorization);
+    const payload = authority.createSyncPayload({
+      authorizeRead,
       freshness: options.freshness,
     });
+    if (!plannedScope) {
+      return payload;
+    }
+
+    return {
+      ...payload,
+      scope: plannedScope.scope,
+      snapshot: filterModuleScopedSnapshot(payload.snapshot, authority.store, plannedScope),
+      cursor: formatScopedModuleCursor(plannedScope.scope, payload.cursor),
+    };
   }
 
   async function applyTransaction(
@@ -955,9 +1141,89 @@ export async function createWebAppAuthority(
     after: string | undefined,
     options: WebAppAuthoritySyncOptions,
   ) {
-    return authority.getIncrementalSyncResult(after, {
-      authorizeRead: createReadableReplicationAuthorizer(options.authorization, compiledFieldIndex),
+    const authorizeRead = createReadableReplicationAuthorizer(
+      options.authorization,
+      compiledFieldIndex,
+    );
+    const plannedScope = planSyncScope(options.scope, options.authorization);
+    if (!plannedScope) {
+      return authority.getIncrementalSyncResult(after, {
+        authorizeRead,
+        freshness: options.freshness,
+      });
+    }
+
+    if (after) {
+      const currentScopedCursor = formatScopedModuleCursor(
+        plannedScope.scope,
+        authority.createSyncPayload({
+          authorizeRead,
+          freshness: options.freshness,
+        }).cursor,
+      );
+      const parsedAfter = parseScopedModuleCursor(after);
+      if (!parsedAfter) {
+        return createIncrementalSyncFallback("scope-changed", {
+          after,
+          cursor: currentScopedCursor,
+          freshness: options.freshness,
+          scope: plannedScope.scope,
+        });
+      }
+      if (
+        parsedAfter.moduleId !== plannedScope.scope.moduleId ||
+        parsedAfter.scopeId !== plannedScope.scope.scopeId ||
+        parsedAfter.definitionHash !== plannedScope.scope.definitionHash
+      ) {
+        return createIncrementalSyncFallback("scope-changed", {
+          after,
+          cursor: currentScopedCursor,
+          freshness: options.freshness,
+          scope: plannedScope.scope,
+        });
+      }
+      if (parsedAfter.policyFilterVersion !== plannedScope.scope.policyFilterVersion) {
+        return createIncrementalSyncFallback("policy-changed", {
+          after,
+          cursor: currentScopedCursor,
+          freshness: options.freshness,
+          scope: plannedScope.scope,
+        });
+      }
+      after = parsedAfter.cursor;
+    }
+
+    const result = authority.getIncrementalSyncResult(after, {
+      authorizeRead,
       freshness: options.freshness,
+    });
+    const resultAfter = formatScopedModuleCursor(plannedScope.scope, result.after);
+    const resultCursor = formatScopedModuleCursor(plannedScope.scope, result.cursor);
+    if ("fallback" in result) {
+      return createIncrementalSyncFallback(result.fallback, {
+        after: resultAfter,
+        cursor: resultCursor,
+        freshness: result.freshness,
+        scope: plannedScope.scope,
+      });
+    }
+
+    const edgeById = new Map(authority.store.snapshot().edges.map((edge) => [edge.id, edge]));
+    const transactions = result.transactions.flatMap((transaction) => {
+      const scoped = filterModuleScopedWriteResult(
+        transaction,
+        authority.store,
+        edgeById,
+        plannedScope,
+      );
+      return scoped ? [scoped] : [];
+    });
+
+    return createIncrementalSyncPayload(transactions, {
+      after: resultAfter,
+      cursor: resultCursor,
+      freshness: result.freshness,
+      scope: plannedScope.scope,
     });
   }
 

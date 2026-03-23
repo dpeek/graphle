@@ -25,7 +25,7 @@ setDefaultTimeout(20_000);
 import { pkm } from "@io/core/graph/modules/pkm";
 
 import { createAnonymousAuthorizationContext } from "./auth-bridge.js";
-import { createTestWebAppAuthority } from "./authority-test-helpers.js";
+import { createTestWebAppAuthority, createTestWorkflowFixture } from "./authority-test-helpers.js";
 import {
   createWebAppAuthority,
   type WebAppAuthority,
@@ -39,6 +39,11 @@ import {
 
 const productGraph = { ...core, ...pkm, ...ops } as const;
 const envVarSecretPredicateId = edgeId(ops.envVar.fields.secret);
+const workflowModuleScope = {
+  kind: "module" as const,
+  moduleId: "ops/workflow",
+  scopeId: "scope:ops/workflow:review",
+};
 const hiddenCursorProbe = defineType({
   values: { key: "test:hiddenCursorProbe", name: "Hidden Cursor Probe" },
   fields: {
@@ -148,9 +153,18 @@ type SecretValueRow = {
 
 type SyncPayload = {
   readonly mode: "incremental" | "total";
+  readonly scope?: {
+    readonly kind: "graph" | "module";
+    readonly moduleId?: string;
+    readonly scopeId?: string;
+    readonly definitionHash?: string;
+    readonly policyFilterVersion?: string;
+  };
   readonly after?: string;
   readonly cursor: string;
-  readonly fallback?: "gap" | "reset" | "unknown-cursor";
+  readonly fallback?: "gap" | "reset" | "unknown-cursor" | "scope-changed" | "policy-changed";
+  readonly completeness?: "complete" | "incomplete";
+  readonly freshness?: "current" | "stale";
   readonly snapshot?: StoreSnapshot;
   readonly transactions?: readonly {
     readonly cursor: string;
@@ -479,13 +493,31 @@ function buildHiddenCursorAdvanceTransaction(
   return buildGraphWriteTransaction(before, mutationStore.snapshot(), txId);
 }
 
+function updateScopedCursor(cursor: string, updates: Record<string, string>): string {
+  if (!cursor.startsWith("scope:")) {
+    throw new Error(`Expected a scoped cursor, received "${cursor}".`);
+  }
+
+  const params = new URLSearchParams(cursor.slice("scope:".length));
+  for (const [key, value] of Object.entries(updates)) {
+    params.set(key, value);
+  }
+  return `scope:${params.toString()}`;
+}
+
 async function readSyncPayload(
   durableObject: WebGraphAuthorityDurableObject,
   after?: string,
   authorization: AuthorizationContext = testAuthorityAuthorization,
+  scope?: typeof workflowModuleScope,
 ): Promise<SyncPayload> {
   const url = new URL("https://graph-authority.local/api/sync");
   if (after) url.searchParams.set("after", after);
+  if (scope) {
+    url.searchParams.set("scopeKind", scope.kind);
+    url.searchParams.set("moduleId", scope.moduleId);
+    url.searchParams.set("scopeId", scope.scopeId);
+  }
   const response = await durableObject.fetch(
     createAuthorizedRequest(url.toString(), {}, authorization),
   );
@@ -656,6 +688,146 @@ describe("web graph authority durable object", () => {
     expect(await response.json()).toEqual({
       error: expect.stringContaining("policy.stale_context"),
     });
+  });
+
+  it("serves the first workflow module scope through the durable sync route", async () => {
+    const { state } = createSqliteDurableObjectState();
+    const durableObject = createTestDurableObject(state);
+    const authority = await getDurableAuthority<WebAppAuthority>(durableObject);
+    const fixture = await createTestWorkflowFixture(authority, testAuthorityAuthorization);
+    const total = await readSyncPayload(
+      durableObject,
+      undefined,
+      testAuthorityAuthorization,
+      workflowModuleScope,
+    );
+
+    if (total.mode !== "total") {
+      throw new Error("Expected a scoped total sync payload.");
+    }
+
+    expect(total).toMatchObject({
+      scope: {
+        kind: "module",
+        moduleId: workflowModuleScope.moduleId,
+        scopeId: workflowModuleScope.scopeId,
+        definitionHash: "scope-def:ops/workflow:review:v1",
+        policyFilterVersion: "policy:0",
+      },
+      completeness: "complete",
+      freshness: "current",
+    });
+    if (!total.snapshot) {
+      throw new Error("Expected the scoped total payload to include a snapshot.");
+    }
+    expect(total.snapshot.edges.some((edge) => edge.s === fixture.branchId)).toBe(true);
+
+    const createdCommit = (await authority.executeCommand(
+      {
+        kind: "workflow-mutation",
+        input: {
+          action: "createCommit",
+          branchId: fixture.branchId,
+          title: "Durable scoped incremental",
+          commitKey: "commit:durable-scoped-incremental",
+          order: 0,
+          state: "ready",
+        },
+      },
+      {
+        authorization: testAuthorityAuthorization,
+      },
+    )) as { readonly summary: { readonly id: string } };
+
+    const incremental = await readSyncPayload(
+      durableObject,
+      total.cursor,
+      testAuthorityAuthorization,
+      workflowModuleScope,
+    );
+
+    if (incremental.mode !== "incremental" || "fallback" in incremental) {
+      throw new Error("Expected a data-bearing scoped incremental payload.");
+    }
+
+    expect(incremental.scope).toEqual(total.scope);
+    if (!incremental.transactions) {
+      throw new Error("Expected scoped incremental transactions.");
+    }
+    expect(incremental.transactions).toHaveLength(1);
+    expect(
+      incremental.transactions[0]?.transaction.ops.some(
+        (operation) =>
+          operation.op === "assert" &&
+          operation.edge.s === createdCommit.summary.id &&
+          operation.edge.p === edgeId(core.node.fields.name),
+      ),
+    ).toBe(true);
+  });
+
+  it("returns scoped fallback from the durable sync route and keeps whole-graph recovery explicit", async () => {
+    const { state } = createSqliteDurableObjectState();
+    const durableObject = createTestDurableObject(state);
+    const authority = await getDurableAuthority<WebAppAuthority>(durableObject);
+    const fixture = await createTestWorkflowFixture(authority, testAuthorityAuthorization);
+    const envVarWrite = buildTransactionFromSnapshot(
+      authority.readSnapshot({ authorization: testAuthorityAuthorization }),
+      "tx:create-env-var:scoped-recovery",
+      (graph) =>
+        graph.envVar.create({
+          description: "Only whole-graph recovery should include this env var.",
+          name: "OPENAI_API_KEY",
+        }),
+    );
+    await postTransaction(durableObject, envVarWrite.transaction);
+
+    const scopedTotal = await readSyncPayload(
+      durableObject,
+      undefined,
+      testAuthorityAuthorization,
+      workflowModuleScope,
+    );
+
+    if (scopedTotal.mode !== "total") {
+      throw new Error("Expected a scoped total sync payload.");
+    }
+
+    expect(scopedTotal.snapshot?.edges.some((edge) => edge.s === fixture.branchId)).toBe(true);
+    expect(scopedTotal.snapshot?.edges.some((edge) => edge.s === envVarWrite.result)).toBe(false);
+
+    const staleCursor = updateScopedCursor(scopedTotal.cursor, {
+      policyFilterVersion: "policy:999",
+    });
+    const fallback = await readSyncPayload(
+      durableObject,
+      staleCursor,
+      testAuthorityAuthorization,
+      workflowModuleScope,
+    );
+
+    expect(fallback).toMatchObject({
+      mode: "incremental",
+      scope: scopedTotal.scope,
+      after: staleCursor,
+      cursor: scopedTotal.cursor,
+      fallback: "policy-changed",
+      completeness: "complete",
+      freshness: "current",
+      transactions: [],
+    });
+
+    const recovered = await readSyncPayload(durableObject, undefined, testAuthorityAuthorization);
+
+    expect(recovered).toMatchObject({
+      mode: "total",
+      scope: {
+        kind: "graph",
+      },
+      completeness: "complete",
+      freshness: "current",
+    });
+    expect(recovered.snapshot?.edges.some((edge) => edge.s === fixture.branchId)).toBe(true);
+    expect(recovered.snapshot?.edges.some((edge) => edge.s === envVarWrite.result)).toBe(true);
   });
 
   it("proves two principals receive different sync payloads and direct-read outcomes for the same entity", async () => {

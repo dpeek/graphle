@@ -1,3 +1,4 @@
+import { applyHttpSyncRequest } from "./http-sync-request";
 import { createGraphId } from "./id";
 import type { AnyTypeOutput } from "./schema";
 import {
@@ -5,6 +6,8 @@ import {
   type AuthoritativeGraphWriteResult,
   type GraphWriteTransaction,
   type SyncPayload,
+  type SyncScopeRequest,
+  type SyncState,
   type SyncedTypeClient,
 } from "./sync";
 
@@ -18,6 +21,7 @@ export type HttpGraphClientOptions = {
   readonly transactionPath?: string;
   readonly fetch?: FetchImpl;
   readonly createTxId?: () => string;
+  readonly requestedScope?: SyncScopeRequest;
 };
 
 function readErrorMessage(
@@ -60,9 +64,14 @@ export async function createHttpGraphClient<const T extends Record<string, AnyTy
   const fetchImpl = options.fetch ?? globalThis.fetch;
   const createTxId = options.createTxId ?? createHttpGraphTxIdFactory();
 
-  async function fetchSyncPayload(after?: string): Promise<SyncPayload> {
+  async function fetchSyncPayload(
+    state: Pick<SyncState, "cursor" | "requestedScope">,
+  ): Promise<SyncPayload> {
     const requestUrl = new URL(syncUrl);
-    if (after) requestUrl.searchParams.set("after", after);
+    applyHttpSyncRequest(requestUrl, {
+      after: state.cursor,
+      scope: state.requestedScope,
+    });
 
     const response = await fetchImpl(requestUrl, {
       cache: "no-store",
@@ -111,7 +120,8 @@ export async function createHttpGraphClient<const T extends Record<string, AnyTy
 
   const client = createSyncedTypeClient(namespace, {
     createTxId,
-    pull: (state) => fetchSyncPayload(state.cursor),
+    requestedScope: options.requestedScope,
+    pull: (state) => fetchSyncPayload(state),
     push: pushTransaction,
   });
 

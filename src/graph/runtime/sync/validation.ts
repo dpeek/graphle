@@ -9,19 +9,27 @@ import { createStore, type Store, type StoreSnapshot } from "../store";
 import {
   cloneAuthoritativeGraphWriteResult,
   cloneGraphWriteTransaction,
+  cloneSyncScope,
+  createModuleSyncScope,
   graphSyncScope,
+  isGraphSyncScope,
   isIncrementalSyncFallbackReason,
   isAuthoritativeWriteScope,
   isObjectRecord,
+  isSyncCompleteness,
+  isSyncFreshness,
+  sameSyncScope,
   type AuthoritativeGraphWriteResult,
   type AuthoritativeGraphWriteResultValidator,
   type AuthoritativeWriteScope,
   type GraphWriteTransaction,
+  type SyncCompleteness,
   type IncrementalSyncFallback,
   type IncrementalSyncFallbackReason,
   type IncrementalSyncPayload,
   type IncrementalSyncResult,
   type SyncFreshness,
+  type SyncScope,
   type TotalSyncPayload,
   type TotalSyncPayloadValidator,
 } from "./contracts";
@@ -48,6 +56,126 @@ import {
   prefixIncrementalSyncTransactionIssues,
   withValidationValue,
 } from "./validation-helpers";
+
+type SyncValidationIssueFactory = (
+  path: string[],
+  code: string,
+  message: string,
+) => GraphValidationIssue;
+
+const graphIncrementalFallbackReasons = new Set<IncrementalSyncFallbackReason>([
+  "unknown-cursor",
+  "gap",
+  "reset",
+]);
+
+function materializeSyncScope(scope: unknown): SyncScope {
+  if (isObjectRecord(scope) && scope.kind === "module") {
+    return createModuleSyncScope({
+      moduleId: typeof scope.moduleId === "string" ? scope.moduleId : "",
+      scopeId: typeof scope.scopeId === "string" ? scope.scopeId : "",
+      definitionHash: typeof scope.definitionHash === "string" ? scope.definitionHash : "",
+      policyFilterVersion:
+        typeof scope.policyFilterVersion === "string" ? scope.policyFilterVersion : "",
+    });
+  }
+
+  return graphSyncScope;
+}
+
+function validateSyncScopeShape(
+  scope: unknown,
+  issueFactory: SyncValidationIssueFactory,
+  codePrefix: string,
+): {
+  issues: GraphValidationIssue[];
+  value: SyncScope;
+} {
+  const issues: GraphValidationIssue[] = [];
+  const value = materializeSyncScope(scope);
+
+  if (!isObjectRecord(scope) || (scope.kind !== "graph" && scope.kind !== "module")) {
+    issues.push(
+      issueFactory(
+        ["scope", "kind"],
+        codePrefix,
+        'Field "scope.kind" must be "graph" or "module".',
+      ),
+    );
+    return { issues, value };
+  }
+
+  if (scope.kind !== "module") {
+    return { issues, value };
+  }
+
+  for (const field of ["moduleId", "scopeId", "definitionHash", "policyFilterVersion"] as const) {
+    const rawValue = scope[field];
+    if (typeof rawValue !== "string") {
+      issues.push(
+        issueFactory(
+          ["scope", field],
+          `${codePrefix}.${field}`,
+          `Field "scope.${field}" must be a string.`,
+        ),
+      );
+      continue;
+    }
+
+    if (rawValue.length === 0) {
+      issues.push(
+        issueFactory(
+          ["scope", field],
+          `${codePrefix}.${field}.empty`,
+          `Field "scope.${field}" must not be empty.`,
+        ),
+      );
+    }
+  }
+
+  return { issues, value };
+}
+
+function validateSyncCompleteness(
+  completeness: unknown,
+  scope: SyncScope,
+  issueFactory: SyncValidationIssueFactory,
+  path: string[],
+  code: string,
+  graphMessage: string,
+): readonly GraphValidationIssue[] {
+  if (isGraphSyncScope(scope)) {
+    return completeness === "complete" ? [] : [issueFactory(path, code, graphMessage)];
+  }
+
+  return isSyncCompleteness(completeness)
+    ? []
+    : [issueFactory(path, code, 'Field "completeness" must be "complete" or "incomplete".')];
+}
+
+function validateSyncFreshness(
+  freshness: unknown,
+  issueFactory: SyncValidationIssueFactory,
+  path: string[],
+  code: string,
+): readonly GraphValidationIssue[] {
+  return isSyncFreshness(freshness)
+    ? []
+    : [issueFactory(path, code, 'Field "freshness" must be "current" or "stale".')];
+}
+
+function describeIncrementalFallbackReasons(scope: SyncScope): string {
+  return isGraphSyncScope(scope)
+    ? '"unknown-cursor", "gap", or "reset"'
+    : '"unknown-cursor", "gap", "reset", "scope-changed", or "policy-changed"';
+}
+
+function allowsIncrementalSyncFallbackReason(
+  scope: SyncScope,
+  fallback: IncrementalSyncFallbackReason,
+): boolean {
+  return isGraphSyncScope(scope) ? graphIncrementalFallbackReasons.has(fallback) : true;
+}
 
 function materializeTotalSyncPayload(
   payload: TotalSyncPayload,
@@ -341,6 +469,7 @@ function validateStoreSnapshotShape(snapshot: unknown): readonly GraphValidation
 function validateTotalSyncPayloadShape(payload: TotalSyncPayload): readonly GraphValidationIssue[] {
   const issues: GraphValidationIssue[] = [];
   const candidate = payload as Partial<TotalSyncPayload> & Record<string, unknown>;
+  const scope = validateSyncScopeShape(candidate.scope, createPayloadValidationIssue, "sync.scope");
 
   if (candidate.mode !== "total") {
     issues.push(
@@ -348,15 +477,7 @@ function validateTotalSyncPayloadShape(payload: TotalSyncPayload): readonly Grap
     );
   }
 
-  if (!isObjectRecord(candidate.scope) || candidate.scope.kind !== "graph") {
-    issues.push(
-      createPayloadValidationIssue(
-        ["scope", "kind"],
-        "sync.scope",
-        'Field "scope.kind" must be "graph".',
-      ),
-    );
-  }
+  issues.push(...scope.issues);
 
   if (typeof candidate.cursor !== "string") {
     issues.push(
@@ -364,25 +485,25 @@ function validateTotalSyncPayloadShape(payload: TotalSyncPayload): readonly Grap
     );
   }
 
-  if (candidate.completeness !== "complete") {
-    issues.push(
-      createPayloadValidationIssue(
-        ["completeness"],
-        "sync.completeness",
-        'Field "completeness" must be "complete" for total sync payloads.',
-      ),
-    );
-  }
+  issues.push(
+    ...validateSyncCompleteness(
+      candidate.completeness,
+      scope.value,
+      createPayloadValidationIssue,
+      ["completeness"],
+      "sync.completeness",
+      'Field "completeness" must be "complete" for graph-scoped total sync payloads.',
+    ),
+  );
 
-  if (candidate.freshness !== "current" && candidate.freshness !== "stale") {
-    issues.push(
-      createPayloadValidationIssue(
-        ["freshness"],
-        "sync.freshness",
-        'Field "freshness" must be "current" or "stale".',
-      ),
-    );
-  }
+  issues.push(
+    ...validateSyncFreshness(
+      candidate.freshness,
+      createPayloadValidationIssue,
+      ["freshness"],
+      "sync.freshness",
+    ),
+  );
 
   issues.push(...validateStoreSnapshotShape(candidate.snapshot));
   return issues;
@@ -395,18 +516,20 @@ export function createIncrementalSyncPayload(
   options: {
     after: string;
     cursor?: string;
+    completeness?: SyncCompleteness;
     freshness?: SyncFreshness;
+    scope?: SyncScope;
   },
 ): IncrementalSyncPayload {
   return {
     mode: "incremental",
-    scope: graphSyncScope,
+    scope: cloneSyncScope(options.scope ?? graphSyncScope),
     after: options.after,
     transactions: transactions.map((transaction) =>
       cloneAuthoritativeGraphWriteResult(transaction),
     ),
     cursor: options.cursor ?? transactions[transactions.length - 1]?.cursor ?? options.after,
-    completeness: "complete",
+    completeness: options.completeness ?? "complete",
     freshness: options.freshness ?? "current",
   };
 }
@@ -418,16 +541,18 @@ export function createIncrementalSyncFallback(
   options: {
     after: string;
     cursor: string;
+    completeness?: SyncCompleteness;
     freshness?: SyncFreshness;
+    scope?: SyncScope;
   },
 ): IncrementalSyncFallback {
   return {
     mode: "incremental",
-    scope: graphSyncScope,
+    scope: cloneSyncScope(options.scope ?? graphSyncScope),
     after: options.after,
     transactions: [],
     cursor: options.cursor,
-    completeness: "complete",
+    completeness: options.completeness ?? "complete",
     freshness: options.freshness ?? "current",
     fallback,
   };
@@ -446,6 +571,11 @@ function validateIncrementalSyncPayloadShape(
 } {
   const issues: GraphValidationIssue[] = [];
   const candidate = payload as Partial<IncrementalSyncResult> & Record<string, unknown>;
+  const scope = validateSyncScopeShape(
+    candidate.scope,
+    createIncrementalSyncValidationIssue,
+    "sync.incremental.scope",
+  );
   const transactions: AuthoritativeGraphWriteResult[] = [];
   const txIds = new Set<string>();
   const cursors = new Set<string>();
@@ -460,15 +590,7 @@ function validateIncrementalSyncPayloadShape(
     );
   }
 
-  if (!isObjectRecord(candidate.scope) || candidate.scope.kind !== "graph") {
-    issues.push(
-      createIncrementalSyncValidationIssue(
-        ["scope", "kind"],
-        "sync.incremental.scope",
-        'Field "scope.kind" must be "graph".',
-      ),
-    );
-  }
+  issues.push(...scope.issues);
 
   if (typeof candidate.after !== "string") {
     issues.push(
@@ -506,25 +628,25 @@ function validateIncrementalSyncPayloadShape(
     );
   }
 
-  if (candidate.completeness !== "complete") {
-    issues.push(
-      createIncrementalSyncValidationIssue(
-        ["completeness"],
-        "sync.incremental.completeness",
-        'Field "completeness" must be "complete" for graph-scoped incremental sync.',
-      ),
-    );
-  }
+  issues.push(
+    ...validateSyncCompleteness(
+      candidate.completeness,
+      scope.value,
+      createIncrementalSyncValidationIssue,
+      ["completeness"],
+      "sync.incremental.completeness",
+      'Field "completeness" must be "complete" for graph-scoped incremental sync.',
+    ),
+  );
 
-  if (candidate.freshness !== "current" && candidate.freshness !== "stale") {
-    issues.push(
-      createIncrementalSyncValidationIssue(
-        ["freshness"],
-        "sync.incremental.freshness",
-        'Field "freshness" must be "current" or "stale".',
-      ),
-    );
-  }
+  issues.push(
+    ...validateSyncFreshness(
+      candidate.freshness,
+      createIncrementalSyncValidationIssue,
+      ["freshness"],
+      "sync.incremental.freshness",
+    ),
+  );
 
   if (!Array.isArray(candidate.transactions)) {
     issues.push(
@@ -613,6 +735,9 @@ function validateIncrementalSyncPayloadShape(
 
   const after = typeof candidate.after === "string" ? candidate.after : "";
   const cursor = typeof candidate.cursor === "string" ? candidate.cursor : "";
+  const completeness = isSyncCompleteness(candidate.completeness)
+    ? candidate.completeness
+    : "complete";
   const freshness = candidate.freshness === "stale" ? "stale" : "current";
   const hasFallback = "fallback" in candidate;
   const fallbackReason = isIncrementalSyncFallbackReason(candidate.fallback)
@@ -630,12 +755,15 @@ function validateIncrementalSyncPayloadShape(
   }
 
   if (options.allowFallback && hasFallback) {
-    if (!isIncrementalSyncFallbackReason(candidate.fallback)) {
+    if (
+      !isIncrementalSyncFallbackReason(candidate.fallback) ||
+      !allowsIncrementalSyncFallbackReason(scope.value, candidate.fallback)
+    ) {
       issues.push(
         createIncrementalSyncValidationIssue(
           ["fallback"],
           "sync.incremental.fallback",
-          'Field "fallback" must be "unknown-cursor", "gap", or "reset".',
+          `Field "fallback" must be ${describeIncrementalFallbackReasons(scope.value)}.`,
         ),
       );
     }
@@ -689,12 +817,16 @@ function validateIncrementalSyncPayloadShape(
         ? createIncrementalSyncFallback(fallbackReason, {
             after,
             cursor,
+            completeness,
             freshness,
+            scope: scope.value,
           })
         : createIncrementalSyncPayload(transactions, {
             after,
             cursor,
+            completeness,
             freshness,
+            scope: scope.value,
           }),
   };
 }
@@ -811,6 +943,7 @@ export function prepareIncrementalSyncResultForApply(
   result: IncrementalSyncResult,
   currentCursor: string | undefined,
   options: {
+    currentScope?: SyncScope;
     validateWriteResult?: AuthoritativeGraphWriteResultValidator;
   } = {},
 ):
@@ -842,6 +975,19 @@ export function prepareIncrementalSyncResultForApply(
           ["fallback"],
           "sync.incremental.recovery",
           `Incremental sync requires total snapshot recovery because the authority reported "${materialized.fallback}".`,
+        ),
+      ]),
+    };
+  }
+
+  if (options.currentScope && !sameSyncScope(materialized.scope, options.currentScope)) {
+    return {
+      ok: false,
+      result: invalidIncrementalSyncResult(materialized, [
+        createIncrementalSyncValidationIssue(
+          ["scope"],
+          "sync.incremental.scope.current",
+          'Field "scope" must match the active sync scope before incremental apply.',
         ),
       ]),
     };

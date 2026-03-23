@@ -4,6 +4,7 @@ export * from "./bootstrap";
 export * from "./client";
 export * from "./contracts";
 export * from "./http-client";
+export * from "./http-sync-request";
 export * from "./id";
 export * from "./identity";
 export * from "./schema";

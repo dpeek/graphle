@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 
 import { pkm } from "../modules/pkm.js";
 import { bootstrap } from "./bootstrap";
-import { createTypeClient } from "./client";
+import { GraphValidationError, createTypeClient } from "./client";
 import { core } from "./core";
 import { createHttpGraphClient, defaultHttpGraphUrl, type FetchImpl } from "./http-client";
 import { createIdMap, defineNamespace } from "./identity";
@@ -10,6 +10,9 @@ import { defineType, edgeId, typeId } from "./schema";
 import { createStore } from "./store";
 import {
   createAuthoritativeGraphWriteSession,
+  createIncrementalSyncFallback,
+  createIncrementalSyncPayload,
+  createModuleSyncScope,
   createSyncedTypeClient,
   createTotalSyncPayload,
   type AuthoritativeGraphWriteResult,
@@ -101,6 +104,167 @@ describe("createHttpGraphClient", () => {
     expect(peer.graph.item.list().map((entity) => entity.name)).toEqual([
       "Seeded item",
       "Created from client",
+    ]);
+  });
+
+  it("preserves one requested module scope across scoped bootstrap and refresh requests", async () => {
+    const authority = createAuthority();
+    const requestedScope = {
+      kind: "module" as const,
+      moduleId: "ops/workflow",
+      scopeId: "scope:ops/workflow:review",
+    };
+    const deliveredScope = createModuleSyncScope({
+      moduleId: requestedScope.moduleId,
+      scopeId: requestedScope.scopeId,
+      definitionHash: "scope-def:v1",
+      policyFilterVersion: "policy:v1",
+    });
+    const requestedUrls: string[] = [];
+    let syncCount = 0;
+    const fetch: FetchImpl = async (input, init) => {
+      const request = input instanceof Request ? input : new Request(String(input), init);
+      const url = new URL(request.url);
+
+      if (url.pathname === "/api/sync") {
+        requestedUrls.push(url.toString());
+        syncCount += 1;
+        const payload: SyncPayload =
+          syncCount === 1
+            ? createTotalSyncPayload(authority.store, {
+                scope: deliveredScope,
+                cursor: "module:1",
+                freshness: "stale",
+              })
+            : createIncrementalSyncPayload([], {
+                after: "module:1",
+                cursor: "module:2",
+                scope: deliveredScope,
+                freshness: "current",
+              });
+        return Response.json(payload);
+      }
+
+      if (url.pathname === "/api/tx" && request.method === "POST") {
+        const transaction = (await request.json()) as GraphWriteTransaction;
+        const result: AuthoritativeGraphWriteResult = authority.writes.apply(transaction);
+        return Response.json(result);
+      }
+
+      return Response.json(
+        { error: `Unhandled ${request.method} ${url.pathname}` },
+        { status: 404 },
+      );
+    };
+
+    const client = await createHttpGraphClient(testGraph, {
+      fetch,
+      requestedScope,
+    });
+
+    await client.sync.sync();
+
+    expect(client.sync.getState()).toMatchObject({
+      requestedScope,
+      scope: deliveredScope,
+      cursor: "module:2",
+      status: "ready",
+    });
+    expect(requestedUrls).toEqual([
+      "http://io.localhost:1355/api/sync?scopeKind=module&moduleId=ops%2Fworkflow&scopeId=scope%3Aops%2Fworkflow%3Areview",
+      "http://io.localhost:1355/api/sync?after=module%3A1&scopeKind=module&moduleId=ops%2Fworkflow&scopeId=scope%3Aops%2Fworkflow%3Areview",
+    ]);
+  });
+
+  it("surfaces scoped fallback without widening and recovers through a new whole-graph bootstrap", async () => {
+    const authority = createAuthority();
+    const requestedScope = {
+      kind: "module" as const,
+      moduleId: "ops/workflow",
+      scopeId: "scope:ops/workflow:review",
+    };
+    const deliveredScope = createModuleSyncScope({
+      moduleId: requestedScope.moduleId,
+      scopeId: requestedScope.scopeId,
+      definitionHash: "scope-def:v1",
+      policyFilterVersion: "policy:v1",
+    });
+    const requestedUrls: string[] = [];
+
+    const fetch: FetchImpl = async (input, init) => {
+      const request = input instanceof Request ? input : new Request(String(input), init);
+      const url = new URL(request.url);
+
+      if (url.pathname === "/api/sync") {
+        requestedUrls.push(url.toString());
+        const after = url.searchParams.get("after");
+        const scopeKind = url.searchParams.get("scopeKind");
+        const payload: SyncPayload =
+          scopeKind === "module" && !after
+            ? createTotalSyncPayload(authority.store, {
+                scope: deliveredScope,
+                cursor: "module:1",
+                completeness: "incomplete",
+                freshness: "stale",
+              })
+            : scopeKind === "module" && after === "module:1"
+              ? createIncrementalSyncFallback("policy-changed", {
+                  after,
+                  cursor: "module:2",
+                  scope: deliveredScope,
+                  completeness: "incomplete",
+                  freshness: "current",
+                })
+              : createTotalSyncPayload(authority.store, {
+                  cursor: "graph:1",
+                  freshness: "current",
+                });
+        return Response.json(payload);
+      }
+
+      if (url.pathname === "/api/tx" && request.method === "POST") {
+        const transaction = (await request.json()) as GraphWriteTransaction;
+        const result: AuthoritativeGraphWriteResult = authority.writes.apply(transaction);
+        return Response.json(result);
+      }
+
+      return Response.json(
+        { error: `Unhandled ${request.method} ${url.pathname}` },
+        { status: 404 },
+      );
+    };
+
+    const scopedClient = await createHttpGraphClient(testGraph, {
+      fetch,
+      requestedScope,
+    });
+
+    await expect(scopedClient.sync.sync()).rejects.toBeInstanceOf(GraphValidationError);
+    expect(scopedClient.sync.getState()).toMatchObject({
+      requestedScope,
+      scope: deliveredScope,
+      cursor: "module:1",
+      completeness: "incomplete",
+      freshness: "stale",
+      fallback: "policy-changed",
+      status: "error",
+    });
+
+    const recovered = await createHttpGraphClient(testGraph, {
+      fetch,
+    });
+
+    expect(recovered.sync.getState()).toMatchObject({
+      requestedScope: { kind: "graph" },
+      scope: { kind: "graph" },
+      cursor: "graph:1",
+      freshness: "current",
+      status: "ready",
+    });
+    expect(requestedUrls).toEqual([
+      "http://io.localhost:1355/api/sync?scopeKind=module&moduleId=ops%2Fworkflow&scopeId=scope%3Aops%2Fworkflow%3Areview",
+      "http://io.localhost:1355/api/sync?after=module%3A1&scopeKind=module&moduleId=ops%2Fworkflow&scopeId=scope%3Aops%2Fworkflow%3Areview",
+      "http://io.localhost:1355/api/sync?scopeKind=graph",
     ]);
   });
 

@@ -50,11 +50,89 @@ export type SyncActivity =
       readonly at: Date;
     };
 
-export type SyncScope = {
+export type GraphSyncScope = {
   readonly kind: "graph";
 };
 
-export const graphSyncScope: SyncScope = Object.freeze({ kind: "graph" });
+export type ModuleSyncScope = {
+  readonly kind: "module";
+  readonly moduleId: string;
+  readonly scopeId: string;
+  readonly definitionHash: string;
+  readonly policyFilterVersion: string;
+};
+
+export type SyncScope = GraphSyncScope | ModuleSyncScope;
+export type ModuleSyncScopeRequest = {
+  readonly kind: "module";
+  readonly moduleId: string;
+  readonly scopeId: string;
+};
+export type SyncScopeRequest = GraphSyncScope | ModuleSyncScopeRequest;
+
+export const graphSyncScope = Object.freeze({ kind: "graph" }) satisfies GraphSyncScope;
+
+export function createModuleSyncScope(scope: {
+  moduleId: string;
+  scopeId: string;
+  definitionHash: string;
+  policyFilterVersion: string;
+}): ModuleSyncScope {
+  return {
+    kind: "module",
+    moduleId: scope.moduleId,
+    scopeId: scope.scopeId,
+    definitionHash: scope.definitionHash,
+    policyFilterVersion: scope.policyFilterVersion,
+  };
+}
+
+export function isGraphSyncScope(scope: SyncScope): scope is GraphSyncScope {
+  return scope.kind === "graph";
+}
+
+export function isModuleSyncScope(scope: SyncScope): scope is ModuleSyncScope {
+  return scope.kind === "module";
+}
+
+export function isModuleSyncScopeRequest(scope: SyncScopeRequest): scope is ModuleSyncScopeRequest {
+  return scope.kind === "module";
+}
+
+export function cloneSyncScope(scope: SyncScope): SyncScope {
+  return isGraphSyncScope(scope) ? graphSyncScope : { ...scope };
+}
+
+export function cloneSyncScopeRequest(scope: SyncScopeRequest): SyncScopeRequest {
+  return scope.kind === "graph" ? graphSyncScope : { ...scope };
+}
+
+export function sameSyncScope(left: SyncScope, right: SyncScope): boolean {
+  if (left.kind !== right.kind) return false;
+  if (left.kind === "graph") return true;
+  if (right.kind !== "module") return false;
+  return (
+    left.moduleId === right.moduleId &&
+    left.scopeId === right.scopeId &&
+    left.definitionHash === right.definitionHash &&
+    left.policyFilterVersion === right.policyFilterVersion
+  );
+}
+
+export function sameSyncScopeRequest(left: SyncScopeRequest, right: SyncScopeRequest): boolean {
+  if (left.kind !== right.kind) return false;
+  if (left.kind === "graph") return true;
+  if (right.kind !== "module") return false;
+  return left.moduleId === right.moduleId && left.scopeId === right.scopeId;
+}
+
+export function isSyncCompleteness(value: unknown): value is SyncCompleteness {
+  return value === "complete" || value === "incomplete";
+}
+
+export function isSyncFreshness(value: unknown): value is SyncFreshness {
+  return value === "current" || value === "stale";
+}
 
 /**
  * Predicate materialization target evaluated during sync replication after
@@ -78,15 +156,22 @@ export type TotalSyncPayload = {
   readonly scope: SyncScope;
   readonly snapshot: StoreSnapshot;
   readonly cursor: AuthoritativeGraphCursor;
-  readonly completeness: "complete";
+  readonly completeness: SyncCompleteness;
   readonly freshness: SyncFreshness;
 };
 
-export type IncrementalSyncFallbackReason = "unknown-cursor" | "gap" | "reset";
+export type IncrementalSyncFallbackReason =
+  | "unknown-cursor"
+  | "gap"
+  | "reset"
+  | "scope-changed"
+  | "policy-changed";
 export const incrementalSyncFallbackReasons = [
   "unknown-cursor",
   "gap",
   "reset",
+  "scope-changed",
+  "policy-changed",
 ] as const satisfies readonly IncrementalSyncFallbackReason[];
 
 export function isIncrementalSyncFallbackReason(
@@ -104,7 +189,7 @@ export function isIncrementalSyncFallbackReason(
  * `transactions` may be empty without becoming a fallback:
  * - `cursor === after`: nothing new was accepted after the requested cursor
  * - `cursor !== after`: the cursor advanced, but no replicated transactions
- *   were visible in this graph-scoped result
+ *   were visible in this sync scope
  */
 export type IncrementalSyncPayload = {
   readonly mode: "incremental";
@@ -112,7 +197,7 @@ export type IncrementalSyncPayload = {
   readonly after: AuthoritativeGraphCursor;
   readonly transactions: readonly AuthoritativeGraphWriteResult[];
   readonly cursor: AuthoritativeGraphCursor;
-  readonly completeness: "complete";
+  readonly completeness: SyncCompleteness;
   readonly freshness: SyncFreshness;
 };
 
@@ -126,7 +211,7 @@ export type IncrementalSyncFallback = {
   readonly after: AuthoritativeGraphCursor;
   readonly transactions: readonly [];
   readonly cursor: AuthoritativeGraphCursor;
-  readonly completeness: "complete";
+  readonly completeness: SyncCompleteness;
   readonly freshness: SyncFreshness;
   readonly fallback: IncrementalSyncFallbackReason;
 };
@@ -273,7 +358,7 @@ export function cloneAuthoritativeGraphWriteResult(
 export function cloneTotalSyncPayload(payload: TotalSyncPayload): TotalSyncPayload {
   return {
     ...payload,
-    scope: { ...payload.scope },
+    scope: cloneSyncScope(payload.scope),
     snapshot: {
       edges: payload.snapshot.edges.map((edge) => ({ ...edge })),
       retracted: [...payload.snapshot.retracted],
@@ -285,12 +370,12 @@ export function cloneIncrementalSyncResult(result: IncrementalSyncResult): Incre
   return "fallback" in result
     ? {
         ...result,
-        scope: { ...result.scope },
+        scope: cloneSyncScope(result.scope),
         transactions: [],
       }
     : {
         ...result,
-        scope: { ...result.scope },
+        scope: cloneSyncScope(result.scope),
         transactions: result.transactions.map((transaction) =>
           cloneAuthoritativeGraphWriteResult(transaction),
         ),
@@ -310,15 +395,20 @@ export class GraphSyncWriteError extends Error {
   }
 }
 
-export type SyncState = {
-  readonly mode: "total";
+export type SyncScopeState = {
   readonly scope: SyncScope;
-  readonly status: SyncStatus;
   readonly completeness: SyncCompleteness;
   readonly freshness: SyncFreshness;
+  readonly cursor?: AuthoritativeGraphCursor;
+  readonly fallback?: IncrementalSyncFallbackReason;
+};
+
+export type SyncState = SyncScopeState & {
+  readonly mode: "total";
+  readonly requestedScope: SyncScopeRequest;
+  readonly status: SyncStatus;
   readonly pendingCount: number;
   readonly recentActivities: readonly SyncActivity[];
-  readonly cursor?: string;
   readonly lastSyncedAt?: Date;
   readonly error?: unknown;
 };
@@ -455,7 +545,8 @@ export function appendSyncActivity(
 export function cloneState(state: SyncState): SyncState {
   return {
     ...state,
-    scope: graphSyncScope,
+    requestedScope: cloneSyncScopeRequest(state.requestedScope),
+    scope: cloneSyncScope(state.scope),
     pendingCount: state.pendingCount,
     recentActivities: state.recentActivities.map((activity) => cloneSyncActivity(activity)),
     lastSyncedAt: state.lastSyncedAt ? new Date(state.lastSyncedAt.getTime()) : undefined,

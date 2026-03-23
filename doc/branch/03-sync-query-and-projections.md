@@ -58,8 +58,9 @@ not an implementation detail inside the web app.
 
 ### First Shippable Milestone
 
-Ship one narrow scoped sync class, ideally a module slice or work queue, plus
-one materialized collection index and one live invalidation proof.
+Ship one narrow scoped sync class. The current sync-contract proof freezes that
+class as a module slice, plus one materialized collection index and one live
+invalidation proof.
 
 ### Done Means
 
@@ -747,11 +748,17 @@ Dropped or late invalidation events
 ### Slice 1: Named scoped sync over the current single authority
 
 - goal: extend the current `graph` sync contract to support one named scope
-  class, such as a module slice or work queue
+  class; the current proof freezes that class as a module slice
 - prerequisite contracts: Branch 1 cursor continuity, Branch 2 owner-only or
   simple capability filtering
 - what it proves: a client can bootstrap and refresh one non-graph scope with
   explicit completeness
+- current shipped proof:
+  `ops/workflow` review scope over `/api/sync`, with delivered
+  `definitionHash`, `policyFilterVersion`, and scoped cursor identity
+- recovery contract: scoped incremental fallback is explicit
+  (`scope-changed` or `policy-changed`) and recovery stays a new total sync,
+  with whole-graph bootstrap kept as the current browser proof path
 - what it postpones: sharding, generic planners, federated reads
 
 ### Slice 2: One projection-backed collection query
@@ -795,7 +802,7 @@ Dropped or late invalidation events
 
 ## 13. Recommended First Code Targets
 
-- `src/graph/runtime/sync/contracts.ts` and `src/graph/runtime/sync.md`:
+- `src/graph/runtime/sync/contracts.ts` and `doc/graph/sync.md`:
   extend `SyncScope`, completeness, and fallback semantics beyond whole-graph
 - `src/graph/runtime/http-client.ts` and `src/web/lib/server-routes.ts`: add
   scoped bootstrap and scoped incremental pull transport shapes

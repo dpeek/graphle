@@ -24,11 +24,33 @@ The current engine already supports two authoritative delivery shapes in `../../
 - transaction envelopes keyed by stable idempotency ids
 - authoritative write acknowledgements that retain `writeScope` and explicit
   replay state
+- one named proof scope beyond whole-graph sync: `scope.kind === "module"`
+
+The first shipped non-graph scope is a module slice. The shared sync contract
+freezes that proof shape without claiming support for every Branch 3 scope
+class yet.
+
+The current web authority now plans one concrete module scope on the authority
+side:
+
+- request:
+  `{ kind: "module", moduleId: "ops/workflow", scopeId: "scope:ops/workflow:review" }`
+- delivered scope:
+  `{ kind: "module", moduleId, scopeId, definitionHash, policyFilterVersion }`
+- current materialization:
+  the `ops/workflow` entity family only, using the current request
+  `AuthorizationContext.policyVersion` as the planned `policyFilterVersion`
+
+Scoped cursors stay opaque to callers, but the web authority now binds them to
+the planned module scope metadata. Incremental refreshes for that scope fail
+explicitly with `scope-changed` or `policy-changed` when the cursor no longer
+matches the current planned scope.
 
 Total payloads carry:
 
 - `mode: "total"`
-- `scope: { kind: "graph" }`
+- `scope`, which is either `{ kind: "graph" }` or:
+  `{ kind: "module", moduleId, scopeId, definitionHash, policyFilterVersion }`
 - `snapshot`
 - `cursor`
 - `completeness`
@@ -37,7 +59,7 @@ Total payloads carry:
 Incremental payloads carry:
 
 - `mode: "incremental"`
-- `scope: { kind: "graph" }`
+- `scope`, using the same graph-or-module contract as total payloads
 - `after`
 - `transactions`
 - `cursor`
@@ -57,11 +79,38 @@ Stable delivery rules:
   successful pull: `cursor === after` means no new authoritative change,
   while `cursor !== after` means the cursor advanced without any replicated
   writes in scope
-- `fallback` is reserved for `unknown-cursor`, `gap`, and `reset`, and always
-  means the caller must recover with total sync
+- graph-scoped `fallback` remains limited to `unknown-cursor`, `gap`, and
+  `reset`
+- module-scoped incremental fallbacks may also report `scope-changed` or
+  `policy-changed`; those are explicit recovery signals, not successful
+  incremental repairs
+- incremental apply must stay on the active scope identity; changing
+  `moduleId`, `scopeId`, `definitionHash`, or `policyFilterVersion` requires a
+  total refresh rather than a silent incremental scope swap
 - cursor strings are opaque to transport callers; the shared runtime may parse
   its own authority-issued tokens internally, but downstream callers should
   only persist them, compare them for equality, and echo them back
+
+### First Scoped Proof
+
+The current end-to-end proof is intentionally narrow and explicit:
+
+1. the browser requests
+   `scopeKind=module&moduleId=ops/workflow&scopeId=scope:ops/workflow:review`
+2. the web authority returns a scoped total payload with explicit
+   `completeness`, `freshness`, `definitionHash`, `policyFilterVersion`, and
+   an opaque scoped cursor
+3. later scoped refreshes must reuse that same requested scope; if the planned
+   scope hash or policy version no longer matches, the authority returns an
+   incremental fallback with `transactions: []` plus `scope-changed` or
+   `policy-changed`
+4. the client keeps the existing scoped cache readable but stale, records the
+   fallback, and recovers with a new whole-graph total request
+   `scopeKind=graph`; recovery is never a silent incremental widen
+
+That flow is the baseline proof covered today across shared sync validation,
+client apply behavior, HTTP client transport, and the durable `/api/sync`
+browser route.
 
 ## Current Session APIs
 
@@ -109,17 +158,27 @@ authoritative sync events:
 
 ### Typed synced client
 
-- `createSyncedTypeClient(namespace, { pull, push?, createTxId? })`
+- `createSyncedTypeClient(namespace, { pull, push?, createTxId?, requestedScope? })`
 - exposes `graph` for both `core` and the provided namespace, plus `sync`
 - local typed mutations capture committed diffs as pending `GraphWriteTransaction`s
 - `sync.flush()` pushes queued writes
 - `sync.sync()` pulls authoritative state
 - `sync.getPendingTransactions()` and `sync.getState()` expose queue and delivery state
+- `SyncState.requestedScope` preserves the active graph-or-module scope request even before a total snapshot arrives
+- `SyncState.fallback` retains the last recovery-only incremental fallback so callers can see scoped `scope-changed` or `policy-changed` failures without silently widening the cache
 
 ## Ownership Boundary
 
 - `graph` owns the total/incremental payload contracts, cursor progression rules, fallback semantics, and the persisted-authority history that feeds those contracts after restart.
 - Consumer packages own transport and endpoint policy: when to call `createSyncPayload()` or `getIncrementalSyncResult(...)`, how to expose them over HTTP or another transport, how to construct any `authorizeRead` callback from request-local auth context, and what auth wraps those endpoints.
+- The current web transport proof uses one shared HTTP sync-request shape on
+  `GET /api/sync`: optional `after`, plus an explicit scope request via either
+  `scopeKind=graph` or
+  `scopeKind=module&moduleId=ops/workflow&scopeId=scope:ops/workflow:review`.
+- `createHttpGraphClient(..., { requestedScope })` now forwards that same
+  explicit graph-or-module request on both bootstrap and incremental refreshes,
+  so whole-graph recovery stays available without relying on an implicit
+  missing-param fallback.
 - The web Worker is one such consumer: `src/web/lib/graph-authority-do.ts` now owns the SQLite-backed Durable Object storage path, while `src/web/lib/authority.ts` stays focused on the shared web authority behavior and request handlers.
 - The current web authority layer now includes a thin consumer-owned command
   dispatcher in `src/web/lib/authority.ts` over a shared scoped command seam,
@@ -144,6 +203,9 @@ authoritative sync events:
 - successful total replace clears pending local transactions
 - successful write reconciliation or incremental apply keeps local optimistic replay coherent
 - fallback reasons already distinguish `unknown-cursor`, `gap`, and `reset`
+- module-scoped proofs can now carry explicit `scopeId`, `definitionHash`, and
+  `policyFilterVersion`, plus `scope-changed` and `policy-changed` recovery
+  reasons
 - persisted authoritative runtimes can resume cursor progression from retained write history after restart
 - unusable retained history is rewritten as a reset baseline instead of partially replayed
 

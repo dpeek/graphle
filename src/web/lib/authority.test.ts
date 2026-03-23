@@ -102,6 +102,24 @@ function createHumanAuthorizationContext(
   });
 }
 
+const workflowModuleScope = {
+  kind: "module" as const,
+  moduleId: "ops/workflow",
+  scopeId: "scope:ops/workflow:review",
+};
+
+function updateScopedCursor(cursor: string, updates: Record<string, string>): string {
+  if (!cursor.startsWith("scope:")) {
+    throw new Error(`Expected a scoped cursor, received "${cursor}".`);
+  }
+
+  const params = new URLSearchParams(cursor.slice("scope:".length));
+  for (const [key, value] of Object.entries(updates)) {
+    params.set(key, value);
+  }
+  return `scope:${params.toString()}`;
+}
+
 function buildGraphWriteTransaction(
   before: StoreSnapshot,
   after: StoreSnapshot,
@@ -1286,6 +1304,112 @@ describe("web authority", () => {
     ).toBe(ops.repositoryCommitLeaseState.values.released.id);
   });
 
+  it("plans the first workflow module scope and produces scoped total and incremental payloads", async () => {
+    const authorization = createAuthorityAuthorizationContext();
+    const { authority, fixture } =
+      await createTestWebAppAuthorityWithWorkflowFixture(authorization);
+    const envVarId = await createEnvVar(
+      authority,
+      authorization,
+      {
+        description: "Out of scope for workflow sync",
+        name: "OPENAI_API_KEY",
+      },
+      "tx:create-env-var:workflow-scope",
+    );
+
+    const total = authority.createSyncPayload({
+      authorization,
+      scope: workflowModuleScope,
+    });
+
+    expect(total).toMatchObject({
+      mode: "total",
+      scope: {
+        kind: "module",
+        moduleId: workflowModuleScope.moduleId,
+        scopeId: workflowModuleScope.scopeId,
+        definitionHash: "scope-def:ops/workflow:review:v1",
+        policyFilterVersion: "policy:0",
+      },
+      completeness: "complete",
+      freshness: "current",
+    });
+    expect(total.cursor).toContain("moduleId=ops%2Fworkflow");
+    expect(total.snapshot.edges.some((edge) => edge.s === fixture.branchId)).toBe(true);
+    expect(total.snapshot.edges.some((edge) => edge.s === envVarId)).toBe(false);
+
+    const createdCommit = await executeWorkflowMutation(authority, authorization, {
+      action: "createCommit",
+      branchId: fixture.branchId,
+      title: "Scoped incremental",
+      commitKey: "commit:scoped-incremental",
+      order: 0,
+      state: "ready",
+    });
+
+    const incremental = authority.getIncrementalSyncResult(total.cursor, {
+      authorization,
+      scope: workflowModuleScope,
+    });
+
+    if (incremental.mode !== "incremental" || "fallback" in incremental) {
+      throw new Error("Expected a data-bearing scoped incremental sync payload.");
+    }
+    expect(incremental.scope).toEqual(total.scope);
+    expect(incremental.transactions).toHaveLength(1);
+    expect(
+      incremental.transactions[0]?.transaction.ops.some(
+        (operation) =>
+          operation.op === "assert" &&
+          operation.edge.s === createdCommit.summary.id &&
+          operation.edge.p === edgeId(core.node.fields.name),
+      ),
+    ).toBe(true);
+    expect(
+      incremental.transactions[0]?.transaction.ops.some(
+        (operation) => operation.op === "assert" && operation.edge.s === envVarId,
+      ),
+    ).toBe(false);
+  });
+
+  it("returns explicit scope and policy fallbacks for stale scoped cursors", async () => {
+    const authorization = createAuthorityAuthorizationContext();
+    const { authority } = await createTestWebAppAuthorityWithWorkflowFixture(authorization);
+    const total = authority.createSyncPayload({
+      authorization,
+      scope: workflowModuleScope,
+    });
+    const scopeChangedCursor = updateScopedCursor(total.cursor, {
+      scopeId: "scope:ops/workflow:backlog",
+    });
+    const policyChangedCursor = updateScopedCursor(total.cursor, {
+      policyFilterVersion: "policy:999",
+    });
+
+    const scopeChanged = authority.getIncrementalSyncResult(scopeChangedCursor, {
+      authorization,
+      scope: workflowModuleScope,
+    });
+    const policyChanged = authority.getIncrementalSyncResult(policyChangedCursor, {
+      authorization,
+      scope: workflowModuleScope,
+    });
+
+    expect(scopeChanged).toMatchObject({
+      mode: "incremental",
+      fallback: "scope-changed",
+      scope: total.scope,
+      after: scopeChangedCursor,
+    });
+    expect(policyChanged).toMatchObject({
+      mode: "incremental",
+      fallback: "policy-changed",
+      scope: total.scope,
+      after: policyChangedCursor,
+    });
+  });
+
   it("returns workflow failure codes through the command route", async () => {
     const authorization = createAuthorityAuthorizationContext();
     const authority = await createTestWebAppAuthority(
@@ -1404,6 +1528,88 @@ describe("web authority", () => {
     expect(transactionResponse.status).toBe(200);
     expect(syncAuthorizations).toEqual([authorization]);
     expect(transactionAuthorizations).toEqual([authorization]);
+  });
+
+  it("passes the requested sync scope through the sync route helper", async () => {
+    const authorization = createTestAuthorizationContext();
+    const scopes: WebAppAuthoritySyncOptions["scope"][] = [];
+    const authority = {
+      createSyncPayload(options: WebAppAuthoritySyncOptions) {
+        scopes.push(options.scope);
+        return {
+          mode: "total" as const,
+          cursor: "cursor:total",
+          snapshot: {
+            edges: [],
+            retracted: [],
+          },
+          scope: { kind: "graph" as const },
+          completeness: "complete" as const,
+          freshness: "current" as const,
+        };
+      },
+    } as unknown as WebAppAuthority;
+
+    const response = handleSyncRequest(
+      new Request(
+        "http://web.local/api/sync?scopeKind=module&moduleId=ops%2Fworkflow&scopeId=scope%3Aops%2Fworkflow%3Areview",
+      ),
+      authority,
+      authorization,
+    );
+
+    expect(response.status).toBe(200);
+    expect(scopes).toEqual([workflowModuleScope]);
+  });
+
+  it("passes explicit whole-graph sync scope through the sync route helper", async () => {
+    const authorization = createTestAuthorizationContext();
+    const scopes: WebAppAuthoritySyncOptions["scope"][] = [];
+    const authority = {
+      createSyncPayload(options: WebAppAuthoritySyncOptions) {
+        scopes.push(options.scope);
+        return {
+          mode: "total" as const,
+          cursor: "cursor:total",
+          snapshot: {
+            edges: [],
+            retracted: [],
+          },
+          scope: { kind: "graph" as const },
+          completeness: "complete" as const,
+          freshness: "current" as const,
+        };
+      },
+    } as unknown as WebAppAuthority;
+
+    const response = handleSyncRequest(
+      new Request("http://web.local/api/sync?scopeKind=graph"),
+      authority,
+      authorization,
+    );
+
+    expect(response.status).toBe(200);
+    expect(scopes).toEqual([{ kind: "graph" }]);
+  });
+
+  it("rejects incomplete module sync scope requests before dispatch", async () => {
+    const authorization = createTestAuthorizationContext();
+    const authority = {
+      createSyncPayload() {
+        throw new Error("Route should reject the request before dispatch.");
+      },
+    } as unknown as WebAppAuthority;
+
+    const response = handleSyncRequest(
+      new Request("http://web.local/api/sync?scopeKind=module&moduleId=ops%2Fworkflow"),
+      authority,
+      authorization,
+    );
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: 'Sync scope query parameter "scopeId" is required.',
+    });
   });
 
   it("rejects unsupported /api/commands payloads before dispatching the web proof", async () => {

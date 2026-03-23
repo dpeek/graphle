@@ -1,11 +1,12 @@
 "use client";
 
 import {
-  createGraphId,
-  createSyncedTypeClient,
-  type AuthoritativeGraphWriteResult,
-  type GraphWriteTransaction,
-  type SyncPayload,
+  applyHttpSyncRequest,
+  createHttpGraphClient,
+  createHttpGraphTxIdFactory,
+  defaultHttpGraphUrl,
+  graphSyncScope,
+  type SyncScopeRequest,
   type SyncedTypeClient,
 } from "@io/core/graph";
 import { ops } from "@io/core/graph/modules/ops";
@@ -27,110 +28,68 @@ const runtimeCache = new Map<string, Promise<GraphRuntime>>();
 
 const GraphRuntimeContext = createContext<GraphRuntime | null>(null);
 
-function readErrorMessage(
-  status: number,
-  statusText: string,
-  payload: unknown,
-  fallback: string,
-): string {
+function resolveWebGraphBaseUrl(): string {
+  if (typeof window !== "undefined" && window.location.origin.length > 0) {
+    return window.location.origin;
+  }
   if (
-    typeof payload === "object" &&
-    payload !== null &&
-    "error" in payload &&
-    typeof (payload as { error?: unknown }).error === "string"
+    typeof globalThis.location === "object" &&
+    globalThis.location !== null &&
+    typeof globalThis.location.origin === "string" &&
+    globalThis.location.origin.length > 0
   ) {
-    return (payload as { error: string }).error;
+    return globalThis.location.origin;
   }
-
-  return `${fallback} with ${status} ${statusText}.`;
+  return defaultHttpGraphUrl;
 }
 
-async function fetchSyncPayload(after?: string): Promise<SyncPayload> {
-  const requestUrl = after ? `${syncUrl}?after=${encodeURIComponent(after)}` : syncUrl;
-  const response = await fetch(requestUrl, {
-    cache: "no-store",
-    headers: {
-      accept: "application/json",
-    },
+function runtimeCacheKey(requestedScope: SyncScopeRequest): string {
+  const requestUrl = new URL(syncUrl, resolveWebGraphBaseUrl());
+  applyHttpSyncRequest(requestUrl, {
+    scope: requestedScope,
   });
-
-  const payload = (await response.json().catch(() => undefined)) as
-    | SyncPayload
-    | { error?: string }
-    | undefined;
-
-  if (!response.ok) {
-    throw new Error(
-      readErrorMessage(response.status, response.statusText, payload, "Sync request failed"),
-    );
-  }
-
-  return payload as SyncPayload;
-}
-
-async function pushTransaction(
-  transaction: GraphWriteTransaction,
-): Promise<AuthoritativeGraphWriteResult> {
-  const response = await fetch(transactionUrl, {
-    method: "POST",
-    headers: {
-      accept: "application/json",
-      "content-type": "application/json",
-    },
-    body: JSON.stringify(transaction),
-  });
-
-  const payload = (await response.json().catch(() => undefined)) as
-    | AuthoritativeGraphWriteResult
-    | { error?: string }
-    | undefined;
-
-  if (!response.ok) {
-    throw new Error(
-      readErrorMessage(response.status, response.statusText, payload, "Graph write failed"),
-    );
-  }
-
-  return payload as AuthoritativeGraphWriteResult;
+  return requestUrl.toString();
 }
 
 export function createWebTxIdFactory(): () => string {
-  const sessionId = createGraphId();
-  let txSequence = 0;
-
-  return () => {
-    txSequence += 1;
-    return `web:${sessionId}:${txSequence}`;
-  };
+  return createHttpGraphTxIdFactory("web");
 }
 
-export async function createGraphRuntime(): Promise<GraphRuntime> {
-  const createTxId = createWebTxIdFactory();
-  const runtime = createSyncedTypeClient(graphSchema, {
-    createTxId,
-    pull: (state) => fetchSyncPayload(state.cursor),
-    push: pushTransaction,
+export async function createGraphRuntime(
+  requestedScope: SyncScopeRequest = graphSyncScope,
+): Promise<GraphRuntime> {
+  return createHttpGraphClient(graphSchema, {
+    url: resolveWebGraphBaseUrl(),
+    syncPath: syncUrl,
+    transactionPath: transactionUrl,
+    createTxId: createWebTxIdFactory(),
+    requestedScope,
   });
-
-  await runtime.sync.sync();
-  return runtime;
 }
 
-export function loadSharedGraphRuntime(): Promise<GraphRuntime> {
-  const cached = runtimeCache.get(syncUrl);
+export function loadSharedGraphRuntime(
+  requestedScope: SyncScopeRequest = graphSyncScope,
+): Promise<GraphRuntime> {
+  const key = runtimeCacheKey(requestedScope);
+  const cached = runtimeCache.get(key);
   if (cached) return cached;
 
-  const pending = createGraphRuntime().catch((error) => {
-    runtimeCache.delete(syncUrl);
+  const pending = createGraphRuntime(requestedScope).catch((error) => {
+    runtimeCache.delete(key);
     throw error;
   });
 
-  runtimeCache.set(syncUrl, pending);
+  runtimeCache.set(key, pending);
   return pending;
 }
 
-export function resetSharedGraphRuntime(): void {
-  runtimeCache.delete(syncUrl);
+export function resetSharedGraphRuntime(requestedScope?: SyncScopeRequest): void {
+  if (!requestedScope) {
+    runtimeCache.clear();
+    return;
+  }
+
+  runtimeCache.delete(runtimeCacheKey(requestedScope));
 }
 
 export function useOptionalGraphRuntime(): GraphRuntime | null {
@@ -147,7 +106,8 @@ export function useGraphRuntime(): GraphRuntime {
 
 type GraphRuntimeBootstrapProps = {
   children: ReactNode;
-  loadRuntime?: () => Promise<GraphRuntime>;
+  loadRuntime?: (requestedScope: SyncScopeRequest) => Promise<GraphRuntime>;
+  requestedScope?: SyncScopeRequest;
 };
 
 type BootstrapState =
@@ -211,16 +171,18 @@ function ErrorState({ error, onRetry }: { error: unknown; onRetry(): void }) {
 
 export function GraphRuntimeBootstrap({
   children,
+  requestedScope = graphSyncScope,
   loadRuntime = loadSharedGraphRuntime,
 }: GraphRuntimeBootstrapProps) {
   const [state, setState] = useState<BootstrapState>({ status: "loading" });
   const [attempt, setAttempt] = useState(0);
+  const requestedScopeKey = runtimeCacheKey(requestedScope);
 
   useEffect(() => {
     let cancelled = false;
     setState({ status: "loading" });
 
-    loadRuntime()
+    loadRuntime(requestedScope)
       .then((runtime) => {
         if (cancelled) return;
         setState({ status: "ready", runtime });
@@ -233,7 +195,7 @@ export function GraphRuntimeBootstrap({
     return () => {
       cancelled = true;
     };
-  }, [attempt, loadRuntime]);
+  }, [attempt, loadRuntime, requestedScope, requestedScopeKey]);
 
   if (state.status === "loading") {
     return <LoadingState />;
@@ -244,7 +206,7 @@ export function GraphRuntimeBootstrap({
       <ErrorState
         error={state.error}
         onRetry={() => {
-          resetSharedGraphRuntime();
+          resetSharedGraphRuntime(requestedScope);
           setAttempt((current) => current + 1);
         }}
       />

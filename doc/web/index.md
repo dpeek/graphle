@@ -62,7 +62,10 @@ generic shared command transport.
   authority cursor, pending writes, recent authoritative activity, and
   surfaced write-scope diagnostics for acknowledged and pulled writes, plus
   cursor-advance diagnostics when incremental replication filters out all
-  browser-visible transactions
+  browser-visible transactions. The current proof now lets operators switch
+  between explicit whole-graph recovery and the first named
+  `ops/workflow` review scope, inspect delivered scope metadata, and trigger
+  scoped refreshes over the shared `/api/sync` transport contract
 - `../../src/web/components/topic-browser-page.tsx`: topic browsing, metadata
   editing, shared Base UI entity-reference combobox editing with inline chips
   and icon-aware option rows, tag create-on-enter flows on top of that shared
@@ -88,7 +91,8 @@ generic shared command transport.
   helpers that omit denied predicates from snapshot-style reads and fail
   explicit protected predicate reads with stable `policy.read.forbidden`
   errors, explicit `policyVersion` fail-closed checks for authority-owned read,
-  `/api/sync`, `/api/tx`, and `/api/commands` paths, and the storage
+  authority-planned module-scoped sync for the first named
+  `ops/workflow` review scope over `/api/sync`, and the storage
   abstraction consumed by both tests and the Durable Object adapter, including
   an opt-out seeded-example bootstrap path used by web authority tests plus a
   cached graph-metadata/bootstrap path for repeated authority construction

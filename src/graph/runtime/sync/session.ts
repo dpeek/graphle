@@ -13,17 +13,25 @@ import {
   appendSyncActivity,
   cloneAuthoritativeGraphWriteResult,
   cloneGraphWriteTransaction,
+  cloneSyncScope,
+  cloneSyncScopeRequest,
   cloneState,
   graphSyncScope,
   isObjectRecord,
+  sameSyncScope,
   sameSyncActivity,
+  sameSyncScopeRequest,
   type AuthoritativeGraphWriteResultValidator,
   type AuthoritativeGraphWriteResult,
   type GraphWriteSink,
   type GraphWriteTransaction,
+  type IncrementalSyncFallbackReason,
   type IncrementalSyncResult,
   type ReplicationReadAuthorizer,
+  type SyncCompleteness,
   type SyncFreshness,
+  type SyncScope,
+  type SyncScopeRequest,
   type SyncState,
   type SyncStateListener,
   type SyncStatus,
@@ -54,6 +62,7 @@ import { invalidGraphWriteResult, prefixGraphWriteResultIssues } from "./validat
 export function createTotalSyncSession(
   store: Store,
   options: {
+    requestedScope?: SyncScopeRequest;
     validate?: TotalSyncPayloadValidator;
     validateWriteResult?: AuthoritativeGraphWriteResultValidator;
     preserveSnapshot?: StoreSnapshot;
@@ -61,6 +70,7 @@ export function createTotalSyncSession(
 ): TotalSyncSession {
   let state: SyncState = {
     mode: "total",
+    requestedScope: cloneSyncScopeRequest(options.requestedScope ?? graphSyncScope),
     scope: graphSyncScope,
     status: "idle",
     completeness: "incomplete",
@@ -101,6 +111,7 @@ export function createTotalSyncSession(
       at: syncedAt,
     });
     publish({
+      ...state,
       mode: materialized.mode,
       scope: materialized.scope,
       status: "ready",
@@ -110,6 +121,8 @@ export function createTotalSyncSession(
       recentActivities: state.recentActivities,
       cursor: materialized.cursor,
       lastSyncedAt: syncedAt,
+      fallback: undefined,
+      error: undefined,
     });
     return materialized;
   }
@@ -130,6 +143,7 @@ export function createTotalSyncSession(
     }
 
     const prepared = prepareIncrementalSyncResultForApply(store, result, state.cursor, {
+      currentScope: state.scope,
       validateWriteResult: options.validateWriteResult,
     });
     if (!prepared.ok) {
@@ -155,12 +169,14 @@ export function createTotalSyncSession(
     });
     publish({
       ...state,
+      scope: prepared.value.scope,
       status: "ready",
       completeness: prepared.value.completeness,
       freshness: prepared.value.freshness,
       recentActivities: state.recentActivities,
       cursor: prepared.value.cursor,
       lastSyncedAt: syncedAt,
+      fallback: undefined,
       error: undefined,
     });
     return prepared.value;
@@ -211,6 +227,7 @@ export function createTotalSyncSession(
       recentActivities: state.recentActivities,
       cursor: materialized.cursor,
       lastSyncedAt: syncedAt,
+      fallback: undefined,
       error: undefined,
     });
     return cloneAuthoritativeGraphWriteResult(materialized);
@@ -218,6 +235,7 @@ export function createTotalSyncSession(
 
   async function pull(source: SyncSource): Promise<SyncPayload> {
     const sourceState = cloneState(state);
+    let fallback: IncrementalSyncFallbackReason | undefined;
     publish({
       ...state,
       status: "syncing",
@@ -225,12 +243,20 @@ export function createTotalSyncSession(
     });
 
     try {
-      return apply(await source(sourceState));
+      const payload = await source(sourceState);
+      if (payload.mode === "incremental" && "fallback" in payload) {
+        const validation = validateIncrementalSyncResult(payload);
+        if (validation.ok && "fallback" in validation.value) {
+          fallback = validation.value.fallback;
+        }
+      }
+      return apply(payload);
     } catch (error) {
       publish({
         ...state,
         status: "error",
         freshness: "stale",
+        fallback: fallback ?? state.fallback,
         error,
       });
       throw error;
@@ -262,21 +288,23 @@ export function createTotalSyncPayload<const T extends Record<string, AnyTypeOut
   store: Store,
   options: {
     authorizeRead?: ReplicationReadAuthorizer;
+    completeness?: SyncCompleteness;
     cursor?: string;
     freshness?: SyncFreshness;
     namespace?: T;
+    scope?: SyncScope;
   } = {},
 ) {
   return {
     mode: "total" as const,
-    scope: graphSyncScope,
+    scope: cloneSyncScope(options.scope ?? graphSyncScope),
     snapshot: options.namespace
       ? filterReplicatedSnapshot(store, options.namespace, {
           authorizeRead: options.authorizeRead,
         })
       : store.snapshot(),
     cursor: options.cursor ?? "full",
-    completeness: "complete" as const,
+    completeness: options.completeness ?? "complete",
     freshness: options.freshness ?? "current",
   };
 }
@@ -285,12 +313,14 @@ export function createTotalSyncController(
   store: Store,
   options: {
     pull: SyncSource;
+    requestedScope?: SyncScopeRequest;
     validate?: TotalSyncPayloadValidator;
     validateWriteResult?: AuthoritativeGraphWriteResultValidator;
     preserveSnapshot?: StoreSnapshot;
   },
 ): TotalSyncController {
   const session = createTotalSyncSession(store, {
+    requestedScope: options.requestedScope,
     preserveSnapshot: options.preserveSnapshot,
     validate: options.validate,
     validateWriteResult: options.validateWriteResult,
@@ -313,6 +343,7 @@ export function createSyncedTypeClient<const T extends Record<string, AnyTypeOut
     pull: SyncSource;
     push?: GraphWriteSink;
     createTxId?: () => string;
+    requestedScope?: SyncScopeRequest;
   },
 ): SyncedTypeClient<T> {
   const schemaSnapshot = createBootstrappedSnapshot(namespace);
@@ -323,6 +354,7 @@ export function createSyncedTypeClient<const T extends Record<string, AnyTypeOut
     typeof core & T
   >;
   const session = createTotalSyncSession(authoritativeStore, {
+    requestedScope: options.requestedScope,
     preserveSnapshot,
     validate: createAuthoritativeTotalSyncValidator(namespace),
     validateWriteResult: createAuthoritativeGraphWriteResultValidator(
@@ -356,10 +388,12 @@ export function createSyncedTypeClient<const T extends Record<string, AnyTypeOut
 
     return (
       lastPublishedState.mode === state.mode &&
-      lastPublishedState.scope.kind === state.scope.kind &&
+      sameSyncScopeRequest(lastPublishedState.requestedScope, state.requestedScope) &&
+      sameSyncScope(lastPublishedState.scope, state.scope) &&
       lastPublishedState.status === state.status &&
       lastPublishedState.completeness === state.completeness &&
       lastPublishedState.freshness === state.freshness &&
+      lastPublishedState.fallback === state.fallback &&
       lastPublishedState.pendingCount === state.pendingCount &&
       lastPublishedState.cursor === state.cursor &&
       lastPublishedState.error === state.error &&

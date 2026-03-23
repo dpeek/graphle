@@ -1,11 +1,13 @@
 import {
   GraphValidationError,
+  readHttpSyncRequest,
   type AuthorizationContext,
   type GraphWriteTransaction,
 } from "@io/core/graph";
 
 import type {
   WebAppAuthority,
+  WebAppAuthoritySyncScopeRequest,
   WebAuthorityCommand,
   WebAuthorityCommandResult,
 } from "./authority.js";
@@ -26,6 +28,15 @@ export class RequestAuthorizationContextError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "RequestAuthorizationContextError";
+  }
+}
+
+export class RequestSyncScopeError extends Error {
+  readonly status = 400;
+
+  constructor(message: string) {
+    super(message);
+    this.name = "RequestSyncScopeError";
   }
 }
 
@@ -137,10 +148,10 @@ export function handleSyncRequest(
   }
 
   try {
-    const after = new URL(request.url).searchParams.get("after")?.trim();
+    const { after, scope } = readRequestSyncRequest(request);
     const payload = after
-      ? authority.getIncrementalSyncResult(after, { authorization })
-      : authority.createSyncPayload({ authorization });
+      ? authority.getIncrementalSyncResult(after, { authorization, scope })
+      : authority.createSyncPayload({ authorization, scope });
 
     return Response.json(payload, {
       headers: {
@@ -150,6 +161,20 @@ export function handleSyncRequest(
   } catch (error) {
     if (isHttpError(error)) {
       return errorResponse(error.message, error.status);
+    }
+    throw error;
+  }
+}
+
+function readRequestSyncRequest(request: Request): {
+  readonly after?: string;
+  readonly scope?: WebAppAuthoritySyncScopeRequest;
+} {
+  try {
+    return readHttpSyncRequest(request);
+  } catch (error) {
+    if (error instanceof Error) {
+      throw new RequestSyncScopeError(error.message);
     }
     throw error;
   }
