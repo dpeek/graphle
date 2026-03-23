@@ -19,6 +19,7 @@ import {
   type AuthoritativeWriteScope,
   type GraphWriteOperation,
   type GraphWriteTransaction,
+  type ReplicationReadAuthorizer,
 } from "./contracts";
 import { createTransactionValidationIssue } from "./validation-helpers";
 
@@ -120,13 +121,25 @@ function resolveTransactionOperationTarget(
 export function filterReplicatedSnapshot(
   store: Store,
   namespace: Record<string, AnyTypeOutput>,
+  options: {
+    authorizeRead?: ReplicationReadAuthorizer;
+  } = {},
 ): StoreSnapshot {
   const policiesByTypeId = createFieldAuthorityPolicyIndex(namespace);
   const snapshot = store.snapshot();
   const edges = snapshot.edges
     .filter((edge) => {
       const policy = findFieldAuthorityPolicy(policiesByTypeId, store, edge.s, edge.p);
-      return (policy?.visibility ?? "replicated") === "replicated";
+      if ((policy?.visibility ?? "replicated") !== "replicated") {
+        return false;
+      }
+
+      return options.authorizeRead
+        ? options.authorizeRead({
+            subjectId: edge.s,
+            predicateId: edge.p,
+          })
+        : true;
     })
     .map((edge) => ({ ...edge }));
   const visibleEdgeIds = new Set(edges.map((edge) => edge.id));
@@ -142,10 +155,17 @@ export function filterReplicatedWriteResult(
   store: Store,
   policiesByTypeId: FieldAuthorityPolicyIndex,
   edgeById: Map<string, StoreSnapshot["edges"][number]>,
+  options: {
+    authorizeRead?: ReplicationReadAuthorizer;
+  } = {},
 ): AuthoritativeGraphWriteResult | undefined {
   const ops = result.transaction.ops.filter((operation) => {
     const target = resolveTransactionOperationTarget(operation, edgeById);
-    if (!target) return true;
+    if (!target) {
+      // Retain unresolved ops so incremental delivery can still converge when
+      // retained history only has an edge id for a retract operation.
+      return true;
+    }
 
     const policy = findFieldAuthorityPolicy(
       policiesByTypeId,
@@ -153,7 +173,16 @@ export function filterReplicatedWriteResult(
       target.subjectId,
       target.predicateId,
     );
-    return (policy?.visibility ?? "replicated") === "replicated";
+    if ((policy?.visibility ?? "replicated") !== "replicated") {
+      return false;
+    }
+
+    return options.authorizeRead
+      ? options.authorizeRead({
+          subjectId: target.subjectId,
+          predicateId: target.predicateId,
+        })
+      : true;
   });
 
   if (ops.length === 0) return undefined;

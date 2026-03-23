@@ -10,6 +10,7 @@ import {
   type AuthoritativeGraphWriteResult,
   type GraphWriteTransaction,
   type IncrementalSyncResult,
+  type ReplicationReadAuthorizer,
   type SyncFreshness,
 } from "./sync";
 
@@ -103,6 +104,7 @@ export type PersistedAuthoritativeGraph<T extends Record<string, AnyTypeOutput>>
   readonly store: Store;
   readonly graph: NamespaceClient<T>;
   createSyncPayload(options?: {
+    authorizeRead?: ReplicationReadAuthorizer;
     freshness?: SyncFreshness;
   }): ReturnType<typeof createTotalSyncPayload>;
   applyTransaction(
@@ -115,6 +117,7 @@ export type PersistedAuthoritativeGraph<T extends Record<string, AnyTypeOutput>>
   getIncrementalSyncResult(
     after?: string,
     options?: {
+      authorizeRead?: ReplicationReadAuthorizer;
       freshness?: SyncFreshness;
     },
   ): IncrementalSyncResult;
@@ -234,6 +237,7 @@ export async function createPersistedAuthoritativeGraph<
     graph,
     createSyncPayload(syncOptions = {}) {
       return createTotalSyncPayload(store, {
+        authorizeRead: syncOptions.authorizeRead,
         cursor: writes.getCursor() ?? writes.getBaseCursor(),
         freshness: syncOptions.freshness ?? "current",
         namespace,

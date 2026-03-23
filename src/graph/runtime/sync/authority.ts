@@ -10,6 +10,7 @@ import {
   type AuthoritativeWriteScope,
   type GraphWriteTransaction,
   type IncrementalSyncResult,
+  type ReplicationReadAuthorizer,
   type SyncFreshness,
 } from "./contracts";
 import { classifyIncrementalSyncFallbackReason, formatAuthoritativeGraphCursor } from "./cursor";
@@ -160,6 +161,7 @@ export function createAuthoritativeGraphWriteSession<const T extends Record<stri
   function getIncrementalSyncResult(
     after = baseCursor(),
     options: {
+      authorizeRead?: ReplicationReadAuthorizer;
       freshness?: SyncFreshness;
     } = {},
   ): IncrementalSyncResult {
@@ -167,7 +169,9 @@ export function createAuthoritativeGraphWriteSession<const T extends Record<stri
     if (changes.kind === "changes") {
       const edgeById = createEdgeIndex(store.snapshot());
       const transactions = changes.changes.flatMap((result) => {
-        const filtered = filterReplicatedWriteResult(result, store, policiesByTypeId, edgeById);
+        const filtered = filterReplicatedWriteResult(result, store, policiesByTypeId, edgeById, {
+          authorizeRead: options.authorizeRead,
+        });
         return filtered ? [filtered] : [];
       });
       return createIncrementalSyncPayload(transactions, {

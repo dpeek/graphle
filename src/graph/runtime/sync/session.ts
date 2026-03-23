@@ -22,6 +22,7 @@ import {
   type GraphWriteSink,
   type GraphWriteTransaction,
   type IncrementalSyncResult,
+  type ReplicationReadAuthorizer,
   type SyncFreshness,
   type SyncState,
   type SyncStateListener,
@@ -260,6 +261,7 @@ export function createTotalSyncSession(
 export function createTotalSyncPayload<const T extends Record<string, AnyTypeOutput>>(
   store: Store,
   options: {
+    authorizeRead?: ReplicationReadAuthorizer;
     cursor?: string;
     freshness?: SyncFreshness;
     namespace?: T;
@@ -269,7 +271,9 @@ export function createTotalSyncPayload<const T extends Record<string, AnyTypeOut
     mode: "total" as const,
     scope: graphSyncScope,
     snapshot: options.namespace
-      ? filterReplicatedSnapshot(store, options.namespace)
+      ? filterReplicatedSnapshot(store, options.namespace, {
+          authorizeRead: options.authorizeRead,
+        })
       : store.snapshot(),
     cursor: options.cursor ?? "full",
     completeness: "complete" as const,

@@ -29,6 +29,7 @@ import {
   type PolicyError,
   type PredicatePolicyDescriptor,
   readPredicateValue as decodePredicateValue,
+  type ReplicationReadAuthorizer,
   type Store,
   type StoreSnapshot,
 } from "@io/core/graph";
@@ -539,10 +540,6 @@ function createTransactionEdgeIndex(
   return new Map(snapshot.edges.map((edge) => [edge.id, edge]));
 }
 
-function createStoreEdgeIndex(store: Store): ReadonlyMap<string, StoreSnapshot["edges"][number]> {
-  return new Map(store.find().map((edge) => [edge.id, edge]));
-}
-
 function resolveOperationTarget(
   operation: GraphWriteTransaction["ops"][number],
   edgeById: ReadonlyMap<string, StoreSnapshot["edges"][number]>,
@@ -607,24 +604,48 @@ function createAuthorizationTarget(
   };
 }
 
-function filterReadableSnapshot(
-  snapshot: StoreSnapshot,
+function evaluateReadAuthorization(
   authorization: AuthorizationContext,
   compiledFieldIndex: ReadonlyMap<string, CompiledFieldDefinition>,
-): StoreSnapshot {
+  subjectId: string,
+  predicateId: string,
+) {
+  return authorizeRead({
+    authorization,
+    capabilityKeys: webAppAuthorityCapabilityKeys,
+    target: createAuthorizationTarget(compiledFieldIndex, subjectId, predicateId),
+  });
+}
+
+function createReadableReplicationAuthorizer(
+  authorization: AuthorizationContext,
+  compiledFieldIndex: ReadonlyMap<string, CompiledFieldDefinition>,
+): ReplicationReadAuthorizer {
   const staleContextError = assertCurrentPolicyVersion(authorization);
   if (staleContextError) {
     throw createReadPolicyError(staleContextError);
   }
 
+  return ({ subjectId, predicateId }) =>
+    evaluateReadAuthorization(authorization, compiledFieldIndex, subjectId, predicateId).allowed;
+}
+
+function filterReadableSnapshot(
+  snapshot: StoreSnapshot,
+  authorization: AuthorizationContext,
+  compiledFieldIndex: ReadonlyMap<string, CompiledFieldDefinition>,
+): StoreSnapshot {
+  const authorizeReadablePredicate = createReadableReplicationAuthorizer(
+    authorization,
+    compiledFieldIndex,
+  );
+
   const edges = snapshot.edges
-    .filter(
-      (edge) =>
-        authorizeRead({
-          authorization,
-          capabilityKeys: webAppAuthorityCapabilityKeys,
-          target: createAuthorizationTarget(compiledFieldIndex, edge.s, edge.p),
-        }).allowed,
+    .filter((edge) =>
+      authorizeReadablePredicate({
+        subjectId: edge.s,
+        predicateId: edge.p,
+      }),
     )
     .map((edge) => ({ ...edge }));
   const visibleEdgeIds = new Set(edges.map((edge) => edge.id));
@@ -781,71 +802,6 @@ export async function applyStagedWebAuthorityMutation<TResult>(input: {
   return input.result;
 }
 
-function filterReadableIncrementalSyncResult(
-  result: ReturnType<PersistedWebAppAuthority["getIncrementalSyncResult"]>,
-  authorization: AuthorizationContext,
-  store: Store,
-  compiledFieldIndex: ReadonlyMap<string, CompiledFieldDefinition>,
-): ReturnType<PersistedWebAppAuthority["getIncrementalSyncResult"]> {
-  const staleContextError = assertCurrentPolicyVersion(authorization);
-  if (staleContextError) {
-    throw createReadPolicyError(staleContextError);
-  }
-  if ("fallback" in result) {
-    return result;
-  }
-
-  const edgeById = createStoreEdgeIndex(store);
-  const transactions = result.transactions.flatMap((transaction) => {
-    const ops = transaction.transaction.ops.flatMap((operation) => {
-      const target = resolveOperationTarget(operation, edgeById);
-      if (!target) {
-        // Fail closed if retained history can no longer resolve the touched predicate.
-        return [];
-      }
-
-      const decision = authorizeRead({
-        authorization,
-        capabilityKeys: webAppAuthorityCapabilityKeys,
-        target: createAuthorizationTarget(compiledFieldIndex, target.subjectId, target.predicateId),
-      });
-      if (!decision.allowed) {
-        return [];
-      }
-
-      return [
-        operation.op === "assert"
-          ? {
-              op: "assert" as const,
-              edge: { ...operation.edge },
-            }
-          : {
-              op: "retract" as const,
-              edgeId: operation.edgeId,
-            },
-      ];
-    });
-    if (ops.length === 0) {
-      return [];
-    }
-
-    return [
-      {
-        ...transaction,
-        transaction: {
-          ...transaction.transaction,
-          ops,
-        },
-      },
-    ];
-  });
-
-  return {
-    ...result,
-    transactions,
-  };
-}
-
 function createAuthorityStorage(
   storage: WebAppAuthorityStorage,
   pendingSecretWriteRef: { current: WebAppAuthoritySecretWrite | null },
@@ -934,11 +890,12 @@ export async function createWebAppAuthority(
       throw createReadPolicyError(staleContextError);
     }
 
-    const decision = authorizeRead({
-      authorization: options.authorization,
-      capabilityKeys: webAppAuthorityCapabilityKeys,
-      target: createAuthorizationTarget(compiledFieldIndex, subjectId, predicateId),
-    });
+    const decision = evaluateReadAuthorization(
+      options.authorization,
+      compiledFieldIndex,
+      subjectId,
+      predicateId,
+    );
     if (!decision.allowed) {
       throw createReadPolicyError(decision.error);
     }
@@ -956,13 +913,10 @@ export async function createWebAppAuthority(
   }
 
   function createSyncPayload(options: WebAppAuthoritySyncOptions) {
-    const payload = authority.createSyncPayload({
+    return authority.createSyncPayload({
+      authorizeRead: createReadableReplicationAuthorizer(options.authorization, compiledFieldIndex),
       freshness: options.freshness,
     });
-    return {
-      ...payload,
-      snapshot: filterReadableSnapshot(payload.snapshot, options.authorization, compiledFieldIndex),
-    };
   }
 
   async function applyTransaction(
@@ -986,14 +940,10 @@ export async function createWebAppAuthority(
     after: string | undefined,
     options: WebAppAuthoritySyncOptions,
   ) {
-    return filterReadableIncrementalSyncResult(
-      authority.getIncrementalSyncResult(after, {
-        freshness: options.freshness,
-      }),
-      options.authorization,
-      authority.store,
-      compiledFieldIndex,
-    );
+    return authority.getIncrementalSyncResult(after, {
+      authorizeRead: createReadableReplicationAuthorizer(options.authorization, compiledFieldIndex),
+      freshness: options.freshness,
+    });
   }
 
   async function runWriteSecretFieldCommand(

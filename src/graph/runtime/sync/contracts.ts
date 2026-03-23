@@ -56,6 +56,23 @@ export type SyncScope = {
 
 export const graphSyncScope: SyncScope = Object.freeze({ kind: "graph" });
 
+/**
+ * Predicate materialization target evaluated during sync replication after
+ * transport visibility filtering.
+ */
+export type ReplicatedPredicateTarget = {
+  readonly subjectId: string;
+  readonly predicateId: string;
+};
+
+/**
+ * Optional consumer-owned read gate for total and incremental replication.
+ *
+ * Returning `false` omits the predicate from the sync payload. Throwing lets
+ * callers surface route-local stale-context or read-policy failures.
+ */
+export type ReplicationReadAuthorizer = (target: ReplicatedPredicateTarget) => boolean;
+
 export type TotalSyncPayload = {
   readonly mode: "total";
   readonly scope: SyncScope;
@@ -355,6 +372,7 @@ export interface AuthoritativeGraphWriteSession {
   getIncrementalSyncResult(
     after?: string,
     options?: {
+      authorizeRead?: ReplicationReadAuthorizer;
       freshness?: SyncFreshness;
     },
   ): IncrementalSyncResult;

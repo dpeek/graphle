@@ -22,6 +22,8 @@ export {
   type IncrementalSyncFallbackReason,
   type IncrementalSyncPayload,
   type IncrementalSyncResult,
+  type ReplicatedPredicateTarget,
+  type ReplicationReadAuthorizer,
   type SyncActivity,
   type SyncCompleteness,
   type SyncFreshness,

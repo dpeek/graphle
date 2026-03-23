@@ -11,11 +11,13 @@ import {
   type PersistedAuthoritativeGraphStorage,
   type PersistedAuthoritativeGraphStorageLoadResult,
 } from "./authority";
+import { authorizeRead } from "./authorization";
 import { bootstrap } from "./bootstrap";
 import { createTypeClient } from "./client";
+import type { AuthorizationContext } from "./contracts";
 import { core } from "./core";
 import { createIdMap, defineNamespace } from "./identity";
-import { defineType, edgeId } from "./schema";
+import { defineType, edgeId, fieldPolicyDescriptor } from "./schema";
 import { createStore } from "./store";
 import {
   createAuthoritativeGraphWriteSession,
@@ -37,7 +39,68 @@ const item = defineType({
   },
 });
 
+const visibilityProbe = defineType({
+  values: { key: "test:visibilityProbe", name: "Visibility Probe" },
+  fields: {
+    ...core.node.fields,
+    memberNote: {
+      ...core.node.fields.description,
+      key: "test:visibilityProbe:memberNote",
+      authority: {
+        visibility: "replicated",
+        write: "client-tx",
+        policy: {
+          readAudience: "graph-member",
+          writeAudience: "authority",
+          shareable: false,
+        },
+      },
+      meta: {
+        ...core.node.fields.description.meta,
+        label: "Member note",
+      },
+    },
+  },
+});
+
 const testGraph = defineNamespace(createIdMap({ item }).map, { item });
+const visibilityGraph = defineNamespace(createIdMap({ visibilityProbe }).map, {
+  visibilityProbe,
+});
+const visibilityProbeMemberNotePredicateId = edgeId(visibilityProbe.fields.memberNote);
+const visibilityProbeMemberNotePolicy = fieldPolicyDescriptor(visibilityProbe.fields.memberNote);
+if (!visibilityProbeMemberNotePolicy) {
+  throw new Error("Expected the visibility probe member note to resolve a policy descriptor.");
+}
+
+function createAuthorizationContext(
+  overrides: Partial<AuthorizationContext> = {},
+): AuthorizationContext {
+  return {
+    graphId: "graph:test",
+    principalId: null,
+    principalKind: null,
+    sessionId: null,
+    roleKeys: [],
+    capabilityGrantIds: [],
+    capabilityVersion: 0,
+    policyVersion: 0,
+    ...overrides,
+  };
+}
+
+const graphMemberAuthorization = createAuthorizationContext({
+  principalId: "principal:member",
+  principalKind: "human",
+  roleKeys: ["graph:member"],
+  sessionId: "session:member",
+});
+
+const outsiderAuthorization = createAuthorizationContext({
+  principalId: "principal:outsider",
+  principalKind: "human",
+  sessionId: "session:outsider",
+});
 
 function cloneJson<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
@@ -150,6 +213,29 @@ function createMemoryStorage() {
     failOnNextWrite() {
       failNextWrite = true;
     },
+  };
+}
+
+function createVisibilityReadAuthorizer(authorization: AuthorizationContext) {
+  return ({
+    predicateId,
+    subjectId,
+  }: {
+    readonly predicateId: string;
+    readonly subjectId: string;
+  }) => {
+    if (predicateId !== visibilityProbeMemberNotePredicateId) {
+      return true;
+    }
+
+    return authorizeRead({
+      authorization,
+      target: {
+        subjectId,
+        predicateId,
+        policy: visibilityProbeMemberNotePolicy,
+      },
+    }).allowed;
   };
 }
 
@@ -651,6 +737,91 @@ describe("persisted authoritative graph", () => {
           operation.edge.p === edgeId(kitchenSink.secret.fields.fingerprint),
       ),
     ).toBe(false);
+  });
+
+  it("applies authorizeRead filters to total and incremental sync replication", async () => {
+    const storage = createMemoryStorage();
+    const store = createStore();
+    bootstrap(store, core);
+    bootstrap(store, visibilityGraph);
+    const authority = await createPersistedAuthoritativeGraph(store, visibilityGraph, {
+      storage: storage.storage,
+      createCursorPrefix: createTestCursorPrefix,
+      seed(graph) {
+        graph.visibilityProbe.create({
+          memberNote: "Visible only to graph members",
+          name: "Existing visibility proof",
+        });
+      },
+    });
+    const memberTotal = authority.createSyncPayload({
+      authorizeRead: createVisibilityReadAuthorizer(graphMemberAuthorization),
+    });
+    const outsiderTotal = authority.createSyncPayload({
+      authorizeRead: createVisibilityReadAuthorizer(outsiderAuthorization),
+    });
+
+    expect(
+      memberTotal.snapshot.edges.some((edge) => edge.p === visibilityProbeMemberNotePredicateId),
+    ).toBe(true);
+    expect(
+      outsiderTotal.snapshot.edges.some((edge) => edge.p === visibilityProbeMemberNotePredicateId),
+    ).toBe(false);
+
+    const mutationStore = createStore();
+    bootstrap(mutationStore, core);
+    bootstrap(mutationStore, visibilityGraph);
+    mutationStore.replace(authority.store.snapshot());
+    const mutationGraph = createTypeClient(mutationStore, visibilityGraph);
+    const before = mutationStore.snapshot();
+    const probeId = mutationGraph.visibilityProbe.create({
+      memberNote: "Incremental note",
+      name: "Incremental visibility proof",
+    });
+    const transaction = createGraphWriteTransactionFromSnapshots(
+      before,
+      mutationStore.snapshot(),
+      "tx:visibility:1",
+    );
+
+    await authority.applyTransaction(transaction);
+
+    const memberIncremental = authority.getIncrementalSyncResult(memberTotal.cursor, {
+      authorizeRead: createVisibilityReadAuthorizer(graphMemberAuthorization),
+    });
+    const outsiderIncremental = authority.getIncrementalSyncResult(outsiderTotal.cursor, {
+      authorizeRead: createVisibilityReadAuthorizer(outsiderAuthorization),
+    });
+
+    expect("fallback" in memberIncremental).toBe(false);
+    expect("fallback" in outsiderIncremental).toBe(false);
+    if ("fallback" in memberIncremental || "fallback" in outsiderIncremental) {
+      throw new Error("Expected data-bearing incremental sync payloads.");
+    }
+
+    expect(memberIncremental.transactions).toHaveLength(1);
+    expect(outsiderIncremental.transactions).toHaveLength(1);
+    expect(
+      memberIncremental.transactions[0]?.transaction.ops.some(
+        (operation) =>
+          operation.op === "assert" &&
+          operation.edge.s === probeId &&
+          operation.edge.p === visibilityProbeMemberNotePredicateId,
+      ),
+    ).toBe(true);
+    expect(
+      outsiderIncremental.transactions[0]?.transaction.ops.some(
+        (operation) =>
+          operation.op === "assert" &&
+          operation.edge.s === probeId &&
+          operation.edge.p === visibilityProbeMemberNotePredicateId,
+      ),
+    ).toBe(false);
+    expect(
+      outsiderIncremental.transactions[0]?.transaction.ops.some(
+        (operation) => operation.op === "assert" && operation.edge.s === probeId,
+      ),
+    ).toBe(true);
   });
 
   it("rolls back the in-memory authority when persisting an accepted transaction fails", async () => {
