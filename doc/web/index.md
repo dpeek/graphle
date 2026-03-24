@@ -146,11 +146,11 @@ generic shared command/read transports.
   emission for accepted workflow writes through the shared transaction hook
   plus dependency-key fan-out into matching live registrations,
   authority-owned auth subject resolution with idempotent first-use
-  principal/projection repair plus active role binding lookup, the
-  provisional bearer-share lookup path that resolves hash-stored bearer grants
-  only when they still have an active validated share surface plus an explicit
-  unexpired `constraintExpiresAt`, bearer-share visibility resets that force
-  total-sync recovery when linked share grants change, authority-owned
+  principal/projection repair plus active role binding lookup, the provisional
+  bearer-share lookup path that resolves hash-stored bearer grants only when
+  they still have an active validated share surface plus an explicit unexpired
+  `constraintExpiresAt`, bearer-share visibility resets that force total-sync
+  recovery when linked share grants change, authority-owned
   `ProjectBranchScope` and `CommitQueueScope` reads that rebuild from
   authoritative workflow, repository, and session records and fail closed with
   stable workflow query codes, and the storage abstraction
