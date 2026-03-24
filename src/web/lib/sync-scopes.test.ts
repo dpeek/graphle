@@ -6,6 +6,7 @@ import {
   isWebSyncProofScopeKey,
   resolveWebSyncProofRequestedScope,
   resolveWebSyncProofScopeKey,
+  workflowReviewModuleReadScope,
   workflowReviewSyncScopeRequest,
 } from "./sync-scopes.js";
 
@@ -32,7 +33,7 @@ describe("web sync proof scopes", () => {
         kind: "module",
         moduleId: workflowReviewSyncScopeRequest.moduleId,
         scopeId: workflowReviewSyncScopeRequest.scopeId,
-        definitionHash: "scope-def:ops/workflow:review:v1",
+        definitionHash: workflowReviewModuleReadScope.definitionHash,
         policyFilterVersion: "policy:0",
       }),
     ).toBe("workflow-review");

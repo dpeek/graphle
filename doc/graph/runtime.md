@@ -108,6 +108,11 @@ The current implementation keeps ids stable per key and treats rename as an expl
 
 ### Runtime helpers
 
+- `../../src/graph/runtime/projection.ts` owns the shared Branch 3 read-scope
+  and projection metadata contracts, including `ModuleReadScopeDefinition`,
+  `ProjectionSpec`, and helpers that keep requested scope ids,
+  delivered `definitionHash` values, and projection catalogs aligned across
+  runtime consumers
 - `../../src/graph/runtime/serialize.ts` contains internal helpers for turning store state into plain objects and schema views
 - `../../src/graph/modules/core/input.ts` contains input-kind guards used by scalar codecs
 

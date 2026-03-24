@@ -4,7 +4,11 @@ import { bootstrap, createStore, createTypeClient } from "@io/core/graph";
 
 import { core } from "../../core.js";
 import { ops } from "../../ops.js";
-import { createWorkflowProjectionIndex, WorkflowProjectionQueryError } from "./schema.js";
+import {
+  createWorkflowProjectionIndex,
+  WorkflowProjectionQueryError,
+  workflowProjectionMetadata,
+} from "./schema.js";
 
 const productGraph = { ...core, ...ops } as const;
 
@@ -269,6 +273,8 @@ describe("workflow projection query helpers", () => {
     const projection = createWorkflowProjectionIndex(graph, {
       projectedAt: "2026-01-10T00:00:00.000Z",
     });
+
+    expect(projection.projections).toEqual(workflowProjectionMetadata);
 
     const firstPage = projection.readProjectBranchScope({
       projectId: ids.projectId,

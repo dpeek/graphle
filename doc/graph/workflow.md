@@ -22,6 +22,9 @@ The exported surface is:
   validators, and default lifecycle values
 - `command.ts`: defines the stable `workflow-mutation` command envelope,
   summary shapes, and failure codes consumed by the authority layer
+- `projection.ts`: defines the canonical workflow review scope descriptor plus
+  the first Branch 3 projection ids, `definitionHash` values, and metadata
+  shared across workflow reads and the web authority proof
 - `query.ts`: defines the stable `ProjectBranchScope` branch-board contract and
   the stable `CommitQueueScope` branch-detail and commit-queue contract,
   plus the rebuildable in-memory projection helpers that materialize those
@@ -151,6 +154,29 @@ It builds a rebuildable read index from the current graph client and exposes
 `readProjectBranchScope(...)` and `readCommitQueueScope(...)` so downstream TUI
 work can consume stable workflow read helpers without reaching into raw
 workflow, repository, and session records directly.
+That read helper now also exposes the canonical workflow projection metadata
+for the branch board and commit queue, so projection ids and `definitionHash`
+values stay shared with the authority-side scope proof instead of living in
+web-local constants.
+
+The first authority-owned runtime seam now lives beside the web authority in
+`../../src/web/lib/authority.ts`. `createWebAppAuthority(...)` exposes
+`readProjectBranchScope(...)` and `readCommitQueueScope(...)`, rebuilds the
+projection from authoritative graph state on each read, and maps read-policy
+failures back onto the stable workflow query code `policy-denied`.
+The first shipped web transport proof for those reads now lives in
+`../../src/web/lib/workflow-transport.ts` and `../../src/web/lib/server-routes.ts`:
+
+- `POST /api/workflow-read`
+- request body:
+  `{ kind: "project-branch-scope", query: ProjectBranchScopeQuery }` or
+  `{ kind: "commit-queue-scope", query: CommitQueueScopeQuery }`
+- success body:
+  `{ kind: "project-branch-scope", result: ProjectBranchScopeResult }` or
+  `{ kind: "commit-queue-scope", result: CommitQueueScopeResult }`
+- failure body: `{ error, code? }`, where stable workflow read codes such as
+  `project-not-found`, `branch-not-found`, `policy-denied`, and
+  `projection-stale` are preserved at the transport boundary
 
 ## Branch Detail And Commit Queue Query
 
@@ -215,6 +241,19 @@ The stable failure codes exposed by the query contract are:
   `WorkflowBranch`, `WorkflowCommit`, `RepositoryBranch`, `RepositoryCommit`,
   and `AgentSession` records. No TUI-local state is required to recover the
   branch board or commit queue.
+- the web authority read seam reuses that same rebuild-on-read path directly
+  against authoritative graph state, so board and commit-queue reads do not
+  depend on TUI-local caches or filtered browser sync state
+- `freshness.projectedAt` records when the current in-memory projection was
+  rebuilt for the read. `freshness.projectionCursor` identifies the
+  authoritative-state shape used for pagination, so follow-up pages either
+  stay on that projection or fail closed with `projection-stale`.
+- the shipped proof boundary is authority-backed rebuildability, not retained
+  projection durability. The current authority path keeps no durable workflow
+  projection rows or checkpoints; it rebuilds them from authoritative
+  workflow, repository, and session state on each read.
+- retained workflow projection rows, restart-stable checkpoints, and other
+  durable projection state remain deferred to `OPE-418`
 - workflow lineage remains authoritative when repository observations are not
   current. `rows[]`, `branch.workflowBranch`, `branch.activeCommit`, and
   `branch.latestSession` still return from retained workflow state even when

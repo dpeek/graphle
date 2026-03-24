@@ -4,6 +4,16 @@ import {
   type AuthorizationContext,
   type GraphWriteTransaction,
 } from "@io/core/graph";
+import {
+  projectBranchScopeOrderDirectionValues,
+  projectBranchScopeOrderFieldValues,
+  workflowBranchStateValues,
+  type CommitQueueScopeQuery,
+  type ProjectBranchScopeFilters,
+  type ProjectBranchScopeOrderClause,
+  type ProjectBranchScopeQuery,
+  type WorkflowBranchStateValue,
+} from "@io/core/graph/modules/ops/workflow";
 
 import type {
   WebAppAuthority,
@@ -11,6 +21,7 @@ import type {
   WebAuthorityCommand,
   WebAuthorityCommandResult,
 } from "./authority.js";
+import { type WorkflowReadRequest, workflowReadRequestKinds } from "./workflow-transport.js";
 
 const supportedPrincipalKinds = new Set([
   "human",
@@ -37,6 +48,15 @@ export class RequestSyncScopeError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "RequestSyncScopeError";
+  }
+}
+
+export class RequestWorkflowReadError extends Error {
+  readonly status = 400;
+
+  constructor(message: string) {
+    super(message);
+    this.name = "RequestWorkflowReadError";
   }
 }
 
@@ -207,6 +227,204 @@ function isObjectRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object";
 }
 
+function requireWorkflowReadObject(value: unknown, label: string): Record<string, unknown> {
+  if (!isObjectRecord(value)) {
+    throw new RequestWorkflowReadError(`${label} must be a JSON object.`);
+  }
+
+  return value;
+}
+
+function requireWorkflowReadString(value: unknown, label: string): string {
+  if (typeof value !== "string" || value.trim().length === 0) {
+    throw new RequestWorkflowReadError(`${label} must be a non-empty string.`);
+  }
+
+  return value;
+}
+
+function parseWorkflowReadCursor(value: unknown, label: string): string | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  return requireWorkflowReadString(value, label);
+}
+
+function parseWorkflowReadLimit(value: unknown, label: string): number | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 0) {
+    throw new RequestWorkflowReadError(`${label} must be a non-negative integer.`);
+  }
+
+  return value;
+}
+
+function parseWorkflowBranchState(value: unknown, label: string): WorkflowBranchStateValue {
+  if (
+    typeof value !== "string" ||
+    !workflowBranchStateValues.includes(value as WorkflowBranchStateValue)
+  ) {
+    throw new RequestWorkflowReadError(
+      `${label} must be one of: ${workflowBranchStateValues.join(", ")}.`,
+    );
+  }
+
+  return value as WorkflowBranchStateValue;
+}
+
+function parseProjectBranchScopeFilters(
+  value: unknown,
+  label: string,
+): ProjectBranchScopeFilters | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  const filter = requireWorkflowReadObject(value, label);
+  const hasActiveCommit = filter.hasActiveCommit;
+  if (hasActiveCommit !== undefined && typeof hasActiveCommit !== "boolean") {
+    throw new RequestWorkflowReadError(`${label}.hasActiveCommit must be a boolean.`);
+  }
+
+  const showUnmanagedRepositoryBranches = filter.showUnmanagedRepositoryBranches;
+  if (
+    showUnmanagedRepositoryBranches !== undefined &&
+    typeof showUnmanagedRepositoryBranches !== "boolean"
+  ) {
+    throw new RequestWorkflowReadError(
+      `${label}.showUnmanagedRepositoryBranches must be a boolean.`,
+    );
+  }
+
+  const states = filter.states;
+  if (states !== undefined && !Array.isArray(states)) {
+    throw new RequestWorkflowReadError(`${label}.states must be an array when provided.`);
+  }
+
+  return {
+    ...(hasActiveCommit !== undefined ? { hasActiveCommit } : {}),
+    ...(showUnmanagedRepositoryBranches !== undefined ? { showUnmanagedRepositoryBranches } : {}),
+    ...(states !== undefined
+      ? {
+          states: states.map((entry, index) =>
+            parseWorkflowBranchState(entry, `${label}.states[${index}]`),
+          ),
+        }
+      : {}),
+  };
+}
+
+function parseProjectBranchScopeOrder(
+  value: unknown,
+  label: string,
+): readonly ProjectBranchScopeOrderClause[] | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (!Array.isArray(value)) {
+    throw new RequestWorkflowReadError(`${label} must be an array when provided.`);
+  }
+
+  return value.map((entry, index) => {
+    const clause = requireWorkflowReadObject(entry, `${label}[${index}]`);
+    const field = clause.field;
+    if (
+      typeof field !== "string" ||
+      !projectBranchScopeOrderFieldValues.includes(
+        field as (typeof projectBranchScopeOrderFieldValues)[number],
+      )
+    ) {
+      throw new RequestWorkflowReadError(
+        `${label}[${index}].field must be one of: ${projectBranchScopeOrderFieldValues.join(", ")}.`,
+      );
+    }
+
+    const direction = clause.direction;
+    if (
+      typeof direction !== "string" ||
+      !projectBranchScopeOrderDirectionValues.includes(
+        direction as (typeof projectBranchScopeOrderDirectionValues)[number],
+      )
+    ) {
+      throw new RequestWorkflowReadError(
+        `${label}[${index}].direction must be one of: ${projectBranchScopeOrderDirectionValues.join(", ")}.`,
+      );
+    }
+
+    const typedField = field as ProjectBranchScopeOrderClause["field"];
+    const typedDirection = direction as ProjectBranchScopeOrderClause["direction"];
+
+    return {
+      field: typedField,
+      direction: typedDirection,
+    };
+  });
+}
+
+function parseProjectBranchScopeQuery(value: unknown): ProjectBranchScopeQuery {
+  const query = requireWorkflowReadObject(value, 'Workflow read request "query"');
+  const cursor = parseWorkflowReadCursor(query.cursor, 'Workflow read request "query.cursor"');
+  const limit = parseWorkflowReadLimit(query.limit, 'Workflow read request "query.limit"');
+  const filter = parseProjectBranchScopeFilters(
+    query.filter,
+    'Workflow read request "query.filter"',
+  );
+  const order = parseProjectBranchScopeOrder(query.order, 'Workflow read request "query.order"');
+
+  return {
+    projectId: requireWorkflowReadString(
+      query.projectId,
+      'Workflow read request "query.projectId"',
+    ),
+    ...(cursor !== undefined ? { cursor } : {}),
+    ...(limit !== undefined ? { limit } : {}),
+    ...(filter !== undefined ? { filter } : {}),
+    ...(order !== undefined ? { order } : {}),
+  };
+}
+
+function parseCommitQueueScopeQuery(value: unknown): CommitQueueScopeQuery {
+  const query = requireWorkflowReadObject(value, 'Workflow read request "query"');
+  const cursor = parseWorkflowReadCursor(query.cursor, 'Workflow read request "query.cursor"');
+  const limit = parseWorkflowReadLimit(query.limit, 'Workflow read request "query.limit"');
+
+  return {
+    branchId: requireWorkflowReadString(query.branchId, 'Workflow read request "query.branchId"'),
+    ...(cursor !== undefined ? { cursor } : {}),
+    ...(limit !== undefined ? { limit } : {}),
+  };
+}
+
+function parseWorkflowReadRequest(value: unknown): WorkflowReadRequest {
+  const request = requireWorkflowReadObject(value, "Workflow read request");
+  const kind = request.kind;
+  if (
+    typeof kind !== "string" ||
+    !workflowReadRequestKinds.includes(kind as (typeof workflowReadRequestKinds)[number])
+  ) {
+    throw new RequestWorkflowReadError(
+      `Workflow read request "kind" must be one of: ${workflowReadRequestKinds.join(", ")}.`,
+    );
+  }
+
+  if (kind === "project-branch-scope") {
+    return {
+      kind: "project-branch-scope",
+      query: parseProjectBranchScopeQuery(request.query),
+    };
+  }
+
+  return {
+    kind: "commit-queue-scope",
+    query: parseCommitQueueScopeQuery(request.query),
+  };
+}
+
 function isSupportedWebCommandPayload(value: unknown): value is WebAuthorityCommand {
   return (
     isObjectRecord(value) &&
@@ -249,6 +467,37 @@ async function executeWebCommandRequest(
     if (error instanceof GraphValidationError) {
       return errorResponse(formatGraphValidationError(error), 400);
     }
+    throw error;
+  }
+}
+
+function executeWorkflowReadRequest(
+  read: WorkflowReadRequest,
+  authority: WebAppAuthority,
+  authorization: AuthorizationContext,
+): Response {
+  try {
+    const response =
+      read.kind === "project-branch-scope"
+        ? {
+            kind: read.kind,
+            result: authority.readProjectBranchScope(read.query, { authorization }),
+          }
+        : {
+            kind: read.kind,
+            result: authority.readCommitQueueScope(read.query, { authorization }),
+          };
+
+    return Response.json(response, {
+      headers: {
+        "cache-control": "no-store",
+      },
+    });
+  } catch (error) {
+    if (isHttpError(error)) {
+      return errorResponse(error.message, error.status, httpErrorCode(error));
+    }
+
     throw error;
   }
 }
@@ -318,4 +567,39 @@ export async function handleWebCommandRequest(
   }
 
   return executeWebCommandRequest(body, authority, authorization);
+}
+
+export async function handleWorkflowReadRequest(
+  request: Request,
+  authority: WebAppAuthority,
+  authorization: AuthorizationContext,
+): Promise<Response> {
+  if (request.method !== "POST") {
+    return new Response("Method Not Allowed", {
+      status: 405,
+      headers: { allow: "POST" },
+    });
+  }
+
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return errorResponse("Request body must be valid JSON.", 400);
+  }
+
+  try {
+    const workflowRead = parseWorkflowReadRequest(body);
+    return executeWorkflowReadRequest(workflowRead, authority, authorization);
+  } catch (error) {
+    if (error instanceof RequestWorkflowReadError) {
+      return errorResponse(error.message, error.status);
+    }
+
+    if (isHttpError(error)) {
+      return errorResponse(error.message, error.status, httpErrorCode(error));
+    }
+
+    throw error;
+  }
 }

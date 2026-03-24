@@ -17,6 +17,10 @@ import {
 } from "@io/core/graph";
 import { core } from "@io/core/graph/modules";
 import { ops } from "@io/core/graph/modules/ops";
+import {
+  workflowReviewModuleReadScope,
+  workflowReviewSyncScopeRequest,
+} from "@io/core/graph/modules/ops/workflow";
 import { pkm } from "@io/core/graph/modules/pkm";
 
 import {
@@ -27,12 +31,14 @@ import {
   createTestWebAppAuthority,
   createTestWebAppAuthorityWithWorkflowFixture,
   executeTestWorkflowMutation as executeWorkflowMutation,
+  type WorkflowFixture,
 } from "./authority-test-helpers.js";
 import { createInMemoryTestWebAppAuthorityStorage } from "./authority-test-storage.js";
 import {
   applyStagedWebAuthorityMutation,
   type WebAppAuthority,
   type WebAuthorityCommand,
+  WebAppAuthorityWorkflowReadError,
   type WebAppAuthorityStorage,
   type WebAppAuthoritySyncOptions,
   type WebAppAuthorityTransactionOptions,
@@ -72,6 +78,14 @@ const secretNoteSecretPredicateId = edgeId(secretNote.fields.secret);
 
 setDefaultTimeout(20_000);
 
+function date(value: string): Date {
+  return new Date(value);
+}
+
+function expectIsoTimestamp(value: string) {
+  expect(new Date(value).toISOString()).toBe(value);
+}
+
 function createTestAuthorizationContext(
   overrides: Partial<AuthorizationContext> = {},
 ): AuthorizationContext {
@@ -108,11 +122,7 @@ function createHumanAuthorizationContext(
   });
 }
 
-const workflowModuleScope = {
-  kind: "module" as const,
-  moduleId: "ops/workflow",
-  scopeId: "scope:ops/workflow:review",
-};
+const workflowModuleScope = workflowReviewSyncScopeRequest;
 
 function updateScopedCursor(cursor: string, updates: Record<string, string>): string {
   if (!cursor.startsWith("scope:")) {
@@ -163,6 +173,177 @@ function createMutationStoreForGraph<TGraph extends Record<string, AnyTypeOutput
 
 function createProductMutationStore(snapshot: StoreSnapshot) {
   return createMutationStoreForGraph(snapshot, productGraph);
+}
+
+function expectWorkflowReadError(
+  callback: () => unknown,
+  code: WebAppAuthorityWorkflowReadError["code"],
+) {
+  try {
+    callback();
+    throw new Error(`Expected a workflow read error with code "${code}".`);
+  } catch (error) {
+    expect(error).toBeInstanceOf(WebAppAuthorityWorkflowReadError);
+    expect(error).toMatchObject({ code });
+  }
+}
+
+async function seedWorkflowProjectionReadFixture(
+  authority: WebAppAuthority,
+  authorization: AuthorizationContext,
+  fixture: WorkflowFixture,
+) {
+  await executeWorkflowMutation(authority, authorization, {
+    action: "updateBranch",
+    branchId: fixture.branchId,
+    queueRank: 1,
+  });
+  const backlogBranch = await executeWorkflowMutation(authority, authorization, {
+    action: "createBranch",
+    projectId: fixture.projectId,
+    title: "Backlog docs",
+    branchKey: "branch:backlog-docs",
+    goalSummary: "Document backlog branch guidance.",
+    queueRank: 3,
+    state: "backlog",
+  });
+  const noRankBranch = await executeWorkflowMutation(authority, authorization, {
+    action: "createBranch",
+    projectId: fixture.projectId,
+    title: "Unranked polish",
+    branchKey: "branch:unranked-polish",
+    goalSummary: "Polish the workflow shell after the ranked work lands.",
+    state: "ready",
+  });
+  const commit1 = await executeWorkflowMutation(authority, authorization, {
+    action: "createCommit",
+    branchId: fixture.branchId,
+    title: "Define branch board scope",
+    commitKey: "commit:define-branch-board-scope",
+    order: 1,
+    state: "ready",
+  });
+  const commit2 = await executeWorkflowMutation(authority, authorization, {
+    action: "createCommit",
+    branchId: fixture.branchId,
+    title: "Document commit queue scope",
+    commitKey: "commit:document-commit-queue-scope",
+    order: 2,
+    state: "ready",
+  });
+  const commit3 = await executeWorkflowMutation(authority, authorization, {
+    action: "createCommit",
+    branchId: fixture.branchId,
+    title: "Surface session summaries",
+    commitKey: "commit:surface-session-summaries",
+    order: 3,
+    state: "ready",
+  });
+
+  await executeWorkflowMutation(authority, authorization, {
+    action: "setCommitState",
+    commitId: commit1.summary.id,
+    state: "active",
+  });
+
+  const repositoryCommit1 = await executeWorkflowMutation(authority, authorization, {
+    action: "createRepositoryCommit",
+    repositoryId: fixture.repositoryId,
+    repositoryBranchId: fixture.repositoryBranchId,
+    workflowCommitId: commit1.summary.id,
+    title: "Define branch board scope",
+    state: "attached",
+    worktree: {
+      branchName: "workflow-authority",
+      leaseState: "attached",
+      path: "/tmp/io-worktree",
+    },
+  });
+
+  await executeWorkflowMutation(authority, authorization, {
+    action: "attachCommitResult",
+    repositoryCommitId: repositoryCommit1.summary.id,
+    repositoryBranchId: fixture.repositoryBranchId,
+    workflowCommitId: commit1.summary.id,
+    sha: "abcdef1234567",
+    committedAt: "2026-01-02T12:00:00.000Z",
+  });
+
+  await executeWorkflowMutation(authority, authorization, {
+    action: "setCommitState",
+    commitId: commit2.summary.id,
+    state: "active",
+  });
+
+  const repositoryCommit2 = await executeWorkflowMutation(authority, authorization, {
+    action: "createRepositoryCommit",
+    repositoryId: fixture.repositoryId,
+    repositoryBranchId: fixture.repositoryBranchId,
+    workflowCommitId: commit2.summary.id,
+    title: "Document commit queue scope",
+    state: "attached",
+    worktree: {
+      branchName: "workflow-authority",
+      leaseState: "attached",
+      path: "/tmp/io-worktree",
+    },
+  });
+
+  const { mutationGraph, mutationStore } = createProductMutationStore(
+    authority.readSnapshot({ authorization }),
+  );
+  const before = mutationStore.snapshot();
+  mutationGraph.repositoryBranch.update(fixture.repositoryBranchId, {
+    latestReconciledAt: date("2026-01-05T12:00:00.000Z"),
+    updatedAt: date("2026-01-05T12:00:00.000Z"),
+  });
+  const unmanagedRepositoryBranchId = mutationGraph.repositoryBranch.create({
+    name: "observed/fixup",
+    project: fixture.projectId,
+    repository: fixture.repositoryId,
+    managed: false,
+    branchName: "observed/fixup",
+    baseBranchName: "main",
+    latestReconciledAt: date("2026-01-06T00:00:00.000Z"),
+    createdAt: date("2026-01-04T00:00:00.000Z"),
+    updatedAt: date("2026-01-06T00:00:00.000Z"),
+  });
+  const sessionId = mutationGraph.agentSession.create({
+    name: "Execute workflow authority read",
+    project: fixture.projectId,
+    repository: fixture.repositoryId,
+    subjectKind: ops.agentSessionSubjectKind.values.commit.id,
+    branch: fixture.branchId,
+    commit: commit2.summary.id,
+    sessionKey: "session:workflow-authority-execution-01",
+    kind: ops.agentSessionKind.values.execution.id,
+    workerId: "worker-1",
+    runtimeState: ops.agentSessionRuntimeState.values.running.id,
+    startedAt: date("2026-01-05T12:30:00.000Z"),
+    createdAt: date("2026-01-05T12:30:00.000Z"),
+    updatedAt: date("2026-01-05T12:30:00.000Z"),
+  });
+
+  await authority.applyTransaction(
+    buildGraphWriteTransaction(
+      before,
+      mutationStore.snapshot(),
+      "tx:seed-workflow-projection-read",
+    ),
+    { authorization },
+  );
+
+  return {
+    backlogBranchId: backlogBranch.summary.id,
+    commit1Id: commit1.summary.id,
+    commit2Id: commit2.summary.id,
+    commit3Id: commit3.summary.id,
+    noRankBranchId: noRankBranch.summary.id,
+    repositoryCommit1Id: repositoryCommit1.summary.id,
+    repositoryCommit2Id: repositoryCommit2.summary.id,
+    sessionId,
+    unmanagedRepositoryBranchId,
+  };
 }
 
 async function createEnvVar(
@@ -1551,6 +1732,345 @@ describe("web authority", () => {
     ).toBe(ops.repositoryCommitLeaseState.values.released.id);
   });
 
+  it("reads workflow branch board and commit queue scopes from authoritative graph state", async () => {
+    const authorization = createAuthorityAuthorizationContext();
+    const { authority, fixture } =
+      await createTestWebAppAuthorityWithWorkflowFixture(authorization);
+    const seeded = await seedWorkflowProjectionReadFixture(authority, authorization, fixture);
+
+    const branchBoard = authority.readProjectBranchScope(
+      {
+        projectId: fixture.projectId,
+        filter: {
+          showUnmanagedRepositoryBranches: true,
+        },
+        limit: 2,
+      },
+      { authorization },
+    );
+    const branchProjectionCursor = branchBoard.freshness.projectionCursor;
+
+    expectIsoTimestamp(branchBoard.freshness.projectedAt);
+    expect(branchProjectionCursor).toEqual(expect.any(String));
+    if (!branchProjectionCursor) {
+      throw new Error("Expected the branch board read to include a projection cursor.");
+    }
+
+    expect(branchBoard.project.projectKey).toBe("project:io");
+    expect(branchBoard.repository?.repositoryKey).toBe("repo:io");
+    expect(branchBoard.rows.map((row) => row.workflowBranch.id)).toEqual([
+      fixture.branchId,
+      seeded.backlogBranchId,
+    ]);
+    expect(branchBoard.rows[0]?.repositoryBranch).toMatchObject({
+      freshness: "fresh",
+      repositoryBranch: {
+        id: fixture.repositoryBranchId,
+        branchName: "workflow-authority",
+      },
+    });
+    expect(branchBoard.unmanagedRepositoryBranches).toMatchObject([
+      {
+        freshness: "fresh",
+        repositoryBranch: {
+          id: seeded.unmanagedRepositoryBranchId,
+          branchName: "observed/fixup",
+        },
+      },
+    ]);
+    expect(branchBoard.freshness).toMatchObject({
+      repositoryFreshness: "fresh",
+      repositoryReconciledAt: "2026-01-06T00:00:00.000Z",
+    });
+    expect(branchBoard.nextCursor).toEqual(expect.any(String));
+
+    const secondBranchPage = authority.readProjectBranchScope(
+      {
+        projectId: fixture.projectId,
+        cursor: branchBoard.nextCursor,
+        limit: 2,
+      },
+      { authorization },
+    );
+
+    expect(secondBranchPage.rows.map((row) => row.workflowBranch.id)).toEqual([
+      seeded.noRankBranchId,
+    ]);
+    expectIsoTimestamp(secondBranchPage.freshness.projectedAt);
+    expect(secondBranchPage.freshness.projectionCursor).toBe(branchProjectionCursor);
+    expect(secondBranchPage.nextCursor).toBeUndefined();
+
+    const commitQueue = authority.readCommitQueueScope(
+      {
+        branchId: fixture.branchId,
+        limit: 2,
+      },
+      { authorization },
+    );
+
+    expectIsoTimestamp(commitQueue.freshness.projectedAt);
+    expect(commitQueue.freshness.projectionCursor).toBe(branchProjectionCursor);
+    expect(commitQueue.freshness).toMatchObject({
+      repositoryFreshness: "fresh",
+      repositoryReconciledAt: "2026-01-06T00:00:00.000Z",
+    });
+    expect(commitQueue.branch.workflowBranch.activeCommitId).toBe(seeded.commit2Id);
+    expect(commitQueue.branch.activeCommit).toMatchObject({
+      workflowCommit: {
+        id: seeded.commit2Id,
+        commitKey: "commit:document-commit-queue-scope",
+      },
+      repositoryCommit: {
+        id: seeded.repositoryCommit2Id,
+        state: "attached",
+        worktree: {
+          branchName: "workflow-authority",
+          leaseState: "attached",
+          path: "/tmp/io-worktree",
+        },
+      },
+    });
+    expect(commitQueue.branch.latestSession).toMatchObject({
+      id: seeded.sessionId,
+      sessionKey: "session:workflow-authority-execution-01",
+      kind: "execution",
+      runtimeState: "running",
+      subject: {
+        kind: "commit",
+        commitId: seeded.commit2Id,
+      },
+    });
+    expect(commitQueue.rows.map((row) => row.workflowCommit.id)).toEqual([
+      seeded.commit1Id,
+      seeded.commit2Id,
+    ]);
+    expect(commitQueue.rows[0]?.repositoryCommit).toMatchObject({
+      id: seeded.repositoryCommit1Id,
+      state: "committed",
+      sha: "abcdef1234567",
+    });
+    expect(commitQueue.rows[1]?.repositoryCommit).toMatchObject({
+      id: seeded.repositoryCommit2Id,
+      state: "attached",
+    });
+    expect(commitQueue.nextCursor).toEqual(expect.any(String));
+
+    const secondCommitPage = authority.readCommitQueueScope(
+      {
+        branchId: fixture.branchId,
+        cursor: commitQueue.nextCursor,
+        limit: 2,
+      },
+      { authorization },
+    );
+
+    expect(secondCommitPage.rows.map((row) => row.workflowCommit.id)).toEqual([seeded.commit3Id]);
+    expectIsoTimestamp(secondCommitPage.freshness.projectedAt);
+    expect(secondCommitPage.freshness.projectionCursor).toBe(branchProjectionCursor);
+    expect(secondCommitPage.rows[0]?.repositoryCommit).toBeUndefined();
+    expect(secondCommitPage.nextCursor).toBeUndefined();
+  });
+
+  it("fails closed when workflow pagination cursors are reused across different projections", async () => {
+    const authorization = createAuthorityAuthorizationContext();
+    const { authority, fixture } =
+      await createTestWebAppAuthorityWithWorkflowFixture(authorization);
+
+    await seedWorkflowProjectionReadFixture(authority, authorization, fixture);
+
+    const otherProject = await executeWorkflowMutation(authority, authorization, {
+      action: "createProject",
+      inferred: false,
+      title: "Other project",
+      projectKey: "project:other",
+    });
+    const otherBranch = await executeWorkflowMutation(authority, authorization, {
+      action: "createBranch",
+      projectId: fixture.projectId,
+      title: "Other branch",
+      branchKey: "branch:other-branch",
+      goalSummary: "Exercise commit-queue cursor mismatch handling.",
+      state: "ready",
+    });
+
+    const branchPage = authority.readProjectBranchScope(
+      {
+        projectId: fixture.projectId,
+        limit: 1,
+      },
+      { authorization },
+    );
+    const commitPage = authority.readCommitQueueScope(
+      {
+        branchId: fixture.branchId,
+        limit: 1,
+      },
+      { authorization },
+    );
+
+    expect(branchPage.nextCursor).toEqual(expect.any(String));
+    expect(commitPage.nextCursor).toEqual(expect.any(String));
+
+    expectWorkflowReadError(
+      () =>
+        authority.readProjectBranchScope(
+          {
+            projectId: otherProject.summary.id,
+            cursor: branchPage.nextCursor,
+            limit: 1,
+          },
+          { authorization },
+        ),
+      "projection-stale",
+    );
+    expectWorkflowReadError(
+      () =>
+        authority.readCommitQueueScope(
+          {
+            branchId: otherBranch.summary.id,
+            cursor: commitPage.nextCursor,
+            limit: 1,
+          },
+          { authorization },
+        ),
+      "projection-stale",
+    );
+    expectWorkflowReadError(
+      () =>
+        authority.readCommitQueueScope(
+          {
+            branchId: fixture.branchId,
+            cursor: branchPage.nextCursor,
+            limit: 1,
+          },
+          { authorization },
+        ),
+      "projection-stale",
+    );
+  });
+
+  it("rebuilds workflow projection reads and invalidates stale cursors after authoritative changes", async () => {
+    const authorization = createAuthorityAuthorizationContext();
+    const { authority, fixture } =
+      await createTestWebAppAuthorityWithWorkflowFixture(authorization);
+
+    await seedWorkflowProjectionReadFixture(authority, authorization, fixture);
+
+    const branchBoard = authority.readProjectBranchScope(
+      {
+        projectId: fixture.projectId,
+        limit: 1,
+      },
+      { authorization },
+    );
+    const commitQueue = authority.readCommitQueueScope(
+      {
+        branchId: fixture.branchId,
+        limit: 1,
+      },
+      { authorization },
+    );
+
+    expect(branchBoard.nextCursor).toEqual(expect.any(String));
+    expect(commitQueue.nextCursor).toEqual(expect.any(String));
+
+    await executeWorkflowMutation(authority, authorization, {
+      action: "createBranch",
+      projectId: fixture.projectId,
+      title: "Fresh branch",
+      branchKey: "branch:fresh-branch",
+      goalSummary: "Force a branch-board projection rebuild.",
+      queueRank: 2,
+      state: "ready",
+    });
+    await executeWorkflowMutation(authority, authorization, {
+      action: "createCommit",
+      branchId: fixture.branchId,
+      title: "Fresh commit",
+      commitKey: "commit:fresh-commit",
+      order: 4,
+      state: "ready",
+    });
+
+    expectWorkflowReadError(
+      () =>
+        authority.readProjectBranchScope(
+          {
+            projectId: fixture.projectId,
+            cursor: branchBoard.nextCursor,
+            limit: 1,
+          },
+          { authorization },
+        ),
+      "projection-stale",
+    );
+    expectWorkflowReadError(
+      () =>
+        authority.readCommitQueueScope(
+          {
+            branchId: fixture.branchId,
+            cursor: commitQueue.nextCursor,
+            limit: 1,
+          },
+          { authorization },
+        ),
+      "projection-stale",
+    );
+
+    const refreshed = authority.readProjectBranchScope(
+      {
+        projectId: fixture.projectId,
+        limit: 4,
+      },
+      { authorization },
+    );
+
+    expect(
+      refreshed.rows.some((row) => row.workflowBranch.branchKey === "branch:fresh-branch"),
+    ).toBe(true);
+  });
+
+  it("surfaces stable workflow read failure codes", async () => {
+    const authorization = createAuthorityAuthorizationContext();
+    const { authority, fixture } =
+      await createTestWebAppAuthorityWithWorkflowFixture(authorization);
+
+    expectWorkflowReadError(
+      () =>
+        authority.readProjectBranchScope(
+          {
+            projectId: "project:missing",
+          },
+          { authorization },
+        ),
+      "project-not-found",
+    );
+    expectWorkflowReadError(
+      () =>
+        authority.readCommitQueueScope(
+          {
+            branchId: "branch:missing",
+          },
+          { authorization },
+        ),
+      "branch-not-found",
+    );
+    expectWorkflowReadError(
+      () =>
+        authority.readProjectBranchScope(
+          {
+            projectId: fixture.projectId,
+          },
+          {
+            authorization: createAuthorityAuthorizationContext({
+              policyVersion: 1,
+            }),
+          },
+        ),
+      "policy-denied",
+    );
+  });
+
   it("plans the first workflow module scope and produces scoped total and incremental payloads", async () => {
     const authorization = createAuthorityAuthorizationContext();
     const { authority, fixture } =
@@ -1576,7 +2096,7 @@ describe("web authority", () => {
         kind: "module",
         moduleId: workflowModuleScope.moduleId,
         scopeId: workflowModuleScope.scopeId,
-        definitionHash: "scope-def:ops/workflow:review:v1",
+        definitionHash: workflowReviewModuleReadScope.definitionHash,
         policyFilterVersion: "policy:0",
       },
       completeness: "complete",

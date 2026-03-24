@@ -15,6 +15,7 @@ import {
   encodeRequestAuthorizationContext,
   webAppAuthorizationContextHeader,
 } from "../lib/server-routes.js";
+import { webWorkflowReadPath } from "../lib/workflow-transport.js";
 
 type Fetcher = {
   fetch(request: Request): Promise<Response>;
@@ -83,7 +84,10 @@ function isBetterAuthRequest(url: URL): boolean {
 
 function isGraphApiRequest(url: URL): boolean {
   return (
-    url.pathname === "/api/sync" || url.pathname === "/api/tx" || url.pathname === "/api/commands"
+    url.pathname === "/api/sync" ||
+    url.pathname === "/api/tx" ||
+    url.pathname === "/api/commands" ||
+    url.pathname === webWorkflowReadPath
   );
 }
 

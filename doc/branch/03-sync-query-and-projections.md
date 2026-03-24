@@ -769,6 +769,17 @@ Dropped or late invalidation events
 - what it proves: collection reads no longer depend on raw traversal
 - what it postpones: full query planner and secondary projection families
 
+Current shipped workflow proof:
+
+- `ops/workflow` now proves one projection-backed read surface through
+  `ProjectBranchScope` and `CommitQueueScope`
+- each workflow read rebuilds from authoritative workflow, repository, and
+  session state, reports `projectedAt` plus `projectionCursor`, and keeps
+  pagination fail-closed with `projection-stale`
+- retained projection rows, retained checkpoints, and restart-stable
+  projection durability are still deferred to `OPE-418`; the shipped proof is
+  rebuildable from authority, not durably retained derived state
+
 ### Slice 3: Live scope registration plus cursor-advanced invalidation
 
 - goal: register one active scope and send `cursor-advanced` invalidations from

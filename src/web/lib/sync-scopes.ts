@@ -1,14 +1,15 @@
-import { graphSyncScope, type SyncScope, type SyncScopeRequest } from "@io/core/graph";
+import {
+  graphSyncScope,
+  matchesModuleReadScopeRequest,
+  type SyncScope,
+  type SyncScopeRequest,
+} from "@io/core/graph";
+import {
+  workflowReviewModuleReadScope,
+  workflowReviewSyncScopeRequest,
+} from "@io/core/graph/modules/ops/workflow";
 
-export const workflowModuleId = "ops/workflow";
-export const workflowReviewScopeId = "scope:ops/workflow:review";
-export const workflowReviewScopeDefinitionHash = "scope-def:ops/workflow:review:v1";
-
-export const workflowReviewSyncScopeRequest = Object.freeze({
-  kind: "module",
-  moduleId: workflowModuleId,
-  scopeId: workflowReviewScopeId,
-}) satisfies SyncScopeRequest;
+export { workflowReviewModuleReadScope, workflowReviewSyncScopeRequest };
 
 export type WebSyncProofScopeKey = "graph" | "workflow-review";
 
@@ -45,9 +46,7 @@ export function resolveWebSyncProofRequestedScope(
 export function resolveWebSyncProofScopeKey(
   scope: SyncScope | SyncScopeRequest,
 ): WebSyncProofScopeKey {
-  return scope.kind === "module" &&
-    scope.moduleId === workflowReviewSyncScopeRequest.moduleId &&
-    scope.scopeId === workflowReviewSyncScopeRequest.scopeId
+  return matchesModuleReadScopeRequest(scope, workflowReviewModuleReadScope)
     ? "workflow-review"
     : "graph";
 }

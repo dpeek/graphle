@@ -16,6 +16,7 @@ import {
   workflowBranchStateValues,
   workflowCommitStateValues,
 } from "./command.js";
+import { workflowProjectionMetadata } from "./projection.js";
 import {
   agentSession,
   agentSessionKind,
@@ -340,6 +341,7 @@ export interface WorkflowProjectionIndexOptions {
 }
 
 export interface WorkflowProjectionIndex {
+  readonly projections: typeof workflowProjectionMetadata;
   readonly projectedAt: string;
   readonly projectionCursor: string;
   readCommitQueueScope(query: CommitQueueScopeQuery): CommitQueueScopeResult;
@@ -448,6 +450,7 @@ export function createWorkflowProjectionIndex(
   }
 
   return {
+    projections: workflowProjectionMetadata,
     projectedAt,
     projectionCursor,
     readProjectBranchScope,

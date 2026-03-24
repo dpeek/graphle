@@ -39,10 +39,11 @@ types, move it to `@io/web`. If it is deciding how a graph predicate validates,
 mutates, or previews, leave that code in `graph` even when the surrounding
 chrome comes from `@io/web`.
 
-The current `POST /api/commands` route is part of that same package boundary.
-It is a web-owned proof for the shipped `write-secret-field` envelope and its
-authority-local staging path, not a published graph-owned command registry or
-generic shared command transport.
+The current `POST /api/commands` and `POST /api/workflow-read` routes are part
+of that same package boundary. They are web-owned proofs for the shipped
+`write-secret-field` command envelope and the first workflow projection read
+envelope, not published graph-owned registries or generic shared command/read
+transports.
 
 ## Docs
 
@@ -101,14 +102,19 @@ generic shared command transport.
   adapter that bootstraps graph tables in the constructor, hydrates retained
   history during authority init, commits graph and secret side-storage changes
   in one Durable Object storage transaction, prunes old transaction rows, and
-  now exposes an internal Worker-only auth-subject lookup-and-repair seam ahead
-  of the public graph routes
+  now exposes an internal Worker-only auth-subject lookup-and-repair seam plus
+  the first public workflow projection read route ahead of future transport
+  expansion
 - `../../src/web/lib/better-auth.ts`: shared Better Auth option/factory helper
   for the dedicated `AUTH_DB` binding, optional trusted-origin wiring, the
   stable `/api/auth` base path, and the minimal email/password browser demo
   flow
 - `../../src/web/lib/auth-client.ts`: Better Auth React client helper plus the
   derived shell session-state projection consumed by the SPA
+- `../../src/web/lib/workflow-transport.ts`: shared `POST /api/workflow-read`
+  request and response envelopes plus the fetch helper that browser, TUI, or
+  MCP callers can reuse for the first shipped `ProjectBranchScope` and
+  `CommitQueueScope` proof
 - `../../src/web/lib/authority.ts`: shared web authority behavior, secret-field
   mutation flow, the current web-owned `/api/commands` envelope, the shared
   write/command authorization seam, principal-aware sync filtering that omits
@@ -121,11 +127,13 @@ generic shared command transport.
   `/api/sync`, `/api/tx`, and `/api/commands` paths, authority-planned
   module-scoped sync for the first named `ops/workflow` review scope over
   `/api/sync`, authority-owned auth subject resolution with idempotent
-  first-use principal/projection repair plus active role binding lookup, and
-  the storage abstraction consumed by both tests and the Durable Object
-  adapter, including an opt-out seeded-example bootstrap path used by web
-  authority tests plus a cached graph-metadata/bootstrap path for repeated
-  authority construction
+  first-use principal/projection repair plus active role binding lookup,
+  authority-owned `ProjectBranchScope` and `CommitQueueScope` reads that
+  rebuild from authoritative workflow, repository, and session records and
+  fail closed with stable workflow query codes, and the storage abstraction
+  consumed by both tests and the Durable Object adapter, including an opt-out
+  seeded-example bootstrap path used by web authority tests plus a cached
+  graph-metadata/bootstrap path for repeated authority construction
 - `../../src/web/lib/authority-test-helpers.ts`: no-seed test authority
   factory plus cached persisted workflow baseline helpers for the slow web
   authority and Durable Object suites
@@ -147,9 +155,10 @@ generic shared command transport.
   now verifies Better Auth sessions with cookie-cache bypass for graph
   requests, reduces them into the repo's stable `AuthenticatedSession` shape,
   forwards anonymous requests as anonymous, resolves authenticated subjects
-  through the Durable Object's internal lookup-and-repair seam, and fails
-  closed when an authenticated session still lacks a graph principal
-  projection.
+  through the Durable Object's internal lookup-and-repair seam, forwards the
+  first `POST /api/workflow-read` proof alongside `/api/sync`, `/api/tx`, and
+  `/api/commands`, and fails closed when an authenticated session still lacks a
+  graph principal projection.
 - `../../migrations/auth-store/`: committed Better Auth schema migrations for
   the dedicated D1 auth store, applied separately from Durable Object
   migrations

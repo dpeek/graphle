@@ -21,6 +21,10 @@ import {
 } from "@io/core/graph";
 import { core } from "@io/core/graph/modules";
 import { ops } from "@io/core/graph/modules/ops";
+import {
+  workflowReviewModuleReadScope,
+  workflowReviewSyncScopeRequest,
+} from "@io/core/graph/modules/ops/workflow";
 import { pkm } from "@io/core/graph/modules/pkm";
 
 import {
@@ -41,16 +45,13 @@ import {
   encodeRequestAuthorizationContext,
   webAppAuthorizationContextHeader,
 } from "./server-routes.js";
+import { webWorkflowReadPath, type WorkflowReadResponse } from "./workflow-transport.js";
 
 setDefaultTimeout(20_000);
 
 const productGraph = { ...core, ...pkm, ...ops } as const;
 const envVarSecretPredicateId = edgeId(ops.envVar.fields.secret);
-const workflowModuleScope = {
-  kind: "module" as const,
-  moduleId: "ops/workflow",
-  scopeId: "scope:ops/workflow:review",
-};
+const workflowModuleScope = workflowReviewSyncScopeRequest;
 const hiddenCursorProbe = defineType({
   values: { key: "test:hiddenCursorProbe", name: "Hidden Cursor Probe" },
   fields: {
@@ -642,6 +643,38 @@ async function postCommand(
   return (await response.json()) as SecretFieldResponse;
 }
 
+async function postWorkflowRead(
+  durableObject: WebGraphAuthorityDurableObject,
+  request: {
+    readonly kind: "project-branch-scope" | "commit-queue-scope";
+    readonly query: Record<string, unknown>;
+  },
+  authorization: AuthorizationContext = testAuthorityAuthorization,
+): Promise<{
+  readonly response: Response;
+  readonly payload: WorkflowReadResponse | { readonly code?: string; readonly error?: string };
+}> {
+  const response = await durableObject.fetch(
+    createAuthorizedRequest(
+      `https://graph-authority.local${webWorkflowReadPath}`,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify(request),
+      },
+      authorization,
+    ),
+  );
+
+  const payload = (await response.json()) as
+    | WorkflowReadResponse
+    | { readonly code?: string; readonly error?: string };
+
+  return { response, payload };
+}
+
 async function getDurableAuthority(durableObject: WebGraphAuthorityDurableObject): Promise<{
   persist(): Promise<void>;
   readSnapshot(options: { authorization: AuthorizationContext }): StoreSnapshot;
@@ -834,6 +867,97 @@ describe("web graph authority durable object", () => {
     });
   });
 
+  it("serves project branch scope reads over the durable workflow route", async () => {
+    const { state } = createSqliteDurableObjectState();
+    const durableObject = createTestDurableObject(state);
+    const authority = await getDurableAuthority<WebAppAuthority>(durableObject);
+    const fixture = await createTestWorkflowFixture(authority, testAuthorityAuthorization);
+    const { payload, response } = await postWorkflowRead(durableObject, {
+      kind: "project-branch-scope",
+      query: {
+        projectId: fixture.projectId,
+        filter: {
+          showUnmanagedRepositoryBranches: true,
+        },
+      },
+    });
+
+    expect(response.status).toBe(200);
+    expect(payload).toMatchObject({
+      kind: "project-branch-scope",
+      result: {
+        project: {
+          id: fixture.projectId,
+        },
+        repository: {
+          id: fixture.repositoryId,
+        },
+        rows: [
+          {
+            workflowBranch: {
+              id: fixture.branchId,
+            },
+            repositoryBranch: {
+              repositoryBranch: {
+                id: fixture.repositoryBranchId,
+              },
+            },
+          },
+        ],
+        unmanagedRepositoryBranches: [],
+      },
+    });
+  });
+
+  it("serves commit queue scope reads over the durable workflow route", async () => {
+    const { state } = createSqliteDurableObjectState();
+    const durableObject = createTestDurableObject(state);
+    const authority = await getDurableAuthority<WebAppAuthority>(durableObject);
+    const fixture = await createTestWorkflowFixture(authority, testAuthorityAuthorization);
+    const createdCommit = (await authority.executeCommand(
+      {
+        kind: "workflow-mutation",
+        input: {
+          action: "createCommit",
+          branchId: fixture.branchId,
+          title: "Transport-backed commit queue read",
+          commitKey: "commit:transport-backed-read",
+          order: 0,
+          state: "ready",
+        },
+      },
+      {
+        authorization: testAuthorityAuthorization,
+      },
+    )) as { readonly summary: { readonly id: string } };
+    const { payload, response } = await postWorkflowRead(durableObject, {
+      kind: "commit-queue-scope",
+      query: {
+        branchId: fixture.branchId,
+        limit: 5,
+      },
+    });
+
+    expect(response.status).toBe(200);
+    expect(payload).toMatchObject({
+      kind: "commit-queue-scope",
+      result: {
+        branch: {
+          workflowBranch: {
+            id: fixture.branchId,
+          },
+        },
+        rows: [
+          {
+            workflowCommit: {
+              id: createdCommit.summary.id,
+            },
+          },
+        ],
+      },
+    });
+  });
+
   it("serves the first workflow module scope through the durable sync route", async () => {
     const { state } = createSqliteDurableObjectState();
     const durableObject = createTestDurableObject(state);
@@ -855,7 +979,7 @@ describe("web graph authority durable object", () => {
         kind: "module",
         moduleId: workflowModuleScope.moduleId,
         scopeId: workflowModuleScope.scopeId,
-        definitionHash: "scope-def:ops/workflow:review:v1",
+        definitionHash: workflowReviewModuleReadScope.definitionHash,
         policyFilterVersion: "policy:0",
       },
       completeness: "complete",

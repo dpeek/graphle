@@ -41,6 +41,15 @@ side:
   the `ops/workflow` entity family only, using the current request
   `AuthorizationContext.policyVersion` as the planned `policyFilterVersion`
 
+That first scoped proof is now defined from one shared graph-owned seam:
+
+- `../../src/graph/runtime/projection.ts` exports the public Branch 3
+  `ModuleReadScopeDefinition` and `ProjectionSpec` metadata helpers
+- `../../src/graph/modules/ops/workflow/projection.ts` owns the canonical
+  `workflowReviewModuleReadScope`, `workflowReviewSyncScopeRequest`, and the
+  first workflow projection descriptors for `project-branch-board` and
+  `branch-commit-queue`
+
 Scoped cursors stay opaque to callers, but the web authority now binds them to
 the planned module scope metadata. Incremental refreshes for that scope fail
 explicitly with `scope-changed` or `policy-changed` when the cursor no longer

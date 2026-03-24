@@ -16,10 +16,18 @@ import {
   projectBranchScopeOrderDirectionValues,
   projectBranchScopeOrderFieldValues,
   projectBranchScopeRepositoryFreshnessValues,
+  workflowBranchCommitQueueProjection,
   workflowBranchKeyPattern,
   workflowCommitKeyPattern,
   workflowMutationCommand,
   workflowMutationFailureCodes,
+  workflowProjectBranchBoardProjection,
+  workflowProjectionCatalog,
+  workflowProjectionDefinitionHashes,
+  workflowProjectionIds,
+  workflowProjectionMetadata,
+  workflowReviewModuleReadScope,
+  workflowReviewSyncScopeRequest,
   workflowProjectKeyPattern,
   workflowRepositoryKeyPattern,
   workflowSchema,
@@ -270,6 +278,55 @@ describe("ops workflow schema", () => {
     expect(result.branch.activeCommit?.workflowCommit.id).toBe("workflow-commit-2");
     expect(result.branch.latestSession?.subject.kind).toBe("commit");
     expect(result.rows[1]?.repositoryCommit?.state).toBe("attached");
+  });
+
+  it("exports the canonical workflow read scope and projection metadata", () => {
+    expect(workflowReviewModuleReadScope).toEqual({
+      kind: "module",
+      moduleId: "ops/workflow",
+      scopeId: "scope:ops/workflow:review",
+      definitionHash: "scope-def:ops/workflow:review:v1",
+    });
+    expect(workflowReviewSyncScopeRequest).toEqual({
+      kind: "module",
+      moduleId: workflowReviewModuleReadScope.moduleId,
+      scopeId: workflowReviewModuleReadScope.scopeId,
+    });
+    expect(workflowProjectBranchBoardProjection).toMatchObject({
+      projectionId: "ops/workflow:project-branch-board",
+      kind: "collection-index",
+      definitionHash: "projection-def:ops/workflow:project-branch-board:v1",
+      sourceScopeKinds: ["module"],
+      dependencyKeys: ["projection:ops/workflow:project-branch-board", "scope:ops/workflow:review"],
+      rebuildStrategy: "full",
+      visibilityMode: "policy-filtered",
+    });
+    expect(workflowBranchCommitQueueProjection).toMatchObject({
+      projectionId: "ops/workflow:branch-commit-queue",
+      kind: "collection-index",
+      definitionHash: "projection-def:ops/workflow:branch-commit-queue:v1",
+      sourceScopeKinds: ["module"],
+      dependencyKeys: ["projection:ops/workflow:branch-commit-queue", "scope:ops/workflow:review"],
+      rebuildStrategy: "full",
+      visibilityMode: "policy-filtered",
+    });
+    expect(workflowProjectionCatalog).toEqual([
+      workflowProjectBranchBoardProjection,
+      workflowBranchCommitQueueProjection,
+    ]);
+    expect(workflowProjectionMetadata).toEqual({
+      projectBranchBoard: workflowProjectBranchBoardProjection,
+      branchCommitQueue: workflowBranchCommitQueueProjection,
+    });
+    expect(workflowProjectionIds).toEqual({
+      projectBranchBoard: workflowProjectBranchBoardProjection.projectionId,
+      branchCommitQueue: workflowBranchCommitQueueProjection.projectionId,
+    });
+    expect(workflowProjectionDefinitionHashes).toEqual({
+      reviewScope: workflowReviewModuleReadScope.definitionHash,
+      projectBranchBoard: workflowProjectBranchBoardProjection.definitionHash,
+      branchCommitQueue: workflowBranchCommitQueueProjection.definitionHash,
+    });
   });
 
   it("owns stable keys for workflow lineage, retained execution, and repository execution records", () => {

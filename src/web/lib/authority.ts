@@ -11,6 +11,7 @@ import {
   collectTypeIndex,
   createIncrementalSyncFallback,
   createIncrementalSyncPayload,
+  createModuleReadScope,
   createModuleSyncScope,
   createPersistedAuthoritativeGraph,
   createStore,
@@ -39,11 +40,28 @@ import {
   type Store,
   type StoreSnapshot,
   type AuthoritativeGraphWriteResult,
+  matchesModuleReadScopeRequest,
 } from "@io/core/graph";
 import { core } from "@io/core/graph/modules";
 import { ops } from "@io/core/graph/modules/ops";
 import {
+  agentSession,
+  repositoryBranch,
+  repositoryCommit,
+  workflowBranch,
+  workflowCommit,
+  workflowProject,
+  workflowRepository,
+  createWorkflowProjectionIndex,
+  type CommitQueueScopeFailureCode,
+  type CommitQueueScopeQuery,
+  type CommitQueueScopeResult,
+  type ProjectBranchScopeFailureCode,
+  type ProjectBranchScopeQuery,
+  type ProjectBranchScopeResult,
+  WorkflowProjectionQueryError,
   workflowSchema,
+  workflowReviewModuleReadScope,
   type WorkflowMutationAction,
   type WorkflowMutationResult,
 } from "@io/core/graph/modules/ops/workflow";
@@ -60,11 +78,6 @@ import {
   type WriteSecretFieldInput,
   type WriteSecretFieldResult,
 } from "./secret-fields.js";
-import {
-  workflowModuleId,
-  workflowReviewScopeDefinitionHash,
-  workflowReviewScopeId,
-} from "./sync-scopes.js";
 import { runWorkflowMutationCommand } from "./workflow-authority.js";
 
 const webAppGraph = { ...core, ...pkm, ...ops } as const;
@@ -252,6 +265,14 @@ export type WebAppAuthority = Omit<
     predicateId: string,
     options: WebAppAuthorityPredicateReadOptions,
   ): unknown;
+  readProjectBranchScope(
+    query: ProjectBranchScopeQuery,
+    options: WebAppAuthorityReadOptions,
+  ): ProjectBranchScopeResult;
+  readCommitQueueScope(
+    query: CommitQueueScopeQuery,
+    options: WebAppAuthorityReadOptions,
+  ): CommitQueueScopeResult;
   createSyncPayload(
     options: WebAppAuthoritySyncOptions,
   ): ReturnType<PersistedWebAppAuthority["createSyncPayload"]>;
@@ -310,6 +331,20 @@ const workflowModuleEntityTypeIds = new Set(
       const values = typeDef.values as { readonly id?: string; readonly key: string };
       return values.id ?? values.key;
     }),
+);
+const workflowProjectionReadEntityTypeIds = new Set(
+  [
+    workflowProject,
+    workflowRepository,
+    workflowBranch,
+    workflowCommit,
+    repositoryBranch,
+    repositoryCommit,
+    agentSession,
+  ].map((typeDef) => {
+    const values = typeDef.values as { readonly id?: string; readonly key: string };
+    return values.id ?? values.key;
+  }),
 );
 const principalHomeGraphIdPredicateId = edgeId(core.principal.fields.homeGraphId);
 const authSubjectProjectionPrincipalPredicateId = edgeId(
@@ -660,6 +695,67 @@ function createReadPolicyError(error: PolicyError): WebAppAuthorityReadError {
   );
 }
 
+type WorkflowProjectionReadFailureCode =
+  | ProjectBranchScopeFailureCode
+  | CommitQueueScopeFailureCode;
+
+function resolveWorkflowProjectionReadStatus(code: WorkflowProjectionReadFailureCode): number {
+  switch (code) {
+    case "project-not-found":
+    case "branch-not-found":
+      return 404;
+    case "projection-stale":
+      return 409;
+    case "policy-denied":
+      return 403;
+  }
+}
+
+export class WebAppAuthorityWorkflowReadError extends Error {
+  readonly status: number;
+  readonly code: WorkflowProjectionReadFailureCode;
+  readonly retryable?: boolean;
+  readonly refreshRequired?: boolean;
+
+  constructor(
+    status: number,
+    code: WorkflowProjectionReadFailureCode,
+    message: string,
+    options: Partial<Pick<PolicyError, "retryable" | "refreshRequired">> = {},
+  ) {
+    super(message);
+    this.name = "WebAppAuthorityWorkflowReadError";
+    this.status = status;
+    this.code = code;
+    this.retryable = options.retryable;
+    this.refreshRequired = options.refreshRequired;
+  }
+}
+
+function createWorkflowProjectionPolicyError(error: PolicyError): WebAppAuthorityWorkflowReadError {
+  return new WebAppAuthorityWorkflowReadError(
+    resolveReadErrorStatus(error),
+    "policy-denied",
+    formatPolicyErrorMessage(error),
+    {
+      retryable: error.retryable,
+      refreshRequired: error.refreshRequired,
+    },
+  );
+}
+
+function throwWorkflowProjectionReadError(error: unknown): never {
+  if (error instanceof WorkflowProjectionQueryError) {
+    throw new WebAppAuthorityWorkflowReadError(
+      resolveWorkflowProjectionReadStatus(error.code),
+      error.code,
+      error.message,
+    );
+  }
+
+  throw error;
+}
+
 type PlannedWebAppAuthorityScope = {
   readonly scope: ModuleSyncScope;
   readonly typeIds: ReadonlySet<string>;
@@ -778,7 +874,7 @@ function planSyncScope(
 ): PlannedWebAppAuthorityScope | undefined {
   if (isGraphScopeRequest(scope)) return undefined;
 
-  if (scope.moduleId !== workflowModuleId || scope.scopeId !== workflowReviewScopeId) {
+  if (!matchesModuleReadScopeRequest(scope, workflowReviewModuleReadScope)) {
     throw new WebAppAuthorityReadError(
       404,
       `Scope "${scope.scopeId}" was not found for module "${scope.moduleId}".`,
@@ -786,12 +882,10 @@ function planSyncScope(
   }
 
   return {
-    scope: createModuleSyncScope({
-      moduleId: scope.moduleId,
-      scopeId: scope.scopeId,
-      definitionHash: workflowReviewScopeDefinitionHash,
-      policyFilterVersion: createPolicyFilterVersion(authorization.policyVersion),
-    }),
+    scope: createModuleReadScope(
+      workflowReviewModuleReadScope,
+      createPolicyFilterVersion(authorization.policyVersion),
+    ),
     typeIds: workflowModuleEntityTypeIds,
   };
 }
@@ -1320,6 +1414,43 @@ function filterReadableSnapshot(
   };
 }
 
+function listWorkflowProjectionSubjectIds(store: Store): string[] {
+  const subjectIds = new Set<string>();
+  for (const edge of store.snapshot().edges) {
+    if (edge.p === typePredicateId && workflowProjectionReadEntityTypeIds.has(edge.o)) {
+      subjectIds.add(edge.s);
+    }
+  }
+
+  return [...subjectIds];
+}
+
+function assertWorkflowProjectionReadable(
+  store: Store,
+  authorization: AuthorizationContext,
+  compiledFieldIndex: ReadonlyMap<string, CompiledFieldDefinition>,
+): void {
+  const staleContextError = assertCurrentPolicyVersion(authorization);
+  if (staleContextError) {
+    throw createWorkflowProjectionPolicyError(staleContextError);
+  }
+
+  for (const subjectId of listWorkflowProjectionSubjectIds(store)) {
+    for (const edge of store.facts(subjectId)) {
+      const decision = evaluateReadAuthorization(
+        store,
+        authorization,
+        compiledFieldIndex,
+        subjectId,
+        edge.p,
+      );
+      if (!decision.allowed) {
+        throw createWorkflowProjectionPolicyError(decision.error);
+      }
+    }
+  }
+}
+
 function assertTransactionAuthorized(
   transaction: GraphWriteTransaction,
   snapshot: StoreSnapshot,
@@ -1640,6 +1771,35 @@ export async function createWebAppAuthority(
         strictRequired: options.strictRequired,
       },
     );
+  }
+
+  function createAuthorizedWorkflowProjection(authorization: AuthorizationContext) {
+    assertWorkflowProjectionReadable(authority.store, authorization, compiledFieldIndex);
+    return createWorkflowProjectionIndex(createTypeClient(authority.store, workflowSchema));
+  }
+
+  function readProjectBranchScope(
+    query: ProjectBranchScopeQuery,
+    options: WebAppAuthorityReadOptions,
+  ): ProjectBranchScopeResult {
+    const projection = createAuthorizedWorkflowProjection(options.authorization);
+    try {
+      return projection.readProjectBranchScope(query);
+    } catch (error) {
+      return throwWorkflowProjectionReadError(error);
+    }
+  }
+
+  function readCommitQueueScope(
+    query: CommitQueueScopeQuery,
+    options: WebAppAuthorityReadOptions,
+  ): CommitQueueScopeResult {
+    const projection = createAuthorizedWorkflowProjection(options.authorization);
+    try {
+      return projection.readCommitQueueScope(query);
+    } catch (error) {
+      return throwWorkflowProjectionReadError(error);
+    }
   }
 
   function createSyncPayload(options: WebAppAuthoritySyncOptions) {
@@ -2039,7 +2199,9 @@ export async function createWebAppAuthority(
     createSyncPayload,
     getIncrementalSyncResult,
     lookupSessionPrincipal,
+    readCommitQueueScope,
     readPredicateValue,
+    readProjectBranchScope,
     readSnapshot,
     writeSecretField,
   };

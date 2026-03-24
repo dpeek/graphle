@@ -22,12 +22,14 @@ import {
   WebAppAuthoritySessionPrincipalLookupError,
 } from "./authority.js";
 import {
+  handleWorkflowReadRequest,
   handleWebCommandRequest,
   RequestAuthorizationContextError,
   handleSyncRequest,
   handleTransactionRequest,
   readRequestAuthorizationContext,
 } from "./server-routes.js";
+import { webWorkflowReadPath } from "./workflow-transport.js";
 
 type SqlRow = Record<string, unknown>;
 
@@ -1084,7 +1086,8 @@ export class WebGraphAuthorityDurableObject {
     if (
       url.pathname !== "/api/sync" &&
       url.pathname !== "/api/tx" &&
-      url.pathname !== "/api/commands"
+      url.pathname !== "/api/commands" &&
+      url.pathname !== webWorkflowReadPath
     ) {
       return new Response("Not Found", { status: 404 });
     }
@@ -1119,6 +1122,10 @@ export class WebGraphAuthorityDurableObject {
 
     if (url.pathname === "/api/commands") {
       return handleWebCommandRequest(request, authority, authorization);
+    }
+
+    if (url.pathname === webWorkflowReadPath) {
+      return handleWorkflowReadRequest(request, authority, authorization);
     }
 
     return new Response("Not Found", { status: 404 });
