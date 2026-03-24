@@ -2512,6 +2512,44 @@ describe("web authority", () => {
     expect(afterReissue.capabilityVersion).toBe(3);
   });
 
+  it("projects principal-target module-permission grants through the same authority grant path", async () => {
+    const authorization = createAuthorityAuthorizationContext();
+    const storage = createInMemoryTestWebAppAuthorityStorage();
+    const authority = await createTestWebAppAuthority(storage.storage);
+    const lookupInput = createSessionPrincipalLookupInput();
+    const initialProjection = await authority.lookupSessionPrincipal(lookupInput);
+    const { mutationGraph, mutationStore } = createProductMutationStore(
+      authority.readSnapshot({ authorization }),
+    );
+    const beforeCreate = mutationStore.snapshot();
+    const modulePermissionGrantId = mutationGraph.capabilityGrant.create({
+      grantedByPrincipal: initialProjection.principalId,
+      name: "Module summary read approval",
+      resourceKind: core.capabilityGrantResourceKind.values.modulePermission.id,
+      resourcePermissionKey: "probe.contract.read.summary",
+      status: core.capabilityGrantStatus.values.active.id,
+      targetKind: core.capabilityGrantTargetKind.values.principal.id,
+      targetPrincipal: initialProjection.principalId,
+    });
+
+    await authority.applyTransaction(
+      buildGraphWriteTransaction(
+        beforeCreate,
+        mutationStore.snapshot(),
+        "tx:create-module-permission-grant",
+      ),
+      {
+        authorization,
+        writeScope: "authority-only",
+      },
+    );
+
+    const afterCreate = await authority.lookupSessionPrincipal(lookupInput);
+
+    expect(afterCreate.capabilityGrantIds).toEqual([modulePermissionGrantId]);
+    expect(afterCreate.capabilityVersion).toBe(1);
+  });
+
   it("fails closed when the authorization context capabilityVersion is stale", async () => {
     const authorityAuthorization = createAuthorityAuthorizationContext();
     const storage = createInMemoryTestWebAppAuthorityStorage();

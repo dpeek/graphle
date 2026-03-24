@@ -11,9 +11,13 @@ import type {
   GraphCommandPolicy as GraphCommandPolicyFromRoot,
   GraphCommandSpec as GraphCommandSpecFromRoot,
   GraphCommandTouchedPredicate as GraphCommandTouchedPredicateFromRoot,
+  ModulePermissionApprovalRecord as ModulePermissionApprovalRecordFromRoot,
+  ModulePermissionCapabilityGrant as ModulePermissionCapabilityGrantFromRoot,
+  ModulePermissionGrantResource as ModulePermissionGrantResourceFromRoot,
   ModulePermissionRequest as ModulePermissionRequestFromRoot,
   ObjectViewSpec as ObjectViewSpecFromRoot,
   PolicyVersion as PolicyVersionFromRoot,
+  PrincipalRoleBinding as PrincipalRoleBindingFromRoot,
   PrincipalKind as PrincipalKindFromRoot,
   PredicatePolicyDescriptor as PredicatePolicyDescriptorFromRoot,
   WorkflowSpec as WorkflowSpecFromRoot,
@@ -31,9 +35,13 @@ import type {
   GraphCommandPolicy,
   GraphCommandSpec,
   GraphCommandTouchedPredicate,
+  ModulePermissionApprovalRecord,
+  ModulePermissionCapabilityGrant,
+  ModulePermissionGrantResource,
   ModulePermissionRequest,
   ObjectViewSpec,
   PolicyVersion,
+  PrincipalRoleBinding,
   PrincipalKind,
   PredicatePolicyDescriptor,
   WorkflowSpec,
@@ -186,6 +194,94 @@ const capabilityGrantTarget = {
   principalId: "principal-1",
 } satisfies CapabilityGrantTarget;
 
+const modulePermissionGrantResource = {
+  kind: "module-permission",
+  permissionKey: saveTopicPermission.key,
+} satisfies ModulePermissionGrantResource;
+
+const modulePermissionCapabilityGrant = {
+  id: "grant-module-permission-1",
+  resource: modulePermissionGrantResource,
+  target: capabilityGrantTarget,
+  grantedByPrincipalId: "principal-admin",
+  status: "active",
+  issuedAt: "2026-03-24T00:00:00.000Z",
+} satisfies ModulePermissionCapabilityGrant;
+
+const modulePermissionRoleBinding = {
+  id: "binding-module-permission-1",
+  principalId: "principal-module-1",
+  roleKey: "module:pkm.topic.editor",
+  status: "active",
+} satisfies PrincipalRoleBinding;
+
+const approvedModulePermissionRecord = {
+  moduleId: "pkm/topic",
+  permissionKey: saveTopicPermission.key,
+  request: saveTopicPermission,
+  status: "approved",
+  decidedAt: "2026-03-24T00:00:00.000Z",
+  decidedByPrincipalId: "principal-admin",
+  lowerings: [
+    {
+      kind: "capability-grant",
+      grant: modulePermissionCapabilityGrant,
+    },
+    {
+      kind: "role-binding",
+      binding: modulePermissionRoleBinding,
+    },
+  ] as const,
+} satisfies ModulePermissionApprovalRecord;
+
+const deniedModulePermissionRecord = {
+  moduleId: "pkm/topic",
+  permissionKey: blobPreviewPermission.key,
+  request: blobPreviewPermission,
+  status: "denied",
+  decidedAt: "2026-03-24T00:05:00.000Z",
+  decidedByPrincipalId: "principal-admin",
+  lowerings: [] as const,
+} satisfies ModulePermissionApprovalRecord;
+
+const revokedModulePermissionRecord = {
+  moduleId: "pkm/topic",
+  permissionKey: readTopicPermission.key,
+  request: readTopicPermission,
+  status: "revoked",
+  decidedAt: "2026-03-24T00:10:00.000Z",
+  decidedByPrincipalId: "principal-admin",
+  revokedAt: "2026-03-24T01:00:00.000Z",
+  revokedByPrincipalId: "principal-admin",
+  lowerings: [
+    {
+      kind: "capability-grant",
+      grant: {
+        ...modulePermissionCapabilityGrant,
+        id: "grant-module-permission-2",
+        resource: {
+          kind: "module-permission",
+          permissionKey: readTopicPermission.key,
+        },
+        status: "revoked",
+        revokedAt: "2026-03-24T01:00:00.000Z",
+      },
+    },
+  ] as const,
+} satisfies ModulePermissionApprovalRecord;
+
+const rootModulePermissionGrantResource: ModulePermissionGrantResourceFromRoot =
+  modulePermissionGrantResource;
+const rootModulePermissionCapabilityGrant: ModulePermissionCapabilityGrantFromRoot =
+  modulePermissionCapabilityGrant;
+const rootModulePermissionRoleBinding: PrincipalRoleBindingFromRoot = modulePermissionRoleBinding;
+const rootApprovedModulePermissionRecord: ModulePermissionApprovalRecordFromRoot =
+  approvedModulePermissionRecord;
+const rootDeniedModulePermissionRecord: ModulePermissionApprovalRecordFromRoot =
+  deniedModulePermissionRecord;
+const rootRevokedModulePermissionRecord: ModulePermissionApprovalRecordFromRoot =
+  revokedModulePermissionRecord;
+
 const capabilityGrantConstraints = {
   predicateIds: ["pkm:topic.content"],
   rootEntityId: "topic-1",
@@ -228,6 +324,17 @@ const runtimePredicatePolicy: PredicatePolicyDescriptor = rootPredicatePolicy;
 const runtimeCommandPolicy: GraphCommandPolicy = rootCommandPolicy;
 const runtimeTouchedPredicate: GraphCommandTouchedPredicate = rootTouchedPredicate;
 const runtimePrincipalKind: PrincipalKind = rootPrincipalKind;
+const runtimeModulePermissionGrantResource: ModulePermissionGrantResource =
+  rootModulePermissionGrantResource;
+const runtimeModulePermissionCapabilityGrant: ModulePermissionCapabilityGrant =
+  rootModulePermissionCapabilityGrant;
+const runtimeModulePermissionRoleBinding: PrincipalRoleBinding = rootModulePermissionRoleBinding;
+const runtimeApprovedModulePermissionRecord: ModulePermissionApprovalRecord =
+  rootApprovedModulePermissionRecord;
+const runtimeDeniedModulePermissionRecord: ModulePermissionApprovalRecord =
+  rootDeniedModulePermissionRecord;
+const runtimeRevokedModulePermissionRecord: ModulePermissionApprovalRecord =
+  rootRevokedModulePermissionRecord;
 const runtimeReadPermission: ModulePermissionRequest = rootReadPermission;
 const runtimeSavePermission: ModulePermissionRequest = rootSavePermission;
 const runtimeBlobPermission: ModulePermissionRequest = rootBlobPermission;
@@ -238,6 +345,12 @@ void rootCommand;
 void rootReadPermission;
 void rootSavePermission;
 void rootBlobPermission;
+void rootModulePermissionGrantResource;
+void rootModulePermissionCapabilityGrant;
+void rootModulePermissionRoleBinding;
+void rootApprovedModulePermissionRecord;
+void rootDeniedModulePermissionRecord;
+void rootRevokedModulePermissionRecord;
 void rootAuthSubject;
 void rootAuthenticatedSession;
 void rootAuthorizationContext;
@@ -263,6 +376,12 @@ void runtimePredicatePolicy;
 void runtimeCommandPolicy;
 void runtimeTouchedPredicate;
 void runtimePrincipalKind;
+void runtimeModulePermissionGrantResource;
+void runtimeModulePermissionCapabilityGrant;
+void runtimeModulePermissionRoleBinding;
+void runtimeApprovedModulePermissionRecord;
+void runtimeDeniedModulePermissionRecord;
+void runtimeRevokedModulePermissionRecord;
 void runtimeReadPermission;
 void runtimeSavePermission;
 void runtimeBlobPermission;
@@ -360,6 +479,47 @@ void ({
   reason: "Queue topic reindex work.",
   required: false,
 } satisfies ModulePermissionRequest);
+
+void ({
+  moduleId: "pkm/topic",
+  permissionKey: saveTopicPermission.key,
+  request: saveTopicPermission,
+  status: "approved",
+  decidedAt: "2026-03-24T00:00:00.000Z",
+  decidedByPrincipalId: "principal-admin",
+  lowerings: [] as const,
+  // @ts-expect-error approved module permissions must lower to at least one explicit grant or role binding
+} satisfies ModulePermissionApprovalRecord);
+
+void ({
+  moduleId: "pkm/topic",
+  permissionKey: blobPreviewPermission.key,
+  request: blobPreviewPermission,
+  status: "denied",
+  decidedAt: "2026-03-24T00:05:00.000Z",
+  decidedByPrincipalId: "principal-admin",
+  lowerings: [
+    {
+      kind: "role-binding",
+      binding: modulePermissionRoleBinding,
+    },
+  ] as const,
+  // @ts-expect-error denied module permissions must not create explicit authorization records
+} satisfies ModulePermissionApprovalRecord);
+
+void ({
+  kind: "module-permission",
+  // @ts-expect-error module-permission grant resources use permissionKey
+  commandKey: saveTopicCommand.key,
+} satisfies ModulePermissionGrantResource);
+
+void ({
+  id: "binding-module-permission-2",
+  principalId: "principal-module-1",
+  roleKey: "module:pkm.topic.viewer",
+  // @ts-expect-error role bindings use the shared active/revoked status literals
+  status: "disabled",
+} satisfies PrincipalRoleBinding);
 
 void ({
   graphId: "graph-1",

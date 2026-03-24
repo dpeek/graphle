@@ -4,8 +4,12 @@ import type {
   AuthenticatedSession,
   AuthorizationContext,
   GraphCommandSpec,
+  ModulePermissionApprovalRecord,
+  ModulePermissionCapabilityGrant,
+  ModulePermissionGrantResource,
   ModulePermissionRequest,
   ObjectViewSpec,
+  PrincipalRoleBinding,
   PredicatePolicyDescriptor,
   WorkflowSpec,
 } from "../index.js";
@@ -203,6 +207,111 @@ export const probeModulePermissionRequests = [
     required: false,
   },
 ] satisfies readonly ModulePermissionRequest[];
+
+const probeReadSummaryPermission = probeModulePermissionRequests[0]!;
+const probeSaveCommandPermission = probeModulePermissionRequests[2]!;
+const probeRebuildJobPermission = probeModulePermissionRequests[5]!;
+
+export const probeModulePermissionGrantResource = {
+  kind: "module-permission",
+  permissionKey: probeReadSummaryPermission.key,
+} satisfies ModulePermissionGrantResource;
+
+export const probeModulePermissionGrant = {
+  id: "grant:probe:module-summary-read",
+  resource: probeModulePermissionGrantResource,
+  target: {
+    kind: "principal",
+    principalId: probeAuthorizationContext.principalId,
+  },
+  grantedByPrincipalId: "principal:operator",
+  status: "active",
+  issuedAt: "2026-03-24T00:00:00.000Z",
+} satisfies ModulePermissionCapabilityGrant;
+
+export const probeModulePermissionRoleBinding = {
+  id: "binding:probe:contract-reviewer",
+  principalId: "principal:module:probe-contract",
+  roleKey: "module:probe.contract.reviewer",
+  status: "active",
+} satisfies PrincipalRoleBinding;
+
+export const probeApprovedModulePermissionRecord = {
+  moduleId: "probe.contract",
+  permissionKey: probeReadSummaryPermission.key,
+  request: probeReadSummaryPermission,
+  status: "approved",
+  decidedAt: "2026-03-24T00:00:00.000Z",
+  decidedByPrincipalId: "principal:operator",
+  lowerings: [
+    {
+      kind: "capability-grant",
+      grant: probeModulePermissionGrant,
+    },
+    {
+      kind: "role-binding",
+      binding: probeModulePermissionRoleBinding,
+    },
+  ] as const,
+} satisfies ModulePermissionApprovalRecord;
+
+export const probeDeniedModulePermissionRecord = {
+  moduleId: "probe.contract",
+  permissionKey: probeRebuildJobPermission.key,
+  request: probeRebuildJobPermission,
+  status: "denied",
+  decidedAt: "2026-03-24T00:05:00.000Z",
+  decidedByPrincipalId: "principal:operator",
+  note: "Background jobs stay disabled in the single-authority proof.",
+  lowerings: [] as const,
+} satisfies ModulePermissionApprovalRecord;
+
+export const probeRevokedModulePermissionRecord = {
+  moduleId: "probe.contract",
+  permissionKey: probeSaveCommandPermission.key,
+  request: probeSaveCommandPermission,
+  status: "revoked",
+  decidedAt: "2026-03-24T00:10:00.000Z",
+  decidedByPrincipalId: "principal:operator",
+  revokedAt: "2026-03-24T01:00:00.000Z",
+  revokedByPrincipalId: "principal:authority",
+  revocationNote: "Save command access was removed after install review changed.",
+  lowerings: [
+    {
+      kind: "capability-grant",
+      grant: {
+        id: "grant:probe:module-command-save",
+        resource: {
+          kind: "module-permission",
+          permissionKey: probeSaveCommandPermission.key,
+        },
+        target: {
+          kind: "principal",
+          principalId: "principal:module:probe-contract",
+        },
+        grantedByPrincipalId: "principal:operator",
+        status: "revoked",
+        issuedAt: "2026-03-24T00:10:00.000Z",
+        revokedAt: "2026-03-24T01:00:00.000Z",
+      },
+    },
+    {
+      kind: "role-binding",
+      binding: {
+        ...probeModulePermissionRoleBinding,
+        id: "binding:probe:contract-executor",
+        roleKey: "module:probe.contract.executor",
+        status: "revoked",
+      },
+    },
+  ] as const,
+} satisfies ModulePermissionApprovalRecord;
+
+export const probeModulePermissionApprovalRecords = [
+  probeApprovedModulePermissionRecord,
+  probeDeniedModulePermissionRecord,
+  probeRevokedModulePermissionRecord,
+] as const;
 
 export const probeContractWorkflow = {
   key: "probe:contractItem:review",

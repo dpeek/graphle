@@ -317,6 +317,58 @@ type ModulePermissionRequest =
       blobClassKeys: readonly string[];
     });
 
+type ModulePermissionGrantResource = Extract<
+  CapabilityResource,
+  { kind: "module-permission" }
+>;
+
+type ModulePermissionLowering =
+  | {
+      kind: "capability-grant";
+      grant: CapabilityGrant & {
+        resource: ModulePermissionGrantResource;
+      };
+    }
+  | {
+      kind: "role-binding";
+      binding: PrincipalRoleBinding;
+    };
+
+type ModulePermissionApprovalRecord =
+  | {
+      moduleId: string;
+      permissionKey: ModulePermissionKey;
+      request: ModulePermissionRequest;
+      status: "approved";
+      decidedAt: string;
+      decidedByPrincipalId: string;
+      note?: string;
+      lowerings: readonly [ModulePermissionLowering, ...ModulePermissionLowering[]];
+    }
+  | {
+      moduleId: string;
+      permissionKey: ModulePermissionKey;
+      request: ModulePermissionRequest;
+      status: "denied";
+      decidedAt: string;
+      decidedByPrincipalId: string;
+      note?: string;
+      lowerings: readonly [];
+    }
+  | {
+      moduleId: string;
+      permissionKey: ModulePermissionKey;
+      request: ModulePermissionRequest;
+      status: "revoked";
+      decidedAt: string;
+      decidedByPrincipalId: string;
+      note?: string;
+      revokedAt: string;
+      revokedByPrincipalId: string;
+      revocationNote?: string;
+      lowerings: readonly [ModulePermissionLowering, ...ModulePermissionLowering[]];
+    };
+
 interface ShareGrant {
   id: string;
   surface: {
@@ -346,6 +398,9 @@ Entity and concept responsibilities:
 - `ModulePermissionRequest` is the canonical manifest-facing install-time
   declaration surface. Branch 2 evaluates the union member and records any
   resulting approval or revocation against the stable `key`.
+- `ModulePermissionApprovalRecord` is the durable install-time review result for
+  one declared permission key. It persists approval, denial, and revocation
+  without creating ambient hidden rights.
 - `ShareGrant` is a narrowed sharing wrapper over a capability grant.
 
 Identifier rules:
@@ -422,6 +477,7 @@ interface PolicyError {
 | `authorizeCommand(...)`          | Enforce command capability requirements                                            | command executor                              | policy evaluator                               | `AuthorizationContext`, command key, touched predicates       | allow or deny                         | `policy.command.forbidden`                                               | `stable`                                                                   |
 | `CapabilityGrant`                | Durable delegated permission                                                       | share service, install flow, workflow runtime | authority persistence                          | resource, target, constraints                                 | stored grant id                       | `grant.invalid`                                                          | `stable` for principal targets, `provisional` for bearer and graph targets |
 | `ModulePermissionRequest`        | Canonical manifest-facing install-time permission request                          | module manifest loader                        | module installer and policy runtime            | stable `key`, `required`, `reason`, and kind-specific target fields | approval or denial keyed by `permissionKey` | `policy.command.forbidden`, `grant.invalid`                              | `stable` for key space plus predicate, command, and secret kinds; `provisional` for `share-admin` details and host-expansion kinds |
+| `ModulePermissionApprovalRecord` | Durable reviewed outcome for one declared module permission                        | module installer, install review UI           | authority persistence plus Branch 2 lowering   | `moduleId`, `permissionKey`, reviewed `request`, and lowerings | stored approval, denial, or revocation record | `policy.command.forbidden`, `grant.invalid`                              | `stable` for approval, denial, revocation, and explicit lowering references |
 | `ShareGrant`                     | Narrow grant for shareable entity predicate slices                                 | share service, future federation bridge       | authority persistence plus policy runtime      | surface selector, grant target                                | stored share grant id                 | `share.surface_invalid`, `grant.invalid`                                 | `provisional`                                                              |
 
 Contract rules:
@@ -446,6 +502,13 @@ Contract rules:
   by recording `CapabilityResource = { kind: "module-permission",
   permissionKey: request.key }`; the union member determines what Branch 2
   evaluates before that grant is issued
+- approved `ModulePermissionApprovalRecord`s must reference at least one
+  explicit `module-permission` capability grant or reusable role binding
+- denied `ModulePermissionApprovalRecord`s must keep `lowerings = []` so the
+  reviewed request remains durable without introducing hidden rights
+- revoking a module permission must revoke or deactivate the referenced grants
+  or role bindings and update the durable review record; revocation must not
+  silently delete the approval history
 - `predicate-read`, `predicate-write`, `command-execute`, and `secret-use`
   are the stable Branch 2 authorization-backed kinds
 - `share-admin` already occupies the same `permissionKey` space, but its

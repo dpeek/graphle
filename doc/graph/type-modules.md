@@ -19,7 +19,8 @@ Canonical imports:
 - `@io/core/graph/def`: focused schema and type-module authoring helpers from
   `../../src/graph/runtime/def.ts`
 - `@io/core/graph`: root runtime surface, including `ObjectViewSpec`,
-  `WorkflowSpec`, `GraphCommandSpec`, and `ModulePermissionRequest` from
+  `WorkflowSpec`, `GraphCommandSpec`, `ModulePermissionRequest`,
+  `PrincipalRoleBinding`, and `ModulePermissionApprovalRecord` from
   `../../src/graph/runtime/contracts.ts`
 - `@io/core/graph/runtime`: full runtime entry surface from
   `../../src/graph/runtime/index.ts`
@@ -129,6 +130,27 @@ The stable contract is the request union itself plus the `key` space it lowers
 into for approval, grant, and revocation. Installers and UIs may summarize
 these requests, but they should not invent a second incompatible manifest
 shape.
+
+## `ModulePermissionApprovalRecord`
+
+Use `ModulePermissionApprovalRecord` for the durable authority-owned decision
+record attached to one declared module permission key.
+
+Current fields:
+
+- identity fields: `moduleId`, `permissionKey`, and the reviewed `request`
+- decision fields: `status`, `decidedAt`, `decidedByPrincipalId`, and optional
+  notes
+- explicit lowerings: one or more `module-permission` capability grants or
+  role bindings for `approved` and `revoked`, and an empty lowering list for
+  `denied`
+- revocation fields: `revokedAt`, `revokedByPrincipalId`, and optional
+  `revocationNote` when a previously approved permission is later revoked
+
+This keeps install-time permission review durable without creating hidden
+ambient rights. Module permission approvals always lower to explicit grants or
+role bindings, and denials remain durable records rather than disappearing
+from audit history.
 
 ## Canonical Module Layout
 

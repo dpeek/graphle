@@ -224,6 +224,73 @@ export type ModulePermissionRequest =
       readonly blobClassKeys: readonly string[];
     });
 
+export type PrincipalRoleBinding = {
+  readonly id: string;
+  readonly principalId: string;
+  readonly roleKey: string;
+  readonly status: "active" | "revoked";
+};
+
+export type ModulePermissionGrantResource = {
+  readonly kind: "module-permission";
+  readonly permissionKey: ModulePermissionKey;
+};
+
+export type ModulePermissionLowering =
+  | {
+      readonly kind: "capability-grant";
+      readonly grant: {
+        readonly id: string;
+        readonly resource: ModulePermissionGrantResource;
+        readonly status: "active" | "expired" | "revoked";
+      };
+    }
+  | {
+      readonly kind: "role-binding";
+      readonly binding: PrincipalRoleBinding;
+    };
+
+export type ModulePermissionApprovalRecord =
+  | {
+      readonly moduleId: string;
+      readonly permissionKey: ModulePermissionKey;
+      readonly request: ModulePermissionRequest;
+      readonly status: "approved";
+      readonly decidedAt: string;
+      readonly decidedByPrincipalId: string;
+      readonly note?: string;
+      readonly lowerings: readonly [
+        ModulePermissionLowering,
+        ...ModulePermissionLowering[],
+      ];
+    }
+  | {
+      readonly moduleId: string;
+      readonly permissionKey: ModulePermissionKey;
+      readonly request: ModulePermissionRequest;
+      readonly status: "denied";
+      readonly decidedAt: string;
+      readonly decidedByPrincipalId: string;
+      readonly note?: string;
+      readonly lowerings: readonly [];
+    }
+  | {
+      readonly moduleId: string;
+      readonly permissionKey: ModulePermissionKey;
+      readonly request: ModulePermissionRequest;
+      readonly status: "revoked";
+      readonly decidedAt: string;
+      readonly decidedByPrincipalId: string;
+      readonly note?: string;
+      readonly revokedAt: string;
+      readonly revokedByPrincipalId: string;
+      readonly revocationNote?: string;
+      readonly lowerings: readonly [
+        ModulePermissionLowering,
+        ...ModulePermissionLowering[],
+      ];
+    };
+
 export interface ModuleSetupField {
   readonly key: string;
   readonly label: string;
@@ -324,6 +391,8 @@ export interface InstalledModuleRecord {
   readonly sourceLocator: string;
   readonly bundleDigest: string;
   readonly state: ModuleInstallState;
+  // Stable subset of declared permission keys backed by active approved
+  // ModulePermissionApprovalRecord rows.
   readonly grantedPermissions: readonly ModulePermissionKey[];
   readonly installedAt?: string;
   readonly updatedAt: string;
@@ -453,9 +522,32 @@ Permission contract rules:
   even when the human-facing UI groups or labels requests differently.
 - approval lowers every granted request into the shared grant key space as
   `CapabilityResource = { kind: "module-permission", permissionKey: request.key }`.
+- approved results must persist at least one explicit lowering to a
+  `module-permission` capability grant or reusable role binding.
+- denied results persist the reviewed request with `lowerings = []`; denial is
+  durable state, not the absence of a row.
+- revocation updates the durable approval record and revokes or deactivates the
+  referenced grants or role bindings instead of silently dropping prior review
+  state.
 - `command-execute.touchesPredicates`, when present, is review metadata only;
   the referenced `GraphCommandSpec.policy` remains the authoritative command
   policy contract.
+
+### `ModulePermissionApprovalRecord`
+
+- Purpose: durable current-state review record for one declared
+  `ModulePermissionKey`.
+- Caller: install coordinator, permission review UI, restart rebuild, audit
+  tooling.
+- Callee: authority persistence plus Branch 2 lowering.
+- Inputs: `moduleId`, reviewed `request`, explicit lowerings, decision actor,
+  and approval/denial/revocation status.
+- Outputs: authoritative approval result consumed by install activation and
+  later revocation flows.
+- Failure shape: `permission-denied`, `grant.invalid`, or invalid lowering
+  shape.
+- Stability: `stable` for approval, denial, revocation, and explicit lowering
+  references.
 
 ### `ModuleInstaller`
 
@@ -608,9 +700,10 @@ own fact storage itself.
     `installed_at`, `updated_at`, `disabled_at`, `last_error_code`,
     `last_error_message`
 - `io_module_permission_grant`
-  - one row per granted or denied request
-  - fields: `module_id`, `permission_key`, `kind`, `status`, `details_json`,
-    `granted_at`, `granted_by`
+  - one authoritative current-state row per declared permission key
+  - fields: `module_id`, `permission_key`, `kind`, `status`, `request_json`,
+    `lowerings_json`, `decided_at`, `decided_by`, `note`,
+    `revoked_at`, `revoked_by`, `revocation_note`
 - `io_module_migration_run`
   - append-oriented migration ledger
   - fields: `module_id`, `migration_id`, `from_version`, `to_version`,

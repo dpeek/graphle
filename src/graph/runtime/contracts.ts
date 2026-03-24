@@ -120,6 +120,15 @@ export type CapabilityGrant = {
   readonly revokedAt?: string;
 };
 
+export type PrincipalRoleBindingStatus = "active" | "revoked";
+
+export type PrincipalRoleBinding = {
+  readonly id: string;
+  readonly principalId: string;
+  readonly roleKey: string;
+  readonly status: PrincipalRoleBindingStatus;
+};
+
 export type PolicyErrorCode =
   | "auth.unauthenticated"
   | "auth.principal_missing"
@@ -234,6 +243,72 @@ export type ModulePermissionRequest =
   | (ModulePermissionRequestBase & {
       readonly kind: "blob-class";
       readonly blobClassKeys: readonly string[];
+    });
+
+export type ModulePermissionGrantResource = Extract<
+  CapabilityGrantResource,
+  {
+    readonly kind: "module-permission";
+  }
+>;
+
+export type ModulePermissionCapabilityGrant = CapabilityGrant & {
+  readonly resource: ModulePermissionGrantResource;
+};
+
+export type ModulePermissionLowering =
+  | {
+      readonly kind: "capability-grant";
+      readonly grant: ModulePermissionCapabilityGrant;
+    }
+  | {
+      readonly kind: "role-binding";
+      readonly binding: PrincipalRoleBinding;
+    };
+
+export type ModulePermissionApprovalStatus = "approved" | "denied" | "revoked";
+
+type ModulePermissionApprovalRecordBase = {
+  readonly moduleId: string;
+  readonly permissionKey: ModulePermissionKey;
+  readonly request: ModulePermissionRequest;
+  readonly decidedAt: string;
+  readonly decidedByPrincipalId: string;
+  readonly note?: string;
+};
+
+type ModulePermissionApprovalLowerings = readonly [
+  ModulePermissionLowering,
+  ...ModulePermissionLowering[],
+];
+
+/**
+ * Durable authority-owned decision record for one declared module permission.
+ * Approved permissions must lower to explicit grants or role bindings; denials
+ * retain the reviewed request without creating ambient rights; revocation keeps
+ * the original lowering references and records who revoked them.
+ */
+export type ModulePermissionApprovalRecord =
+  | (ModulePermissionApprovalRecordBase & {
+      readonly status: "approved";
+      readonly lowerings: ModulePermissionApprovalLowerings;
+      readonly revokedAt?: never;
+      readonly revokedByPrincipalId?: never;
+      readonly revocationNote?: never;
+    })
+  | (ModulePermissionApprovalRecordBase & {
+      readonly status: "denied";
+      readonly lowerings: readonly [];
+      readonly revokedAt?: never;
+      readonly revokedByPrincipalId?: never;
+      readonly revocationNote?: never;
+    })
+  | (ModulePermissionApprovalRecordBase & {
+      readonly status: "revoked";
+      readonly lowerings: ModulePermissionApprovalLowerings;
+      readonly revokedAt: string;
+      readonly revokedByPrincipalId: string;
+      readonly revocationNote?: string;
     });
 
 export type ObjectViewFieldSpec = {

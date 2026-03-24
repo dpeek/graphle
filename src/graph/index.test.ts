@@ -5,11 +5,17 @@ import {
   probeAuthSubject,
   probeAuthenticatedSession,
   probeAuthorizationContext,
+  probeApprovedModulePermissionRecord,
   probeContractItem,
+  probeDeniedModulePermissionRecord,
   probeModulePermissionRequests,
+  probeModulePermissionApprovalRecords,
+  probeModulePermissionGrant,
+  probeModulePermissionRoleBinding,
   probeContractObjectView,
   probeContractSummaryPolicy,
   probeContractWorkflow,
+  probeRevokedModulePermissionRecord,
   probeSaveContractItemCommand,
 } from "./runtime/contracts.probe.js";
 
@@ -332,6 +338,81 @@ describe("@io/core/graph package entry surfaces", () => {
         }),
       ]),
     );
+    expect(probeModulePermissionGrant).toMatchObject({
+      resource: {
+        kind: "module-permission",
+        permissionKey: "probe.contract.read.summary",
+      },
+      target: {
+        kind: "principal",
+        principalId: probeAuthorizationContext.principalId,
+      },
+      status: "active",
+    });
+    expect(probeModulePermissionRoleBinding).toMatchObject({
+      principalId: "principal:module:probe-contract",
+      roleKey: "module:probe.contract.reviewer",
+      status: "active",
+    });
+    expect(probeApprovedModulePermissionRecord).toMatchObject({
+      moduleId: "probe.contract",
+      permissionKey: "probe.contract.read.summary",
+      status: "approved",
+      lowerings: [
+        expect.objectContaining({
+          kind: "capability-grant",
+          grant: expect.objectContaining({
+            resource: {
+              kind: "module-permission",
+              permissionKey: "probe.contract.read.summary",
+            },
+          }),
+        }),
+        expect.objectContaining({
+          kind: "role-binding",
+          binding: expect.objectContaining({
+            roleKey: "module:probe.contract.reviewer",
+            status: "active",
+          }),
+        }),
+      ],
+    });
+    expect(probeDeniedModulePermissionRecord).toMatchObject({
+      moduleId: "probe.contract",
+      permissionKey: "probe.contract.job.rebuild",
+      status: "denied",
+      lowerings: [],
+    });
+    expect(probeRevokedModulePermissionRecord).toMatchObject({
+      moduleId: "probe.contract",
+      permissionKey: "probe.contract.command.save",
+      status: "revoked",
+      revokedByPrincipalId: "principal:authority",
+      lowerings: [
+        expect.objectContaining({
+          kind: "capability-grant",
+          grant: expect.objectContaining({
+            resource: {
+              kind: "module-permission",
+              permissionKey: "probe.contract.command.save",
+            },
+            status: "revoked",
+          }),
+        }),
+        expect.objectContaining({
+          kind: "role-binding",
+          binding: expect.objectContaining({
+            roleKey: "module:probe.contract.executor",
+            status: "revoked",
+          }),
+        }),
+      ],
+    });
+    expect(probeModulePermissionApprovalRecords).toEqual([
+      probeApprovedModulePermissionRecord,
+      probeDeniedModulePermissionRecord,
+      probeRevokedModulePermissionRecord,
+    ]);
   });
 
   it("keeps the canonical React runtime and host adapter entries separate", async () => {
