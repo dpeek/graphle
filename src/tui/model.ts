@@ -1,5 +1,10 @@
 import type {
+  WorkflowBranchStateValue,
+  WorkflowCommitStateValue,
+} from "../graph/modules/ops/workflow/command.js";
+import type {
   CommitQueueScopeResult,
+  CommitQueueScopeSessionSummary,
   ProjectBranchScopeQuery,
   ProjectBranchScopeResult,
   WorkflowProjectionIndex,
@@ -29,7 +34,60 @@ export const workflowTuiFocusValues = ["branch-board", "branch-detail", "commit-
 
 export type WorkflowTuiFocus = (typeof workflowTuiFocusValues)[number];
 
+export const workflowTuiActionValues = ["branch-session", "commit-session"] as const;
+
+export type WorkflowTuiAction = (typeof workflowTuiActionValues)[number];
+
+export interface WorkflowTuiBranchSubjectStateModel {
+  readonly branchId: string;
+  readonly branchState: WorkflowBranchStateValue;
+  readonly latestSession?: CommitQueueScopeSessionSummary;
+}
+
+export interface WorkflowTuiCommitSubjectStateModel {
+  readonly branchId: string;
+  readonly branchState: WorkflowBranchStateValue;
+  readonly commitId?: string;
+  readonly commitState?: WorkflowCommitStateValue;
+  readonly hasRunningSession: boolean;
+  readonly isActiveCommit: boolean;
+  readonly latestSession?: CommitQueueScopeSessionSummary;
+}
+
+export interface WorkflowTuiActionModel {
+  readonly availability: "available" | "unavailable";
+  readonly description: string;
+  readonly id: WorkflowTuiAction;
+  readonly label: string;
+  readonly reason?: string;
+  readonly subject: {
+    readonly branchId: string;
+    readonly commitId?: string;
+    readonly kind: "branch" | "commit";
+  };
+}
+
+export interface WorkflowTuiActionRequestStateModel {
+  readonly actionId: WorkflowTuiAction;
+  readonly message: string;
+  readonly status: "failure" | "pending" | "success";
+  readonly subject: WorkflowTuiActionModel["subject"];
+}
+
+export interface WorkflowTuiActionSetModel {
+  readonly branch: readonly WorkflowTuiActionModel[];
+  readonly commit: readonly WorkflowTuiActionModel[];
+}
+
+export interface WorkflowTuiActionSurfaceModel {
+  readonly open: boolean;
+  readonly selectedActionId?: WorkflowTuiAction;
+  readonly states?: readonly WorkflowTuiActionRequestStateModel[];
+}
+
 export interface WorkflowTuiWorkflowSurfaceModel {
+  readonly actions: WorkflowTuiActionSetModel;
+  readonly actionSurface: WorkflowTuiActionSurfaceModel;
   readonly branchBoard: ProjectBranchScopeResult;
   readonly commitQueues: readonly CommitQueueScopeResult[];
   readonly focus: WorkflowTuiFocus;
@@ -142,6 +200,294 @@ function resolveSelectedCommitId(
   }
 
   return commitIds[0];
+}
+
+function getSelectedCommitRow(
+  commitQueue: CommitQueueScopeResult | undefined,
+  selectedCommitId: string | undefined,
+) {
+  if (!commitQueue) {
+    return undefined;
+  }
+
+  return commitQueue.rows.find((row) => row.workflowCommit.id === selectedCommitId);
+}
+
+function getSelectedBranchSubjectState(
+  branchBoard: ProjectBranchScopeResult,
+  commitQueue: CommitQueueScopeResult | undefined,
+  selectedBranchId: string | undefined,
+): WorkflowTuiBranchSubjectStateModel | undefined {
+  if (!selectedBranchId) {
+    return undefined;
+  }
+
+  const selectedBranch = branchBoard.rows.find((row) => row.workflowBranch.id === selectedBranchId);
+  if (!selectedBranch) {
+    return undefined;
+  }
+
+  return {
+    branchId: selectedBranchId,
+    branchState: selectedBranch.workflowBranch.state,
+    latestSession: commitQueue?.branch.latestSession,
+  };
+}
+
+function getSelectedCommitSubjectState(
+  branchState: WorkflowBranchStateValue | undefined,
+  commitQueue: CommitQueueScopeResult | undefined,
+  selectedCommitId: string | undefined,
+): WorkflowTuiCommitSubjectStateModel | undefined {
+  if (!commitQueue || !branchState) {
+    return undefined;
+  }
+
+  const latestSession = commitQueue.branch.latestSession;
+  const selectedCommit = getSelectedCommitRow(commitQueue, selectedCommitId);
+
+  return {
+    branchId: commitQueue.branch.workflowBranch.id,
+    branchState,
+    ...(selectedCommitId ? { commitId: selectedCommitId } : {}),
+    ...(selectedCommit ? { commitState: selectedCommit.workflowCommit.state } : {}),
+    hasRunningSession:
+      latestSession?.runtimeState === "running" &&
+      latestSession.subject.kind === "commit" &&
+      latestSession.subject.commitId === selectedCommitId,
+    isActiveCommit:
+      selectedCommitId !== undefined &&
+      commitQueue.branch.workflowBranch.activeCommitId === selectedCommitId,
+    latestSession,
+  };
+}
+
+function createActionModel(
+  action: Omit<WorkflowTuiActionModel, "availability"> & {
+    readonly reason?: string;
+  },
+): WorkflowTuiActionModel {
+  return {
+    ...action,
+    availability: action.reason ? "unavailable" : "available",
+  };
+}
+
+function buildBranchSessionAction(
+  subject: WorkflowTuiBranchSubjectStateModel | undefined,
+): WorkflowTuiActionModel {
+  if (!subject) {
+    return createActionModel({
+      description: "Start a branch-scoped planning session from the selected workflow branch.",
+      id: "branch-session",
+      label: "Launch branch session",
+      reason: "Select a workflow branch first.",
+      subject: {
+        branchId: "",
+        kind: "branch",
+      },
+    });
+  }
+
+  const latestSession = subject.latestSession;
+  const hasRunningBranchSession =
+    latestSession?.runtimeState === "running" && latestSession.subject.kind === "branch";
+
+  let reason: string | undefined;
+  if (subject.branchState === "done" || subject.branchState === "archived") {
+    reason = "Completed and archived branches do not accept new branch sessions.";
+  } else if (latestSession?.runtimeState === "running" && latestSession.subject.kind === "commit") {
+    reason = "The selected branch already has a running commit-scoped session.";
+  }
+
+  return createActionModel({
+    description: hasRunningBranchSession
+      ? "Reuse the running branch-scoped session for the selected workflow branch."
+      : "Start a branch-scoped planning session from the selected workflow branch.",
+    id: "branch-session",
+    label: hasRunningBranchSession ? "Attach branch session" : "Launch branch session",
+    ...(reason ? { reason } : {}),
+    subject: {
+      branchId: subject.branchId,
+      kind: "branch",
+    },
+  });
+}
+
+function buildCommitSessionAction(
+  subject: WorkflowTuiCommitSubjectStateModel | undefined,
+): WorkflowTuiActionModel {
+  if (!subject) {
+    return createActionModel({
+      description: "Start a commit-scoped execution session from the selected workflow commit.",
+      id: "commit-session",
+      label: "Launch commit session",
+      reason: "Select a workflow branch first.",
+      subject: {
+        branchId: "",
+        kind: "commit",
+      },
+    });
+  }
+
+  const latestSession = subject.latestSession;
+  const runningBranchSession =
+    latestSession?.runtimeState === "running" && latestSession.subject.kind === "branch";
+  const runningOtherCommitSession =
+    latestSession?.runtimeState === "running" &&
+    latestSession.subject.kind === "commit" &&
+    latestSession.subject.commitId !== subject.commitId;
+
+  let reason: string | undefined;
+  if (!subject.commitId || !subject.commitState) {
+    reason = "Select a workflow commit first.";
+  } else if (subject.hasRunningSession) {
+    reason = undefined;
+  } else if (
+    subject.branchState === "backlog" ||
+    subject.branchState === "done" ||
+    subject.branchState === "archived"
+  ) {
+    reason = "The selected branch is not in a launchable state for commit execution.";
+  } else if (!subject.isActiveCommit) {
+    reason = "Select the branch active commit to launch commit execution.";
+  } else if (subject.commitState === "planned") {
+    reason = "Planned commits must be promoted before execution can launch.";
+  } else if (subject.commitState === "committed" || subject.commitState === "dropped") {
+    reason = "Committed and dropped commits do not accept execution sessions.";
+  } else if (runningBranchSession) {
+    reason = "The selected branch already has a running branch-scoped session.";
+  } else if (runningOtherCommitSession) {
+    reason = "Another commit on the selected branch already has a running session.";
+  }
+
+  return createActionModel({
+    description: subject.hasRunningSession
+      ? "Reuse the running commit-scoped session for the selected workflow commit."
+      : "Start a commit-scoped execution session from the selected workflow commit.",
+    id: "commit-session",
+    label: subject.hasRunningSession ? "Attach commit session" : "Launch commit session",
+    ...(reason ? { reason } : {}),
+    subject: {
+      branchId: subject.branchId,
+      ...(subject.commitId ? { commitId: subject.commitId } : {}),
+      kind: "commit",
+    },
+  });
+}
+
+function buildWorkflowActionSet(
+  branchBoard: ProjectBranchScopeResult,
+  commitQueues: readonly CommitQueueScopeResult[],
+  selectedBranchId: string | undefined,
+  selectedCommitId: string | undefined,
+): WorkflowTuiActionSetModel {
+  const selectedCommitQueue = getCommitQueueForBranch(commitQueues, selectedBranchId);
+  const branchSubject = getSelectedBranchSubjectState(
+    branchBoard,
+    selectedCommitQueue,
+    selectedBranchId,
+  );
+  const commitSubject = getSelectedCommitSubjectState(
+    branchSubject?.branchState,
+    selectedCommitQueue,
+    selectedCommitId,
+  );
+
+  return {
+    branch: [buildBranchSessionAction(branchSubject)],
+    commit: [buildCommitSessionAction(commitSubject)],
+  };
+}
+
+function listWorkflowActions(actions: WorkflowTuiActionSetModel) {
+  return [...actions.branch, ...actions.commit];
+}
+
+function getWorkflowTuiActionStateKey(
+  subject: WorkflowTuiActionModel["subject"],
+  actionId: WorkflowTuiAction,
+) {
+  return `${subject.kind}:${subject.branchId}:${subject.commitId ?? ""}:${actionId}`;
+}
+
+function isKnownActionSubject(
+  branchBoard: ProjectBranchScopeResult,
+  commitQueues: readonly CommitQueueScopeResult[],
+  subject: WorkflowTuiActionModel["subject"],
+) {
+  if (!subject.branchId) {
+    return false;
+  }
+
+  const branchExists = branchBoard.rows.some((row) => row.workflowBranch.id === subject.branchId);
+  if (!branchExists) {
+    return false;
+  }
+
+  if (subject.kind === "branch") {
+    return true;
+  }
+
+  if (!subject.commitId) {
+    return false;
+  }
+
+  return (
+    getCommitQueueForBranch(commitQueues, subject.branchId)?.rows.some(
+      (row) => row.workflowCommit.id === subject.commitId,
+    ) ?? false
+  );
+}
+
+function normalizeWorkflowTuiActionRequestStates(
+  branchBoard: ProjectBranchScopeResult,
+  commitQueues: readonly CommitQueueScopeResult[],
+  states: readonly WorkflowTuiActionRequestStateModel[] | undefined,
+) {
+  if (!states?.length) {
+    return undefined;
+  }
+
+  const deduped = new Map<string, WorkflowTuiActionRequestStateModel>();
+  for (const state of states) {
+    if (!isKnownActionSubject(branchBoard, commitQueues, state.subject)) {
+      continue;
+    }
+    deduped.set(getWorkflowTuiActionStateKey(state.subject, state.actionId), state);
+  }
+
+  return deduped.size > 0 ? [...deduped.values()] : undefined;
+}
+
+function upsertWorkflowTuiActionRequestState(
+  states: readonly WorkflowTuiActionRequestStateModel[] | undefined,
+  nextState: WorkflowTuiActionRequestStateModel,
+) {
+  const nextStates = [...(states ?? [])];
+  const stateKey = getWorkflowTuiActionStateKey(nextState.subject, nextState.actionId);
+  const existingIndex = nextStates.findIndex(
+    (state) => getWorkflowTuiActionStateKey(state.subject, state.actionId) === stateKey,
+  );
+  if (existingIndex >= 0) {
+    nextStates.splice(existingIndex, 1, nextState);
+  } else {
+    nextStates.push(nextState);
+  }
+  return nextStates;
+}
+
+function resolveSelectedActionId(
+  actions: readonly WorkflowTuiActionModel[],
+  selectedActionId: WorkflowTuiAction | undefined,
+) {
+  if (!actions.length) {
+    return undefined;
+  }
+  if (selectedActionId && actions.some((action) => action.id === selectedActionId)) {
+    return selectedActionId;
+  }
+  return actions.find((action) => action.availability === "available")?.id ?? actions[0]?.id;
 }
 
 function moveSelection(currentId: string | undefined, ids: readonly string[], delta: number) {
@@ -277,6 +623,13 @@ export function createWorkflowTuiWorkflowModel(
   options: WorkflowTuiWorkflowModelOptions,
 ): WorkflowTuiWorkflowSurfaceModel {
   return normalizeWorkflowTuiSurfaceModel({
+    actions: {
+      branch: [],
+      commit: [],
+    },
+    actionSurface: {
+      open: false,
+    },
     kind: "workflow",
     branchBoard: options.branchBoard,
     commitQueues: options.commitQueues,
@@ -326,9 +679,31 @@ export function normalizeWorkflowTuiSurfaceModel(
     getCommitQueueForBranch(commitQueues, selectedBranchId),
     model.selectedCommitId,
   );
+  const actions = buildWorkflowActionSet(
+    model.branchBoard,
+    commitQueues,
+    selectedBranchId,
+    selectedCommitId,
+  );
+  const flatActions = listWorkflowActions(actions);
+  const resolvedSelectedActionId = resolveSelectedActionId(
+    flatActions,
+    model.actionSurface?.selectedActionId,
+  );
+  const states = normalizeWorkflowTuiActionRequestStates(
+    model.branchBoard,
+    commitQueues,
+    model.actionSurface?.states,
+  );
 
   return {
     kind: "workflow",
+    actions,
+    actionSurface: {
+      open: Boolean(model.actionSurface?.open),
+      ...(resolvedSelectedActionId ? { selectedActionId: resolvedSelectedActionId } : {}),
+      ...(states ? { states } : {}),
+    },
     branchBoard: model.branchBoard,
     commitQueues,
     focus: isWorkflowFocus(model.focus) ? model.focus : "branch-board",
@@ -395,5 +770,102 @@ export function moveWorkflowTuiSelection(
     ...model,
     selectedBranchId: nextBranchId,
     selectedCommitId: undefined,
+  });
+}
+
+export function toggleWorkflowTuiActionSurface(
+  model: WorkflowTuiSurfaceModel,
+): WorkflowTuiSurfaceModel {
+  if (model.kind !== "workflow") {
+    return model;
+  }
+
+  return normalizeWorkflowTuiSurfaceModel({
+    ...model,
+    actionSurface: {
+      ...model.actionSurface,
+      open: !model.actionSurface.open,
+    },
+  });
+}
+
+export function moveWorkflowTuiActionSelection(
+  model: WorkflowTuiSurfaceModel,
+  delta: number,
+): WorkflowTuiSurfaceModel {
+  if (model.kind !== "workflow" || delta === 0 || !model.actionSurface.open) {
+    return model;
+  }
+
+  const actions = listWorkflowActions(model.actions);
+  if (!actions.length) {
+    return model;
+  }
+
+  const selectedActionId = resolveSelectedActionId(actions, model.actionSurface.selectedActionId);
+  const nextActionId = moveSelection(
+    selectedActionId,
+    actions.map((action) => action.id),
+    delta,
+  ) as WorkflowTuiAction | undefined;
+  if (!nextActionId || nextActionId === model.actionSurface.selectedActionId) {
+    return model;
+  }
+
+  return normalizeWorkflowTuiSurfaceModel({
+    ...model,
+    actionSurface: {
+      ...model.actionSurface,
+      selectedActionId: nextActionId,
+    },
+  });
+}
+
+export function getSelectedWorkflowTuiAction(
+  model: WorkflowTuiSurfaceModel,
+): WorkflowTuiActionModel | undefined {
+  if (model.kind !== "workflow") {
+    return undefined;
+  }
+
+  const selectedActionId = resolveSelectedActionId(
+    listWorkflowActions(model.actions),
+    model.actionSurface.selectedActionId,
+  );
+  if (!selectedActionId) {
+    return undefined;
+  }
+
+  return listWorkflowActions(model.actions).find((action) => action.id === selectedActionId);
+}
+
+export function getWorkflowTuiActionRequestState(
+  model: WorkflowTuiSurfaceModel,
+  action: WorkflowTuiActionModel,
+): WorkflowTuiActionRequestStateModel | undefined {
+  if (model.kind !== "workflow") {
+    return undefined;
+  }
+
+  const stateKey = getWorkflowTuiActionStateKey(action.subject, action.id);
+  return model.actionSurface.states?.find(
+    (state) => getWorkflowTuiActionStateKey(state.subject, state.actionId) === stateKey,
+  );
+}
+
+export function setWorkflowTuiActionRequestState(
+  model: WorkflowTuiSurfaceModel,
+  state: WorkflowTuiActionRequestStateModel,
+): WorkflowTuiSurfaceModel {
+  if (model.kind !== "workflow") {
+    return model;
+  }
+
+  return normalizeWorkflowTuiSurfaceModel({
+    ...model,
+    actionSurface: {
+      ...model.actionSurface,
+      states: upsertWorkflowTuiActionRequestState(model.actionSurface.states, state),
+    },
   });
 }

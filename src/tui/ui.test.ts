@@ -12,7 +12,10 @@ import {
   createWorkflowTuiStartupFailureModel,
   createWorkflowTuiStartupLoadingModel,
   createWorkflowTuiWorkflowModelFromProjection,
+  normalizeWorkflowTuiSurfaceModel,
+  setWorkflowTuiActionRequestState,
 } from "./model.js";
+import type { WorkflowTuiWorkflowSurfaceModel } from "./model.js";
 import { createWorkflowTui } from "./tui.js";
 
 (
@@ -94,7 +97,7 @@ function createWorkflowProjectionFixture() {
     createdAt: date("2026-01-03T00:00:00.000Z"),
     updatedAt: date("2026-01-04T12:00:00.000Z"),
   });
-  graph.workflowCommit.create({
+  const branch2Commit2Id = graph.workflowCommit.create({
     name: "Queue selection rules",
     branch: branch2Id,
     commitKey: "commit:queue-selection-rules",
@@ -222,6 +225,7 @@ function createWorkflowProjectionFixture() {
   return {
     branch1Id,
     branch2Id,
+    branch2Commit2Id,
     projectId,
     projection: createWorkflowProjectionIndex(graph, {
       projectedAt: "2026-01-10T00:00:00.000Z",
@@ -329,9 +333,22 @@ test("buildWorkflowTuiRootComponentModel renders selected branch detail metadata
   expect(branchDetailBody).toContain(
     "Latest session: planning / completed / session:workflow-runtime-contract-plan-01",
   );
+  expect(branchDetailBody).toContain("Launch branch session [available] (branch)");
+  expect(branchDetailBody).toContain(
+    "Start a branch-scoped planning session from the selected workflow branch.",
+  );
   expect(branchDetailBody).toContain("Projected at: 2026-01-10T00:00:00.000Z");
   expect(branchDetailBody).toContain("Repository freshness: fresh");
   expect(branchDetailBody).toContain("Repository reconciled at: 2026-01-06T00:00:00.000Z");
+  expect(layout.footerLines).toContain(
+    "Actions: press a to open the action bar for the selected branch or commit",
+  );
+  expect(layout.footerLines).toContain(
+    "Keys: left/right focus | up/down select | a open actions | q, esc, ctrl-c exit",
+  );
+  expect(layout.footerLines).toContain(
+    "Action state: No action triggered for the selected branch or commit.",
+  );
 });
 
 test("buildWorkflowTuiRootComponentModel renders commit queue repository summaries", () => {
@@ -349,12 +366,138 @@ test("buildWorkflowTuiRootComponentModel renders commit queue repository summari
   expect(commitQueueBody).toContain(
     "state attached | branch workflow/runtime-contract | worktree /tmp/io-worktree-runtime | lease attached",
   );
+  expect(commitQueueBody).toContain("Launch commit session [available] (commit)");
+  expect(commitQueueBody).toContain(
+    "Start a commit-scoped execution session from the selected workflow commit.",
+  );
+});
+
+test("buildWorkflowTuiRootComponentModel derives action availability from selected subject state", () => {
+  const { branch2Commit2Id, branch2Id, projectId, projection } = createWorkflowProjectionFixture();
+  const attachableModel = createWorkflowTuiWorkflowModelFromProjection({
+    projection,
+    projectId,
+    selectedBranchId: branch2Id,
+  });
+
+  let layout = buildWorkflowTuiRootComponentModel(attachableModel);
+  expect(layout.panels.find((panel) => panel.id === "branch-detail")?.body).toContain(
+    "Launch branch session [disabled] (branch)",
+  );
+  expect(layout.panels.find((panel) => panel.id === "branch-detail")?.body).toContain(
+    "Why disabled: The selected branch already has a running commit-scoped session.",
+  );
+  expect(layout.panels.find((panel) => panel.id === "commit-queue")?.body).toContain(
+    "Attach commit session [available] (commit)",
+  );
+
+  const gatedModel = createWorkflowTuiWorkflowModelFromProjection({
+    projection,
+    projectId,
+    selectedBranchId: branch2Id,
+    selectedCommitId: branch2Commit2Id,
+  });
+  layout = buildWorkflowTuiRootComponentModel(gatedModel);
+  expect(layout.panels.find((panel) => panel.id === "commit-queue")?.body).toContain(
+    "Launch commit session [disabled] (commit)",
+  );
+  expect(layout.panels.find((panel) => panel.id === "commit-queue")?.body).toContain(
+    "Why disabled: Select the branch active commit to launch commit execution.",
+  );
+});
+
+test("buildWorkflowTuiRootComponentModel renders subject-scoped action request states", () => {
+  const { projectId, projection } = createWorkflowProjectionFixture();
+  const branchModel = createWorkflowTuiWorkflowModelFromProjection({
+    projection,
+    projectId,
+  });
+  const model = setWorkflowTuiActionRequestState(
+    {
+      ...branchModel,
+      actionSurface: {
+        open: true,
+        selectedActionId: "commit-session" as const,
+      },
+    },
+    {
+      actionId: "commit-session",
+      message: "Requested launch commit session for commit:document-commit-queue-scope.",
+      status: "pending",
+      subject: {
+        branchId: branchModel.selectedBranchId!,
+        commitId: branchModel.selectedCommitId!,
+        kind: "commit",
+      },
+    },
+  );
+
+  const layout = buildWorkflowTuiRootComponentModel(model);
+  expect(layout.footerLines).toContain(
+    "Actions:   Launch branch session [available] | > Launch commit session [pending]",
+  );
+  expect(layout.footerLines).toContain(
+    "Keys: left/right focus | up/down select | a close actions | n/p cycle actions | enter trigger | q, esc, ctrl-c exit",
+  );
+  expect(layout.footerLines).toContain(
+    "Action state: Launch commit session pending: Requested launch commit session for commit:document-commit-queue-scope.",
+  );
+  expect(layout.panels.find((panel) => panel.id === "commit-queue")?.body).toContain(
+    "Launch commit session [pending] (commit)",
+  );
+  expect(layout.panels.find((panel) => panel.id === "commit-queue")?.body).toContain(
+    "State: pending: Requested launch commit session for commit:document-commit-queue-scope.",
+  );
+});
+
+test("buildWorkflowTuiRootComponentModel keeps action request state scoped to its workflow subject", () => {
+  const { branch2Id, projectId, projection } = createWorkflowProjectionFixture();
+  const baseModel = createWorkflowTuiWorkflowModelFromProjection({
+    projection,
+    projectId,
+  });
+  const withBranch1State = setWorkflowTuiActionRequestState(baseModel, {
+    actionId: "commit-session",
+    message: "Launch commit session completed for commit:document-commit-queue-scope.",
+    status: "success",
+    subject: {
+      branchId: baseModel.selectedBranchId!,
+      commitId: baseModel.selectedCommitId!,
+      kind: "commit",
+    },
+  }) as WorkflowTuiWorkflowSurfaceModel;
+  const selectedModel = normalizeWorkflowTuiSurfaceModel({
+    ...withBranch1State,
+    actionSurface: {
+      ...withBranch1State.actionSurface,
+      selectedActionId: "commit-session",
+    },
+  }) as WorkflowTuiWorkflowSurfaceModel;
+
+  const branch1Layout = buildWorkflowTuiRootComponentModel(selectedModel);
+  expect(branch1Layout.footerLines).toContain(
+    "Action state: Launch commit session success: Launch commit session completed for commit:document-commit-queue-scope.",
+  );
+
+  const branch2Layout = buildWorkflowTuiRootComponentModel(
+    normalizeWorkflowTuiSurfaceModel({
+      ...selectedModel,
+      selectedBranchId: branch2Id,
+      selectedCommitId: undefined,
+    }) as WorkflowTuiWorkflowSurfaceModel,
+  );
+  expect(branch2Layout.footerLines).toContain(
+    "Action state: No action triggered for the selected branch or commit.",
+  );
+  expect(branch2Layout.panels.find((panel) => panel.id === "commit-queue")?.body).not.toContain(
+    "State: success:",
+  );
 });
 
 test("createWorkflowTui hydrates from loading state into the graph-backed workflow shell", async () => {
   const { projectId, projection } = createWorkflowProjectionFixture();
   const { captureCharFrame, mockInput, renderOnce, renderer } = await createTestRenderer({
-    height: 24,
+    height: 34,
     width: 140,
   });
   let exitRequested = 0;
@@ -438,7 +581,7 @@ test("createWorkflowTui renders startup failure presentation when hydration fail
 test("createWorkflowTui supports workflow focus and selection across branch and commit panels", async () => {
   const { projectId, projection } = createWorkflowProjectionFixture();
   const { captureCharFrame, mockInput, renderOnce, renderer } = await createTestRenderer({
-    height: 28,
+    height: 34,
     width: 160,
   });
   const tui = createWorkflowTui({
@@ -494,7 +637,7 @@ test("createWorkflowTui supports workflow focus and selection across branch and 
 test("createWorkflowTui resets commit selection when branch selection changes from branch detail", async () => {
   const { projectId, projection } = createWorkflowProjectionFixture();
   const { captureCharFrame, mockInput, renderOnce, renderer } = await createTestRenderer({
-    height: 28,
+    height: 34,
     width: 160,
   });
   const tui = createWorkflowTui({
@@ -551,6 +694,318 @@ test("createWorkflowTui resets commit selection when branch selection changes fr
     expect(frame).toContain("Branch Detail [focused]");
     expect(frame).toContain("Selected branch: Workflow runtime contract [active]");
     expect(frame).toContain("Selected commit: Document commit queue scope [active]");
+  } finally {
+    await act(async () => {
+      await tui.stop();
+    });
+    renderer.destroy();
+  }
+});
+
+test("createWorkflowTui supports workflow action bindings without breaking focus or selection", async () => {
+  const { projectId, projection } = createWorkflowProjectionFixture();
+  const { captureCharFrame, mockInput, renderOnce, renderer } = await createTestRenderer({
+    height: 34,
+    width: 160,
+  });
+  const triggered: string[] = [];
+  const tui = createWorkflowTui({
+    onAction: async (action) => {
+      triggered.push(`${action.id}:${action.subject.commitId ?? action.subject.branchId}`);
+    },
+    renderer,
+    requireTty: false,
+    surfaceModel: createWorkflowTuiWorkflowModelFromProjection({
+      projection,
+      projectId,
+    }),
+  });
+
+  try {
+    await act(async () => {
+      await tui.start();
+      await renderOnce();
+    });
+
+    let frame = captureCharFrame();
+    expect(frame).toContain("Actions: press a to open the action bar");
+
+    await act(async () => {
+      await mockInput.typeText("a");
+      await renderOnce();
+    });
+    frame = captureCharFrame();
+    expect(frame).toContain(
+      "Actions: > Launch branch session [available] |   Launch commit session [available]",
+    );
+
+    await act(async () => {
+      await mockInput.typeText("n");
+      await renderOnce();
+    });
+    frame = captureCharFrame();
+    expect(frame).toContain(
+      "Actions:   Launch branch session [available] | > Launch commit session [available]",
+    );
+    expect(frame).toContain("Selected branch: Workflow runtime contract [active]");
+    expect(frame).toContain("Selected commit: Document commit queue scope [active]");
+
+    await act(async () => {
+      await mockInput.typeText("\r");
+      await renderOnce();
+    });
+    frame = captureCharFrame();
+    expect(frame).toContain(
+      "Action state: Launch commit session success: Launch commit session completed for commit:document-commit-queue-scope.",
+    );
+    expect(triggered).toHaveLength(1);
+    expect(triggered[0]).toStartWith("commit-session:");
+
+    await act(async () => {
+      mockInput.pressArrow("right");
+      mockInput.pressArrow("down");
+      await renderOnce();
+    });
+    frame = captureCharFrame();
+    expect(frame).toContain("Branch Detail [focused]");
+    expect(frame).toContain("Selected branch: Workflow shell polish [ready]");
+
+    await act(async () => {
+      await mockInput.typeText("a");
+      await mockInput.typeText("a");
+      await renderOnce();
+    });
+    frame = captureCharFrame();
+    expect(frame).toContain(
+      "Actions:   Launch branch session [disabled] | > Attach commit session [available]",
+    );
+  } finally {
+    await act(async () => {
+      await tui.stop();
+    });
+    renderer.destroy();
+  }
+});
+
+test("createWorkflowTui cycles actions backward and ignores disabled action triggers", async () => {
+  const { projectId, projection } = createWorkflowProjectionFixture();
+  const { captureCharFrame, mockInput, renderOnce, renderer } = await createTestRenderer({
+    height: 34,
+    width: 160,
+  });
+  let triggered = 0;
+  const tui = createWorkflowTui({
+    onAction: async () => {
+      triggered += 1;
+    },
+    renderer,
+    requireTty: false,
+    surfaceModel: createWorkflowTuiWorkflowModelFromProjection({
+      projection,
+      projectId,
+    }),
+  });
+
+  try {
+    await act(async () => {
+      await tui.start();
+      await renderOnce();
+    });
+
+    await act(async () => {
+      await mockInput.typeText("a");
+      await mockInput.typeText("n");
+      await renderOnce();
+    });
+
+    let frame = captureCharFrame();
+    expect(frame).toContain(
+      "Actions:   Launch branch session [available] | > Launch commit session [available]",
+    );
+
+    await act(async () => {
+      await mockInput.typeText("p");
+      await renderOnce();
+    });
+
+    frame = captureCharFrame();
+    expect(frame).toContain(
+      "Actions: > Launch branch session [available] |   Launch commit session [available]",
+    );
+
+    await act(async () => {
+      mockInput.pressArrow("down");
+      mockInput.pressArrow("right");
+      mockInput.pressArrow("right");
+      mockInput.pressArrow("down");
+      await renderOnce();
+    });
+
+    frame = captureCharFrame();
+    expect(frame).toContain("Selected branch: Workflow shell polish [ready]");
+    expect(frame).toContain("Selected commit: Queue selection rules [planned]");
+
+    await act(async () => {
+      await mockInput.typeText("n");
+      await renderOnce();
+    });
+
+    frame = captureCharFrame();
+    expect(frame).toContain(
+      "Actions:   Launch branch session [disabled] | > Launch commit session [disabled]",
+    );
+    expect(frame).toContain("Select the branch active");
+    expect(frame).toContain("commit to launch commit execution.");
+
+    await act(async () => {
+      await mockInput.typeText("\r");
+      await renderOnce();
+    });
+
+    frame = captureCharFrame();
+    expect(frame).toContain("Action state: No action triggered for the selected branch or commit.");
+    expect(triggered).toBe(0);
+  } finally {
+    await act(async () => {
+      await tui.stop();
+    });
+    renderer.destroy();
+  }
+});
+
+test("createWorkflowTui renders pending and failure action states without leaking across selections", async () => {
+  const { projectId, projection } = createWorkflowProjectionFixture();
+  const { captureCharFrame, mockInput, renderOnce, renderer } = await createTestRenderer({
+    height: 34,
+    width: 160,
+  });
+  let releaseAction: (() => void) | undefined;
+  const tui = createWorkflowTui({
+    onAction: () =>
+      new Promise<void>((resolve, reject) => {
+        releaseAction = () => reject(new Error("Transport refused launch."));
+      }),
+    renderer,
+    requireTty: false,
+    surfaceModel: createWorkflowTuiWorkflowModelFromProjection({
+      projection,
+      projectId,
+    }),
+  });
+
+  try {
+    await act(async () => {
+      await tui.start();
+      await renderOnce();
+    });
+
+    await act(async () => {
+      await mockInput.typeText("a");
+      await mockInput.typeText("n");
+      await mockInput.typeText("\r");
+      await renderOnce();
+    });
+
+    let frame = captureCharFrame();
+    expect(frame).toContain(
+      "Actions:   Launch branch session [available] | > Launch commit session [pending]",
+    );
+    expect(frame).toContain(
+      "Action state: Launch commit session pending: Requested launch commit session for commit:document-commit-queue-scope.",
+    );
+
+    await act(async () => {
+      mockInput.pressArrow("right");
+      mockInput.pressArrow("down");
+      await renderOnce();
+    });
+    frame = captureCharFrame();
+    expect(frame).toContain("Selected branch: Workflow shell polish [ready]");
+    expect(frame).toContain("Action state: No action triggered for the selected branch or commit.");
+
+    await act(async () => {
+      releaseAction?.();
+      await Promise.resolve();
+      await renderOnce();
+    });
+    frame = captureCharFrame();
+    expect(frame).toContain("Action state: No action triggered for the selected branch or commit.");
+
+    await act(async () => {
+      mockInput.pressArrow("left");
+      mockInput.pressArrow("up");
+      await renderOnce();
+    });
+    frame = captureCharFrame();
+    expect(frame).toContain("Selected branch: Workflow runtime contract [active]");
+    expect(frame).toContain(
+      "Action state: Launch commit session failure: Transport refused launch.",
+    );
+    expect(frame).toContain("Launch commit session [failure]");
+  } finally {
+    await act(async () => {
+      await tui.stop();
+    });
+    renderer.destroy();
+  }
+});
+
+test("createWorkflowTui ignores duplicate enter presses while the selected action is pending", async () => {
+  const { projectId, projection } = createWorkflowProjectionFixture();
+  const { captureCharFrame, mockInput, renderOnce, renderer } = await createTestRenderer({
+    height: 34,
+    width: 160,
+  });
+  let resolveAction: (() => void) | undefined;
+  let triggered = 0;
+  const tui = createWorkflowTui({
+    onAction: () =>
+      new Promise<void>((resolve) => {
+        triggered += 1;
+        resolveAction = resolve;
+      }),
+    renderer,
+    requireTty: false,
+    surfaceModel: createWorkflowTuiWorkflowModelFromProjection({
+      projection,
+      projectId,
+    }),
+  });
+
+  try {
+    await act(async () => {
+      await tui.start();
+      await renderOnce();
+    });
+
+    await act(async () => {
+      await mockInput.typeText("a");
+      await mockInput.typeText("n");
+      await mockInput.typeText("\r");
+      await mockInput.typeText("\r");
+      await renderOnce();
+    });
+
+    let frame = captureCharFrame();
+    expect(frame).toContain(
+      "Actions:   Launch branch session [available] | > Launch commit session [pending]",
+    );
+    expect(frame).toContain(
+      "Action state: Launch commit session pending: Requested launch commit session for commit:document-commit-queue-scope.",
+    );
+    expect(triggered).toBe(1);
+
+    await act(async () => {
+      resolveAction?.();
+      await Promise.resolve();
+      await renderOnce();
+    });
+
+    frame = captureCharFrame();
+    expect(frame).toContain(
+      "Action state: Launch commit session success: Launch commit session completed for commit:document-commit-queue-scope.",
+    );
+    expect(triggered).toBe(1);
   } finally {
     await act(async () => {
       await tui.stop();

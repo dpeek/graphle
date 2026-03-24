@@ -1420,7 +1420,8 @@ graph.
 ### Slice 3: Graph-backed workflow TUI shell
 
 - goal: build `src/tui` as a new graph-backed workflow surface that renders the
-  branch board, branch detail, and commit queue
+  branch board, branch detail, commit queue, and the first explicit operator
+  action set
 - prerequisite contracts:
   - Slice 2 branch-board and commit-queue read models
 - startup contract for the first network-backed proof:
@@ -1437,11 +1438,24 @@ graph.
     graph
   - the repo can support a graph-native TUI separate from the legacy
     `src/agent/tui/*` session monitor
+  - action availability can be derived from selected branch and commit subject
+    state before launch or mutation wiring exists
 - what it postpones:
-  - minimal editing and session launch
+  - minimal editing and session launch transport
   - transcript and session replay migration
   - alternate runtime kinds, custom startup filters, and launch-time git action
     policy
+
+First action-set rule for Slice 3:
+
+- keep the surface to one branch-scoped session action and one commit-scoped
+  session action
+- derive availability from selected subject state, not from panel-local UI
+  checks
+- use branch state, commit state, active-commit identity, and retained running
+  session metadata as the first gating fields
+- do not add reorder, archive, block, or general field-editing actions in this
+  slice
 
 ### Slice 4: Session launch, retained history, and commit finalization
 

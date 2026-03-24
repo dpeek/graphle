@@ -3,10 +3,13 @@ import type {
   ProjectBranchScopeRepositoryObservation,
 } from "../graph/modules/ops/workflow/query.js";
 import type {
+  WorkflowTuiActionModel,
+  WorkflowTuiActionRequestStateModel,
   WorkflowTuiPanelModel,
   WorkflowTuiSurfaceModel,
   WorkflowTuiWorkflowSurfaceModel,
 } from "./model.js";
+import { getWorkflowTuiActionRequestState } from "./model.js";
 
 export interface WorkflowTuiPanelComponentModel {
   body: string;
@@ -108,6 +111,46 @@ function renderLatestSession(commitQueue: CommitQueueScopeResult | undefined) {
   return `${latestSession.kind} / ${latestSession.runtimeState} / ${latestSession.sessionKey}`;
 }
 
+function formatActionRequestState(state: WorkflowTuiActionRequestStateModel | undefined) {
+  if (!state) {
+    return undefined;
+  }
+
+  return `${state.status}: ${state.message}`;
+}
+
+function formatActionPresentation(
+  action: WorkflowTuiActionModel,
+  requestState: WorkflowTuiActionRequestStateModel | undefined,
+) {
+  if (requestState) {
+    return requestState.status;
+  }
+  return action.availability === "available" ? "available" : "disabled";
+}
+
+function renderActionLines(
+  model: WorkflowTuiWorkflowSurfaceModel,
+  actions: readonly WorkflowTuiActionModel[],
+) {
+  const lines = ["Actions:"];
+
+  for (const action of actions) {
+    const requestState = getWorkflowTuiActionRequestState(model, action);
+    const presentation = formatActionPresentation(action, requestState);
+    lines.push(`- ${action.label} [${presentation}] (${action.subject.kind})`);
+    lines.push(`  ${action.description}`);
+    if (action.reason) {
+      lines.push(`  Why disabled: ${action.reason}`);
+    }
+    if (requestState) {
+      lines.push(`  State: ${formatActionRequestState(requestState)}`);
+    }
+  }
+
+  return lines;
+}
+
 function renderBranchDetailBody(model: WorkflowTuiWorkflowSurfaceModel) {
   const selectedRow = getSelectedBranchRow(model);
   const selectedQueue = getSelectedCommitQueue(model);
@@ -141,6 +184,8 @@ function renderBranchDetailBody(model: WorkflowTuiWorkflowSurfaceModel) {
       `Repository reconciled at: ${formatTimestamp(model.branchBoard.freshness.repositoryReconciledAt)}`,
     );
   }
+  lines.push("");
+  lines.push(...renderActionLines(model, model.actions.branch));
 
   return lines.join("\n");
 }
@@ -200,6 +245,9 @@ function renderCommitQueueBody(model: WorkflowTuiWorkflowSurfaceModel) {
     lines.push("More commit rows remain beyond the current page.");
   }
 
+  lines.push("");
+  lines.push(...renderActionLines(model, model.actions.commit));
+
   return lines.join("\n");
 }
 
@@ -238,8 +286,30 @@ function buildWorkflowSummaryLines(model: WorkflowTuiWorkflowSurfaceModel) {
 }
 
 function buildWorkflowFooterLines(model: WorkflowTuiWorkflowSurfaceModel) {
+  const actionItems = [...model.actions.branch, ...model.actions.commit].map((action) => {
+    const selected = action.id === model.actionSurface.selectedActionId ? ">" : " ";
+    const requestState = getWorkflowTuiActionRequestState(model, action);
+    const presentation = formatActionPresentation(action, requestState);
+    return `${selected} ${action.label} [${presentation}]`;
+  });
+  const selectedAction = [...model.actions.branch, ...model.actions.commit].find(
+    (action) => action.id === model.actionSurface.selectedActionId,
+  );
+  const selectedActionState = selectedAction
+    ? getWorkflowTuiActionRequestState(model, selectedAction)
+    : undefined;
+  const selectedActionStateLine = selectedActionState
+    ? `${selectedAction?.label ?? "Selected action"} ${selectedActionState.status}: ${selectedActionState.message}`
+    : "No action triggered for the selected branch or commit.";
+
   return [
-    "Keys: left/right focus | up/down select | q, esc, ctrl-c exit",
+    model.actionSurface.open
+      ? `Actions: ${actionItems.join(" | ")}`
+      : "Actions: press a to open the action bar for the selected branch or commit",
+    model.actionSurface.open
+      ? "Keys: left/right focus | up/down select | a close actions | n/p cycle actions | enter trigger | q, esc, ctrl-c exit"
+      : "Keys: left/right focus | up/down select | a open actions | q, esc, ctrl-c exit",
+    `Action state: ${selectedActionStateLine}`,
     `Board freshness: ${model.branchBoard.freshness.repositoryFreshness} | projected ${formatTimestamp(model.branchBoard.freshness.projectedAt)}${model.branchBoard.freshness.repositoryReconciledAt ? ` | repository reconciled ${formatTimestamp(model.branchBoard.freshness.repositoryReconciledAt)}` : ""}`,
   ];
 }
