@@ -156,7 +156,32 @@ generic shared command/read transports.
   stable workflow query codes, and the storage abstraction
   consumed by both tests and the Durable Object adapter, including an opt-out
   seeded-example bootstrap path used by web authority tests plus a cached
-  graph-metadata/bootstrap path for repeated authority construction
+  graph-metadata/bootstrap path for repeated authority construction while now
+  acting primarily as the composition entrypoint that wires focused bootstrap,
+  scoped-sync, command, compiled-field, and authorization services together
+- `../../src/web/lib/authority-compiled-fields.ts`: compiled field metadata and
+  predicate policy lookup cache used by the web authority read and write
+  authorization path
+- `../../src/web/lib/authority-authorization-services.ts`: focused capability,
+  read-evaluation, readable-replication, transaction-authorization, and
+  command-authorization helpers consumed by `authority.ts`
+- `../../src/web/lib/authority-bootstrap-services.ts`: bootstrap-time
+  persisted-state loading, secret drift checks and live-secret hydration,
+  retained workflow projection preload and recovery, and the
+  persisted-authority storage adapter that bridges graph state commits with
+  web-only secret side storage and retained workflow projection persistence
+- `../../src/web/lib/authority-scoped-sync-services.ts`: module-scoped sync
+  cursor formatting, scoped incremental fallback handling, and retained
+  workflow projection reads/live-registration planning consumed by
+  `authority.ts`
+- `../../src/web/lib/authority-sync-scope-planning.ts`: focused requested-scope
+  planning, scoped cursor parse/format helpers, module-scoped snapshot and
+  write-result filtering, and touched-type collection used by the scoped-sync
+  service and workflow invalidation path
+- `../../src/web/lib/authority-command-services.ts`: secret-field command
+  validation, command policy targeting, staged secret side-storage mutation
+  orchestration, and top-level web authority command dispatch consumed by
+  `authority.ts`
 - `../../src/web/lib/workflow-live-scope-router.ts`: in-memory workflow review
   registration router that renews, expires, and removes ephemeral live scope
   registrations while indexing them by session, scope, and dependency key,
