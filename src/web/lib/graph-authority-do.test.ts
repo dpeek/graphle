@@ -11,6 +11,7 @@ import {
   defineSecretField,
   defineType,
   edgeId,
+  type AuthoritativeGraphRetainedHistoryPolicy,
   type AuthSubjectRef,
   type AnyTypeOutput,
   type AuthorizationContext,
@@ -268,6 +269,17 @@ type SyncPayload = {
   readonly fallback?: "gap" | "reset" | "unknown-cursor" | "scope-changed" | "policy-changed";
   readonly completeness?: "complete" | "incomplete";
   readonly freshness?: "current" | "stale";
+  readonly diagnostics?: {
+    readonly retainedBaseCursor: string;
+    readonly retainedHistoryPolicy:
+      | {
+          readonly kind: "all";
+        }
+      | {
+          readonly kind: "transaction-count";
+          readonly maxTransactions: number;
+        };
+  };
   readonly snapshot?: StoreSnapshot;
   readonly transactions?: readonly {
     readonly cursor: string;
@@ -390,6 +402,10 @@ function createCursor<T extends Record<string, unknown>>(
       yield* rows;
     },
   };
+}
+
+function encodeRetainedHistoryPolicy(policy: AuthoritativeGraphRetainedHistoryPolicy): string {
+  return JSON.stringify(policy);
 }
 
 function createAuthorizedRequest(
@@ -628,7 +644,7 @@ function createHiddenCursorAdvanceAuthorityFactory(ref: { entityId: string | nul
 
   return async (
     storage: WebAppAuthorityStorage,
-    options: { readonly maxRetainedTransactions?: number },
+    options: { readonly retainedHistoryPolicy?: AuthoritativeGraphRetainedHistoryPolicy },
   ): Promise<WebAppAuthority> => {
     const store = createStore();
     bootstrap(store, core);
@@ -643,7 +659,7 @@ function createHiddenCursorAdvanceAuthorityFactory(ref: { entityId: string | nul
       },
       // Fresh prefixes keep baseline rewrites classifiable as "reset" instead of "unknown-cursor".
       createCursorPrefix: () => `web-hidden:${++cursorEpoch}:`,
-      maxRetainedTransactions: options.maxRetainedTransactions,
+      retainedHistoryPolicy: options.retainedHistoryPolicy,
     });
 
     return Object.assign(authority, {
@@ -2677,7 +2693,10 @@ describe("web graph authority durable object", () => {
     const durableObject = createTestDurableObject(
       state,
       {
-        GRAPH_AUTHORITY_MAX_RETAINED_TRANSACTIONS: 2,
+        GRAPH_AUTHORITY_RETAINED_HISTORY_POLICY: encodeRetainedHistoryPolicy({
+          kind: "transaction-count",
+          maxTransactions: 2,
+        }),
       },
       {
         createAuthority: createHiddenCursorAdvanceAuthorityFactory(hiddenProbe),
@@ -2746,9 +2765,17 @@ describe("web graph authority durable object", () => {
       head_cursor: string;
       head_seq: number;
       history_retained_from_seq: number;
+      retained_history_policy_kind: string;
+      retained_history_policy_max_transactions: number | null;
     }>(
       db,
-      `SELECT cursor_prefix, head_seq, head_cursor, history_retained_from_seq
+      `SELECT
+        cursor_prefix,
+        head_seq,
+        head_cursor,
+        history_retained_from_seq,
+        retained_history_policy_kind,
+        retained_history_policy_max_transactions
       FROM io_graph_meta
       WHERE id = 1`,
     );
@@ -2757,7 +2784,10 @@ describe("web graph authority durable object", () => {
     const restarted = createTestDurableObject(
       state,
       {
-        GRAPH_AUTHORITY_MAX_RETAINED_TRANSACTIONS: 2,
+        GRAPH_AUTHORITY_RETAINED_HISTORY_POLICY: encodeRetainedHistoryPolicy({
+          kind: "transaction-count",
+          maxTransactions: 2,
+        }),
       },
       {
         createAuthority: createHiddenCursorAdvanceAuthorityFactory(hiddenProbe),
@@ -2789,6 +2819,8 @@ describe("web graph authority durable object", () => {
         head_seq: 3,
         head_cursor: thirdHidden.cursor,
         history_retained_from_seq: 1,
+        retained_history_policy_kind: "transaction-count",
+        retained_history_policy_max_transactions: 2,
       },
     ]);
     expect(gap).toMatchObject({
@@ -2796,12 +2828,26 @@ describe("web graph authority durable object", () => {
       after: initialSync.cursor,
       fallback: "gap",
       cursor: thirdHidden.cursor,
+      diagnostics: {
+        retainedBaseCursor: firstHidden.cursor,
+        retainedHistoryPolicy: {
+          kind: "transaction-count",
+          maxTransactions: 2,
+        },
+      },
       transactions: [],
     });
     expect(retained).toMatchObject({
       mode: "incremental",
       after: firstHidden.cursor,
       cursor: thirdHidden.cursor,
+      diagnostics: {
+        retainedBaseCursor: firstHidden.cursor,
+        retainedHistoryPolicy: {
+          kind: "transaction-count",
+          maxTransactions: 2,
+        },
+      },
       transactions: [],
     });
     expect(retained.fallback).toBeUndefined();
@@ -2812,15 +2858,114 @@ describe("web graph authority durable object", () => {
       after: initialSync.cursor,
       fallback: "gap",
       cursor: thirdHidden.cursor,
+      diagnostics: {
+        retainedBaseCursor: firstHidden.cursor,
+        retainedHistoryPolicy: {
+          kind: "transaction-count",
+          maxTransactions: 2,
+        },
+      },
       transactions: [],
     });
     expect(restartedRetained).toMatchObject({
       mode: "incremental",
       after: firstHidden.cursor,
       cursor: thirdHidden.cursor,
+      diagnostics: {
+        retainedBaseCursor: firstHidden.cursor,
+        retainedHistoryPolicy: {
+          kind: "transaction-count",
+          maxTransactions: 2,
+        },
+      },
       transactions: [],
     });
     expect(restartedRetained.fallback).toBeUndefined();
+  });
+
+  it("keeps hidden-only cursor recovery incremental when the retained policy is unbounded", async () => {
+    const { db, state } = createSqliteDurableObjectState();
+    const hiddenProbe = { entityId: null as string | null };
+    const durableObject = createTestDurableObject(
+      state,
+      {
+        GRAPH_AUTHORITY_RETAINED_HISTORY_POLICY: encodeRetainedHistoryPolicy({
+          kind: "all",
+        }),
+      },
+      {
+        createAuthority: createHiddenCursorAdvanceAuthorityFactory(hiddenProbe),
+      },
+    );
+    const initialSync = await readSyncPayload(durableObject);
+    const authority = await getDurableAuthority<{
+      applyTransaction(
+        transaction: GraphWriteTransaction,
+        options?: {
+          writeScope?: "authority-only" | "client-tx" | "server-command";
+        },
+      ): Promise<{
+        cursor: string;
+        replayed: boolean;
+        txId: string;
+        writeScope: "authority-only" | "client-tx" | "server-command";
+      }>;
+      store: {
+        snapshot(): StoreSnapshot;
+      };
+    }>(durableObject);
+
+    if (!hiddenProbe.entityId) {
+      throw new Error("Expected the hidden cursor probe to be seeded.");
+    }
+
+    await authority.applyTransaction(
+      buildHiddenCursorAdvanceTransaction(
+        authority.store.snapshot(),
+        hiddenProbe.entityId,
+        "tx:hidden:all:1",
+      ),
+      {
+        writeScope: "authority-only",
+      },
+    );
+    await authority.applyTransaction(
+      buildHiddenCursorAdvanceTransaction(
+        authority.store.snapshot(),
+        hiddenProbe.entityId,
+        "tx:hidden:all:2",
+      ),
+      {
+        writeScope: "authority-only",
+      },
+    );
+    const thirdHidden = await authority.applyTransaction(
+      buildHiddenCursorAdvanceTransaction(
+        authority.store.snapshot(),
+        hiddenProbe.entityId,
+        "tx:hidden:all:3",
+      ),
+      {
+        writeScope: "authority-only",
+      },
+    );
+    const txCount = queryAll<{ count: number }>(db, `SELECT COUNT(*) AS count FROM io_graph_tx`);
+    const incremental = await readSyncPayload(durableObject, initialSync.cursor);
+
+    expect(txCount).toEqual([{ count: 3 }]);
+    expect(incremental).toMatchObject({
+      mode: "incremental",
+      after: initialSync.cursor,
+      cursor: thirdHidden.cursor,
+      diagnostics: {
+        retainedBaseCursor: initialSync.cursor,
+        retainedHistoryPolicy: {
+          kind: "all",
+        },
+      },
+      transactions: [],
+    });
+    expect(incremental.fallback).toBeUndefined();
   });
 
   it("falls back with reset when a hidden-only baseline rewrite drops retained history", async () => {
@@ -2876,9 +3021,17 @@ describe("web graph authority durable object", () => {
       head_cursor: string;
       head_seq: number;
       history_retained_from_seq: number;
+      retained_history_policy_kind: string;
+      retained_history_policy_max_transactions: number | null;
     }>(
       db,
-      `SELECT cursor_prefix, head_seq, head_cursor, history_retained_from_seq
+      `SELECT
+        cursor_prefix,
+        head_seq,
+        head_cursor,
+        history_retained_from_seq,
+        retained_history_policy_kind,
+        retained_history_policy_max_transactions
       FROM io_graph_meta
       WHERE id = 1`,
     );
@@ -2916,6 +3069,13 @@ describe("web graph authority durable object", () => {
       after: initialSync.cursor,
       fallback: "reset",
       cursor: restartedSync.cursor,
+      diagnostics: {
+        retainedBaseCursor: restartedSync.cursor,
+        retainedHistoryPolicy: {
+          kind: "transaction-count",
+          maxTransactions: 128,
+        },
+      },
       transactions: [],
     });
     expect(reset.cursor).not.toBe(reset.after);
@@ -2977,9 +3137,17 @@ describe("web graph authority durable object", () => {
       head_cursor: string;
       head_seq: number;
       history_retained_from_seq: number;
+      retained_history_policy_kind: string;
+      retained_history_policy_max_transactions: number | null;
     }>(
       db,
-      `SELECT cursor_prefix, head_seq, head_cursor, history_retained_from_seq
+      `SELECT
+        cursor_prefix,
+        head_seq,
+        head_cursor,
+        history_retained_from_seq,
+        retained_history_policy_kind,
+        retained_history_policy_max_transactions
       FROM io_graph_meta
       WHERE id = 1`,
     );
@@ -3051,6 +3219,8 @@ describe("web graph authority durable object", () => {
         head_seq: 2,
         head_cursor: latestTx.cursor,
         history_retained_from_seq: 0,
+        retained_history_policy_kind: "transaction-count",
+        retained_history_policy_max_transactions: 128,
       },
     ]);
     expect(restartedSync.cursor).toBe(latestTx.cursor);
@@ -3802,9 +3972,17 @@ describe("web graph authority durable object", () => {
       head_cursor: string;
       head_seq: number;
       history_retained_from_seq: number;
+      retained_history_policy_kind: string;
+      retained_history_policy_max_transactions: number | null;
     }>(
       db,
-      `SELECT cursor_prefix, head_seq, head_cursor, history_retained_from_seq
+      `SELECT
+        cursor_prefix,
+        head_seq,
+        head_cursor,
+        history_retained_from_seq,
+        retained_history_policy_kind,
+        retained_history_policy_max_transactions
       FROM io_graph_meta
       WHERE id = 1`,
     );
@@ -3825,7 +4003,10 @@ describe("web graph authority durable object", () => {
   it("prunes retained transaction rows and falls back for old or unknown cursors", async () => {
     const { db, state } = createSqliteDurableObjectState();
     const durableObject = createTestDurableObject(state, {
-      GRAPH_AUTHORITY_MAX_RETAINED_TRANSACTIONS: 2,
+      GRAPH_AUTHORITY_RETAINED_HISTORY_POLICY: encodeRetainedHistoryPolicy({
+        kind: "transaction-count",
+        maxTransactions: 2,
+      }),
     });
     const initialSync = await readSyncPayload(durableObject);
     const createdEnvVar = buildTransactionFromSnapshot(
@@ -3875,9 +4056,17 @@ describe("web graph authority durable object", () => {
       head_cursor: string;
       head_seq: number;
       history_retained_from_seq: number;
+      retained_history_policy_kind: string;
+      retained_history_policy_max_transactions: number | null;
     }>(
       db,
-      `SELECT cursor_prefix, head_seq, head_cursor, history_retained_from_seq
+      `SELECT
+        cursor_prefix,
+        head_seq,
+        head_cursor,
+        history_retained_from_seq,
+        retained_history_policy_kind,
+        retained_history_policy_max_transactions
       FROM io_graph_meta
       WHERE id = 1`,
     );
@@ -3885,7 +4074,10 @@ describe("web graph authority durable object", () => {
     const retained = await readSyncPayload(durableObject, createdTx.cursor);
     const unknown = await readSyncPayload(durableObject, "web-authority:unknown");
     const restarted = createTestDurableObject(state, {
-      GRAPH_AUTHORITY_MAX_RETAINED_TRANSACTIONS: 2,
+      GRAPH_AUTHORITY_RETAINED_HISTORY_POLICY: encodeRetainedHistoryPolicy({
+        kind: "transaction-count",
+        maxTransactions: 2,
+      }),
     });
     const restartedGap = await readSyncPayload(restarted, initialSync.cursor);
     const restartedRetained = await readSyncPayload(restarted, createdTx.cursor);
@@ -3911,6 +4103,8 @@ describe("web graph authority durable object", () => {
         head_seq: 3,
         head_cursor: latestTx.cursor,
         history_retained_from_seq: 1,
+        retained_history_policy_kind: "transaction-count",
+        retained_history_policy_max_transactions: 2,
       },
     ]);
     expect(gap).toMatchObject({

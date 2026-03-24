@@ -4,11 +4,18 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 import type { ExplorerSync } from "./model.js";
 import { ExplorerSyncInspector } from "./sync-inspector.js";
-import { formatStreamActivityDetail, formatStreamActivityTitle } from "./sync.js";
+import {
+  formatRetainedHistoryPolicy,
+  formatStreamActivityDetail,
+  formatStreamActivityTitle,
+} from "./sync.js";
 
 type ExplorerStreamActivity = ReturnType<ExplorerSync["getState"]>["recentActivities"][number];
 
-function createSyncFixture(recentActivities: readonly ExplorerStreamActivity[]): ExplorerSync {
+function createSyncFixture(
+  recentActivities: readonly ExplorerStreamActivity[],
+  diagnostics?: ReturnType<ExplorerSync["getState"]>["diagnostics"],
+): ExplorerSync {
   const state: ReturnType<ExplorerSync["getState"]> = {
     mode: "total",
     requestedScope: { kind: "graph" },
@@ -20,6 +27,7 @@ function createSyncFixture(recentActivities: readonly ExplorerStreamActivity[]):
     recentActivities,
     cursor: "example:2",
     lastSyncedAt: new Date("2026-03-22T00:00:00.000Z"),
+    diagnostics,
   };
 
   return {
@@ -159,5 +167,34 @@ describe("explorer sync inspector", () => {
     expect(html).toContain("after example:1 -&gt; example:2");
     expect(html).toContain("Incremental poll confirmed head cursor");
     expect(html).toContain("after example:2 -&gt; example:2");
+  });
+
+  it("formats retained-history policies for operator-facing diagnostics", () => {
+    expect(formatRetainedHistoryPolicy({ kind: "all" })).toBe("all transactions");
+    expect(
+      formatRetainedHistoryPolicy({
+        kind: "transaction-count",
+        maxTransactions: 2,
+      }),
+    ).toBe("last 2 transactions");
+  });
+
+  it("renders retained cursor and retention diagnostics when the authority exposes them", () => {
+    const html = renderToStaticMarkup(
+      <ExplorerSyncInspector
+        sync={createSyncFixture([], {
+          retainedBaseCursor: "example:1",
+          retainedHistoryPolicy: {
+            kind: "transaction-count",
+            maxTransactions: 2,
+          },
+        })}
+      />,
+    );
+
+    expect(html).toContain("Retained base");
+    expect(html).toContain("example:1");
+    expect(html).toContain("Retention");
+    expect(html).toContain("last 2 transactions");
   });
 });

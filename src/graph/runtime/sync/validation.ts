@@ -7,11 +7,14 @@ import {
 import type { AnyTypeOutput } from "../schema";
 import { createStore, type Store, type StoreSnapshot } from "../store";
 import {
+  cloneAuthoritativeGraphRetainedHistoryPolicy,
   cloneAuthoritativeGraphWriteResult,
+  cloneSyncDiagnostics,
   cloneGraphWriteTransaction,
   cloneSyncScope,
   createModuleSyncScope,
   graphSyncScope,
+  isAuthoritativeGraphRetainedHistoryPolicy,
   isGraphSyncScope,
   isIncrementalSyncFallbackReason,
   isAuthoritativeWriteScope,
@@ -19,7 +22,9 @@ import {
   isSyncCompleteness,
   isSyncFreshness,
   sameSyncScope,
+  type SyncDiagnostics,
   type AuthoritativeGraphWriteResult,
+  type AuthoritativeGraphRetainedHistoryPolicy,
   type AuthoritativeGraphWriteResultValidator,
   type AuthoritativeWriteScope,
   type GraphWriteTransaction,
@@ -164,6 +169,80 @@ function validateSyncFreshness(
     : [issueFactory(path, code, 'Field "freshness" must be "current" or "stale".')];
 }
 
+function validateSyncDiagnosticsShape(
+  diagnostics: unknown,
+  issueFactory: SyncValidationIssueFactory,
+  codePrefix: string,
+): {
+  issues: GraphValidationIssue[];
+  value?: SyncDiagnostics;
+} {
+  if (diagnostics === undefined) {
+    return {
+      issues: [],
+    };
+  }
+
+  const issues: GraphValidationIssue[] = [];
+  const candidate = isObjectRecord(diagnostics)
+    ? (diagnostics as Partial<SyncDiagnostics> & Record<string, unknown>)
+    : null;
+  if (!candidate) {
+    issues.push(
+      issueFactory(
+        ["diagnostics"],
+        codePrefix,
+        'Field "diagnostics" must be an object when provided.',
+      ),
+    );
+    return { issues };
+  }
+
+  if (!isAuthoritativeGraphRetainedHistoryPolicy(candidate.retainedHistoryPolicy)) {
+    issues.push(
+      issueFactory(
+        ["diagnostics", "retainedHistoryPolicy"],
+        `${codePrefix}.retainedHistoryPolicy`,
+        'Field "diagnostics.retainedHistoryPolicy" must be a supported retained-history policy.',
+      ),
+    );
+  }
+
+  if (typeof candidate.retainedBaseCursor !== "string") {
+    issues.push(
+      issueFactory(
+        ["diagnostics", "retainedBaseCursor"],
+        `${codePrefix}.retainedBaseCursor`,
+        'Field "diagnostics.retainedBaseCursor" must be a string.',
+      ),
+    );
+  } else if (candidate.retainedBaseCursor.length === 0) {
+    issues.push(
+      issueFactory(
+        ["diagnostics", "retainedBaseCursor"],
+        `${codePrefix}.retainedBaseCursor.empty`,
+        'Field "diagnostics.retainedBaseCursor" must not be empty.',
+      ),
+    );
+  }
+
+  if (issues.length > 0) {
+    return { issues };
+  }
+
+  const retainedHistoryPolicy =
+    candidate.retainedHistoryPolicy as AuthoritativeGraphRetainedHistoryPolicy;
+  const retainedBaseCursor = candidate.retainedBaseCursor as string;
+
+  return {
+    issues,
+    value: {
+      retainedHistoryPolicy: cloneAuthoritativeGraphRetainedHistoryPolicy(retainedHistoryPolicy),
+      retainedBaseCursor,
+    },
+  };
+}
+
 function describeIncrementalFallbackReasons(scope: SyncScope): string {
   return isGraphSyncScope(scope)
     ? '"unknown-cursor", "gap", or "reset"'
@@ -185,7 +264,10 @@ function materializeTotalSyncPayload(
     !preserveSnapshot ||
     (preserveSnapshot.edges.length === 0 && preserveSnapshot.retracted.length === 0)
   ) {
-    return payload;
+    return {
+      ...payload,
+      diagnostics: payload.diagnostics ? cloneSyncDiagnostics(payload.diagnostics) : undefined,
+    };
   }
 
   const payloadFactKeys = new Set(payload.snapshot.edges.map((edge) => logicalFactKey(edge)));
@@ -213,6 +295,7 @@ function materializeTotalSyncPayload(
       edges,
       retracted,
     },
+    diagnostics: payload.diagnostics ? cloneSyncDiagnostics(payload.diagnostics) : undefined,
   };
 }
 
@@ -470,6 +553,11 @@ function validateTotalSyncPayloadShape(payload: TotalSyncPayload): readonly Grap
   const issues: GraphValidationIssue[] = [];
   const candidate = payload as Partial<TotalSyncPayload> & Record<string, unknown>;
   const scope = validateSyncScopeShape(candidate.scope, createPayloadValidationIssue, "sync.scope");
+  const diagnostics = validateSyncDiagnosticsShape(
+    candidate.diagnostics,
+    createPayloadValidationIssue,
+    "sync.diagnostics",
+  );
 
   if (candidate.mode !== "total") {
     issues.push(
@@ -506,6 +594,7 @@ function validateTotalSyncPayloadShape(payload: TotalSyncPayload): readonly Grap
   );
 
   issues.push(...validateStoreSnapshotShape(candidate.snapshot));
+  issues.push(...diagnostics.issues);
   return issues;
 }
 
@@ -519,6 +608,7 @@ export function createIncrementalSyncPayload(
     completeness?: SyncCompleteness;
     freshness?: SyncFreshness;
     scope?: SyncScope;
+    diagnostics?: SyncDiagnostics;
   },
 ): IncrementalSyncPayload {
   return {
@@ -531,6 +621,7 @@ export function createIncrementalSyncPayload(
     cursor: options.cursor ?? transactions[transactions.length - 1]?.cursor ?? options.after,
     completeness: options.completeness ?? "complete",
     freshness: options.freshness ?? "current",
+    ...(options.diagnostics ? { diagnostics: cloneSyncDiagnostics(options.diagnostics) } : {}),
   };
 }
 
@@ -544,6 +635,7 @@ export function createIncrementalSyncFallback(
     completeness?: SyncCompleteness;
     freshness?: SyncFreshness;
     scope?: SyncScope;
+    diagnostics?: SyncDiagnostics;
   },
 ): IncrementalSyncFallback {
   return {
@@ -555,6 +647,7 @@ export function createIncrementalSyncFallback(
     completeness: options.completeness ?? "complete",
     freshness: options.freshness ?? "current",
     fallback,
+    ...(options.diagnostics ? { diagnostics: cloneSyncDiagnostics(options.diagnostics) } : {}),
   };
 }
 
@@ -575,6 +668,11 @@ function validateIncrementalSyncPayloadShape(
     candidate.scope,
     createIncrementalSyncValidationIssue,
     "sync.incremental.scope",
+  );
+  const diagnostics = validateSyncDiagnosticsShape(
+    candidate.diagnostics,
+    createIncrementalSyncValidationIssue,
+    "sync.incremental.diagnostics",
   );
   const transactions: AuthoritativeGraphWriteResult[] = [];
   const txIds = new Set<string>();
@@ -739,6 +837,7 @@ function validateIncrementalSyncPayloadShape(
     ? candidate.completeness
     : "complete";
   const freshness = candidate.freshness === "stale" ? "stale" : "current";
+  const diagnosticsValue = diagnostics.value ? cloneSyncDiagnostics(diagnostics.value) : undefined;
   const hasFallback = "fallback" in candidate;
   const fallbackReason = isIncrementalSyncFallbackReason(candidate.fallback)
     ? candidate.fallback
@@ -753,6 +852,8 @@ function validateIncrementalSyncPayloadShape(
       ),
     );
   }
+
+  issues.push(...diagnostics.issues);
 
   if (options.allowFallback && hasFallback) {
     if (
@@ -820,6 +921,7 @@ function validateIncrementalSyncPayloadShape(
             completeness,
             freshness,
             scope: scope.value,
+            diagnostics: diagnosticsValue,
           })
         : createIncrementalSyncPayload(transactions, {
             after,
@@ -827,6 +929,7 @@ function validateIncrementalSyncPayloadShape(
             completeness,
             freshness,
             scope: scope.value,
+            diagnostics: diagnosticsValue,
           }),
   };
 }

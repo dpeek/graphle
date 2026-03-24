@@ -42,6 +42,9 @@ const durableState = {
   snapshot: loadResult.snapshot,
   writeHistory: {
     cursorPrefix: "authority:",
+    retainedHistoryPolicy: {
+      kind: "all",
+    },
     baseSequence: 0,
     results: [],
   },

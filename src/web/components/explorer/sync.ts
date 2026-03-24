@@ -115,6 +115,16 @@ export function formatWriteScopeSummary(writeScopes: readonly ExplorerWriteScope
   return `mixed scopes: ${uniqueScopes.join(", ")}`;
 }
 
+export function formatRetainedHistoryPolicy(
+  policy: NonNullable<ExplorerSyncSnapshot["state"]["diagnostics"]>["retainedHistoryPolicy"],
+): string {
+  if (policy.kind === "all") {
+    return "all transactions";
+  }
+
+  return `last ${policy.maxTransactions} transaction${policy.maxTransactions === 1 ? "" : "s"}`;
+}
+
 export function describeSyncError(error: unknown): string | null {
   if (error instanceof GraphValidationError) {
     return error.result.issues[0]?.message ?? error.message;

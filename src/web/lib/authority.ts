@@ -3,6 +3,7 @@ import {
   type AuthSubjectRef,
   type AuthorizationContext,
   type AnyTypeOutput,
+  type AuthoritativeGraphRetainedHistoryPolicy,
   type AuthoritativeWriteScope,
   authorizeCommand,
   authorizeRead,
@@ -39,6 +40,7 @@ import {
   type PredicatePolicyDescriptor,
   readPredicateValue as decodePredicateValue,
   type ReplicationReadAuthorizer,
+  type SyncDiagnostics,
   type Store,
   type StoreSnapshot,
   type AuthoritativeGraphWriteResult,
@@ -339,8 +341,8 @@ export type WebAppAuthority = Omit<
 
 export type WebAppAuthorityOptions = {
   readonly graph?: WebAppAuthorityGraph;
-  readonly maxRetainedTransactions?: number;
   readonly onWorkflowReviewInvalidation?: (invalidation: InvalidationEvent) => void;
+  readonly retainedHistoryPolicy?: AuthoritativeGraphRetainedHistoryPolicy;
   readonly seedExampleGraph?: boolean;
 };
 
@@ -967,6 +969,17 @@ function formatScopedModuleCursor(scope: ModuleSyncScope, cursor: string): strin
   params.set("policyFilterVersion", scope.policyFilterVersion);
   params.set("cursor", cursor);
   return `${moduleScopeCursorPrefix}${params.toString()}`;
+}
+
+function formatScopedSyncDiagnostics(
+  scope: ModuleSyncScope,
+  diagnostics: SyncDiagnostics | undefined,
+): SyncDiagnostics | undefined {
+  if (!diagnostics) return undefined;
+  return {
+    ...diagnostics,
+    retainedBaseCursor: formatScopedModuleCursor(scope, diagnostics.retainedBaseCursor),
+  };
 }
 
 function parseScopedModuleCursor(
@@ -2753,7 +2766,7 @@ export async function createWebAppAuthority(
       }
     },
     createCursorPrefix: createAuthorityCursorPrefix,
-    maxRetainedTransactions: options.maxRetainedTransactions,
+    retainedHistoryPolicy: options.retainedHistoryPolicy,
   });
   const workflowReviewInvalidationListener = options.onWorkflowReviewInvalidation;
   // Early persisted Better Auth rollouts could create graph principals without
@@ -2921,6 +2934,7 @@ export async function createWebAppAuthority(
       scope: plannedScope.scope,
       snapshot: filterModuleScopedSnapshot(payload.snapshot, authority.store, plannedScope),
       cursor: formatScopedModuleCursor(plannedScope.scope, payload.cursor),
+      diagnostics: formatScopedSyncDiagnostics(plannedScope.scope, payload.diagnostics),
     };
   }
 
@@ -2978,12 +2992,17 @@ export async function createWebAppAuthority(
     );
     const plannedScope = planSyncScope(options.scope, options.authorization);
     if (after && plannedScope) {
+      const currentPayload = authority.createSyncPayload({
+        authorizeRead,
+        freshness: options.freshness,
+      });
       const currentScopedCursor = formatScopedModuleCursor(
         plannedScope.scope,
-        authority.createSyncPayload({
-          authorizeRead,
-          freshness: options.freshness,
-        }).cursor,
+        currentPayload.cursor,
+      );
+      const currentDiagnostics = formatScopedSyncDiagnostics(
+        plannedScope.scope,
+        currentPayload.diagnostics,
       );
       const parsedAfter = parseScopedModuleCursor(after);
       if (!parsedAfter) {
@@ -2992,6 +3011,7 @@ export async function createWebAppAuthority(
           cursor: currentScopedCursor,
           freshness: options.freshness,
           scope: plannedScope.scope,
+          diagnostics: currentDiagnostics,
         });
       }
       if (
@@ -3004,6 +3024,7 @@ export async function createWebAppAuthority(
           cursor: currentScopedCursor,
           freshness: options.freshness,
           scope: plannedScope.scope,
+          diagnostics: currentDiagnostics,
         });
       }
       if (parsedAfter.policyFilterVersion !== plannedScope.scope.policyFilterVersion) {
@@ -3012,6 +3033,7 @@ export async function createWebAppAuthority(
           cursor: currentScopedCursor,
           freshness: options.freshness,
           scope: plannedScope.scope,
+          diagnostics: currentDiagnostics,
         });
       }
       after = parsedAfter.cursor;
@@ -3050,6 +3072,7 @@ export async function createWebAppAuthority(
         cursor: resultCursor,
         freshness: result.freshness,
         scope: plannedScope.scope,
+        diagnostics: formatScopedSyncDiagnostics(plannedScope.scope, result.diagnostics),
       });
     }
 
@@ -3069,6 +3092,7 @@ export async function createWebAppAuthority(
       cursor: resultCursor,
       freshness: result.freshness,
       scope: plannedScope.scope,
+      diagnostics: formatScopedSyncDiagnostics(plannedScope.scope, result.diagnostics),
     });
   }
 

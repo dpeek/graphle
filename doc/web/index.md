@@ -81,8 +81,10 @@ generic shared command/read transports.
   authority cursor, pending writes, recent authoritative activity, and
   surfaced write-scope diagnostics for acknowledged and pulled writes, plus
   cursor-advance diagnostics when incremental replication filters out all
-  browser-visible transactions. The current proof now lets operators switch
-  between explicit whole-graph recovery and the first named
+  browser-visible transactions. The current proof now also surfaces the
+  retained base cursor plus active retained-history policy so fallback causes
+  stay legible to operators. It lets operators switch between explicit
+  whole-graph recovery and the first named
   `ops/workflow` review scope, inspect delivered scope metadata, and trigger
   scoped refreshes over the shared `/api/sync` transport contract
 - `../../src/web/components/topic-browser-page.tsx`: topic browsing, metadata

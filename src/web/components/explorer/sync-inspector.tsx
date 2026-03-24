@@ -2,6 +2,7 @@ import type { ExplorerSync } from "./model.js";
 import {
   describeSyncError,
   formatPendingTransactionSummary,
+  formatRetainedHistoryPolicy,
   formatScopedTransactionLabel,
   formatStreamActivityDetail,
   formatStreamActivityTitle,
@@ -71,6 +72,25 @@ export function ExplorerSyncInspector({ sync }: { sync: ExplorerSync }) {
               {state.lastSyncedAt ? "captured" : "not yet"}
             </span>
           </div>
+          {state.diagnostics ? (
+            <>
+              <div className="flex items-center justify-between gap-3">
+                <span>Retained base</span>
+                <code
+                  className="text-xs text-slate-200"
+                  data-explorer-stream-retained-base-cursor=""
+                >
+                  {state.diagnostics.retainedBaseCursor}
+                </code>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <span>Retention</span>
+                <span data-explorer-stream-retained-history-policy="">
+                  {formatRetainedHistoryPolicy(state.diagnostics.retainedHistoryPolicy)}
+                </span>
+              </div>
+            </>
+          ) : null}
         </div>
 
         <div className="space-y-2">

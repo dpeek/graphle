@@ -16,9 +16,12 @@ import type { AnyTypeOutput } from "./schema";
 import type { Store, StoreSnapshot } from "./store";
 import {
   graphSyncScope,
+  isAuthoritativeGraphRetainedHistoryPolicy,
+  type AuthoritativeGraphRetainedHistoryPolicy,
   type AuthoritativeGraphWriteHistory,
   type AuthoritativeGraphWriteResult,
   type TotalSyncPayload,
+  unboundedAuthoritativeGraphRetainedHistoryPolicy,
   validateAuthoritativeTotalSyncPayload,
 } from "./sync";
 
@@ -80,6 +83,11 @@ function readPersistedWriteHistory(rawHistory: unknown): {
       needsPersistence: false,
     };
   }
+  const retainedHistoryPolicy = rawHistory.retainedHistoryPolicy;
+  const normalizedRetainedHistoryPolicy: AuthoritativeGraphRetainedHistoryPolicy =
+    isAuthoritativeGraphRetainedHistoryPolicy(retainedHistoryPolicy)
+      ? retainedHistoryPolicy
+      : unboundedAuthoritativeGraphRetainedHistoryPolicy;
 
   // Legacy entries predate durable writeScope storage. They are intentionally
   // normalized to client-tx on load and then rewritten, rather than treated as
@@ -87,10 +95,14 @@ function readPersistedWriteHistory(rawHistory: unknown): {
   return {
     writeHistory: {
       cursorPrefix,
+      retainedHistoryPolicy: normalizedRetainedHistoryPolicy,
       baseSequence,
       results: results as AuthoritativeGraphWriteResult[],
     },
-    needsPersistence: results.some((result) => isObjectRecord(result) && !("writeScope" in result)),
+    needsPersistence:
+      retainedHistoryPolicy === undefined ||
+      !isAuthoritativeGraphRetainedHistoryPolicy(retainedHistoryPolicy) ||
+      results.some((result) => isObjectRecord(result) && !("writeScope" in result)),
   };
 }
 
@@ -174,6 +186,6 @@ export async function createJsonPersistedAuthoritativeGraph<
     storage: createJsonPersistedAuthoritativeGraphStorage(options.path, namespace),
     seed: options.seed,
     createCursorPrefix: options.createCursorPrefix,
-    maxRetainedTransactions: options.maxRetainedTransactions,
+    retainedHistoryPolicy: options.retainedHistoryPolicy,
   });
 }

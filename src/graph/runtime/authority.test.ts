@@ -18,7 +18,7 @@ import type { AuthorizationContext } from "./contracts";
 import { core } from "./core";
 import { createIdMap, defineNamespace } from "./identity";
 import { defineType, edgeId, fieldPolicyDescriptor } from "./schema";
-import { createStore } from "./store";
+import { createStore, type StoreSnapshot } from "./store";
 import {
   createAuthoritativeGraphWriteSession,
   createGraphWriteTransactionFromSnapshots,
@@ -72,6 +72,30 @@ const visibilityProbeMemberNotePolicy = fieldPolicyDescriptor(visibilityProbe.fi
 if (!visibilityProbeMemberNotePolicy) {
   throw new Error("Expected the visibility probe member note to resolve a policy descriptor.");
 }
+
+const hiddenCursorProbe = defineType({
+  values: { key: "test:hiddenCursorProbe", name: "Hidden Cursor Probe" },
+  fields: {
+    name: core.node.fields.name,
+    hiddenState: {
+      ...core.node.fields.description,
+      key: "test:hiddenCursorProbe:hiddenState",
+      authority: {
+        visibility: "authority-only",
+        write: "authority-only",
+      },
+      meta: {
+        ...core.node.fields.description.meta,
+        label: "Hidden state",
+      },
+    },
+  },
+});
+
+const hiddenCursorNamespace = defineNamespace(createIdMap({ hiddenCursorProbe }).map, {
+  hiddenCursorProbe,
+});
+const hiddenCursorGraph = { ...core, ...hiddenCursorNamespace } as const;
 
 function createAuthorizationContext(
   overrides: Partial<AuthorizationContext> = {},
@@ -159,6 +183,10 @@ function createKitchenSinkStore() {
 
 function createVisibilityStore() {
   return createStore(createBootstrappedSnapshot(visibilityGraph));
+}
+
+function createHiddenCursorStore() {
+  return createStore(createBootstrappedSnapshot(hiddenCursorGraph));
 }
 
 async function createJsonAuthority(
@@ -249,6 +277,18 @@ function createVisibilityReadAuthorizer(authorization: AuthorizationContext) {
   };
 }
 
+function createHiddenCursorAdvanceTransaction(
+  snapshot: StoreSnapshot,
+  probeId: string,
+  hiddenState: string,
+  txId: string,
+): GraphWriteTransaction {
+  const mutationStore = createStore(snapshot);
+  const graph = createTypeClient(mutationStore, hiddenCursorGraph);
+  graph.hiddenCursorProbe.update(probeId, { hiddenState });
+  return createGraphWriteTransactionFromSnapshots(snapshot, mutationStore.snapshot(), txId);
+}
+
 afterEach(async () => {
   testCursorEpoch = 0;
   await Promise.all(tempDirs.splice(0).map((dir) => rm(dir, { force: true, recursive: true })));
@@ -333,6 +373,9 @@ describe("persisted authoritative graph", () => {
     const authority = await createJsonAuthority(snapshotPath);
     const rewrittenState = await readPersistedAuthorityState(snapshotPath);
 
+    expect(rewrittenState.writeHistory.retainedHistoryPolicy).toEqual({
+      kind: "all",
+    });
     expect(rewrittenState.writeHistory.results).toEqual([
       expect.objectContaining({
         txId: "tx:legacy:1",
@@ -396,6 +439,12 @@ describe("persisted authoritative graph", () => {
       cursor: second.cursor,
       completeness: "complete",
       freshness: "current",
+      diagnostics: {
+        retainedBaseCursor: initialCursor,
+        retainedHistoryPolicy: {
+          kind: "all",
+        },
+      },
     });
     expect(second).toMatchObject({
       txId: "tx:2",
@@ -422,7 +471,10 @@ describe("persisted authoritative graph", () => {
           graph.item.create({ name: "Retained Item" });
         },
         createCursorPrefix: () => "persisted:retained:",
-        maxRetainedTransactions: 2,
+        retainedHistoryPolicy: {
+          kind: "transaction-count",
+          maxTransactions: 2,
+        },
       });
     };
 
@@ -445,7 +497,15 @@ describe("persisted authoritative graph", () => {
 
     if (!persistedState) throw new Error("Expected retained persisted state.");
 
+    expect(authority.getRetainedHistoryPolicy()).toEqual({
+      kind: "transaction-count",
+      maxTransactions: 2,
+    });
     expect(persistedState.writeHistory.baseSequence).toBe(1);
+    expect(persistedState.writeHistory.retainedHistoryPolicy).toEqual({
+      kind: "transaction-count",
+      maxTransactions: 2,
+    });
     expect(persistedState.writeHistory.results).toEqual([second, third]);
     expect(authority.getIncrementalSyncResult(initialCursor)).toEqual({
       mode: "incremental",
@@ -456,6 +516,13 @@ describe("persisted authoritative graph", () => {
       completeness: "complete",
       freshness: "current",
       fallback: "gap",
+      diagnostics: {
+        retainedBaseCursor: first.cursor,
+        retainedHistoryPolicy: {
+          kind: "transaction-count",
+          maxTransactions: 2,
+        },
+      },
     });
     expect(authority.getIncrementalSyncResult(first.cursor)).toEqual({
       mode: "incremental",
@@ -465,6 +532,13 @@ describe("persisted authoritative graph", () => {
       cursor: third.cursor,
       completeness: "complete",
       freshness: "current",
+      diagnostics: {
+        retainedBaseCursor: first.cursor,
+        retainedHistoryPolicy: {
+          kind: "transaction-count",
+          maxTransactions: 2,
+        },
+      },
     });
     expect(restarted.getIncrementalSyncResult(initialCursor)).toEqual({
       mode: "incremental",
@@ -475,6 +549,13 @@ describe("persisted authoritative graph", () => {
       completeness: "complete",
       freshness: "current",
       fallback: "gap",
+      diagnostics: {
+        retainedBaseCursor: first.cursor,
+        retainedHistoryPolicy: {
+          kind: "transaction-count",
+          maxTransactions: 2,
+        },
+      },
     });
     expect(restarted.getIncrementalSyncResult(first.cursor)).toEqual({
       mode: "incremental",
@@ -484,6 +565,209 @@ describe("persisted authoritative graph", () => {
       cursor: third.cursor,
       completeness: "complete",
       freshness: "current",
+      diagnostics: {
+        retainedBaseCursor: first.cursor,
+        retainedHistoryPolicy: {
+          kind: "transaction-count",
+          maxTransactions: 2,
+        },
+      },
+    });
+  });
+
+  it("retains hidden-only cursor advances across restart without widening incremental sync", async () => {
+    const storage = createMemoryStorage();
+    const createHiddenAuthority = async () =>
+      createPersistedAuthoritativeGraph(createHiddenCursorStore(), hiddenCursorGraph, {
+        storage: storage.storage,
+        createCursorPrefix: () => "persisted:hidden:",
+        seed(graph) {
+          graph.hiddenCursorProbe.create({
+            name: "Hidden Cursor Probe",
+          });
+        },
+      });
+
+    const authority = await createHiddenAuthority();
+    const probeId = authority.graph.hiddenCursorProbe.list()[0]?.id;
+    if (!probeId) throw new Error("Expected the hidden cursor probe to be seeded.");
+
+    const initialCursor = authority.createSyncPayload().cursor;
+    const hidden = await authority.applyTransaction(
+      createHiddenCursorAdvanceTransaction(
+        authority.store.snapshot(),
+        probeId,
+        "hidden:tx:1",
+        "tx:hidden:1",
+      ),
+      {
+        writeScope: "authority-only",
+      },
+    );
+    const restarted = await createHiddenAuthority();
+
+    expect(hidden.writeScope).toBe("authority-only");
+    expect(storage.getCurrent()?.writeHistory.results).toEqual([hidden]);
+    expect(authority.getIncrementalSyncResult(initialCursor)).toEqual({
+      mode: "incremental",
+      scope: { kind: "graph" },
+      after: initialCursor,
+      transactions: [],
+      cursor: hidden.cursor,
+      completeness: "complete",
+      freshness: "current",
+      diagnostics: {
+        retainedBaseCursor: initialCursor,
+        retainedHistoryPolicy: {
+          kind: "all",
+        },
+      },
+    });
+    expect(restarted.createSyncPayload().cursor).toBe(hidden.cursor);
+    expect(restarted.getIncrementalSyncResult(initialCursor)).toEqual({
+      mode: "incremental",
+      scope: { kind: "graph" },
+      after: initialCursor,
+      transactions: [],
+      cursor: hidden.cursor,
+      completeness: "complete",
+      freshness: "current",
+      diagnostics: {
+        retainedBaseCursor: initialCursor,
+        retainedHistoryPolicy: {
+          kind: "all",
+        },
+      },
+    });
+  });
+
+  it("falls back with gap for pruned hidden-only cursors after restart", async () => {
+    const storage = createMemoryStorage();
+    const createHiddenAuthority = async () =>
+      createPersistedAuthoritativeGraph(createHiddenCursorStore(), hiddenCursorGraph, {
+        storage: storage.storage,
+        createCursorPrefix: () => "persisted:hidden:gap:",
+        retainedHistoryPolicy: {
+          kind: "transaction-count",
+          maxTransactions: 2,
+        },
+        seed(graph) {
+          graph.hiddenCursorProbe.create({
+            name: "Hidden Cursor Probe",
+          });
+        },
+      });
+
+    const authority = await createHiddenAuthority();
+    const probeId = authority.graph.hiddenCursorProbe.list()[0]?.id;
+    if (!probeId) throw new Error("Expected the hidden cursor probe to be seeded.");
+
+    const initialCursor = authority.createSyncPayload().cursor;
+    const first = await authority.applyTransaction(
+      createHiddenCursorAdvanceTransaction(
+        authority.store.snapshot(),
+        probeId,
+        "hidden:tx:1",
+        "tx:hidden:1",
+      ),
+      {
+        writeScope: "authority-only",
+      },
+    );
+    await authority.applyTransaction(
+      createHiddenCursorAdvanceTransaction(
+        authority.store.snapshot(),
+        probeId,
+        "hidden:tx:2",
+        "tx:hidden:2",
+      ),
+      {
+        writeScope: "authority-only",
+      },
+    );
+    const third = await authority.applyTransaction(
+      createHiddenCursorAdvanceTransaction(
+        authority.store.snapshot(),
+        probeId,
+        "hidden:tx:3",
+        "tx:hidden:3",
+      ),
+      {
+        writeScope: "authority-only",
+      },
+    );
+    const restarted = await createHiddenAuthority();
+
+    expect(storage.getCurrent()?.writeHistory.baseSequence).toBe(1);
+    expect(storage.getCurrent()?.writeHistory.results.map((result) => result.txId)).toEqual([
+      "tx:hidden:2",
+      "tx:hidden:3",
+    ]);
+    expect(authority.getIncrementalSyncResult(initialCursor)).toEqual({
+      mode: "incremental",
+      scope: { kind: "graph" },
+      after: initialCursor,
+      transactions: [],
+      cursor: third.cursor,
+      completeness: "complete",
+      freshness: "current",
+      fallback: "gap",
+      diagnostics: {
+        retainedBaseCursor: first.cursor,
+        retainedHistoryPolicy: {
+          kind: "transaction-count",
+          maxTransactions: 2,
+        },
+      },
+    });
+    expect(authority.getIncrementalSyncResult(first.cursor)).toEqual({
+      mode: "incremental",
+      scope: { kind: "graph" },
+      after: first.cursor,
+      transactions: [],
+      cursor: third.cursor,
+      completeness: "complete",
+      freshness: "current",
+      diagnostics: {
+        retainedBaseCursor: first.cursor,
+        retainedHistoryPolicy: {
+          kind: "transaction-count",
+          maxTransactions: 2,
+        },
+      },
+    });
+    expect(restarted.getIncrementalSyncResult(initialCursor)).toEqual({
+      mode: "incremental",
+      scope: { kind: "graph" },
+      after: initialCursor,
+      transactions: [],
+      cursor: third.cursor,
+      completeness: "complete",
+      freshness: "current",
+      fallback: "gap",
+      diagnostics: {
+        retainedBaseCursor: first.cursor,
+        retainedHistoryPolicy: {
+          kind: "transaction-count",
+          maxTransactions: 2,
+        },
+      },
+    });
+    expect(restarted.getIncrementalSyncResult(first.cursor)).toEqual({
+      mode: "incremental",
+      scope: { kind: "graph" },
+      after: first.cursor,
+      transactions: [],
+      cursor: third.cursor,
+      completeness: "complete",
+      freshness: "current",
+      diagnostics: {
+        retainedBaseCursor: first.cursor,
+        retainedHistoryPolicy: {
+          kind: "transaction-count",
+          maxTransactions: 2,
+        },
+      },
     });
   });
 
@@ -570,6 +854,9 @@ describe("persisted authoritative graph", () => {
           snapshot: store.snapshot(),
           writeHistory: {
             cursorPrefix: "persisted:broken:",
+            retainedHistoryPolicy: {
+              kind: "all",
+            },
             baseSequence: 0,
             results: [brokenResult],
           },

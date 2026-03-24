@@ -5,12 +5,14 @@ import {
   createAuthoritativeGraphWriteSession,
   createTotalSyncPayload,
   type AuthoritativeGraphChangesAfterResult,
+  type AuthoritativeGraphRetainedHistoryPolicy,
   type AuthoritativeGraphWriteHistory,
   type AuthoritativeWriteScope,
   type AuthoritativeGraphWriteResult,
   type GraphWriteTransaction,
   type IncrementalSyncResult,
   type ReplicationReadAuthorizer,
+  sameAuthoritativeGraphRetainedHistoryPolicy,
   type SyncFreshness,
 } from "./sync";
 
@@ -90,14 +92,14 @@ export type JsonPersistedAuthoritativeGraphOptions<T extends Record<string, AnyT
   readonly path: string;
   readonly seed?: PersistedAuthoritativeGraphSeed<T>;
   readonly createCursorPrefix?: PersistedAuthoritativeGraphCursorPrefixFactory;
-  readonly maxRetainedTransactions?: number;
+  readonly retainedHistoryPolicy?: AuthoritativeGraphRetainedHistoryPolicy;
 };
 
 export type PersistedAuthoritativeGraphOptions<T extends Record<string, AnyTypeOutput>> = {
   readonly storage: PersistedAuthoritativeGraphStorage;
   readonly seed?: PersistedAuthoritativeGraphSeed<T>;
   readonly createCursorPrefix?: PersistedAuthoritativeGraphCursorPrefixFactory;
-  readonly maxRetainedTransactions?: number;
+  readonly retainedHistoryPolicy?: AuthoritativeGraphRetainedHistoryPolicy;
 };
 
 export type PersistedAuthoritativeGraph<T extends Record<string, AnyTypeOutput>> = {
@@ -121,6 +123,7 @@ export type PersistedAuthoritativeGraph<T extends Record<string, AnyTypeOutput>>
       freshness?: SyncFreshness;
     },
   ): IncrementalSyncResult;
+  getRetainedHistoryPolicy(): AuthoritativeGraphRetainedHistoryPolicy;
   persist(): Promise<void>;
 };
 
@@ -147,17 +150,17 @@ export async function createPersistedAuthoritativeGraph<
   const createFreshWriteSession = () =>
     createAuthoritativeGraphWriteSession(store, namespace, {
       cursorPrefix: createCursorPrefix(),
-      maxRetainedResults: options.maxRetainedTransactions,
+      retainedHistoryPolicy: options.retainedHistoryPolicy,
     });
+  let writes = createFreshWriteSession();
+  const configuredRetainedHistoryPolicy = writes.getRetainedHistoryPolicy();
   const createWriteSession = (writeHistory: AuthoritativeGraphWriteHistory) =>
     createAuthoritativeGraphWriteSession(store, namespace, {
       cursorPrefix: writeHistory.cursorPrefix,
       initialSequence: writeHistory.baseSequence,
       history: writeHistory.results,
-      maxRetainedResults: options.maxRetainedTransactions,
+      retainedHistoryPolicy: configuredRetainedHistoryPolicy,
     });
-
-  let writes = createFreshWriteSession();
 
   async function persistCurrentState(): Promise<void> {
     await options.storage.persist({
@@ -213,10 +216,15 @@ export async function createPersistedAuthoritativeGraph<
     if (persistedState.writeHistory) {
       try {
         writes = createWriteSession(persistedState.writeHistory);
+        const hydratedHistory = writes.getHistory();
         if (
           persistedState.needsPersistence ||
-          (options.maxRetainedTransactions !== undefined &&
-            persistedState.writeHistory.results.length > options.maxRetainedTransactions)
+          !sameAuthoritativeGraphRetainedHistoryPolicy(
+            persistedState.writeHistory.retainedHistoryPolicy,
+            configuredRetainedHistoryPolicy,
+          ) ||
+          hydratedHistory.baseSequence !== persistedState.writeHistory.baseSequence ||
+          hydratedHistory.results.length !== persistedState.writeHistory.results.length
         ) {
           await persistCurrentState();
         }
@@ -241,6 +249,10 @@ export async function createPersistedAuthoritativeGraph<
       return createTotalSyncPayload(store, {
         authorizeRead: syncOptions.authorizeRead,
         cursor: writes.getCursor() ?? writes.getBaseCursor(),
+        diagnostics: {
+          retainedHistoryPolicy: writes.getRetainedHistoryPolicy(),
+          retainedBaseCursor: writes.getBaseCursor(),
+        },
         freshness: syncOptions.freshness ?? "current",
         namespace,
       });
@@ -251,6 +263,9 @@ export async function createPersistedAuthoritativeGraph<
     },
     getIncrementalSyncResult(after, syncOptions) {
       return writes.getIncrementalSyncResult(after, syncOptions);
+    },
+    getRetainedHistoryPolicy() {
+      return writes.getRetainedHistoryPolicy();
     },
     persist,
   };

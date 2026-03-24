@@ -12,6 +12,7 @@ import { GraphMutationRuntimeProvider } from "../../runtime/react/persisted-muta
 import type { AnyTypeOutput } from "../../runtime/schema.js";
 import {
   sameSyncActivity,
+  sameSyncDiagnostics,
   sameSyncScope,
   sameSyncScopeRequest,
   type SyncState,
@@ -46,6 +47,7 @@ function sameGraphSyncState(left: SyncState | undefined, right: SyncState): bool
     left.completeness !== right.completeness ||
     left.freshness !== right.freshness ||
     left.fallback !== right.fallback ||
+    !sameSyncDiagnostics(left.diagnostics, right.diagnostics) ||
     left.pendingCount !== right.pendingCount ||
     left.cursor !== right.cursor ||
     left.error !== right.error ||

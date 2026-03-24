@@ -2,8 +2,11 @@ import { GraphValidationError, type GraphValidationResult } from "../client";
 import type { AnyTypeOutput } from "../schema";
 import type { Store, StoreSnapshot } from "../store";
 import {
+  cloneAuthoritativeGraphRetainedHistoryPolicy,
   cloneAuthoritativeGraphWriteResult,
+  type SyncDiagnostics,
   type AuthoritativeGraphChangesAfterResult,
+  type AuthoritativeGraphRetainedHistoryPolicy,
   type AuthoritativeGraphWriteHistory,
   type AuthoritativeGraphWriteResult,
   type AuthoritativeGraphWriteSession,
@@ -12,6 +15,7 @@ import {
   type IncrementalSyncResult,
   type ReplicationReadAuthorizer,
   type SyncFreshness,
+  unboundedAuthoritativeGraphRetainedHistoryPolicy,
 } from "./contracts";
 import { classifyIncrementalSyncFallbackReason, formatAuthoritativeGraphCursor } from "./cursor";
 import {
@@ -43,8 +47,30 @@ function cloneAuthoritativeGraphWriteHistory(
 ): AuthoritativeGraphWriteHistory {
   return {
     cursorPrefix: history.cursorPrefix,
+    retainedHistoryPolicy: cloneAuthoritativeGraphRetainedHistoryPolicy(
+      history.retainedHistoryPolicy,
+    ),
     baseSequence: history.baseSequence,
     results: history.results.map((result) => cloneAuthoritativeGraphWriteResult(result)),
+  };
+}
+
+function normalizeAuthoritativeGraphRetainedHistoryPolicy(
+  policy: AuthoritativeGraphRetainedHistoryPolicy,
+): AuthoritativeGraphRetainedHistoryPolicy {
+  if (policy.kind === "all") {
+    return unboundedAuthoritativeGraphRetainedHistoryPolicy;
+  }
+
+  if (!Number.isInteger(policy.maxTransactions) || policy.maxTransactions < 1) {
+    throw new Error(
+      "Authoritative graph write sessions require transaction-count retained-history policies to use a positive integer maxTransactions value.",
+    );
+  }
+
+  return {
+    kind: "transaction-count",
+    maxTransactions: policy.maxTransactions,
   };
 }
 
@@ -67,24 +93,18 @@ export function createAuthoritativeGraphWriteSession<const T extends Record<stri
     cursorPrefix?: string;
     initialSequence?: number;
     history?: readonly AuthoritativeGraphWriteResult[];
-    maxRetainedResults?: number;
+    retainedHistoryPolicy?: AuthoritativeGraphRetainedHistoryPolicy;
   } = {},
 ): AuthoritativeGraphWriteSession {
   const cursorPrefix = options.cursorPrefix ?? "tx:";
   let baseSequence = options.initialSequence ?? 0;
-  const maxRetainedResults = options.maxRetainedResults;
+  const retainedHistoryPolicy = normalizeAuthoritativeGraphRetainedHistoryPolicy(
+    options.retainedHistoryPolicy ?? unboundedAuthoritativeGraphRetainedHistoryPolicy,
+  );
   const policiesByTypeId = createFieldAuthorityPolicyIndex(namespace);
   if (!Number.isInteger(baseSequence) || baseSequence < 0) {
     throw new Error(
       "Authoritative graph write sessions require a non-negative integer initial sequence.",
-    );
-  }
-  if (
-    maxRetainedResults !== undefined &&
-    (!Number.isInteger(maxRetainedResults) || maxRetainedResults < 1)
-  ) {
-    throw new Error(
-      "Authoritative graph write sessions require maxRetainedResults to be a positive integer.",
     );
   }
   const txRecords = new Map<string, AuthoritativeGraphWriteRecord>();
@@ -100,8 +120,9 @@ export function createAuthoritativeGraphWriteSession<const T extends Record<stri
   }
 
   function enforceRetentionWindow(): void {
-    if (maxRetainedResults === undefined || acceptedResults.length <= maxRetainedResults) return;
-    const pruneCount = acceptedResults.length - maxRetainedResults;
+    if (retainedHistoryPolicy.kind !== "transaction-count") return;
+    if (acceptedResults.length <= retainedHistoryPolicy.maxTransactions) return;
+    const pruneCount = acceptedResults.length - retainedHistoryPolicy.maxTransactions;
     acceptedResults.splice(0, pruneCount);
     baseSequence += pruneCount;
     rebuildRetainedCursorIndex();
@@ -117,6 +138,13 @@ export function createAuthoritativeGraphWriteSession<const T extends Record<stri
 
   function currentHeadCursor(): string {
     return currentCursor() ?? baseCursor();
+  }
+
+  function currentSyncDiagnostics(): SyncDiagnostics {
+    return {
+      retainedHistoryPolicy: cloneAuthoritativeGraphRetainedHistoryPolicy(retainedHistoryPolicy),
+      retainedBaseCursor: baseCursor(),
+    };
   }
 
   function cloneAcceptedResults(startIndex = 0): AuthoritativeGraphWriteResult[] {
@@ -178,6 +206,7 @@ export function createAuthoritativeGraphWriteSession<const T extends Record<stri
         after,
         cursor: changes.cursor,
         freshness: options.freshness,
+        diagnostics: currentSyncDiagnostics(),
       });
     }
 
@@ -190,6 +219,7 @@ export function createAuthoritativeGraphWriteSession<const T extends Record<stri
         after,
         cursor: changes.cursor,
         freshness: options.freshness,
+        diagnostics: currentSyncDiagnostics(),
       },
     );
   }
@@ -226,9 +256,14 @@ export function createAuthoritativeGraphWriteSession<const T extends Record<stri
   function getHistory(): AuthoritativeGraphWriteHistory {
     return cloneAuthoritativeGraphWriteHistory({
       cursorPrefix,
+      retainedHistoryPolicy,
       baseSequence,
       results: acceptedResults,
     });
+  }
+
+  function getRetainedHistoryPolicy(): AuthoritativeGraphRetainedHistoryPolicy {
+    return cloneAuthoritativeGraphRetainedHistoryPolicy(retainedHistoryPolicy);
   }
 
   function apply(
@@ -336,5 +371,6 @@ export function createAuthoritativeGraphWriteSession<const T extends Record<stri
     getIncrementalSyncResult,
     getCursor: currentCursor,
     getHistory,
+    getRetainedHistoryPolicy,
   };
 }

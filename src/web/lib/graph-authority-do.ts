@@ -1,8 +1,10 @@
-import type {
-  AuthoritativeWriteScope,
-  PersistedAuthoritativeGraphStorageCommitInput as DurableAuthorityCommitInput,
-  PersistedAuthoritativeGraphStorageLoadResult as DurableAuthorityLoadResult,
-  PersistedAuthoritativeGraphStoragePersistInput as DurableAuthorityPersistInput,
+import {
+  isAuthoritativeGraphRetainedHistoryPolicy,
+  type AuthoritativeGraphRetainedHistoryPolicy,
+  type AuthoritativeWriteScope,
+  type PersistedAuthoritativeGraphStorageCommitInput as DurableAuthorityCommitInput,
+  type PersistedAuthoritativeGraphStorageLoadResult as DurableAuthorityLoadResult,
+  type PersistedAuthoritativeGraphStoragePersistInput as DurableAuthorityPersistInput,
 } from "@io/core/graph";
 
 import {
@@ -61,7 +63,7 @@ type DurableObjectStateLike = {
 };
 
 type DurableObjectEnvLike = {
-  GRAPH_AUTHORITY_MAX_RETAINED_TRANSACTIONS?: number | string;
+  GRAPH_AUTHORITY_RETAINED_HISTORY_POLICY?: AuthoritativeGraphRetainedHistoryPolicy | string;
 };
 
 // These row shapes are internal to the current SQLite-backed Durable Object
@@ -72,6 +74,8 @@ type GraphMetaRow = {
   head_cursor: string;
   head_seq: number;
   history_retained_from_seq: number;
+  retained_history_policy_kind: string;
+  retained_history_policy_max_transactions: number | null;
   schema_version: number;
   seeded_at: string | null;
   updated_at: string;
@@ -118,6 +122,10 @@ type SecretValueRow = {
 const durableObjectAuthoritySchemaVersion = 1;
 const defaultMaxRetainedTransactions = 128;
 export const webGraphAuthorityBearerShareLookupPath = "/_internal/bearer-share";
+const defaultRetainedHistoryPolicy = {
+  kind: "transaction-count",
+  maxTransactions: defaultMaxRetainedTransactions,
+} as const satisfies AuthoritativeGraphRetainedHistoryPolicy;
 export const webGraphAuthoritySessionPrincipalLookupPath = "/_internal/session-principal";
 
 type WebGraphAuthorityFactory = (
@@ -129,16 +137,39 @@ function formatCursor(cursorPrefix: string, sequence: number): string {
   return `${cursorPrefix}${sequence}`;
 }
 
-function readMaxRetainedTransactions(env: DurableObjectEnvLike): number {
-  const configured = env.GRAPH_AUTHORITY_MAX_RETAINED_TRANSACTIONS;
-  if (configured === undefined) return defaultMaxRetainedTransactions;
-  const parsed =
-    typeof configured === "number" ? configured : Number.parseInt(configured.trim(), 10);
-  if (!Number.isInteger(parsed) || parsed < 1) {
+function readRetainedHistoryPolicy(
+  env: DurableObjectEnvLike,
+): AuthoritativeGraphRetainedHistoryPolicy {
+  const configured = env.GRAPH_AUTHORITY_RETAINED_HISTORY_POLICY;
+  if (configured === undefined) {
+    return defaultRetainedHistoryPolicy;
+  }
+
+  if (isAuthoritativeGraphRetainedHistoryPolicy(configured)) {
+    return configured;
+  }
+
+  if (typeof configured !== "string" || configured.trim().length === 0) {
     throw new Error(
-      "GRAPH_AUTHORITY_MAX_RETAINED_TRANSACTIONS must be a positive integer when provided.",
+      "GRAPH_AUTHORITY_RETAINED_HISTORY_POLICY must be a retained-history policy object or a JSON string when provided.",
     );
   }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(configured);
+  } catch {
+    throw new Error(
+      "GRAPH_AUTHORITY_RETAINED_HISTORY_POLICY must be valid JSON when provided as a string.",
+    );
+  }
+
+  if (!isAuthoritativeGraphRetainedHistoryPolicy(parsed)) {
+    throw new Error(
+      "GRAPH_AUTHORITY_RETAINED_HISTORY_POLICY must decode to a supported retained-history policy.",
+    );
+  }
+
   return parsed;
 }
 
@@ -193,6 +224,45 @@ function requireWriteScope(value: unknown, label: string): AuthoritativeWriteSco
 function requireNullableString(value: unknown, label: string): string | null {
   if (value === null) return null;
   return requireString(value, label);
+}
+
+function readRetainedHistoryPolicyRow(
+  row: Pick<
+    GraphMetaRow,
+    "retained_history_policy_kind" | "retained_history_policy_max_transactions"
+  >,
+): {
+  retainedHistoryPolicy: AuthoritativeGraphRetainedHistoryPolicy;
+  needsPersistence: boolean;
+} {
+  if (row.retained_history_policy_kind === "all") {
+    return {
+      retainedHistoryPolicy: {
+        kind: "all",
+      },
+      needsPersistence: false,
+    };
+  }
+
+  if (
+    row.retained_history_policy_kind === "transaction-count" &&
+    typeof row.retained_history_policy_max_transactions === "number" &&
+    Number.isInteger(row.retained_history_policy_max_transactions) &&
+    row.retained_history_policy_max_transactions >= 1
+  ) {
+    return {
+      retainedHistoryPolicy: {
+        kind: "transaction-count",
+        maxTransactions: row.retained_history_policy_max_transactions,
+      },
+      needsPersistence: false,
+    };
+  }
+
+  return {
+    retainedHistoryPolicy: defaultRetainedHistoryPolicy,
+    needsPersistence: true,
+  };
 }
 
 class SessionPrincipalLookupRequestError extends Error {
@@ -306,6 +376,8 @@ function readGraphMetaRow(sql: DurableObjectSqlStorageLike): {
   headCursor: string;
   headSeq: number;
   historyRetainedFromSeq: number;
+  retainedHistoryPolicy: AuthoritativeGraphRetainedHistoryPolicy;
+  policyNeedsPersistence: boolean;
   schemaVersion: number;
   seededAt: string | null;
   updatedAt: string;
@@ -319,11 +391,14 @@ function readGraphMetaRow(sql: DurableObjectSqlStorageLike): {
       head_cursor,
       seeded_at,
       history_retained_from_seq,
+      retained_history_policy_kind,
+      retained_history_policy_max_transactions,
       updated_at
     FROM io_graph_meta
     WHERE id = 1`,
   );
   if (!row) return null;
+  const retainedHistoryPolicy = readRetainedHistoryPolicyRow(row);
 
   return {
     cursorPrefix: requireString(row.cursor_prefix, "io_graph_meta.cursor_prefix"),
@@ -333,6 +408,8 @@ function readGraphMetaRow(sql: DurableObjectSqlStorageLike): {
       row.history_retained_from_seq,
       "io_graph_meta.history_retained_from_seq",
     ),
+    retainedHistoryPolicy: retainedHistoryPolicy.retainedHistoryPolicy,
+    policyNeedsPersistence: retainedHistoryPolicy.needsPersistence,
     schemaVersion: requireInteger(row.schema_version, "io_graph_meta.schema_version"),
     seededAt: requireNullableString(row.seeded_at, "io_graph_meta.seeded_at"),
     updatedAt: requireString(row.updated_at, "io_graph_meta.updated_at"),
@@ -430,6 +507,7 @@ function buildWriteHistoryFromSql(
       : snapshotHeadSequence;
   const expectedHeadCursor = formatCursor(meta.cursorPrefix, snapshotHeadSequence);
   const needsPersistence =
+    meta.policyNeedsPersistence ||
     meta.headSeq !== snapshotHeadSequence ||
     meta.headCursor !== expectedHeadCursor ||
     meta.historyRetainedFromSeq !== baseSequence;
@@ -491,6 +569,7 @@ function buildWriteHistoryFromSql(
     needsPersistence,
     writeHistory: {
       cursorPrefix: meta.cursorPrefix,
+      retainedHistoryPolicy: meta.retainedHistoryPolicy,
       baseSequence,
       results,
     },
@@ -560,6 +639,7 @@ function writeGraphMetaRow(
     headCursor: string;
     headSeq: number;
     historyRetainedFromSeq: number;
+    retainedHistoryPolicy: AuthoritativeGraphRetainedHistoryPolicy;
     seededAt: string | null;
     updatedAt: string;
   },
@@ -573,8 +653,10 @@ function writeGraphMetaRow(
       head_cursor,
       seeded_at,
       history_retained_from_seq,
+      retained_history_policy_kind,
+      retained_history_policy_max_transactions,
       updated_at
-    ) VALUES (1, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       schema_version = excluded.schema_version,
       cursor_prefix = excluded.cursor_prefix,
@@ -582,6 +664,8 @@ function writeGraphMetaRow(
       head_cursor = excluded.head_cursor,
       seeded_at = excluded.seeded_at,
       history_retained_from_seq = excluded.history_retained_from_seq,
+      retained_history_policy_kind = excluded.retained_history_policy_kind,
+      retained_history_policy_max_transactions = excluded.retained_history_policy_max_transactions,
       updated_at = excluded.updated_at`,
     durableObjectAuthoritySchemaVersion,
     input.cursorPrefix,
@@ -589,6 +673,10 @@ function writeGraphMetaRow(
     input.headCursor,
     input.seededAt,
     input.historyRetainedFromSeq,
+    input.retainedHistoryPolicy.kind,
+    input.retainedHistoryPolicy.kind === "transaction-count"
+      ? input.retainedHistoryPolicy.maxTransactions
+      : null,
     input.updatedAt,
   );
 }
@@ -783,6 +871,7 @@ function rewritePersistedState(
     headCursor: headCursor(input.writeHistory),
     headSeq: headSequence(input.writeHistory),
     historyRetainedFromSeq: input.writeHistory.baseSequence,
+    retainedHistoryPolicy: input.writeHistory.retainedHistoryPolicy,
     seededAt: existingMeta?.seededAt ?? now,
     updatedAt: now,
   });
@@ -874,6 +963,7 @@ function applyCommittedTransaction(
     headCursor: input.result.cursor,
     headSeq: sequence,
     historyRetainedFromSeq: input.writeHistory.baseSequence,
+    retainedHistoryPolicy: input.writeHistory.retainedHistoryPolicy,
     seededAt: existingMeta?.seededAt ?? now,
     updatedAt: now,
   });
@@ -955,9 +1045,28 @@ function bootstrapDurableObjectAuthoritySchema(storage: DurableObjectStorageLike
       head_cursor TEXT NOT NULL,
       seeded_at TEXT,
       history_retained_from_seq INTEGER NOT NULL,
+      retained_history_policy_kind TEXT NOT NULL,
+      retained_history_policy_max_transactions INTEGER,
       updated_at TEXT NOT NULL
     )`,
   );
+  const graphMetaColumns = new Set(
+    readAllRows<{ name: string }>(storage.sql.exec("PRAGMA table_info(io_graph_meta)")).map((row) =>
+      requireString(row.name, "PRAGMA table_info(io_graph_meta).name"),
+    ),
+  );
+  if (!graphMetaColumns.has("retained_history_policy_kind")) {
+    storage.sql.exec(
+      `ALTER TABLE io_graph_meta
+      ADD COLUMN retained_history_policy_kind TEXT NOT NULL DEFAULT 'transaction-count'`,
+    );
+  }
+  if (!graphMetaColumns.has("retained_history_policy_max_transactions")) {
+    storage.sql.exec(
+      `ALTER TABLE io_graph_meta
+      ADD COLUMN retained_history_policy_max_transactions INTEGER DEFAULT 128`,
+    );
+  }
   storage.sql.exec(
     `CREATE TABLE IF NOT EXISTS io_graph_tx (
       seq INTEGER PRIMARY KEY,
@@ -1041,7 +1150,7 @@ function bootstrapDurableObjectAuthoritySchema(storage: DurableObjectStorageLike
 
 export class WebGraphAuthorityDurableObject {
   private readonly state: DurableObjectStateLike;
-  private readonly maxRetainedTransactions: number;
+  private readonly retainedHistoryPolicy: AuthoritativeGraphRetainedHistoryPolicy;
   private readonly createAuthority: WebGraphAuthorityFactory;
   private readonly workflowReviewLiveScopeRouter = createWorkflowReviewLiveScopeRouter();
   private authorityPromise: Promise<WebAppAuthority> | null = null;
@@ -1054,7 +1163,7 @@ export class WebGraphAuthorityDurableObject {
     } = {},
   ) {
     this.state = state;
-    this.maxRetainedTransactions = readMaxRetainedTransactions(env);
+    this.retainedHistoryPolicy = readRetainedHistoryPolicy(env);
     this.createAuthority = options.createAuthority ?? createWebAppAuthority;
     bootstrapDurableObjectAuthoritySchema(this.state.storage);
   }
@@ -1065,7 +1174,7 @@ export class WebGraphAuthorityDurableObject {
     const pending = this.state
       .blockConcurrencyWhile(() =>
         this.createAuthority(createSqliteDurableObjectAuthorityStorage(this.state), {
-          maxRetainedTransactions: this.maxRetainedTransactions,
+          retainedHistoryPolicy: this.retainedHistoryPolicy,
           onWorkflowReviewInvalidation: (invalidation) => {
             this.workflowReviewLiveScopeRouter.publish(invalidation);
           },

@@ -134,6 +134,11 @@ export function isSyncFreshness(value: unknown): value is SyncFreshness {
   return value === "current" || value === "stale";
 }
 
+export type SyncDiagnostics = {
+  readonly retainedHistoryPolicy: AuthoritativeGraphRetainedHistoryPolicy;
+  readonly retainedBaseCursor: AuthoritativeGraphCursor;
+};
+
 /**
  * Predicate materialization target evaluated during sync replication after
  * transport visibility filtering.
@@ -158,6 +163,7 @@ export type TotalSyncPayload = {
   readonly cursor: AuthoritativeGraphCursor;
   readonly completeness: SyncCompleteness;
   readonly freshness: SyncFreshness;
+  readonly diagnostics?: SyncDiagnostics;
 };
 
 export type IncrementalSyncFallbackReason =
@@ -199,6 +205,7 @@ export type IncrementalSyncPayload = {
   readonly cursor: AuthoritativeGraphCursor;
   readonly completeness: SyncCompleteness;
   readonly freshness: SyncFreshness;
+  readonly diagnostics?: SyncDiagnostics;
 };
 
 /**
@@ -214,6 +221,7 @@ export type IncrementalSyncFallback = {
   readonly completeness: SyncCompleteness;
   readonly freshness: SyncFreshness;
   readonly fallback: IncrementalSyncFallbackReason;
+  readonly diagnostics?: SyncDiagnostics;
 };
 
 export type IncrementalSyncResult = IncrementalSyncPayload | IncrementalSyncFallback;
@@ -247,6 +255,82 @@ export type GraphWriteTransaction = {
   readonly id: string;
   readonly ops: readonly GraphWriteOperation[];
 };
+
+export type AuthoritativeGraphRetainedHistoryPolicy =
+  | {
+      readonly kind: "all";
+    }
+  | {
+      readonly kind: "transaction-count";
+      readonly maxTransactions: number;
+    };
+
+export const unboundedAuthoritativeGraphRetainedHistoryPolicy = Object.freeze({
+  kind: "all",
+}) satisfies AuthoritativeGraphRetainedHistoryPolicy;
+
+export function cloneAuthoritativeGraphRetainedHistoryPolicy(
+  policy: AuthoritativeGraphRetainedHistoryPolicy,
+): AuthoritativeGraphRetainedHistoryPolicy {
+  return policy.kind === "all" ? unboundedAuthoritativeGraphRetainedHistoryPolicy : { ...policy };
+}
+
+export function sameAuthoritativeGraphRetainedHistoryPolicy(
+  left: AuthoritativeGraphRetainedHistoryPolicy,
+  right: AuthoritativeGraphRetainedHistoryPolicy,
+): boolean {
+  if (left.kind !== right.kind) return false;
+  if (left.kind === "all") return true;
+  return right.kind === "transaction-count" && left.maxTransactions === right.maxTransactions;
+}
+
+export function isAuthoritativeGraphRetainedHistoryPolicy(
+  value: unknown,
+): value is AuthoritativeGraphRetainedHistoryPolicy {
+  if (value === unboundedAuthoritativeGraphRetainedHistoryPolicy) return true;
+  if (value === null || typeof value !== "object") return false;
+
+  const policy = value as Partial<AuthoritativeGraphRetainedHistoryPolicy>;
+  if (policy.kind === "all") return true;
+  return (
+    policy.kind === "transaction-count" &&
+    typeof policy.maxTransactions === "number" &&
+    Number.isInteger(policy.maxTransactions) &&
+    policy.maxTransactions >= 1
+  );
+}
+
+export function cloneSyncDiagnostics(diagnostics: SyncDiagnostics): SyncDiagnostics {
+  return {
+    retainedHistoryPolicy: cloneAuthoritativeGraphRetainedHistoryPolicy(
+      diagnostics.retainedHistoryPolicy,
+    ),
+    retainedBaseCursor: diagnostics.retainedBaseCursor,
+  };
+}
+
+export function sameSyncDiagnostics(
+  left: SyncDiagnostics | undefined,
+  right: SyncDiagnostics | undefined,
+): boolean {
+  if (!left || !right) return left === right;
+  return (
+    left.retainedBaseCursor === right.retainedBaseCursor &&
+    sameAuthoritativeGraphRetainedHistoryPolicy(
+      left.retainedHistoryPolicy,
+      right.retainedHistoryPolicy,
+    )
+  );
+}
+
+export function isSyncDiagnostics(value: unknown): value is SyncDiagnostics {
+  if (!isObjectRecord(value)) return false;
+  return (
+    typeof value.retainedBaseCursor === "string" &&
+    value.retainedBaseCursor.length > 0 &&
+    isAuthoritativeGraphRetainedHistoryPolicy(value.retainedHistoryPolicy)
+  );
+}
 
 export type AuthoritativeWriteScope = GraphFieldWritePolicy;
 export const authoritativeWriteScopes = [
@@ -286,6 +370,7 @@ export type AuthoritativeGraphWriteResult = {
  */
 export type AuthoritativeGraphWriteHistory = {
   readonly cursorPrefix: string;
+  readonly retainedHistoryPolicy: AuthoritativeGraphRetainedHistoryPolicy;
   readonly baseSequence: number;
   readonly results: readonly AuthoritativeGraphWriteResult[];
 };
@@ -363,6 +448,7 @@ export function cloneTotalSyncPayload(payload: TotalSyncPayload): TotalSyncPaylo
       edges: payload.snapshot.edges.map((edge) => ({ ...edge })),
       retracted: [...payload.snapshot.retracted],
     },
+    diagnostics: payload.diagnostics ? cloneSyncDiagnostics(payload.diagnostics) : undefined,
   };
 }
 
@@ -372,6 +458,7 @@ export function cloneIncrementalSyncResult(result: IncrementalSyncResult): Incre
         ...result,
         scope: cloneSyncScope(result.scope),
         transactions: [],
+        diagnostics: result.diagnostics ? cloneSyncDiagnostics(result.diagnostics) : undefined,
       }
     : {
         ...result,
@@ -379,6 +466,7 @@ export function cloneIncrementalSyncResult(result: IncrementalSyncResult): Incre
         transactions: result.transactions.map((transaction) =>
           cloneAuthoritativeGraphWriteResult(transaction),
         ),
+        diagnostics: result.diagnostics ? cloneSyncDiagnostics(result.diagnostics) : undefined,
       };
 }
 
@@ -401,6 +489,7 @@ export type SyncScopeState = {
   readonly freshness: SyncFreshness;
   readonly cursor?: AuthoritativeGraphCursor;
   readonly fallback?: IncrementalSyncFallbackReason;
+  readonly diagnostics?: SyncDiagnostics;
 };
 
 export type SyncState = SyncScopeState & {
@@ -468,6 +557,7 @@ export interface AuthoritativeGraphWriteSession {
   };
   getCursor(): string | undefined;
   getBaseCursor(): string;
+  getRetainedHistoryPolicy(): AuthoritativeGraphRetainedHistoryPolicy;
   getChangesAfter(cursor?: string): AuthoritativeGraphChangesAfterResult;
   getIncrementalSyncResult(
     after?: string,
@@ -547,6 +637,7 @@ export function cloneState(state: SyncState): SyncState {
     ...state,
     requestedScope: cloneSyncScopeRequest(state.requestedScope),
     scope: cloneSyncScope(state.scope),
+    diagnostics: state.diagnostics ? cloneSyncDiagnostics(state.diagnostics) : undefined,
     pendingCount: state.pendingCount,
     recentActivities: state.recentActivities.map((activity) => cloneSyncActivity(activity)),
     lastSyncedAt: state.lastSyncedAt ? new Date(state.lastSyncedAt.getTime()) : undefined,

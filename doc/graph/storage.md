@@ -61,9 +61,11 @@ Current behavior:
   cleanly returns "no row" instead of depending on `cursor.one()`
 - startup treats broken retained transaction windows as reset baselines instead
   of advertising stale cursors after restart
-- retained history is pruned by transaction count (currently a 128-transaction
-  window), advancing
-  `history_retained_from_seq` and forcing old cursors onto total-sync fallback
+- retained history now carries an explicit shared runtime policy; the current
+  Durable Object consumer persists the count-based baseline
+  `{ kind: "transaction-count", maxTransactions: 128 }`, advances
+  `history_retained_from_seq` as rows are pruned, and forces old cursors onto
+  total-sync fallback
 - accepted graph transactions commit through one Durable Object storage
   transaction that writes `io_graph_tx`, `io_graph_tx_op`, `io_graph_edge`, and
   `io_secret_value`, then prunes orphaned secret rows from the post-commit live
@@ -163,6 +165,8 @@ Columns:
 - `head_cursor TEXT NOT NULL`
 - `seeded_at TEXT`
 - `history_retained_from_seq INTEGER NOT NULL`
+- `retained_history_policy_kind TEXT NOT NULL`
+- `retained_history_policy_max_transactions INTEGER`
 - `updated_at TEXT NOT NULL`
 
 Purpose:
@@ -171,6 +175,7 @@ Purpose:
 - cursor prefix ownership
 - current head sequence/cursor
 - bounded-history reset boundary
+- persisted retained-history policy
 - seeded/bootstrap bookkeeping
 
 #### `io_graph_tx`
@@ -380,12 +385,23 @@ This matches the existing sync contract without whole-graph rewrites.
 
 ### Retention
 
-The adapter retains only a bounded transaction window for incremental sync.
+The shared runtime now publishes one explicit retained-history policy on every
+persisted `writeHistory` snapshot. The current baseline is intentionally
+count-only:
 
-Retention can be defined by:
+- `retainedHistoryPolicy.kind === "transaction-count"`
+- `retainedHistoryPolicy.maxTransactions` defines the retained suffix length
 
-- maximum retained transaction count
-- maximum retained age
+The Durable Object proof now takes that policy from one config path:
+`GRAPH_AUTHORITY_RETAINED_HISTORY_POLICY`. The binding accepts either a shared
+policy object or a JSON string encoding one, for example:
+
+- `{"kind":"transaction-count","maxTransactions":128}`
+- `{"kind":"all"}`
+
+The adapter mirrors the chosen policy in `io_graph_meta` and applies it by
+pruning older transaction rows only when the retained suffix exceeds the
+configured count-based window.
 
 When old transaction rows are pruned:
 
@@ -395,7 +411,9 @@ When old transaction rows are pruned:
 - `io_graph_meta.history_retained_from_seq` advances
 
 Older clients then fall back to total sync, which is already part of the sync
-model.
+model. The same policy and retained base cursor are also surfaced back out on
+sync payload `diagnostics`, so route consumers can explain why a cursor fell
+behind instead of treating fallback as an opaque transport error.
 
 ## Secret Handling
 
@@ -507,11 +525,13 @@ Done in the current web Durable Object path:
   fails closed on live secret drift, hydrates snapshot rows and retained
   transaction rows from SQL, and rewrites reset baselines when retained history
   no longer matches the hydrated head
-- retained history is bounded by transaction count, `history_retained_from_seq`
-  advances with pruning, and old or unknown cursors fall back to total sync
+- retained history now persists an explicit shared runtime policy;
+  `history_retained_from_seq` still advances with pruning, and old or unknown
+  cursors still fall back to total sync
 - file-backed persisted authorities normalize legacy write histories that lack
-  `writeScope` to `client-tx` and rewrite them through the same shared
-  persistence contract instead of claiming exact historical authority origin
+  `writeScope` or `retainedHistoryPolicy` and rewrite them through the same
+  shared persistence contract instead of claiming exact historical authority
+  origin
 - coverage in `../../src/web/lib/graph-authority-do.test.ts` exercises
   constructor bootstrap, restart hydration, retained-history pruning, reset
   baselines, rollback on SQL failure, secret side-storage behavior, and

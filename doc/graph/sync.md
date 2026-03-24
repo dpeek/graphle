@@ -174,6 +174,7 @@ The current live workflow proof layers on top of that scoped sync baseline:
 - `apply(transaction)`
 - `getBaseCursor()`
 - `getCursor()`
+- `getRetainedHistoryPolicy()`
 - `createSyncPayload({ freshness?, authorizeRead? })`
 - `getChangesAfter(cursor?)`
 - `getIncrementalSyncResult(after?, { freshness?, authorizeRead? })`
@@ -181,7 +182,19 @@ The current live workflow proof layers on top of that scoped sync baseline:
 
 The current authority session already treats transaction ids as idempotency keys and emits monotonic cursors.
 The persisted authority helper layers restart hydration, per-transaction durable commits, explicit snapshot persistence, retained history recovery, legacy snapshot rewrite, and rollback-on-durable-write-failure on top of that session model without changing the sync payload shapes clients consume.
-Legacy persisted histories that predate `writeScope` are normalized to `client-tx` on load, so restarted diagnostics are compatibility-oriented rather than perfect pre-migration audit recovery.
+Retained history is now governed by one explicit shared runtime policy surface:
+`writeHistory.retainedHistoryPolicy`, mirrored by `getRetainedHistoryPolicy()`.
+The shipped baseline remains count-based pruning via
+`{ kind: "transaction-count", maxTransactions }`; `kind: "all"` keeps the
+retained suffix unbounded.
+Total and incremental sync payloads may also carry `diagnostics` with the
+current `retainedHistoryPolicy` plus `retainedBaseCursor`, so callers can see
+which retained window produced a `gap`, `reset`, or hidden-only cursor
+advance without re-deriving authority state from transport-local guesses.
+Legacy persisted histories that predate `writeScope` or
+`retainedHistoryPolicy` are normalized on load and rewritten, so restarted
+diagnostics are compatibility-oriented rather than perfect pre-migration audit
+recovery.
 When provided, `authorizeRead` runs after transport visibility filtering for
 both total snapshots and incremental transaction materialization, so denied
 predicates are omitted instead of masked.
@@ -217,6 +230,9 @@ authoritative sync events:
 - `sync.getPendingTransactions()` and `sync.getState()` expose queue and delivery state
 - `SyncState.requestedScope` preserves the active graph-or-module scope request even before a total snapshot arrives
 - `SyncState.fallback` retains the last recovery-only incremental fallback so callers can see scoped `scope-changed` or `policy-changed` failures without silently widening the cache
+- `SyncState.diagnostics` retains the last authority-published retained-window
+  metadata, so UI and transport consumers can show the current base cursor and
+  retention policy alongside fallback state
 
 ## Ownership Boundary
 
@@ -267,6 +283,20 @@ authoritative sync events:
 - failed `flush()` calls preserve queued writes and surface `GraphSyncWriteError`
 - incremental fallback results do not silently repair state; callers must recover via total sync
 - failed persisted-authority saves roll back the in-memory authoritative write session instead of leaving a half-committed durable state
+
+## Offline Recovery Expectations
+
+- retained history may survive restart and still deliver an incremental result
+  with `transactions: []` when the authority cursor advanced only through
+  hidden or filtered writes
+- stale, missing, pruned, or reset cursors stay explicit: authorities return an
+  incremental `fallback` such as `unknown-cursor`, `gap`, or `reset` instead of
+  widening scope or repairing incrementally
+- clients keep the last readable cache and mark sync state as stale/error until
+  the caller performs a new total sync; recovery is never implicit
+- the HTTP client, example runtime, persisted-authority helper, and Durable
+  Object adapter all follow that same contract so offline cursor handling stays
+  transport-independent
 
 ## Roadmap
 

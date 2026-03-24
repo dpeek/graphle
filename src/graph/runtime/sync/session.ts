@@ -13,13 +13,15 @@ import {
   appendSyncActivity,
   cloneAuthoritativeGraphWriteResult,
   cloneGraphWriteTransaction,
+  cloneSyncDiagnostics,
   cloneSyncScope,
   cloneSyncScopeRequest,
   cloneState,
   graphSyncScope,
   isObjectRecord,
-  sameSyncScope,
   sameSyncActivity,
+  sameSyncDiagnostics,
+  sameSyncScope,
   sameSyncScopeRequest,
   type AuthoritativeGraphWriteResultValidator,
   type AuthoritativeGraphWriteResult,
@@ -30,6 +32,7 @@ import {
   type ReplicationReadAuthorizer,
   type SyncCompleteness,
   type SyncFreshness,
+  type SyncDiagnostics,
   type SyncScope,
   type SyncScopeRequest,
   type SyncState,
@@ -122,6 +125,9 @@ export function createTotalSyncSession(
       cursor: materialized.cursor,
       lastSyncedAt: syncedAt,
       fallback: undefined,
+      diagnostics: materialized.diagnostics
+        ? cloneSyncDiagnostics(materialized.diagnostics)
+        : undefined,
       error: undefined,
     });
     return materialized;
@@ -177,6 +183,9 @@ export function createTotalSyncSession(
       cursor: prepared.value.cursor,
       lastSyncedAt: syncedAt,
       fallback: undefined,
+      diagnostics: prepared.value.diagnostics
+        ? cloneSyncDiagnostics(prepared.value.diagnostics)
+        : undefined,
       error: undefined,
     });
     return prepared.value;
@@ -228,6 +237,7 @@ export function createTotalSyncSession(
       cursor: materialized.cursor,
       lastSyncedAt: syncedAt,
       fallback: undefined,
+      diagnostics: state.diagnostics ? cloneSyncDiagnostics(state.diagnostics) : undefined,
       error: undefined,
     });
     return cloneAuthoritativeGraphWriteResult(materialized);
@@ -236,6 +246,9 @@ export function createTotalSyncSession(
   async function pull(source: SyncSource): Promise<SyncPayload> {
     const sourceState = cloneState(state);
     let fallback: IncrementalSyncFallbackReason | undefined;
+    let diagnostics = sourceState.diagnostics
+      ? cloneSyncDiagnostics(sourceState.diagnostics)
+      : undefined;
     publish({
       ...state,
       status: "syncing",
@@ -248,6 +261,25 @@ export function createTotalSyncSession(
         const validation = validateIncrementalSyncResult(payload);
         if (validation.ok && "fallback" in validation.value) {
           fallback = validation.value.fallback;
+          diagnostics = validation.value.diagnostics
+            ? cloneSyncDiagnostics(validation.value.diagnostics)
+            : undefined;
+        }
+      } else if (payload.mode === "incremental") {
+        const validation = validateIncrementalSyncResult(payload);
+        if (validation.ok) {
+          diagnostics = validation.value.diagnostics
+            ? cloneSyncDiagnostics(validation.value.diagnostics)
+            : undefined;
+        }
+      } else {
+        const prepared = prepareTotalSyncPayload(payload, {
+          preserveSnapshot: options.preserveSnapshot,
+        });
+        if (prepared.ok) {
+          diagnostics = prepared.value.diagnostics
+            ? cloneSyncDiagnostics(prepared.value.diagnostics)
+            : undefined;
         }
       }
       return apply(payload);
@@ -257,6 +289,7 @@ export function createTotalSyncSession(
         status: "error",
         freshness: "stale",
         fallback: fallback ?? state.fallback,
+        diagnostics,
         error,
       });
       throw error;
@@ -290,11 +323,12 @@ export function createTotalSyncPayload<const T extends Record<string, AnyTypeOut
     authorizeRead?: ReplicationReadAuthorizer;
     completeness?: SyncCompleteness;
     cursor?: string;
+    diagnostics?: SyncDiagnostics;
     freshness?: SyncFreshness;
     namespace?: T;
     scope?: SyncScope;
   } = {},
-) {
+): TotalSyncPayload {
   return {
     mode: "total" as const,
     scope: cloneSyncScope(options.scope ?? graphSyncScope),
@@ -306,6 +340,7 @@ export function createTotalSyncPayload<const T extends Record<string, AnyTypeOut
     cursor: options.cursor ?? "full",
     completeness: options.completeness ?? "complete",
     freshness: options.freshness ?? "current",
+    ...(options.diagnostics ? { diagnostics: cloneSyncDiagnostics(options.diagnostics) } : {}),
   };
 }
 
@@ -394,6 +429,7 @@ export function createSyncedTypeClient<const T extends Record<string, AnyTypeOut
       lastPublishedState.completeness === state.completeness &&
       lastPublishedState.freshness === state.freshness &&
       lastPublishedState.fallback === state.fallback &&
+      sameSyncDiagnostics(lastPublishedState.diagnostics, state.diagnostics) &&
       lastPublishedState.pendingCount === state.pendingCount &&
       lastPublishedState.cursor === state.cursor &&
       lastPublishedState.error === state.error &&

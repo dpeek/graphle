@@ -241,7 +241,12 @@ describe("example runtime sync integration", () => {
   });
 
   it("records a gap fallback instead of another incremental activity after hidden-only history is pruned", async () => {
-    const runtime = createExampleRuntime({ maxRetainedTransactions: 1 });
+    const runtime = createExampleRuntime({
+      retainedHistoryPolicy: {
+        kind: "transaction-count",
+        maxTransactions: 1,
+      },
+    });
     const peer = runtime.createPeer();
     const baseCursor = peer.sync.getState().cursor;
 

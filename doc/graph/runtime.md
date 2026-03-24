@@ -104,7 +104,11 @@ The current implementation keeps ids stable per key and treats rename as an expl
 - legacy snapshot-only files are rewritten into the current versioned state shape
 - legacy versioned write histories that predate `writeScope` are normalized to `client-tx` on load and rewritten through the shared persistence path rather than treated as exact pre-migration authority-origin audit data
 - failed durable commits or snapshot persists roll back the accepted in-memory authority state so it does not diverge from disk
-- retained history can be bounded by transaction count; when the retained window no longer covers an older or broken cursor, authorities fall back to total-sync recovery instead of serving stale incremental state
+- retained history now carries an explicit shared runtime policy via
+  `writeHistory.retainedHistoryPolicy`; the shipped baseline is still
+  count-based pruning, and when that retained window no longer covers an older
+  or broken cursor, authorities fall back to total-sync recovery instead of
+  serving stale incremental state
 
 ### Runtime helpers
 

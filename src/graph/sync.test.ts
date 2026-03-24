@@ -853,6 +853,12 @@ describe("total sync", () => {
       cursor: second.cursor,
       completeness: "complete",
       freshness: "current",
+      diagnostics: {
+        retainedBaseCursor: authority.getBaseCursor(),
+        retainedHistoryPolicy: {
+          kind: "all",
+        },
+      },
     });
     expect(client.graph.company.get(acmeId).name).toBe("Acme Incremental Two");
     expect(client.graph.company.get(acmeId).website.toString()).toBe("https://acme.com/");
@@ -2603,6 +2609,12 @@ describe("authoritative graph writes", () => {
       cursor: second.cursor,
       completeness: bootstrapPayload.completeness,
       freshness: "stale",
+      diagnostics: {
+        retainedBaseCursor: authority.getBaseCursor(),
+        retainedHistoryPolicy: {
+          kind: "all",
+        },
+      },
     });
 
     const validation = validateIncrementalSyncPayload(incremental);
@@ -2861,6 +2873,12 @@ describe("authoritative graph writes", () => {
       cursor: first.cursor,
       completeness: "complete",
       freshness: "stale",
+      diagnostics: {
+        retainedBaseCursor: authority.getBaseCursor(),
+        retainedHistoryPolicy: {
+          kind: "all",
+        },
+      },
     });
     expect(validateIncrementalSyncResult(noop)).toMatchObject({
       ok: true,
@@ -3015,6 +3033,12 @@ describe("authoritative graph writes", () => {
       completeness: "complete",
       freshness: "current",
       fallback: "unknown-cursor",
+      diagnostics: {
+        retainedBaseCursor: authority.getBaseCursor(),
+        retainedHistoryPolicy: {
+          kind: "all",
+        },
+      },
     });
 
     const gapAuthority = createAuthoritativeGraphWriteSession(server.store, testNamespace, {
@@ -3031,6 +3055,12 @@ describe("authoritative graph writes", () => {
       completeness: "complete",
       freshness: "current",
       fallback: "gap",
+      diagnostics: {
+        retainedBaseCursor: gapAuthority.getBaseCursor(),
+        retainedHistoryPolicy: {
+          kind: "all",
+        },
+      },
     });
 
     const resetAuthority = createAuthoritativeGraphWriteSession(server.store, testNamespace, {
@@ -3046,6 +3076,12 @@ describe("authoritative graph writes", () => {
       completeness: "complete",
       freshness: "current",
       fallback: "reset",
+      diagnostics: {
+        retainedBaseCursor: resetAuthority.getBaseCursor(),
+        retainedHistoryPolicy: {
+          kind: "all",
+        },
+      },
     });
 
     expect(validateIncrementalSyncResult(unknownCursor)).toMatchObject({

@@ -1,4 +1,5 @@
 import {
+  type AuthoritativeGraphRetainedHistoryPolicy,
   type AuthoritativeGraphWriteResult,
   type AuthoritativeWriteScope,
   createIdMap,
@@ -98,13 +99,13 @@ export type ExampleSyncedClient = SyncedTypeClient<typeof exampleGraph>;
 
 export function createExampleRuntime(
   options: {
-    maxRetainedTransactions?: number;
+    retainedHistoryPolicy?: AuthoritativeGraphRetainedHistoryPolicy;
   } = {},
 ) {
   const authority = createExampleAuthorityGraph();
   let writes = createAuthoritativeGraphWriteSession(authority.store, exampleGraph, {
     cursorPrefix: "example:",
-    maxRetainedResults: options.maxRetainedTransactions,
+    retainedHistoryPolicy: options.retainedHistoryPolicy,
   });
   const clients = new Set<ExampleSyncedClient>();
   const pendingTxIds = new WeakMap<ExampleSyncedClient, string[]>();
@@ -115,6 +116,10 @@ export function createExampleRuntime(
     syncPayloadCount += 1;
     return createTotalSyncPayload(authority.store, {
       cursor: writes.getCursor() ?? writes.getBaseCursor(),
+      diagnostics: {
+        retainedHistoryPolicy: writes.getRetainedHistoryPolicy(),
+        retainedBaseCursor: writes.getBaseCursor(),
+      },
     });
   }
 
@@ -137,7 +142,7 @@ export function createExampleRuntime(
   function resetAuthorityStream(cursorPrefix = "reset:"): string {
     writes = createAuthoritativeGraphWriteSession(authority.store, exampleGraph, {
       cursorPrefix,
-      maxRetainedResults: options.maxRetainedTransactions,
+      retainedHistoryPolicy: options.retainedHistoryPolicy,
     });
     return writes.getBaseCursor();
   }
@@ -232,6 +237,9 @@ export function createExampleRuntime(
       resetAuthorityStream,
       getBaseCursor() {
         return writes.getBaseCursor();
+      },
+      getRetainedHistoryPolicy() {
+        return writes.getRetainedHistoryPolicy();
       },
       getSyncPayloadCount() {
         return syncPayloadCount;
