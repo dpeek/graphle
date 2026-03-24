@@ -37,8 +37,8 @@ const colorMeta = {
     format: (value: string) => value,
   },
   display: {
-    kind: "text",
-    allowed: ["text"] as const,
+    kind: "color",
+    allowed: ["text", "color"] as const,
     format: (value: string) => value,
   },
   editor: {
@@ -49,7 +49,7 @@ const colorMeta = {
     parse: parseColor,
     format: (value: string) => value,
   },
-} satisfies TypeModuleMeta<string, readonly ["text"], readonly ["text", "color"]>;
+} satisfies TypeModuleMeta<string, readonly ["text", "color"], readonly ["text", "color"]>;
 
 export const colorTypeModule = defineScalarModule({
   type: defineScalar({

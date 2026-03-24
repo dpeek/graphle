@@ -74,6 +74,9 @@ export function HomePageStateView({
             <Button nativeButton={false} render={<Link to="/graph" />}>
               Open graph
             </Button>
+            <Button nativeButton={false} render={<Link to="/views" />} variant="outline">
+              Review views
+            </Button>
             <Button nativeButton={false} render={<Link to="/topics" />} variant="outline">
               Open topics
             </Button>

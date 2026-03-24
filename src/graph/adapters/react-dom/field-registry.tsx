@@ -4,6 +4,7 @@ import {
   type PredicateFieldProps,
   type PredicateFieldViewCapability,
 } from "../../runtime/react/index.js";
+import { colorFieldViewCapability } from "./fields/color.js";
 import { durationFieldViewCapability } from "./fields/duration.js";
 import { markdownFieldViewCapability } from "./fields/markdown.js";
 import { moneyFieldViewCapability } from "./fields/money.js";
@@ -96,6 +97,7 @@ function BadgeFieldView({ predicate }: AnyFieldProps) {
 
 export const genericWebFieldViewCapabilities = [
   { kind: "boolean", Component: BooleanFieldView },
+  colorFieldViewCapability,
   { kind: "text", Component: TextFieldView },
   markdownFieldViewCapability,
   svgFieldViewCapability,

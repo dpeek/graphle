@@ -9,11 +9,17 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as ViewsRouteImport } from './routes/views'
 import { Route as TopicsRouteImport } from './routes/topics'
 import { Route as SyncRouteImport } from './routes/sync'
 import { Route as GraphRouteImport } from './routes/graph'
 import { Route as IndexRouteImport } from './routes/index'
 
+const ViewsRoute = ViewsRouteImport.update({
+  id: '/views',
+  path: '/views',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const TopicsRoute = TopicsRouteImport.update({
   id: '/topics',
   path: '/topics',
@@ -40,12 +46,14 @@ export interface FileRoutesByFullPath {
   '/graph': typeof GraphRoute
   '/sync': typeof SyncRoute
   '/topics': typeof TopicsRoute
+  '/views': typeof ViewsRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/graph': typeof GraphRoute
   '/sync': typeof SyncRoute
   '/topics': typeof TopicsRoute
+  '/views': typeof ViewsRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -53,13 +61,14 @@ export interface FileRoutesById {
   '/graph': typeof GraphRoute
   '/sync': typeof SyncRoute
   '/topics': typeof TopicsRoute
+  '/views': typeof ViewsRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/graph' | '/sync' | '/topics'
+  fullPaths: '/' | '/graph' | '/sync' | '/topics' | '/views'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/graph' | '/sync' | '/topics'
-  id: '__root__' | '/' | '/graph' | '/sync' | '/topics'
+  to: '/' | '/graph' | '/sync' | '/topics' | '/views'
+  id: '__root__' | '/' | '/graph' | '/sync' | '/topics' | '/views'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -67,10 +76,18 @@ export interface RootRouteChildren {
   GraphRoute: typeof GraphRoute
   SyncRoute: typeof SyncRoute
   TopicsRoute: typeof TopicsRoute
+  ViewsRoute: typeof ViewsRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/views': {
+      id: '/views'
+      path: '/views'
+      fullPath: '/views'
+      preLoaderRoute: typeof ViewsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/topics': {
       id: '/topics'
       path: '/topics'
@@ -107,6 +124,7 @@ const rootRouteChildren: RootRouteChildren = {
   GraphRoute: GraphRoute,
   SyncRoute: SyncRoute,
   TopicsRoute: TopicsRoute,
+  ViewsRoute: ViewsRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

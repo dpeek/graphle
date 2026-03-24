@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+
 import { core } from "../../../modules/index.js";
 import { GraphIcon } from "../icon.js";
 
@@ -78,11 +80,25 @@ export function EntityReferenceOptionContent({
   );
 }
 
-export function EntityReferenceSummary({ entity }: { entity: EntityReferenceEntity }) {
+export function EntityReferenceReadonlyChip({ children, id }: { children: ReactNode; id: string }) {
   return (
-    <span className="inline-flex items-center gap-2">
-      <EntityReferenceOptionContent entity={entity} />
-      <code>{entity.id}</code>
+    <span
+      className="bg-muted-foreground/10 text-foreground flex h-[calc(--spacing(4.75))] max-w-full items-center justify-center gap-1 rounded-[calc(var(--radius-sm)-2px)] px-1.5 text-xs/relaxed font-medium whitespace-nowrap"
+      data-web-reference-chip={id}
+      data-web-reference-id={id}
+    >
+      {children}
     </span>
+  );
+}
+
+export function EntityReferenceReadonlyChipList({ children }: { children: ReactNode }) {
+  return (
+    <div
+      className="border-input bg-input/20 dark:bg-input/30 flex w-full flex-wrap items-center gap-1 rounded-md border bg-clip-padding px-2 py-0.5 text-xs/relaxed"
+      data-web-reference-display="inert"
+    >
+      {children}
+    </div>
   );
 }

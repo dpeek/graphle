@@ -18,6 +18,7 @@ function createRecordFields() {
     name: "Platform",
   });
   const recordId = graph.record.create({
+    accentColor: "#2563eb",
     name: "Kitchen sink fixture",
     headline: "KS-1",
     status: kitchenSink.status.values.draft.id,
@@ -64,6 +65,7 @@ function createRecordFields() {
   const iconRef = graph.icon.ref(iconId);
 
   return {
+    accentColor: recordRef.fields.accentColor,
     budget: recordRef.fields.budget,
     budgetBand: recordRef.fields.budgetBand,
     burnRate: recordRef.fields.burnRate,
@@ -82,6 +84,8 @@ describe("generic react-dom field registry coverage", () => {
   it("resolves structured value fields through the shared web resolver", () => {
     const fields = createRecordFields();
 
+    const colorView = defaultWebFieldResolver.resolveView(fields.accentColor);
+    const colorEditor = defaultWebFieldResolver.resolveEditor(fields.accentColor);
     const moneyView = defaultWebFieldResolver.resolveView(fields.budget);
     const moneyEditor = defaultWebFieldResolver.resolveEditor(fields.budget);
     const percentView = defaultWebFieldResolver.resolveView(fields.completion);
@@ -103,6 +107,8 @@ describe("generic react-dom field registry coverage", () => {
     const tagsView = defaultWebFieldResolver.resolveView(fields.tags);
     const tagsEditor = defaultWebFieldResolver.resolveEditor(fields.tags);
 
+    expect(colorView.status).toBe("resolved");
+    expect(colorEditor.status).toBe("resolved");
     expect(moneyView.status).toBe("resolved");
     expect(moneyEditor.status).toBe("resolved");
     expect(percentView.status).toBe("resolved");
@@ -124,6 +130,12 @@ describe("generic react-dom field registry coverage", () => {
     expect(tagsView.status).toBe("resolved");
     expect(tagsEditor.status).toBe("resolved");
 
+    if (colorView.status === "resolved") {
+      expect(colorView.capability.kind).toBe("color");
+    }
+    if (colorEditor.status === "resolved") {
+      expect(colorEditor.capability.kind).toBe("color");
+    }
     if (moneyView.status === "resolved") {
       expect(moneyView.capability.kind).toBe("money/amount");
     }
@@ -189,6 +201,12 @@ describe("generic react-dom field registry coverage", () => {
   it("renders structured value fields with their specialized shared components", () => {
     const fields = createRecordFields();
 
+    const colorViewMarkup = renderToStaticMarkup(
+      <PredicateFieldView predicate={fields.accentColor} />,
+    );
+    const colorEditorMarkup = renderToStaticMarkup(
+      <PredicateFieldEditor predicate={fields.accentColor} />,
+    );
     const moneyViewMarkup = renderToStaticMarkup(<PredicateFieldView predicate={fields.budget} />);
     const moneyEditorMarkup = renderToStaticMarkup(
       <PredicateFieldEditor predicate={fields.budget} />,
@@ -240,6 +258,11 @@ describe("generic react-dom field registry coverage", () => {
     const tagsViewMarkup = renderToStaticMarkup(<PredicateFieldView predicate={fields.tags} />);
     const tagsEditorMarkup = renderToStaticMarkup(<PredicateFieldEditor predicate={fields.tags} />);
 
+    expect(colorViewMarkup).toContain('data-web-field-kind="color"');
+    expect(colorViewMarkup).toContain('data-web-color-swatch="#2563eb"');
+    expect(colorViewMarkup).toContain("#2563EB");
+    expect(colorEditorMarkup).toContain('data-web-field-kind="color"');
+    expect(colorEditorMarkup).toContain('value="#2563eb"');
     expect(moneyViewMarkup).toContain('data-web-field-kind="money/amount"');
     expect(moneyViewMarkup).toContain("1250 USD");
     expect(moneyEditorMarkup).toContain('data-web-field-kind="money/amount"');
@@ -280,9 +303,11 @@ describe("generic react-dom field registry coverage", () => {
     expect(svgEditorMarkup).toContain('data-web-field-kind="svg"');
     expect(svgEditorMarkup).toContain('data-web-svg-preview="ready"');
     expect(tagsViewMarkup).toContain('data-web-field-kind="entity-reference-list"');
+    expect(tagsViewMarkup).toContain('data-web-reference-display="inert"');
+    expect(tagsViewMarkup).toContain(`data-web-reference-chip="${fields.tagId}"`);
     expect(tagsViewMarkup).toContain(`data-web-reference-id="${fields.tagId}"`);
     expect(tagsViewMarkup).toContain("Platform");
-    expect(tagsViewMarkup).toContain(`<code>${fields.tagId}</code>`);
+    expect(tagsViewMarkup).not.toContain("<code>");
     expect(tagsEditorMarkup).toContain('data-web-field-kind="entity-reference-combobox"');
     expect(tagsEditorMarkup).toContain(`data-web-reference-selected-id="${fields.tagId}"`);
     expect(tagsEditorMarkup).toContain("Platform");

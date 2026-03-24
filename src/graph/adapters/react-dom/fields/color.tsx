@@ -1,4 +1,5 @@
 import { ColorInput } from "@io/web/color";
+import { InputGroup, InputGroupAddon } from "@io/web/input-group";
 import { useEffect, useState } from "react";
 
 import {
@@ -7,6 +8,7 @@ import {
   getPredicateEditorPlaceholder,
   performValidatedMutation,
   usePredicateField,
+  type PredicateFieldViewCapability,
 } from "../../../runtime/react/index.js";
 import {
   clearOrRejectRequiredValue,
@@ -35,6 +37,55 @@ function toPickerColor(value: string): string {
 
   return hex.length === 6 ? `#${hex}` : "#2563eb";
 }
+
+function ColorSwatch({ color }: { color: string }) {
+  return (
+    <span className="border-border relative size-3.5 overflow-hidden rounded-[calc(var(--radius-sm)-2px)] border">
+      <span aria-hidden="true" className="absolute inset-0" style={{ backgroundColor: color }} />
+    </span>
+  );
+}
+
+function ColorFieldView({ predicate }: AnyFieldProps) {
+  const { value } = usePredicateField(predicate);
+  const placeholder = getPredicateEditorPlaceholder(predicate.field) ?? "#2563eb";
+  const parser = getPredicateEditorParser(predicate.field);
+  const committedValue = formatPredicateEditorValue(predicate.field, value);
+  const normalizedValue = getNormalizedColorValue(parser, committedValue, placeholder);
+  const pickerColor = toPickerColor(normalizedValue);
+  const displayValue =
+    committedValue.trim().length > 0 ? committedValue.toUpperCase() : placeholder.toUpperCase();
+
+  return (
+    <div data-web-field-kind="color">
+      <InputGroup className="w-full">
+        <InputGroupAddon align="inline-start">
+          <span
+            className="flex items-center justify-center"
+            data-web-color-swatch={normalizedValue}
+          >
+            <ColorSwatch color={pickerColor} />
+          </span>
+        </InputGroupAddon>
+        <div className="flex min-w-0 flex-1 items-center px-1.5 text-sm font-medium uppercase">
+          <span
+            className={
+              committedValue.trim().length > 0 ? "truncate" : "text-muted-foreground truncate"
+            }
+            data-web-color-display-value=""
+          >
+            {displayValue}
+          </span>
+        </div>
+      </InputGroup>
+    </div>
+  );
+}
+
+export const colorFieldViewCapability = {
+  kind: "color",
+  Component: ColorFieldView,
+} satisfies PredicateFieldViewCapability<any, any>;
 
 export function ColorFieldEditor({ onMutationError, onMutationSuccess, predicate }: AnyFieldProps) {
   const callbacks = useFieldMutationCallbacks({ onMutationError, onMutationSuccess });

@@ -12,8 +12,9 @@ import {
 import { OptionComboboxEditor } from "./option-combobox.js";
 import {
   createTagKey,
+  EntityReferenceReadonlyChip,
+  EntityReferenceReadonlyChipList,
   EntityReferenceOptionContent,
-  EntityReferenceSummary,
   getEntityReferenceLabel,
   type EntityReferenceEntity,
 } from "./reference-ui.js";
@@ -54,13 +55,18 @@ function EntityReferenceListView({ predicate }: AnyFieldProps) {
   const references = getPredicateEntityReferenceSelection(predicate, value);
 
   return (
-    <ul data-web-field-kind="entity-reference-list">
-      {references.map(({ entity, id }) => (
-        <li data-web-reference-id={id} key={id}>
-          <EntityReferenceSummary entity={entity} />
-        </li>
-      ))}
-    </ul>
+    <div data-web-field-kind="entity-reference-list">
+      <EntityReferenceReadonlyChipList>
+        {references.map(({ entity, id }) => (
+          <EntityReferenceReadonlyChip id={id} key={id}>
+            <EntityReferenceOptionContent
+              entity={entity}
+              iconClassName="text-foreground/70 size-3.5"
+            />
+          </EntityReferenceReadonlyChip>
+        ))}
+      </EntityReferenceReadonlyChipList>
+    </div>
   );
 }
 

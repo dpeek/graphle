@@ -21,6 +21,7 @@ import { AppShellAuthStatus } from "./auth-shell.js";
 
 const navigationItems = [
   { to: "/", label: "Home", exact: true },
+  { to: "/views", label: "Views", exact: false },
   { to: "/topics", label: "Topics", exact: false },
   { to: "/graph", label: "Graph", exact: false },
   { to: "/sync", label: "Sync", exact: false },
