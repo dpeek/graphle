@@ -1,4 +1,5 @@
 import {
+  applyGraphWriteTransaction,
   type AuthSubjectRef,
   type AuthorizationContext,
   type AnyTypeOutput,
@@ -309,6 +310,7 @@ const secretHandleVersionPredicateId = edgeId(core.secretHandle.fields.version);
 const secretHandleLastRotatedAtPredicateId = edgeId(core.secretHandle.fields.lastRotatedAt);
 const principalKindPredicateId = edgeId(core.principal.fields.kind);
 const principalStatusPredicateId = edgeId(core.principal.fields.status);
+const principalCapabilityVersionPredicateId = edgeId(core.principal.fields.capabilityVersion);
 const graphWriteTransactionValidationKey = "$sync:tx";
 const webAppAuthorityPolicyVersion = 0;
 const webAppGraphId = "graph:global";
@@ -362,17 +364,83 @@ const authSubjectProjectionStatusPredicateId = edgeId(core.authSubjectProjection
 const principalRoleBindingPrincipalPredicateId = edgeId(core.principalRoleBinding.fields.principal);
 const principalRoleBindingRoleKeyPredicateId = edgeId(core.principalRoleBinding.fields.roleKey);
 const principalRoleBindingStatusPredicateId = edgeId(core.principalRoleBinding.fields.status);
+const capabilityGrantResourceKindPredicateId = edgeId(core.capabilityGrant.fields.resourceKind);
+const capabilityGrantResourcePredicateIdPredicateId = edgeId(
+  core.capabilityGrant.fields.resourcePredicateId,
+);
+const capabilityGrantResourceCommandKeyPredicateId = edgeId(
+  core.capabilityGrant.fields.resourceCommandKey,
+);
+const capabilityGrantResourcePermissionKeyPredicateId = edgeId(
+  core.capabilityGrant.fields.resourcePermissionKey,
+);
+const capabilityGrantResourceSurfaceIdPredicateId = edgeId(
+  core.capabilityGrant.fields.resourceSurfaceId,
+);
+const capabilityGrantTargetKindPredicateId = edgeId(core.capabilityGrant.fields.targetKind);
+const capabilityGrantTargetPrincipalPredicateId = edgeId(
+  core.capabilityGrant.fields.targetPrincipal,
+);
+const capabilityGrantTargetGraphIdPredicateId = edgeId(core.capabilityGrant.fields.targetGraphId);
+const capabilityGrantBearerTokenHashPredicateId = edgeId(
+  core.capabilityGrant.fields.bearerTokenHash,
+);
+const capabilityGrantGrantedByPrincipalPredicateId = edgeId(
+  core.capabilityGrant.fields.grantedByPrincipal,
+);
+const capabilityGrantConstraintRootEntityIdPredicateId = edgeId(
+  core.capabilityGrant.fields.constraintRootEntityId,
+);
+const capabilityGrantConstraintPredicateIdPredicateId = edgeId(
+  core.capabilityGrant.fields.constraintPredicateId,
+);
+const capabilityGrantConstraintExpiresAtPredicateId = edgeId(
+  core.capabilityGrant.fields.constraintExpiresAt,
+);
+const capabilityGrantConstraintDelegatedFromGrantIdPredicateId = edgeId(
+  core.capabilityGrant.fields.constraintDelegatedFromGrantId,
+);
+const capabilityGrantStatusPredicateId = edgeId(core.capabilityGrant.fields.status);
+const capabilityGrantIssuedAtPredicateId = edgeId(core.capabilityGrant.fields.issuedAt);
+const capabilityGrantRevokedAtPredicateId = edgeId(core.capabilityGrant.fields.revokedAt);
 const principalTypeId = core.principal.values.id;
 const authSubjectProjectionTypeId = core.authSubjectProjection.values.id;
 const principalRoleBindingTypeId = core.principalRoleBinding.values.id;
+const capabilityGrantTypeId = core.capabilityGrant.values.id;
 const nonAuthorityHiddenIdentityTypeIds = new Set([
   principalTypeId,
   authSubjectProjectionTypeId,
   principalRoleBindingTypeId,
+  capabilityGrantTypeId,
 ]);
 const activePrincipalStatusId = core.principalStatus.values.active.id;
 const activeAuthSubjectStatusId = core.authSubjectStatus.values.active.id;
 const activePrincipalRoleBindingStatusId = core.principalRoleBindingStatus.values.active.id;
+const activeCapabilityGrantStatusId = core.capabilityGrantStatus.values.active.id;
+const principalCapabilityGrantTargetKindId = core.capabilityGrantTargetKind.values.principal.id;
+const capabilityVersionTriggerPredicateIds = new Set([
+  typePredicateId,
+  principalRoleBindingPrincipalPredicateId,
+  principalRoleBindingRoleKeyPredicateId,
+  principalRoleBindingStatusPredicateId,
+  capabilityGrantResourceKindPredicateId,
+  capabilityGrantResourcePredicateIdPredicateId,
+  capabilityGrantResourceCommandKeyPredicateId,
+  capabilityGrantResourcePermissionKeyPredicateId,
+  capabilityGrantResourceSurfaceIdPredicateId,
+  capabilityGrantTargetKindPredicateId,
+  capabilityGrantTargetPrincipalPredicateId,
+  capabilityGrantTargetGraphIdPredicateId,
+  capabilityGrantBearerTokenHashPredicateId,
+  capabilityGrantGrantedByPrincipalPredicateId,
+  capabilityGrantConstraintRootEntityIdPredicateId,
+  capabilityGrantConstraintPredicateIdPredicateId,
+  capabilityGrantConstraintExpiresAtPredicateId,
+  capabilityGrantConstraintDelegatedFromGrantIdPredicateId,
+  capabilityGrantStatusPredicateId,
+  capabilityGrantIssuedAtPredicateId,
+  capabilityGrantRevokedAtPredicateId,
+]);
 const principalKindById = new Map<string, PrincipalKind>([
   [core.principalKind.values.human.id, "human"],
   [core.principalKind.values.service.id, "service"],
@@ -432,6 +500,40 @@ function assertCurrentPolicyVersion(authorization: AuthorizationContext): Policy
     retryable: false,
     refreshRequired: true,
   };
+}
+
+function assertCurrentCapabilityVersion(
+  store: Store,
+  authorization: AuthorizationContext,
+): PolicyError | undefined {
+  if (!authorization.principalId) {
+    return undefined;
+  }
+  if (!hasEntityOfType(store, authorization.principalId, principalTypeId)) {
+    return undefined;
+  }
+
+  const currentCapabilityVersion = readPrincipalCapabilityVersion(store, authorization.principalId);
+  if (authorization.capabilityVersion === currentCapabilityVersion) {
+    return undefined;
+  }
+
+  return {
+    code: "policy.stale_context",
+    message: `Authorization context capability version "${authorization.capabilityVersion}" does not match principal capability version "${currentCapabilityVersion}" for principal "${authorization.principalId}". Refresh the authorization context and retry.`,
+    retryable: false,
+    refreshRequired: true,
+  };
+}
+
+function assertCurrentAuthorizationVersion(
+  store: Store,
+  authorization: AuthorizationContext,
+): PolicyError | undefined {
+  return (
+    assertCurrentPolicyVersion(authorization) ??
+    assertCurrentCapabilityVersion(store, authorization)
+  );
 }
 
 class WebAppAuthorityMutationError extends Error {
@@ -1014,6 +1116,48 @@ function uniqueStrings(values: Iterable<string | undefined>): string[] {
   return [...new Set([...values].filter((value): value is string => typeof value === "string"))];
 }
 
+function readNonNegativeIntegerField(store: Store, subjectId: string, predicateId: string): number {
+  const raw = getFirstObject(store, subjectId, predicateId);
+  if (raw === undefined) {
+    return 0;
+  }
+
+  const value = Number(raw);
+  return Number.isInteger(value) && value >= 0 ? value : 0;
+}
+
+function readPrincipalCapabilityVersion(store: Store, principalId: string): number {
+  return readNonNegativeIntegerField(store, principalId, principalCapabilityVersionPredicateId);
+}
+
+function readCapabilityGrantTargetPrincipalId(
+  store: Store,
+  capabilityGrantId: string,
+): string | undefined {
+  return getFirstObject(store, capabilityGrantId, capabilityGrantTargetKindPredicateId) ===
+    principalCapabilityGrantTargetKindId
+    ? getFirstObject(store, capabilityGrantId, capabilityGrantTargetPrincipalPredicateId)
+    : undefined;
+}
+
+function readActivePrincipalCapabilityGrantIds(
+  store: Store,
+  principalId: string,
+): readonly string[] {
+  return uniqueStrings(
+    store
+      .facts(undefined, capabilityGrantTargetPrincipalPredicateId, principalId)
+      .map((edge) => edge.s)
+      .filter(
+        (capabilityGrantId) =>
+          hasEntityOfType(store, capabilityGrantId, capabilityGrantTypeId) &&
+          getFirstObject(store, capabilityGrantId, capabilityGrantStatusPredicateId) ===
+            activeCapabilityGrantStatusId &&
+          readCapabilityGrantTargetPrincipalId(store, capabilityGrantId) === principalId,
+      ),
+  ).sort();
+}
+
 function matchesAuthSubjectProjection(
   store: Store,
   projectionId: string,
@@ -1096,8 +1240,8 @@ function readSessionPrincipalProjection(
     principalId,
     principalKind,
     roleKeys: readPrincipalRoleKeys(store, principalId),
-    capabilityGrantIds: [],
-    capabilityVersion: 0,
+    capabilityGrantIds: readActivePrincipalCapabilityGrantIds(store, principalId),
+    capabilityVersion: readPrincipalCapabilityVersion(store, principalId),
   };
 }
 
@@ -1229,6 +1373,142 @@ function setSingleReferenceField(
     }
     store.assert(subjectId, predicateId, objectId);
   });
+}
+
+function resolveRoleBindingPrincipalIds(
+  store: Store,
+  principalRoleBindingId: string,
+): readonly string[] {
+  return uniqueStrings([
+    getFirstObject(store, principalRoleBindingId, principalRoleBindingPrincipalPredicateId),
+  ]);
+}
+
+function resolveCapabilityGrantPrincipalIds(
+  store: Store,
+  capabilityGrantId: string,
+): readonly string[] {
+  return uniqueStrings([readCapabilityGrantTargetPrincipalId(store, capabilityGrantId)]);
+}
+
+function resolveCapabilityVersionAffectedPrincipalIds(
+  beforeStore: Store,
+  afterStore: Store,
+  transaction: GraphWriteTransaction,
+  snapshot: StoreSnapshot,
+): readonly string[] {
+  const touchedPredicatesBySubject = new Map<string, Set<string>>();
+  const edgeById = createTransactionEdgeIndex(snapshot);
+
+  for (const operation of transaction.ops) {
+    const predicateId =
+      operation.op === "assert" ? operation.edge.p : edgeById.get(operation.edgeId)?.p;
+    const subjectId =
+      operation.op === "assert" ? operation.edge.s : edgeById.get(operation.edgeId)?.s;
+    if (!predicateId || !subjectId || !capabilityVersionTriggerPredicateIds.has(predicateId)) {
+      continue;
+    }
+
+    const predicates = touchedPredicatesBySubject.get(subjectId);
+    if (predicates) {
+      predicates.add(predicateId);
+      continue;
+    }
+    touchedPredicatesBySubject.set(subjectId, new Set([predicateId]));
+  }
+
+  const affectedPrincipalIds = new Set<string>();
+  for (const subjectId of touchedPredicatesBySubject.keys()) {
+    if (
+      hasEntityOfType(beforeStore, subjectId, principalRoleBindingTypeId) ||
+      hasEntityOfType(afterStore, subjectId, principalRoleBindingTypeId)
+    ) {
+      for (const principalId of resolveRoleBindingPrincipalIds(beforeStore, subjectId)) {
+        affectedPrincipalIds.add(principalId);
+      }
+      for (const principalId of resolveRoleBindingPrincipalIds(afterStore, subjectId)) {
+        affectedPrincipalIds.add(principalId);
+      }
+    }
+
+    if (
+      hasEntityOfType(beforeStore, subjectId, capabilityGrantTypeId) ||
+      hasEntityOfType(afterStore, subjectId, capabilityGrantTypeId)
+    ) {
+      for (const principalId of resolveCapabilityGrantPrincipalIds(beforeStore, subjectId)) {
+        affectedPrincipalIds.add(principalId);
+      }
+      for (const principalId of resolveCapabilityGrantPrincipalIds(afterStore, subjectId)) {
+        affectedPrincipalIds.add(principalId);
+      }
+    }
+  }
+
+  return [...affectedPrincipalIds].sort();
+}
+
+function planCapabilityVersionInvalidationTransaction(
+  snapshot: StoreSnapshot,
+  transaction: GraphWriteTransaction,
+): GraphWriteTransaction {
+  if (transaction.ops.length === 0) {
+    return transaction;
+  }
+
+  const beforeStore = createStore(snapshot);
+  const afterStore = createStore(snapshot);
+  applyGraphWriteTransaction(afterStore, transaction);
+
+  const affectedPrincipalIds = resolveCapabilityVersionAffectedPrincipalIds(
+    beforeStore,
+    afterStore,
+    transaction,
+    snapshot,
+  );
+  if (affectedPrincipalIds.length === 0) {
+    return transaction;
+  }
+
+  const affectedPrincipalIdSet = new Set(affectedPrincipalIds);
+  const edgeById = createTransactionEdgeIndex(snapshot);
+  const filteredTransaction = {
+    ...transaction,
+    ops: transaction.ops.filter((operation) => {
+      if (operation.op === "assert") {
+        return !(
+          operation.edge.p === principalCapabilityVersionPredicateId &&
+          affectedPrincipalIdSet.has(operation.edge.s)
+        );
+      }
+
+      const edge = edgeById.get(operation.edgeId);
+      return !(
+        edge?.p === principalCapabilityVersionPredicateId && affectedPrincipalIdSet.has(edge.s)
+      );
+    }),
+  };
+
+  return planRecordedMutation(
+    snapshot,
+    webAppGraph,
+    transaction.id,
+    (_mutationGraph, mutationStore) => {
+      applyGraphWriteTransaction(mutationStore, filteredTransaction);
+
+      for (const principalId of affectedPrincipalIds) {
+        if (!hasEntityOfType(mutationStore, principalId, principalTypeId)) {
+          continue;
+        }
+
+        setSingleReferenceField(
+          mutationStore,
+          principalId,
+          principalCapabilityVersionPredicateId,
+          String(readPrincipalCapabilityVersion(mutationStore, principalId) + 1),
+        );
+      }
+    },
+  ).transaction;
 }
 
 function planAuthorityMutation<TResult>(
@@ -1376,7 +1656,7 @@ function createReadableReplicationAuthorizer(
   authorization: AuthorizationContext,
   compiledFieldIndex: ReadonlyMap<string, CompiledFieldDefinition>,
 ): ReplicationReadAuthorizer {
-  const staleContextError = assertCurrentPolicyVersion(authorization);
+  const staleContextError = assertCurrentAuthorizationVersion(store, authorization);
   if (staleContextError) {
     throw createReadPolicyError(staleContextError);
   }
@@ -1458,13 +1738,18 @@ function assertTransactionAuthorized(
   writeScope: AuthoritativeWriteScope,
   compiledFieldIndex: ReadonlyMap<string, CompiledFieldDefinition>,
 ): void {
-  const staleContextError = assertCurrentPolicyVersion(authorization);
+  const store = createStore(snapshot);
+  const policyVersionError = assertCurrentPolicyVersion(authorization);
+  const capabilityVersionError = policyVersionError
+    ? undefined
+    : assertCurrentCapabilityVersion(store, authorization);
+  const staleContextError = policyVersionError ?? capabilityVersionError;
   if (staleContextError) {
     throw buildTransactionValidationError(transaction, [
       {
         code: staleContextError.code,
         message: formatPolicyErrorMessage(staleContextError),
-        path: ["authorization", "policyVersion"],
+        path: ["authorization", capabilityVersionError ? "capabilityVersion" : "policyVersion"],
       },
     ]);
   }
@@ -1531,12 +1816,13 @@ function createWriteSecretFieldCommandPolicy(predicateId: string): GraphCommandP
 
 function assertCommandAuthorized(input: {
   readonly authorization: AuthorizationContext;
+  readonly store: Store;
   readonly commandKey: string;
   readonly commandPolicy: GraphCommandPolicy;
   readonly touchedPredicates: ReturnType<typeof buildWriteSecretFieldCommandTargets>;
   readonly writeScope: AuthoritativeWriteScope;
 }): void {
-  const staleContextError = assertCurrentPolicyVersion(input.authorization);
+  const staleContextError = assertCurrentAuthorizationVersion(input.store, input.authorization);
   if (staleContextError) {
     throw createCommandPolicyError(staleContextError);
   }
@@ -1745,7 +2031,10 @@ export async function createWebAppAuthority(
       throw new WebAppAuthorityReadError(404, `Predicate "${predicateId}" was not found.`);
     }
 
-    const staleContextError = assertCurrentPolicyVersion(options.authorization);
+    const staleContextError = assertCurrentAuthorizationVersion(
+      authority.store,
+      options.authorization,
+    );
     if (staleContextError) {
       throw createReadPolicyError(staleContextError);
     }
@@ -1830,16 +2119,20 @@ export async function createWebAppAuthority(
     options: WebAppAuthorityTransactionOptions,
   ) {
     const writeScope = options.writeScope ?? "client-tx";
+    const snapshot = authority.store.snapshot();
     assertTransactionAuthorized(
       transaction,
-      authority.store.snapshot(),
+      snapshot,
       options.authorization,
       writeScope,
       compiledFieldIndex,
     );
-    return authority.applyTransaction(transaction, {
-      writeScope,
-    });
+    return authority.applyTransaction(
+      planCapabilityVersionInvalidationTransaction(snapshot, transaction),
+      {
+        writeScope,
+      },
+    );
   }
 
   function getIncrementalSyncResult(
@@ -2120,6 +2413,7 @@ export async function createWebAppAuthority(
     );
     assertCommandAuthorized({
       authorization: options.authorization,
+      store: authority.store,
       commandKey: writeSecretFieldCommandKey,
       commandPolicy: createWriteSecretFieldCommandPolicy(predicateId),
       touchedPredicates: buildWriteSecretFieldCommandTargets(

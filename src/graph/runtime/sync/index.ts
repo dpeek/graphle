@@ -57,6 +57,7 @@ export {
   type TotalSyncSource,
 } from "./contracts";
 export {
+  applyGraphWriteTransaction,
   canonicalizeGraphWriteTransaction,
   createGraphWriteOperationsFromSnapshots,
   createGraphWriteTransactionFromSnapshots,

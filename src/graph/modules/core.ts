@@ -11,6 +11,10 @@ import { icon } from "./core/icon/index.js";
 import {
   authSubjectProjection,
   authSubjectStatus,
+  capabilityGrant,
+  capabilityGrantResourceKind,
+  capabilityGrantStatus,
+  capabilityGrantTargetKind,
   principal,
   principalKind,
   principalRoleBinding,
@@ -99,7 +103,11 @@ export const core = defineNamespace(coreIdMap, {
   principalStatus,
   authSubjectStatus,
   principalRoleBindingStatus,
+  capabilityGrantResourceKind,
+  capabilityGrantTargetKind,
+  capabilityGrantStatus,
   principal,
   authSubjectProjection,
   principalRoleBinding,
+  capabilityGrant,
 });

@@ -56,6 +56,70 @@ export type AuthorizationContext = {
   readonly policyVersion: PolicyVersion;
 };
 
+/**
+ * Stable delegated-capability vocabulary shared by graph schema, authority
+ * lookup, and future policy/runtime consumers.
+ */
+export type CapabilityGrantResource =
+  | {
+      readonly kind: "predicate-read";
+      readonly predicateId: string;
+    }
+  | {
+      readonly kind: "predicate-write";
+      readonly predicateId: string;
+    }
+  | {
+      readonly kind: "command-execute";
+      readonly commandKey: string;
+    }
+  | {
+      readonly kind: "module-permission";
+      readonly permissionKey: string;
+    }
+  | {
+      readonly kind: "share-surface";
+      readonly surfaceId: string;
+    };
+
+/**
+ * `principal` targets are stable for the first Branch 2 cut. `graph` and
+ * `bearer` targets are published as provisional shared vocabulary only.
+ */
+export type CapabilityGrantTarget =
+  | {
+      readonly kind: "principal";
+      readonly principalId: string;
+    }
+  | {
+      readonly kind: "graph";
+      readonly graphId: string;
+    }
+  | {
+      readonly kind: "bearer";
+      readonly tokenHash: string;
+    };
+
+export type CapabilityGrantConstraints = {
+  readonly rootEntityId?: string;
+  readonly predicateIds?: readonly string[];
+  readonly expiresAt?: string;
+  readonly delegatedFromGrantId?: string;
+};
+
+export type CapabilityGrantStatus = "active" | "expired" | "revoked";
+
+export type CapabilityGrant = {
+  readonly id: string;
+  readonly resource: CapabilityGrantResource;
+  readonly target: CapabilityGrantTarget;
+  readonly grantedByPrincipalId: string;
+  readonly constraints?: CapabilityGrantConstraints;
+  readonly status: CapabilityGrantStatus;
+  readonly issuedAt: string;
+  readonly revokedAt?: string;
+};
+
 export type PolicyErrorCode =
   | "auth.unauthenticated"
   | "auth.principal_missing"

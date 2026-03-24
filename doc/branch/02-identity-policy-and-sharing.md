@@ -251,6 +251,16 @@ interface CapabilityGrant {
 }
 ```
 
+Current first-cut target boundary:
+
+- `principal` targets are stable and lower directly into the current
+  `AuthorizationContext.capabilityGrantIds` projection
+- `graph` and `bearer` targets are durable graph vocabulary now, but remain
+  provisional until later sharing and federation work makes them live
+  authorization inputs
+- only principal-target grants participate in `capabilityVersion`
+  invalidation in the current proof
+
 ```ts
 interface AuthorizationContext {
   graphId: string;
@@ -344,8 +354,14 @@ Identifier rules:
   ids.
 - `provider + providerAccountId` must map to at most one active
   `AuthSubjectProjection` per graph.
-- `capabilityVersion` is monotonic for each principal and changes whenever a
-  role binding or capability grant affecting that principal changes.
+- `capabilityVersion` starts at `0` when a principal is created.
+- `capabilityVersion` is monotonic for each principal and increments once per
+  committed authority transaction that creates, reassigns, revokes, expires, or
+  retracts a `PrincipalRoleBinding` or principal-target `CapabilityGrant`
+  affecting that principal.
+- graph-target and bearer-target grants publish durable records now, but they do
+  not invalidate a principal `capabilityVersion` until those target kinds
+  become live inputs to principal projection.
 - `policyVersion` is monotonic for the graph and changes whenever predicate
   policy or share-surface contracts change.
 

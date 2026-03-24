@@ -4,6 +4,7 @@ import { defineReferenceField } from "../../../runtime/type-module.js";
 import { dateTypeModule } from "../date/index.js";
 import { defineDefaultEnumTypeModule } from "../enum-module.js";
 import { node } from "../node/index.js";
+import { numberTypeModule } from "../number/index.js";
 import { stringTypeModule } from "../string/index.js";
 
 const authorityOwnedIdentityFieldAuthority = {
@@ -11,12 +12,36 @@ const authorityOwnedIdentityFieldAuthority = {
   write: "authority-only",
 } as const;
 
+function resolvedEnumValue(value: { key: string; id?: string }): string {
+  return value.id ?? value.key;
+}
+
 function validateRequiredString(label: string, value: unknown) {
   return typeof value === "string" && value.trim().length > 0
     ? undefined
     : {
         code: "string.blank",
         message: `${label} must not be blank.`,
+      };
+}
+
+function validateNonNegativeInteger(label: string, value: unknown) {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0
+    ? undefined
+    : {
+        code: "number.invalid",
+        message: `${label} must be a non-negative integer.`,
+      };
+}
+
+function validateRequiredStringList(label: string, value: unknown) {
+  return value === undefined ||
+    (Array.isArray(value) &&
+      value.every((item) => typeof item === "string" && item.trim().length > 0))
+    ? undefined
+    : {
+        code: "string.blank",
+        message: `${label} entries must not be blank.`,
       };
 }
 
@@ -124,6 +149,72 @@ export const principalRoleBindingStatusTypeModule = defineDefaultEnumTypeModule(
   principalRoleBindingStatus,
 );
 
+export const capabilityGrantResourceKind = defineEnum({
+  values: {
+    key: "core:capabilityGrantResourceKind",
+    name: "Capability Grant Resource Kind",
+  },
+  options: {
+    predicateRead: {
+      name: "Predicate read",
+    },
+    predicateWrite: {
+      name: "Predicate write",
+    },
+    commandExecute: {
+      name: "Command execute",
+    },
+    modulePermission: {
+      name: "Module permission",
+    },
+    shareSurface: {
+      name: "Share surface",
+    },
+  },
+});
+
+export const capabilityGrantResourceKindTypeModule = defineDefaultEnumTypeModule(
+  capabilityGrantResourceKind,
+);
+
+export const capabilityGrantTargetKind = defineEnum({
+  values: {
+    key: "core:capabilityGrantTargetKind",
+    name: "Capability Grant Target Kind",
+  },
+  options: {
+    principal: {
+      name: "Principal",
+    },
+    graph: {
+      name: "Graph",
+    },
+    bearer: {
+      name: "Bearer",
+    },
+  },
+});
+
+export const capabilityGrantTargetKindTypeModule =
+  defineDefaultEnumTypeModule(capabilityGrantTargetKind);
+
+export const capabilityGrantStatus = defineEnum({
+  values: { key: "core:capabilityGrantStatus", name: "Capability Grant Status" },
+  options: {
+    active: {
+      name: "Active",
+    },
+    expired: {
+      name: "Expired",
+    },
+    revoked: {
+      name: "Revoked",
+    },
+  },
+});
+
+export const capabilityGrantStatusTypeModule = defineDefaultEnumTypeModule(capabilityGrantStatus);
+
 export const principal = defineType({
   values: { key: "core:principal", name: "Principal" },
   fields: {
@@ -142,6 +233,18 @@ export const principal = defineType({
     }),
     homeGraphId: requiredIdentityStringField("Home graph id"),
     personId: optionalIdentityStringField("Person id"),
+    capabilityVersion: {
+      ...numberTypeModule.field({
+        cardinality: "one",
+        validate: ({ value }) => validateNonNegativeInteger("Capability version", value),
+        onCreate: ({ incoming }) => incoming ?? 0,
+        meta: {
+          label: "Capability version",
+        },
+        authority: authorityOwnedIdentityFieldAuthority,
+      }),
+      createOptional: true as const,
+    },
   },
 });
 
@@ -186,6 +289,102 @@ export const principalRoleBinding = defineType({
       meta: {
         label: "Status",
       },
+    }),
+  },
+});
+
+export const capabilityGrant = defineType({
+  values: { key: "core:capabilityGrant", name: "Capability Grant" },
+  fields: {
+    ...node.fields,
+    resourceKind: capabilityGrantResourceKindTypeModule.field({
+      cardinality: "one",
+      meta: {
+        label: "Resource kind",
+      },
+      authority: authorityOwnedIdentityFieldAuthority,
+    }),
+    resourcePredicateId: optionalIdentityStringField("Resource predicate id"),
+    resourceCommandKey: optionalIdentityStringField("Resource command key"),
+    resourcePermissionKey: optionalIdentityStringField("Resource permission key"),
+    resourceSurfaceId: optionalIdentityStringField("Resource surface id"),
+    targetKind: capabilityGrantTargetKindTypeModule.field({
+      cardinality: "one",
+      meta: {
+        label: "Target kind",
+      },
+      authority: authorityOwnedIdentityFieldAuthority,
+    }),
+    targetPrincipal: defineReferenceField({
+      range: principal.values.key,
+      cardinality: "one?",
+      meta: {
+        label: "Target principal",
+      },
+      authority: authorityOwnedIdentityFieldAuthority,
+    }),
+    targetGraphId: optionalIdentityStringField("Target graph id"),
+    bearerTokenHash: optionalIdentityStringField("Bearer token hash"),
+    grantedByPrincipal: defineReferenceField({
+      range: principal.values.key,
+      cardinality: "one",
+      meta: {
+        label: "Granted by principal",
+      },
+      authority: authorityOwnedIdentityFieldAuthority,
+    }),
+    constraintRootEntityId: optionalIdentityStringField("Constraint root entity id"),
+    constraintPredicateId: stringTypeModule.field({
+      cardinality: "many",
+      validate: ({ value }) => validateRequiredStringList("Constraint predicate id", value),
+      meta: {
+        label: "Constraint predicate id",
+      },
+      filter: {
+        operators: ["equals", "prefix"] as const,
+        defaultOperator: "equals",
+      },
+      authority: authorityOwnedIdentityFieldAuthority,
+    }),
+    constraintExpiresAt: dateTypeModule.field({
+      cardinality: "one?",
+      meta: {
+        label: "Constraint expires at",
+      },
+      authority: authorityOwnedIdentityFieldAuthority,
+    }),
+    constraintDelegatedFromGrantId: optionalIdentityStringField(
+      "Constraint delegated from grant id",
+    ),
+    status: {
+      ...capabilityGrantStatusTypeModule.field({
+        cardinality: "one",
+        onCreate: ({ incoming }) =>
+          incoming ?? resolvedEnumValue(capabilityGrantStatus.values.active),
+        meta: {
+          label: "Status",
+        },
+        authority: authorityOwnedIdentityFieldAuthority,
+      }),
+      createOptional: true as const,
+    },
+    issuedAt: {
+      ...dateTypeModule.field({
+        cardinality: "one",
+        onCreate: ({ incoming, now }) => incoming ?? now,
+        meta: {
+          label: "Issued at",
+        },
+        authority: authorityOwnedIdentityFieldAuthority,
+      }),
+      createOptional: true as const,
+    },
+    revokedAt: dateTypeModule.field({
+      cardinality: "one?",
+      meta: {
+        label: "Revoked at",
+      },
+      authority: authorityOwnedIdentityFieldAuthority,
     }),
   },
 });

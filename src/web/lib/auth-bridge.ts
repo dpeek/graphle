@@ -43,7 +43,9 @@ export type SessionPrincipalLookupInput = {
 /**
  * Stable resolved principal payload consumed by the request-bound auth bridge.
  * The underlying Better Auth-backed lookup implementation is still
- * provisional.
+ * provisional. In the current Branch 2 proof, `capabilityGrantIds` carries
+ * only active principal-target grants; bearer and graph-target grants remain
+ * durable-but-provisional records outside the session projection.
  */
 export type SessionPrincipalProjection = {
   readonly principalId: string;

@@ -2,6 +2,11 @@ import type {
   AuthSubjectRef as AuthSubjectRefFromRoot,
   AuthenticatedSession as AuthenticatedSessionFromRoot,
   AuthorizationContext as AuthorizationContextFromRoot,
+  CapabilityGrant as CapabilityGrantFromRoot,
+  CapabilityGrantConstraints as CapabilityGrantConstraintsFromRoot,
+  CapabilityGrantResource as CapabilityGrantResourceFromRoot,
+  CapabilityGrantStatus as CapabilityGrantStatusFromRoot,
+  CapabilityGrantTarget as CapabilityGrantTargetFromRoot,
   CapabilityVersion as CapabilityVersionFromRoot,
   GraphCommandPolicy as GraphCommandPolicyFromRoot,
   GraphCommandSpec as GraphCommandSpecFromRoot,
@@ -17,6 +22,11 @@ import type {
   AuthSubjectRef,
   AuthenticatedSession,
   AuthorizationContext,
+  CapabilityGrant,
+  CapabilityGrantConstraints,
+  CapabilityGrantResource,
+  CapabilityGrantStatus,
+  CapabilityGrantTarget,
   CapabilityVersion,
   GraphCommandPolicy,
   GraphCommandSpec,
@@ -166,9 +176,40 @@ const authorizationContext = {
   policyVersion: 5,
 } satisfies AuthorizationContext;
 
+const capabilityGrantResource = {
+  kind: "predicate-read",
+  predicateId: "pkm:topic.content",
+} satisfies CapabilityGrantResource;
+
+const capabilityGrantTarget = {
+  kind: "principal",
+  principalId: "principal-1",
+} satisfies CapabilityGrantTarget;
+
+const capabilityGrantConstraints = {
+  predicateIds: ["pkm:topic.content"],
+  rootEntityId: "topic-1",
+} satisfies CapabilityGrantConstraints;
+
+const capabilityGrant = {
+  id: "grant-1",
+  resource: capabilityGrantResource,
+  target: capabilityGrantTarget,
+  grantedByPrincipalId: "principal-admin",
+  constraints: capabilityGrantConstraints,
+  status: "active",
+  issuedAt: "2026-03-24T00:00:00.000Z",
+} satisfies CapabilityGrant;
+
 const rootAuthSubject: AuthSubjectRefFromRoot = authSubject;
 const rootAuthenticatedSession: AuthenticatedSessionFromRoot = authenticatedSession;
 const rootAuthorizationContext: AuthorizationContextFromRoot = authorizationContext;
+const rootCapabilityGrantResource: CapabilityGrantResourceFromRoot = capabilityGrantResource;
+const rootCapabilityGrantTarget: CapabilityGrantTargetFromRoot = capabilityGrantTarget;
+const rootCapabilityGrantConstraints: CapabilityGrantConstraintsFromRoot =
+  capabilityGrantConstraints;
+const rootCapabilityGrantStatus: CapabilityGrantStatusFromRoot = capabilityGrant.status;
+const rootCapabilityGrant: CapabilityGrantFromRoot = capabilityGrant;
 const rootPredicatePolicy: PredicatePolicyDescriptorFromRoot = topicContentPolicy;
 const rootCommandPolicy: GraphCommandPolicyFromRoot = saveTopicCommand.policy!;
 const rootTouchedPredicate: GraphCommandTouchedPredicateFromRoot = topicContentTouch;
@@ -177,6 +218,12 @@ const rootPolicyVersion: PolicyVersionFromRoot = authorizationContext.policyVers
 const rootPrincipalKind: PrincipalKindFromRoot = "remoteGraph";
 const runtimeCapabilityVersion: CapabilityVersion = rootCapabilityVersion;
 const runtimePolicyVersion: PolicyVersion = rootPolicyVersion;
+const runtimeCapabilityGrantResource: CapabilityGrantResource = rootCapabilityGrantResource;
+const runtimeCapabilityGrantTarget: CapabilityGrantTarget = rootCapabilityGrantTarget;
+const runtimeCapabilityGrantConstraints: CapabilityGrantConstraints =
+  rootCapabilityGrantConstraints;
+const runtimeCapabilityGrantStatus: CapabilityGrantStatus = rootCapabilityGrantStatus;
+const runtimeCapabilityGrant: CapabilityGrant = rootCapabilityGrant;
 const runtimePredicatePolicy: PredicatePolicyDescriptor = rootPredicatePolicy;
 const runtimeCommandPolicy: GraphCommandPolicy = rootCommandPolicy;
 const runtimeTouchedPredicate: GraphCommandTouchedPredicate = rootTouchedPredicate;
@@ -194,6 +241,11 @@ void rootBlobPermission;
 void rootAuthSubject;
 void rootAuthenticatedSession;
 void rootAuthorizationContext;
+void rootCapabilityGrantResource;
+void rootCapabilityGrantTarget;
+void rootCapabilityGrantConstraints;
+void rootCapabilityGrantStatus;
+void rootCapabilityGrant;
 void rootPredicatePolicy;
 void rootCommandPolicy;
 void rootTouchedPredicate;
@@ -202,6 +254,11 @@ void rootPolicyVersion;
 void rootPrincipalKind;
 void runtimeCapabilityVersion;
 void runtimePolicyVersion;
+void runtimeCapabilityGrantResource;
+void runtimeCapabilityGrantTarget;
+void runtimeCapabilityGrantConstraints;
+void runtimeCapabilityGrantStatus;
+void runtimeCapabilityGrant;
 void runtimePredicatePolicy;
 void runtimeCommandPolicy;
 void runtimeTouchedPredicate;
@@ -315,6 +372,22 @@ void ({
   capabilityVersion: 1,
   policyVersion: 1,
 } satisfies AuthorizationContext);
+
+void ({
+  kind: "principal",
+  // @ts-expect-error principal-target grants require a principalId string
+  graphId: "graph-1",
+} satisfies CapabilityGrantTarget);
+
+void ({
+  id: "grant-1",
+  resource: capabilityGrantResource,
+  target: capabilityGrantTarget,
+  grantedByPrincipalId: "principal-admin",
+  // @ts-expect-error capability grants only accept the shared status literals
+  status: "pending",
+  issuedAt: "2026-03-24T00:00:00.000Z",
+} satisfies CapabilityGrant);
 
 void ({
   sessionId: "session-1",

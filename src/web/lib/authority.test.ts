@@ -2354,7 +2354,7 @@ describe("web authority", () => {
       principalKind: "human",
       roleKeys: ["graph:member"],
       capabilityGrantIds: [],
-      capabilityVersion: 0,
+      capabilityVersion: 1,
     });
   });
 
@@ -2391,6 +2391,197 @@ describe("web authority", () => {
       providerAccountId: lookupInput.subject.providerAccountId,
       status: core.authSubjectStatus.values.active.id,
     });
+  });
+
+  it("projects active principal-target capability grants and bumps capabilityVersion once per grant transaction", async () => {
+    const authorization = createAuthorityAuthorizationContext();
+    const storage = createInMemoryTestWebAppAuthorityStorage();
+    const authority = await createTestWebAppAuthority(storage.storage);
+    const lookupInput = createSessionPrincipalLookupInput();
+    const initialProjection = await authority.lookupSessionPrincipal(lookupInput);
+    const { mutationGraph, mutationStore } = createProductMutationStore(
+      authority.readSnapshot({ authorization }),
+    );
+    const beforeCreate = mutationStore.snapshot();
+    const firstGrantId = mutationGraph.capabilityGrant.create({
+      grantedByPrincipal: initialProjection.principalId,
+      name: "Principal predicate read grant",
+      resourceKind: core.capabilityGrantResourceKind.values.predicateRead.id,
+      resourcePredicateId: envVarDescriptionPredicateId,
+      status: core.capabilityGrantStatus.values.active.id,
+      targetKind: core.capabilityGrantTargetKind.values.principal.id,
+      targetPrincipal: initialProjection.principalId,
+    });
+    mutationGraph.capabilityGrant.create({
+      grantedByPrincipal: initialProjection.principalId,
+      name: "Graph-wide preview grant",
+      resourceKind: core.capabilityGrantResourceKind.values.shareSurface.id,
+      resourceSurfaceId: "surface:graph-preview",
+      status: core.capabilityGrantStatus.values.active.id,
+      targetGraphId: lookupInput.graphId,
+      targetKind: core.capabilityGrantTargetKind.values.graph.id,
+    });
+    mutationGraph.capabilityGrant.create({
+      bearerTokenHash: "token-hash-1",
+      grantedByPrincipal: initialProjection.principalId,
+      name: "Bearer preview grant",
+      resourceKind: core.capabilityGrantResourceKind.values.shareSurface.id,
+      resourceSurfaceId: "surface:bearer-preview",
+      status: core.capabilityGrantStatus.values.active.id,
+      targetKind: core.capabilityGrantTargetKind.values.bearer.id,
+    });
+
+    await authority.applyTransaction(
+      buildGraphWriteTransaction(
+        beforeCreate,
+        mutationStore.snapshot(),
+        "tx:create-capability-grants",
+      ),
+      {
+        authorization,
+        writeScope: "authority-only",
+      },
+    );
+
+    const afterCreate = await authority.lookupSessionPrincipal(lookupInput);
+
+    expect(afterCreate.capabilityGrantIds).toEqual([firstGrantId]);
+    expect(afterCreate.capabilityVersion).toBe(1);
+    expect(
+      readProductGraph(authority, authorization).principal.get(initialProjection.principalId),
+    ).toMatchObject({
+      capabilityVersion: 1,
+    });
+
+    const { mutationGraph: revokeGraph, mutationStore: revokeStore } = createProductMutationStore(
+      authority.readSnapshot({ authorization }),
+    );
+    const beforeRevoke = revokeStore.snapshot();
+    revokeGraph.capabilityGrant.update(firstGrantId, {
+      revokedAt: new Date("2026-03-24T01:00:00.000Z"),
+      status: core.capabilityGrantStatus.values.revoked.id,
+    });
+
+    await authority.applyTransaction(
+      buildGraphWriteTransaction(
+        beforeRevoke,
+        revokeStore.snapshot(),
+        "tx:revoke-capability-grant",
+      ),
+      {
+        authorization,
+        writeScope: "authority-only",
+      },
+    );
+
+    const afterRevoke = await authority.lookupSessionPrincipal(lookupInput);
+
+    expect(afterRevoke.capabilityGrantIds).toEqual([]);
+    expect(afterRevoke.capabilityVersion).toBe(2);
+
+    const { mutationGraph: reissueGraph, mutationStore: reissueStore } = createProductMutationStore(
+      authority.readSnapshot({ authorization }),
+    );
+    const beforeReissue = reissueStore.snapshot();
+    const secondGrantId = reissueGraph.capabilityGrant.create({
+      grantedByPrincipal: initialProjection.principalId,
+      name: "Principal predicate read grant",
+      resourceKind: core.capabilityGrantResourceKind.values.predicateRead.id,
+      resourcePredicateId: envVarDescriptionPredicateId,
+      status: core.capabilityGrantStatus.values.active.id,
+      targetKind: core.capabilityGrantTargetKind.values.principal.id,
+      targetPrincipal: initialProjection.principalId,
+    });
+
+    await authority.applyTransaction(
+      buildGraphWriteTransaction(
+        beforeReissue,
+        reissueStore.snapshot(),
+        "tx:reissue-capability-grant",
+      ),
+      {
+        authorization,
+        writeScope: "authority-only",
+      },
+    );
+
+    const afterReissue = await authority.lookupSessionPrincipal(lookupInput);
+
+    expect(secondGrantId).not.toBe(firstGrantId);
+    expect(afterReissue.capabilityGrantIds).toEqual([secondGrantId]);
+    expect(afterReissue.capabilityVersion).toBe(3);
+  });
+
+  it("fails closed when the authorization context capabilityVersion is stale", async () => {
+    const authorityAuthorization = createAuthorityAuthorizationContext();
+    const storage = createInMemoryTestWebAppAuthorityStorage();
+    const authority = await createTestWebAppAuthority(storage.storage);
+    const lookupInput = createSessionPrincipalLookupInput();
+    const initialProjection = await authority.lookupSessionPrincipal(lookupInput);
+    const signedInAuthorization = createTestAuthorizationContext({
+      graphId: lookupInput.graphId,
+      principalId: initialProjection.principalId,
+      principalKind: initialProjection.principalKind,
+      sessionId: "session:browser",
+      roleKeys: [...(initialProjection.roleKeys ?? [])],
+      capabilityGrantIds: [...(initialProjection.capabilityGrantIds ?? [])],
+      capabilityVersion: initialProjection.capabilityVersion,
+    });
+    const { mutationGraph, mutationStore } = createProductMutationStore(
+      authority.readSnapshot({ authorization: authorityAuthorization }),
+    );
+    const beforeGrant = mutationStore.snapshot();
+
+    mutationGraph.capabilityGrant.create({
+      grantedByPrincipal: initialProjection.principalId,
+      name: "Stale capability grant",
+      resourceKind: core.capabilityGrantResourceKind.values.predicateRead.id,
+      resourcePredicateId: envVarDescriptionPredicateId,
+      status: core.capabilityGrantStatus.values.active.id,
+      targetKind: core.capabilityGrantTargetKind.values.principal.id,
+      targetPrincipal: initialProjection.principalId,
+    });
+
+    await authority.applyTransaction(
+      buildGraphWriteTransaction(
+        beforeGrant,
+        mutationStore.snapshot(),
+        "tx:create-stale-capability-grant",
+      ),
+      {
+        authorization: authorityAuthorization,
+        writeScope: "authority-only",
+      },
+    );
+
+    expect(() =>
+      authority.createSyncPayload({
+        authorization: signedInAuthorization,
+      }),
+    ).toThrow(
+      expect.objectContaining({
+        code: "policy.stale_context",
+        message: expect.stringContaining("capability version"),
+        status: 409,
+      }),
+    );
+
+    const refreshedProjection = await authority.lookupSessionPrincipal(lookupInput);
+
+    expect(refreshedProjection.capabilityVersion).toBe(1);
+    expect(
+      authority.createSyncPayload({
+        authorization: createTestAuthorizationContext({
+          graphId: lookupInput.graphId,
+          principalId: refreshedProjection.principalId,
+          principalKind: refreshedProjection.principalKind,
+          sessionId: "session:browser",
+          roleKeys: [...(refreshedProjection.roleKeys ?? [])],
+          capabilityGrantIds: [...(refreshedProjection.capabilityGrantIds ?? [])],
+          capabilityVersion: refreshedProjection.capabilityVersion,
+        }),
+      }).mode,
+    ).toBe("total");
   });
 
   it("repairs missing exact subject projections by linking them to the existing auth-user principal", async () => {
