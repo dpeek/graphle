@@ -5,7 +5,7 @@ import { bootstrap, createStore, createTypeClient } from "@io/core/graph";
 import type { Workflow } from "../agent/types.js";
 import { core } from "../graph/modules/core.js";
 import { ops } from "../graph/modules/ops.js";
-import { workflowSchema } from "../graph/modules/ops/workflow/schema.js";
+import { workflowProjectionSchema } from "../graph/modules/ops/workflow/schema.js";
 import { pkm } from "../graph/modules/pkm.js";
 import {
   createWorkflowTuiStartupFailureModel,
@@ -136,7 +136,6 @@ function createWorkflowGraphFixture(
         branchKey: `branch:project-${projectNumber}-branch-${branchNumber}`,
         state: ops.workflowBranchState.values.backlog.id,
         queueRank: branchNumber,
-        goalSummary: `Goal ${projectNumber}.${branchNumber}`,
         createdAt: date(`2026-01-0${projectNumber}T00:00:00.000Z`),
         updatedAt: date(`2026-01-0${projectNumber}T00:00:00.000Z`),
       });
@@ -254,17 +253,19 @@ test("runWorkflowTuiCli bootstraps the synced workflow runtime before creating t
     },
   });
   const startup = resolveWorkflowTuiStartupContract(workflow);
-  const createGraphClient = mock(async (namespace: typeof workflowSchema, options: object) => {
-    expect(namespace).toBe(workflowSchema);
-    expect(options).toEqual({
-      requestedScope: startup.graph.requestedScope,
-      url: "https://graph.example/runtime",
-    });
+  const createGraphClient = mock(
+    async (namespace: typeof workflowProjectionSchema, options: object) => {
+      expect(namespace).toBe(workflowProjectionSchema);
+      expect(options).toEqual({
+        requestedScope: startup.graph.requestedScope,
+        url: "https://graph.example/runtime",
+      });
 
-    return {
-      graph,
-    };
-  });
+      return {
+        graph,
+      };
+    },
+  );
   let createdTuiOptions: WorkflowTuiOptions | undefined;
   let surfaceModel: ReturnType<WorkflowTui["getSurfaceModel"]> | undefined;
   const start = mock(async () => {

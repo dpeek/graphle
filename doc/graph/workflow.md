@@ -276,7 +276,7 @@ The branch-detail view paired with the TUI commit queue uses
 It defines one branch-scoped detail surface with:
 
 - `branch.workflowBranch`: the canonical `WorkflowBranchSummary`, including the
-  branch goal summary and `activeCommitId`
+  derived branch goal summary and `activeCommitId`
 - `branch.repositoryBranch?`: the attached repository-branch observation when
   one exists, reusing the same freshness envelope as the branch board
 - `branch.activeCommit?`: the active commit row promoted into branch detail so
@@ -306,8 +306,9 @@ The canonical result shape is:
 
 Contract rules:
 
-- `branch.workflowBranch.goalSummary` is the canonical branch goal field for
-  the first TUI shell; the query does not duplicate that summary elsewhere
+- `branch.workflowBranch.goalSummary` is derived from
+  `branch.workflowBranch.goalDocumentId` when that document has a non-empty
+  `description`; the query does not duplicate that summary elsewhere
 - `rows` are ordered by `workflowCommit.order asc`; projections may add
   deterministic tie-breakers but cannot change queue-order semantics
 - `branch.activeCommit` may duplicate one row from `rows` so the active commit

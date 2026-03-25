@@ -61,7 +61,6 @@ describe("workflow authority", () => {
         projectId: project.summary.id,
         title: "Unmapped branch",
         branchKey: "branch:unmapped-branch",
-        goalSummary: "Try to activate without a repository target",
         state: "ready",
       });
 
@@ -102,7 +101,6 @@ describe("workflow authority", () => {
         projectId: project.summary.id,
         title: "Workflow authority",
         branchKey: "branch:workflow-authority",
-        goalSummary: "Exercise repository target attachment updates",
         state: "ready",
       });
 
@@ -190,7 +188,6 @@ describe("workflow authority", () => {
         projectId: fixture.projectId,
         title: "Conflicting branch",
         branchKey: "branch:conflicting-branch",
-        goalSummary: "Try to claim an existing repository branch target",
         state: "ready",
       });
 

@@ -267,11 +267,6 @@ export const workflowBranch = defineType({
         label: "Queue rank",
       },
     }),
-    goalSummary: requiredStringField("Goal summary", {
-      multiline: true,
-      operators: ["contains", "equals"] as const,
-      defaultOperator: "contains",
-    }),
     goalDocument: existingEntityReferenceField(pkm.document, {
       cardinality: "one?",
       label: "Goal document",

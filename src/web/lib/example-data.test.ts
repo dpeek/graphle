@@ -56,7 +56,10 @@ test("seedExampleGraph backfills workflow data without duplicating older example
   expect(first.docsTag).toBe(docsTag);
   expect(first.graphExplorer).toBe(graphExplorer);
   expect(graph.tag.list()).toHaveLength(2);
-  expect(graph.document.list()).toHaveLength(3);
+  expect(graph.document.list()).toHaveLength(4);
+  expect(graph.document.list().some((document) => document.slug === "workflow-shell-goal")).toBe(
+    true,
+  );
   expect(graph.documentPlacement.list()).toHaveLength(3);
   expect(graph.documentBlock.list()).toHaveLength(3);
   expect(graph.workflowProject.list()).toHaveLength(1);

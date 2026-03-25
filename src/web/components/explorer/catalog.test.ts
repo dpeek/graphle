@@ -35,7 +35,7 @@ describe("explorer catalog", () => {
     expect(catalog.get("pkm:document")).toMatchObject({
       key: "pkm:document",
       kind: "entity",
-      dataCount: 3,
+      dataCount: 4,
     });
     expect(catalog.get("pkm:document")?.fieldDefs.map((field) => field.pathLabel)).toEqual(
       expect.arrayContaining(["description", "isArchived", "slug", "tags"]),
@@ -77,7 +77,7 @@ describe("explorer catalog", () => {
     expect(entries.every((entry) => entry.typeDef.kind === "entity")).toBe(true);
     expect(catalog.get("pkm:document")).toMatchObject({
       key: "pkm:document",
-      count: 3,
+      count: 4,
     });
     expect(typeof catalog.get("pkm:document")?.create).toBe("function");
     expect(typeof catalog.get("pkm:document")?.validateCreate).toBe("function");

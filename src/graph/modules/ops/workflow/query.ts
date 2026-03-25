@@ -179,7 +179,7 @@ export interface CommitQueueScopeResult {
   readonly rows: readonly CommitQueueScopeCommitRow[];
 }
 
-const workflowProjectionGraph = {
+export const workflowProjectionSchema = {
   document: pkm.document,
   workflowProject,
   workflowRepository,
@@ -197,7 +197,7 @@ const workflowProjectionGraph = {
   agentSession,
 } as const;
 
-type WorkflowProjectionTypeClient = NamespaceClient<typeof workflowProjectionGraph>;
+type WorkflowProjectionTypeClient = NamespaceClient<typeof workflowProjectionSchema>;
 type WorkflowProjectEntity = ReturnType<WorkflowProjectionTypeClient["workflowProject"]["get"]>;
 type WorkflowRepositoryEntity = ReturnType<
   WorkflowProjectionTypeClient["workflowRepository"]["get"]
@@ -207,8 +207,12 @@ type WorkflowCommitEntity = ReturnType<WorkflowProjectionTypeClient["workflowCom
 type RepositoryBranchEntity = ReturnType<WorkflowProjectionTypeClient["repositoryBranch"]["get"]>;
 type RepositoryCommitEntity = ReturnType<WorkflowProjectionTypeClient["repositoryCommit"]["get"]>;
 type AgentSessionEntity = ReturnType<WorkflowProjectionTypeClient["agentSession"]["get"]>;
+type DocumentEntity = ReturnType<WorkflowProjectionTypeClient["document"]["get"]>;
 
 export interface WorkflowProjectionGraphClient {
+  readonly document: {
+    get(id: string): DocumentEntity;
+  };
   readonly workflowProject: {
     list(): WorkflowProjectEntity[];
   };
@@ -869,7 +873,7 @@ function buildWorkflowProjectionIndexState(
   const branchById = new Map<string, WorkflowBranchSummary>();
   const branchesByProjectId = groupBy(
     graph.workflowBranch.list().map((branch) => {
-      const summary = buildBranchSummary(branch);
+      const summary = buildBranchSummary(graph, branch);
       branchById.set(summary.id, summary);
       return summary;
     }),
@@ -1363,7 +1367,26 @@ function buildRepositorySummary(entity: WorkflowRepositoryEntity): WorkflowRepos
   };
 }
 
-function buildBranchSummary(entity: WorkflowBranchEntity): WorkflowBranchSummary {
+function trimOptionalString(value: string | undefined): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
+function readGoalSummary(
+  graph: Pick<WorkflowProjectionGraphClient, "document">,
+  goalDocumentId: string | undefined,
+): string | undefined {
+  if (!goalDocumentId) return undefined;
+  return trimOptionalString(graph.document.get(goalDocumentId).description);
+}
+
+function buildBranchSummary(
+  graph: Pick<WorkflowProjectionGraphClient, "document">,
+  entity: WorkflowBranchEntity,
+): WorkflowBranchSummary {
+  const goalSummary = readGoalSummary(graph, entity.goalDocument);
+
   return {
     entity: "branch",
     id: entity.id,
@@ -1371,7 +1394,7 @@ function buildBranchSummary(entity: WorkflowBranchEntity): WorkflowBranchSummary
     projectId: entity.project,
     branchKey: entity.branchKey,
     state: decodeWorkflowBranchState(entity.state),
-    goalSummary: entity.goalSummary,
+    ...(goalSummary ? { goalSummary } : {}),
     ...(entity.goalDocument ? { goalDocumentId: entity.goalDocument } : {}),
     ...(entity.contextDocument ? { contextDocumentId: entity.contextDocument } : {}),
     ...(entity.queueRank !== undefined ? { queueRank: entity.queueRank } : {}),

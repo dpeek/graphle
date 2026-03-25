@@ -26,13 +26,6 @@ export const node = defineType({
         label: "Name",
       },
     }),
-    label: stringTypeModule.field({
-      cardinality: "one?",
-      icon: graphIconSeeds.string,
-      meta: {
-        label: "Label",
-      },
-    }),
     description: stringTypeModule.field({
       cardinality: "one?",
       icon: graphIconSeeds.string,

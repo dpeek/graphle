@@ -38,9 +38,7 @@ function date(value: string): Date {
 
 function createWorkflowRuntimeFixture() {
   const store = createStore();
-  bootstrap(store, core);
-  bootstrap(store, pkm);
-  bootstrap(store, ops);
+  bootstrap(store, productGraph);
   const graph = createTypeClient(store, productGraph);
 
   const projectId = graph.workflowProject.create({
@@ -49,13 +47,19 @@ function createWorkflowRuntimeFixture() {
     createdAt: date("2026-01-01T00:00:00.000Z"),
     updatedAt: date("2026-01-01T00:00:00.000Z"),
   });
+  const goalDocumentId = graph.document.create({
+    name: "Workflow runtime contract goal",
+    description: "Define the graph-backed branch board contract.",
+    createdAt: date("2026-01-02T00:00:00.000Z"),
+    updatedAt: date("2026-01-05T00:00:00.000Z"),
+  });
   const branchId = graph.workflowBranch.create({
     name: "Workflow runtime contract",
     project: projectId,
     branchKey: "branch:workflow-runtime-contract",
     state: ops.workflowBranchState.values.active.id,
     queueRank: 1,
-    goalSummary: "Define the graph-backed branch board contract.",
+    goalDocument: goalDocumentId,
     createdAt: date("2026-01-02T00:00:00.000Z"),
     updatedAt: date("2026-01-05T00:00:00.000Z"),
   });
@@ -74,7 +78,7 @@ function createWorkflowRuntimeFixture() {
     updatedAt: date("2026-01-05T01:00:00.000Z"),
   });
 
-  const runtime = createSyncedTypeClient(ops, {
+  const runtime = createSyncedTypeClient(productGraph, {
     pull: () => createTotalSyncPayload(store, { cursor: "server:workflow:1" }),
   });
 
@@ -86,8 +90,8 @@ function createWorkflowRuntimeFixture() {
 }
 
 function WorkflowProjectionProbe({ branchId, projectId }: { branchId: string; projectId: string }) {
-  const runtime = useGraphRuntime<typeof ops>();
-  const syncState = useGraphSyncState<typeof ops>();
+  const runtime = useGraphRuntime<typeof productGraph>();
+  const syncState = useGraphSyncState<typeof productGraph>();
   const projection = useWorkflowProjectionIndex();
   const branchScope = useProjectBranchScope({ projectId });
   const commitQueue = useCommitQueueScope({ branchId });

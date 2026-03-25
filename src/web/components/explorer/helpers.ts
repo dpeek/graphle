@@ -118,8 +118,6 @@ export function getEntityLabel(
   const snapshot = entity.get();
   const name = snapshot.name;
   if (typeof name === "string" && name.length > 0) return name;
-  const label = snapshot.label;
-  if (typeof label === "string" && label.length > 0) return label;
   return fallbackLabel;
 }
 
@@ -233,7 +231,12 @@ export function formatPredicateMetaSummary(
   const parts: string[] = [];
 
   if (options.includeReadOnly) parts.unshift("Read only");
-  if (options.status && options.status.tone !== "present" && options.status.label !== "unset") {
+  if (
+    options.status &&
+    options.status.tone !== "present" &&
+    options.status.label !== "unset" &&
+    options.status.label !== "empty"
+  ) {
     parts.push(startCase(options.status.label));
   }
 

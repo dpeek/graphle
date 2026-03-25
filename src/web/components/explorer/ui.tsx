@@ -57,11 +57,13 @@ export function Badge({
 
 export function ListButton({
   active,
+  className,
   children,
   onClick,
   props,
 }: {
   active: boolean;
+  className?: string;
   children: ReactNode;
   onClick: () => void;
   props?: Record<string, string>;
@@ -74,6 +76,7 @@ export function ListButton({
         active
           ? "border-primary/20 bg-secondary text-foreground"
           : "border-border/60 bg-background text-foreground hover:bg-muted",
+        className,
       )}
       onClick={onClick}
       type="button"

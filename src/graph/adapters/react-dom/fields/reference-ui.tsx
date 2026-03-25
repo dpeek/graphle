@@ -30,8 +30,6 @@ export function getEntityReferenceLabel(entity: EntityReferenceEntity): string {
   const snapshot = entity.get();
   const name = snapshot.name;
   if (typeof name === "string" && name.length > 0) return name;
-  const label = snapshot.label;
-  if (typeof label === "string" && label.length > 0) return label;
   return "Untitled";
 }
 

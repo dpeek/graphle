@@ -91,6 +91,7 @@ export async function createHttpGraphClient<const T extends Record<string, AnyTy
 
     const response = await fetchImpl(requestUrl, {
       cache: "no-store",
+      credentials: "same-origin",
       headers: createHttpRequestHeaders(bearerToken, {
         accept: "application/json",
       }),
@@ -114,6 +115,7 @@ export async function createHttpGraphClient<const T extends Record<string, AnyTy
   ): Promise<AuthoritativeGraphWriteResult> {
     const response = await fetchImpl(transactionUrl, {
       method: "POST",
+      credentials: "same-origin",
       headers: createHttpRequestHeaders(bearerToken, {
         accept: "application/json",
         "content-type": "application/json",

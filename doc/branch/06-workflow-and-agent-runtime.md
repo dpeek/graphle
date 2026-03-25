@@ -319,7 +319,7 @@ Recommended foundation contracts this branch should depend on:
 
 - canonical reusable markdown document for notes, specs, blog drafts, docs, and
   agent context
-- carries stable identity, title, optional slug, summary, and tags
+- carries stable identity, title, optional slug, description, and tags
 - does not carry a built-in domain `kind` enum in the foundation contract
 
 `DocumentBlock`
@@ -434,7 +434,7 @@ interface WorkflowBranch {
   title: string;
   state: WorkflowBranchState;
   queueRank?: number;
-  goalSummary: string;
+  goalSummary?: string;
   goalDocumentId?: string;
   contextDocumentId?: string;
   activeCommitId?: string;
@@ -884,8 +884,9 @@ interface CommitQueueScopeResult {
 ```
 
 - contract rules:
-  - `branch.workflowBranch.goalSummary` is the canonical branch goal field for
-    the first TUI shell; the query does not duplicate that summary elsewhere
+  - `branch.workflowBranch.goalSummary` is derived from
+    `branch.workflowBranch.goalDocumentId` when that document has a non-empty
+    `description`; the query does not duplicate that summary elsewhere
   - `rows` are ordered by `workflowCommit.order asc`; projections may add
     deterministic tie-breakers but cannot change queue-order semantics
   - `branch.activeCommit` may duplicate one row from `rows` so the active
@@ -1094,7 +1095,7 @@ interface CommitQueueScopeResult {
 Authoritative:
 
 - project registry and repository attachments
-- logical branch state, goal summary, and queue rank
+- logical branch state, goal document reference, and queue rank
 - commit queue and active commit pointer
 - logical-to-repository branch and commit mappings
 - session identity and ordered event envelopes
@@ -1278,7 +1279,7 @@ graph.
    - optional managed repository-branch creation
 4. authoritative write point:
    - create `WorkflowBranch`
-   - set branch state and goal summary
+   - set branch state and optional goal document reference
    - optionally create or attach managed `RepositoryBranch`
 5. failure or fallback behavior:
    - if git branch creation fails, keep the logical branch record in `backlog`

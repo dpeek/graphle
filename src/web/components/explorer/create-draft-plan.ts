@@ -26,13 +26,10 @@ export type DraftFieldDefinition = {
   path: string[];
   pathLabel: string;
   predicateId: string;
-  reason?: string;
 };
 
 export type CreatePlan = {
   clientFields: DraftFieldDefinition[];
-  deferredFields: DraftFieldDefinition[];
-  requiredBlockingFields: DraftFieldDefinition[];
   supported: boolean;
 };
 
@@ -44,22 +41,6 @@ export function isEdgeOutputValue(value: unknown): value is EdgeOutput {
     typeof candidate.range === "string" &&
     typeof candidate.cardinality === "string"
   );
-}
-
-function describeDeferredFieldReason(field: DraftFieldDefinition): string {
-  if (field.predicateId === typePredicateId) return "Assigned automatically by the graph.";
-  if (field.predicateId === createdAtPredicateId || field.predicateId === updatedAtPredicateId) {
-    return "Managed by lifecycle hooks after create.";
-  }
-
-  const writePolicy = fieldWritePolicy(field.field as Parameters<typeof fieldWritePolicy>[0]);
-  if (writePolicy === "server-command") {
-    return "Edited after create through a server-command flow.";
-  }
-  if (writePolicy === "authority-only") {
-    return "Authority-owned and not editable from this client.";
-  }
-  return "Edited after create through the normal entity view.";
 }
 
 function collectDraftFields(
@@ -88,24 +69,21 @@ function collectDraftFields(
 
 export function buildCreatePlan(entry: EntityCatalogEntry): CreatePlan {
   const clientFields: DraftFieldDefinition[] = [];
-  const deferredFields: DraftFieldDefinition[] = [];
-  const requiredBlockingFields: DraftFieldDefinition[] = [];
+  let supported = true;
 
   for (const field of collectDraftFields(entry.typeDef.fields as Record<string, unknown>)) {
     const isManagedField =
       field.predicateId === typePredicateId ||
       field.predicateId === createdAtPredicateId ||
       field.predicateId === updatedAtPredicateId;
-    const writePolicy = fieldWritePolicy(field.field as Parameters<typeof fieldWritePolicy>[0]);
+    if (isManagedField) {
+      continue;
+    }
 
-    if (isManagedField || writePolicy !== "client-tx") {
-      const deferred = {
-        ...field,
-        reason: describeDeferredFieldReason(field),
-      };
-      deferredFields.push(deferred);
-      if (field.field.cardinality === "one" && !isManagedField) {
-        requiredBlockingFields.push(deferred);
+    const writePolicy = fieldWritePolicy(field.field as Parameters<typeof fieldWritePolicy>[0]);
+    if (writePolicy !== "client-tx") {
+      if (field.field.cardinality === "one") {
+        supported = false;
       }
       continue;
     }
@@ -115,9 +93,7 @@ export function buildCreatePlan(entry: EntityCatalogEntry): CreatePlan {
 
   return {
     clientFields,
-    deferredFields,
-    requiredBlockingFields,
-    supported: requiredBlockingFields.length === 0,
+    supported,
   };
 }
 
@@ -155,8 +131,4 @@ export function buildCreateDefaults(
   }
 
   return defaults;
-}
-
-export function getDeferredFieldReason(field: DraftFieldDefinition): string {
-  return field.reason ?? describeDeferredFieldReason(field);
 }

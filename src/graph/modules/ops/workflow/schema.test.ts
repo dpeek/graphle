@@ -558,7 +558,6 @@ describe("ops workflow schema", () => {
       project: projectId,
       branchKey: "branch:workflow-authority",
       state: ops.workflowBranchState.values.ready.id,
-      goalSummary: "Protect workflow contracts with direct regression coverage.",
     });
     const commitId = graph.workflowCommit.create({
       name: "Add contract tests",

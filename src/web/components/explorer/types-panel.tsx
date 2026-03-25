@@ -70,7 +70,6 @@ export function TypeInspector({
   const iconId = resolveDisplayedDefinitionIconId(entry.compiledIconId, graphIconId);
   const fieldRows = [
     { pathLabel: "metadata.name", predicate: fields.name },
-    { pathLabel: "metadata.label", predicate: fields.label },
     { pathLabel: "metadata.description", predicate: fields.description },
     { pathLabel: "metadata.icon", predicate: fields.icon },
   ];

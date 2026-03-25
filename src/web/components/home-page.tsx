@@ -71,6 +71,9 @@ export function HomePageStateView({
           </p>
 
           <div className="flex flex-wrap gap-2">
+            <Button nativeButton={false} render={<Link to="/workflow" />}>
+              Open workflow
+            </Button>
             <Button nativeButton={false} render={<Link to="/graph" />}>
               Open graph
             </Button>

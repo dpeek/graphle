@@ -1,54 +1,26 @@
 import { GraphValidationError, typeId } from "@io/core/graph";
 import { Button } from "@io/web/button";
+import { DialogClose, DialogFooter, DialogHeader, DialogTitle } from "@io/web/dialog";
+import { XIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { flattenPredicateRefs } from "./catalog.js";
 import { createDraftController } from "./create-draft-controller.js";
-import {
-  buildCreateDefaults,
-  buildCreatePlan,
-  getDeferredFieldReason,
-  type DraftFieldDefinition,
-} from "./create-draft-plan.js";
-import { InspectorFieldSection, InspectorShell } from "./inspector.js";
+import { buildCreateDefaults, buildCreatePlan } from "./create-draft-plan.js";
+import { InspectorFieldSection } from "./inspector.js";
 import { explorerNamespace } from "./model.js";
 import type { EntityCatalogEntry, ExplorerRuntime } from "./model.js";
 import { describeSyncError } from "./sync.js";
-import { EmptyState, Section } from "./ui.js";
-
-function DeferredFieldSection({ fields }: { fields: readonly DraftFieldDefinition[] }) {
-  if (fields.length === 0) return null;
-
-  return (
-    <Section title="After Create">
-      <div className="grid gap-3">
-        {fields.map((field) => (
-          <div
-            className="border-border bg-muted/20 rounded-xl border px-4 py-3"
-            data-explorer-deferred-field={field.pathLabel}
-            key={field.pathLabel}
-          >
-            <div className="text-sm font-medium">{field.pathLabel}</div>
-            <div className="text-muted-foreground mt-1 text-sm">
-              {getDeferredFieldReason(field)}
-            </div>
-          </div>
-        ))}
-      </div>
-    </Section>
-  );
-}
+import { EmptyState } from "./ui.js";
 
 export function GenericCreateInspector({
   entityEntry,
   entityEntryById,
-  onCancelCreate,
   onCreated,
   runtime,
 }: {
   entityEntry: EntityCatalogEntry;
   entityEntryById: ReadonlyMap<string, EntityCatalogEntry>;
-  onCancelCreate?: () => void;
   onCreated: (entityId: string) => void;
   runtime: ExplorerRuntime;
 }) {
@@ -94,6 +66,7 @@ export function GenericCreateInspector({
       }),
     [createPlan.clientFields, predicateRows],
   );
+  const createLabel = `Create ${entityEntry.name}`;
 
   async function handleCreate(): Promise<void> {
     const currentEntry = entityEntryRef.current;
@@ -123,42 +96,60 @@ export function GenericCreateInspector({
 
   if (!createPlan.supported) {
     return (
-      <InspectorShell
-        description="This entity type cannot be created from the client because required fields are owned by server-command or authority-only flows."
-        state="new"
-        status={`New ${entityEntry.name}`}
-        title={`New ${entityEntry.name}`}
-        typeLabel={entityEntry.name}
-      >
-        <EmptyState>Required deferred fields block generic create for this type.</EmptyState>
-        <DeferredFieldSection fields={createPlan.requiredBlockingFields} />
-      </InspectorShell>
+      <div className="flex max-h-full min-h-0 flex-col">
+        <DialogHeader className="border-border/60 flex-row items-center justify-between gap-3 border-b px-4 py-3">
+          <DialogTitle className="text-base font-semibold">{createLabel}</DialogTitle>
+          <DialogClose
+            render={
+              <Button
+                aria-label="Close create dialog"
+                size="icon-sm"
+                type="button"
+                variant="ghost"
+              />
+            }
+          >
+            <XIcon />
+          </DialogClose>
+        </DialogHeader>
+
+        <div className="min-h-0 flex-1 overflow-y-auto p-4">
+          <EmptyState>
+            This type requires fields that cannot be set in the generic create dialog.
+          </EmptyState>
+        </div>
+
+        <DialogFooter className="border-border/60 border-t px-4 py-3">
+          <Button data-explorer-create-submit={entityEntry.id} disabled type="button">
+            {createLabel}
+          </Button>
+          <DialogClose render={<Button type="button" variant="outline" />}>Cancel</DialogClose>
+        </DialogFooter>
+      </div>
     );
   }
 
   return (
-    <InspectorShell
-      description={`Create ${entityEntry.name.toLowerCase()} records through the same field editors used for live entities.`}
-      state="new"
-      status={`New ${entityEntry.name}`}
-      title={`New ${entityEntry.name}`}
-      typeLabel={entityEntry.name}
-    >
-      <InspectorFieldSection
-        emptyMessage="No client-writable fields."
-        hideMissingStatus
-        rows={fieldRows}
-        title="Fields"
-      />
+    <div className="flex max-h-full min-h-0 flex-col">
+      <DialogHeader className="border-border/60 flex-row items-center justify-between gap-3 border-b px-4 py-3">
+        <DialogTitle className="text-base font-semibold">{createLabel}</DialogTitle>
+        <DialogClose
+          render={
+            <Button aria-label="Close create dialog" size="icon-sm" type="button" variant="ghost" />
+          }
+        >
+          <XIcon />
+        </DialogClose>
+      </DialogHeader>
 
-      <DeferredFieldSection fields={createPlan.deferredFields} />
-
-      <Section title="Create">
+      <div className="min-h-0 flex-1 overflow-y-auto p-4">
         <div className="space-y-4">
-          <p className="text-muted-foreground text-sm">
-            The draft validates through the real graph handle before commit. After creation, you
-            continue editing in the normal entity inspector.
-          </p>
+          <InspectorFieldSection
+            chrome={false}
+            emptyMessage="No client-writable fields."
+            hideMissingStatus
+            rows={fieldRows}
+          />
 
           {submitError ? (
             <div
@@ -168,26 +159,22 @@ export function GenericCreateInspector({
               {submitError}
             </div>
           ) : null}
-
-          <div className="flex flex-wrap gap-2">
-            <Button
-              data-explorer-create-submit={entityEntry.id}
-              disabled={busy}
-              onClick={() => {
-                void handleCreate();
-              }}
-              type="button"
-            >
-              {busy ? "Creating..." : `Create ${entityEntry.name}`}
-            </Button>
-            {onCancelCreate ? (
-              <Button onClick={onCancelCreate} type="button" variant="outline">
-                Cancel
-              </Button>
-            ) : null}
-          </div>
         </div>
-      </Section>
-    </InspectorShell>
+      </div>
+
+      <DialogFooter className="border-border/60 border-t px-4 py-3">
+        <Button
+          data-explorer-create-submit={entityEntry.id}
+          disabled={busy}
+          onClick={() => {
+            void handleCreate();
+          }}
+          type="button"
+        >
+          {busy ? "Creating..." : createLabel}
+        </Button>
+        <DialogClose render={<Button type="button" variant="outline" />}>Cancel</DialogClose>
+      </DialogFooter>
+    </div>
   );
 }

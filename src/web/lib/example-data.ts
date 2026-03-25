@@ -197,6 +197,17 @@ export function seedExampleGraph(
         updatedAt: date("2026-01-06T00:00:00.000Z"),
       }),
   );
+  const workflowGoal = resolveEntityId(
+    graph.document.list().find((document) => document.slug === "workflow-shell-goal"),
+    () =>
+      graph.document.create({
+        description: "Hydrate the first graph-backed workflow shell from the synced review scope.",
+        name: "Workflow Shell Goal",
+        isArchived: false,
+        slug: "workflow-shell-goal",
+        tags: [graphTag, docsTag],
+      }),
+  );
   const workflowBranch = resolveEntityId(
     graph.workflowBranch.list().find((branch) => branch.branchKey === "branch:workflow-shell"),
     () =>
@@ -206,7 +217,7 @@ export function seedExampleGraph(
         branchKey: "branch:workflow-shell",
         state: ops.workflowBranchState.values.active.id,
         queueRank: 1,
-        goalSummary: "Hydrate the first graph-backed workflow shell from the synced review scope.",
+        goalDocument: workflowGoal,
         createdAt: date("2026-01-02T00:00:00.000Z"),
         updatedAt: date("2026-01-06T00:00:00.000Z"),
       }),

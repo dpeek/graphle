@@ -81,7 +81,7 @@ export type WorkflowBranchSummary = WorkflowSummaryBase & {
   readonly entity: "branch";
   readonly contextDocumentId?: string;
   readonly goalDocumentId?: string;
-  readonly goalSummary: string;
+  readonly goalSummary?: string;
   readonly projectId: string;
   readonly queueRank?: number;
   readonly state: WorkflowBranchStateValue;
@@ -177,7 +177,6 @@ export type WorkflowMutationAction =
       readonly branchKey: string;
       readonly contextDocumentId?: string | null;
       readonly goalDocumentId?: string | null;
-      readonly goalSummary: string;
       readonly projectId: string;
       readonly queueRank?: number | null;
       readonly state?: Extract<WorkflowBranchStateValue, "backlog" | "ready">;
@@ -189,7 +188,6 @@ export type WorkflowMutationAction =
       readonly branchKey?: string;
       readonly contextDocumentId?: string | null;
       readonly goalDocumentId?: string | null;
-      readonly goalSummary?: string;
       readonly queueRank?: number | null;
       readonly title?: string;
     }

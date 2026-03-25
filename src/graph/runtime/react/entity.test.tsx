@@ -70,7 +70,6 @@ describe("entity traversal helpers", () => {
     expect(collectDataAttributes(markup, "data-path")).toEqual([
       "type",
       "name",
-      "label",
       "description",
       "createdAt",
       "updatedAt",

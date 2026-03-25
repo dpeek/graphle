@@ -9,10 +9,10 @@ import {
   type ProjectBranchScopeResult,
   type WorkflowProjectionIndex,
   type WorkflowProjectionIndexOptions,
-  workflowSchema,
+  workflowProjectionSchema,
 } from "../graph/modules/ops/workflow/schema.js";
 
-type WorkflowProjectionSchema = typeof workflowSchema;
+type WorkflowProjectionSchema = typeof workflowProjectionSchema;
 
 export interface WorkflowProjectionQueryOptions {
   readonly options?: WorkflowProjectionIndexOptions;

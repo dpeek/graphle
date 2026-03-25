@@ -249,14 +249,12 @@ export function flattenPredicateRefs(
 export function asNodeMetadataFields(fields: unknown): {
   createdAt: AnyPredicateRef;
   description: AnyPredicateRef;
-  label: AnyPredicateRef;
   name: AnyPredicateRef;
   updatedAt: AnyPredicateRef;
 } {
   return fields as {
     createdAt: AnyPredicateRef;
     description: AnyPredicateRef;
-    label: AnyPredicateRef;
     name: AnyPredicateRef;
     updatedAt: AnyPredicateRef;
   };
@@ -266,7 +264,6 @@ export function asTypeMetadataFields(fields: unknown): {
   createdAt: AnyPredicateRef;
   description: AnyPredicateRef;
   icon: MutableOptionalPredicateRef;
-  label: AnyPredicateRef;
   name: AnyPredicateRef;
   updatedAt: AnyPredicateRef;
 } {
@@ -274,7 +271,6 @@ export function asTypeMetadataFields(fields: unknown): {
     createdAt: AnyPredicateRef;
     description: AnyPredicateRef;
     icon: MutableOptionalPredicateRef;
-    label: AnyPredicateRef;
     name: AnyPredicateRef;
     updatedAt: AnyPredicateRef;
   };

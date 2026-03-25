@@ -222,6 +222,47 @@ describe("createHttpGraphClient", () => {
     expect(authorizationHeaders).toEqual(["Bearer share-token", "Bearer share-token"]);
   });
 
+  it("sends same-origin credentials on sync and transaction requests", async () => {
+    const authority = createAuthority();
+    const credentials: RequestCredentials[] = [];
+    const fetch: FetchImpl = async (input, init) => {
+      if (init?.credentials) {
+        credentials.push(init.credentials);
+      }
+      const request = input instanceof Request ? input : new Request(String(input), init);
+      const url = new URL(request.url);
+
+      if (url.pathname === "/api/sync") {
+        return Response.json(
+          createTotalSyncPayload(authority.store, {
+            cursor: authority.writes.getCursor() ?? authority.writes.getBaseCursor(),
+            diagnostics: createAuthoritySyncDiagnostics({ writes: authority.writes }),
+          }),
+        );
+      }
+
+      if (url.pathname === "/api/tx" && request.method === "POST") {
+        const transaction = (await request.json()) as GraphWriteTransaction;
+        return Response.json(authority.writes.apply(transaction));
+      }
+
+      return Response.json(
+        { error: `Unhandled ${request.method} ${url.pathname}` },
+        { status: 404 },
+      );
+    };
+
+    const client = await createHttpGraphClient(testGraph, {
+      fetch,
+      createTxId: () => "cli:credentials:1",
+    });
+
+    client.graph.item.create({ name: "Created from client" });
+    await client.sync.flush();
+
+    expect(credentials).toEqual(["same-origin", "same-origin"]);
+  });
+
   it("preserves one requested module scope across scoped bootstrap and refresh requests", async () => {
     const authority = createAuthority();
     const requestedScope = {

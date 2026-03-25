@@ -9,11 +9,17 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as WorkflowRouteImport } from './routes/workflow'
 import { Route as ViewsRouteImport } from './routes/views'
 import { Route as SyncRouteImport } from './routes/sync'
 import { Route as GraphRouteImport } from './routes/graph'
 import { Route as IndexRouteImport } from './routes/index'
 
+const WorkflowRoute = WorkflowRouteImport.update({
+  id: '/workflow',
+  path: '/workflow',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ViewsRoute = ViewsRouteImport.update({
   id: '/views',
   path: '/views',
@@ -40,12 +46,14 @@ export interface FileRoutesByFullPath {
   '/graph': typeof GraphRoute
   '/sync': typeof SyncRoute
   '/views': typeof ViewsRoute
+  '/workflow': typeof WorkflowRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/graph': typeof GraphRoute
   '/sync': typeof SyncRoute
   '/views': typeof ViewsRoute
+  '/workflow': typeof WorkflowRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -53,13 +61,14 @@ export interface FileRoutesById {
   '/graph': typeof GraphRoute
   '/sync': typeof SyncRoute
   '/views': typeof ViewsRoute
+  '/workflow': typeof WorkflowRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/graph' | '/sync' | '/views'
+  fullPaths: '/' | '/graph' | '/sync' | '/views' | '/workflow'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/graph' | '/sync' | '/views'
-  id: '__root__' | '/' | '/graph' | '/sync' | '/views'
+  to: '/' | '/graph' | '/sync' | '/views' | '/workflow'
+  id: '__root__' | '/' | '/graph' | '/sync' | '/views' | '/workflow'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -67,10 +76,18 @@ export interface RootRouteChildren {
   GraphRoute: typeof GraphRoute
   SyncRoute: typeof SyncRoute
   ViewsRoute: typeof ViewsRoute
+  WorkflowRoute: typeof WorkflowRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/workflow': {
+      id: '/workflow'
+      path: '/workflow'
+      fullPath: '/workflow'
+      preLoaderRoute: typeof WorkflowRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/views': {
       id: '/views'
       path: '/views'
@@ -107,6 +124,7 @@ const rootRouteChildren: RootRouteChildren = {
   GraphRoute: GraphRoute,
   SyncRoute: SyncRoute,
   ViewsRoute: ViewsRoute,
+  WorkflowRoute: WorkflowRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

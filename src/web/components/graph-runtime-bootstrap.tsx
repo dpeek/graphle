@@ -169,6 +169,20 @@ function ErrorState({ error, onRetry }: { error: unknown; onRetry(): void }) {
   );
 }
 
+export function GraphRuntimeProvider({
+  children,
+  runtime,
+}: {
+  children: ReactNode;
+  runtime: GraphRuntime;
+}) {
+  return (
+    <GraphRuntimeContext.Provider value={runtime}>
+      <GraphMutationRuntimeProvider runtime={runtime}>{children}</GraphMutationRuntimeProvider>
+    </GraphRuntimeContext.Provider>
+  );
+}
+
 export function GraphRuntimeBootstrap({
   children,
   requestedScope = graphSyncScope,
@@ -213,11 +227,5 @@ export function GraphRuntimeBootstrap({
     );
   }
 
-  return (
-    <GraphRuntimeContext.Provider value={state.runtime}>
-      <GraphMutationRuntimeProvider runtime={state.runtime}>
-        {children}
-      </GraphMutationRuntimeProvider>
-    </GraphRuntimeContext.Provider>
-  );
+  return <GraphRuntimeProvider runtime={state.runtime}>{children}</GraphRuntimeProvider>;
 }

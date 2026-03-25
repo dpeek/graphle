@@ -71,7 +71,7 @@ import {
   type ProjectBranchScopeResult,
   type RetainedWorkflowProjectionState,
   WorkflowProjectionQueryError,
-  workflowSchema,
+  workflowProjectionSchema,
   workflowReviewModuleReadScope,
   type WorkflowMutationAction,
   type WorkflowMutationResult,
@@ -411,7 +411,6 @@ export type WebAppAuthorityOptions = {
 
 const typePredicateId = edgeId(core.node.fields.type);
 const namePredicateId = edgeId(core.node.fields.name);
-const labelPredicateId = edgeId(core.node.fields.label);
 const createdAtPredicateId = edgeId(core.node.fields.createdAt);
 const updatedAtPredicateId = edgeId(core.node.fields.updatedAt);
 const secretHandleVersionPredicateId = edgeId(core.secretHandle.fields.version);
@@ -437,7 +436,7 @@ const writeSecretFieldCommandBasePredicateIds = [
 ] as const;
 const moduleScopeCursorPrefix = "scope:";
 const workflowModuleEntityTypeIds = new Set(
-  Object.values(workflowSchema)
+  Object.values(workflowProjectionSchema)
     .filter(isEntityType)
     .map((typeDef) => {
       const values = typeDef.values as { readonly id?: string; readonly key: string };
@@ -453,6 +452,7 @@ const workflowProjectionReadEntityTypeIds = new Set(
     repositoryBranch,
     repositoryCommit,
     agentSession,
+    pkm.document,
   ].map((typeDef) => {
     const values = typeDef.values as { readonly id?: string; readonly key: string };
     return values.id ?? values.key;
@@ -637,9 +637,12 @@ function buildRetainedWorkflowProjectionState(
   sourceCursor: string,
 ): RetainedWorkflowProjectionState {
   const projectionStore = createStore(snapshot);
-  return createRetainedWorkflowProjectionState(createTypeClient(projectionStore, workflowSchema), {
-    sourceCursor,
-  });
+  return createRetainedWorkflowProjectionState(
+    createTypeClient(projectionStore, workflowProjectionSchema),
+    {
+      sourceCursor,
+    },
+  );
 }
 
 function sameRetainedWorkflowProjectionState(
@@ -1309,9 +1312,7 @@ function getFirstObject(store: Store, subjectId: string, predicateId: string): s
 }
 
 function getEntityLabel(store: Store, id: string): string {
-  return (
-    getFirstObject(store, id, namePredicateId) ?? getFirstObject(store, id, labelPredicateId) ?? id
-  );
+  return getFirstObject(store, id, namePredicateId) ?? id;
 }
 
 export function collectLiveSecretIds(snapshot: StoreSnapshot): readonly string[] {

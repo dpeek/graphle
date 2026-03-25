@@ -95,6 +95,7 @@ export function InspectorShell({
 }
 
 export function InspectorFieldSection({
+  chrome = true,
   description,
   emptyMessage = "No shared fields are available for this selection.",
   hideMissingStatus = false,
@@ -103,6 +104,7 @@ export function InspectorFieldSection({
   submitSecretField,
   title = "Fields",
 }: {
+  chrome?: boolean;
   description?: string;
   emptyMessage?: string;
   hideMissingStatus?: boolean;
@@ -111,49 +113,54 @@ export function InspectorFieldSection({
   submitSecretField?: SubmitSecretFieldMutation;
   title?: string;
 }) {
+  const content =
+    rows.length > 0 ? (
+      <div className="grid gap-4">
+        {rows.map((row) => (
+          <PredicateRow
+            customEditor={
+              row.predicate
+                ? (row.customEditor ??
+                  (runtime &&
+                  submitSecretField &&
+                  isSecretBackedField(row.predicate.field) &&
+                  row.predicate.field.cardinality !== "many"
+                    ? (callbacks) => (
+                        <SecretFieldEditor
+                          callbacks={callbacks}
+                          predicate={row.predicate!}
+                          runtime={runtime}
+                          submitSecretField={submitSecretField}
+                        />
+                      )
+                    : undefined))
+                : undefined
+            }
+            description={row.description}
+            display={row.display}
+            hideMissingStatus={hideMissingStatus}
+            key={
+              row.predicate
+                ? `${row.pathLabel}:${row.predicate.predicateId}`
+                : `${row.pathLabel}:value`
+            }
+            pathLabel={row.pathLabel}
+            predicate={row.predicate}
+            readOnly={row.readOnly}
+            title={row.title}
+            value={row.value}
+          />
+        ))}
+      </div>
+    ) : (
+      <EmptyState>{emptyMessage}</EmptyState>
+    );
+
+  if (!chrome) return content;
+
   return (
     <Section description={description} title={title}>
-      {rows.length > 0 ? (
-        <div className="grid gap-4">
-          {rows.map((row) => (
-            <PredicateRow
-              customEditor={
-                row.predicate
-                  ? (row.customEditor ??
-                    (runtime &&
-                    submitSecretField &&
-                    isSecretBackedField(row.predicate.field) &&
-                    row.predicate.field.cardinality !== "many"
-                      ? (callbacks) => (
-                          <SecretFieldEditor
-                            callbacks={callbacks}
-                            predicate={row.predicate!}
-                            runtime={runtime}
-                            submitSecretField={submitSecretField}
-                          />
-                        )
-                      : undefined))
-                  : undefined
-              }
-              description={row.description}
-              display={row.display}
-              hideMissingStatus={hideMissingStatus}
-              key={
-                row.predicate
-                  ? `${row.pathLabel}:${row.predicate.predicateId}`
-                  : `${row.pathLabel}:value`
-              }
-              pathLabel={row.pathLabel}
-              predicate={row.predicate}
-              readOnly={row.readOnly}
-              title={row.title}
-              value={row.value}
-            />
-          ))}
-        </div>
-      ) : (
-        <EmptyState>{emptyMessage}</EmptyState>
-      )}
+      {content}
     </Section>
   );
 }

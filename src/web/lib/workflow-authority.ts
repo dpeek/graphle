@@ -549,7 +549,19 @@ function buildRepositorySummary(
   } satisfies WorkflowMutationSummary;
 }
 
-function buildBranchSummary(entity: ReturnType<ProductGraphClient["workflowBranch"]["get"]>) {
+function readGoalSummary(
+  graph: Pick<ProductGraphClient, "document">,
+  goalDocumentId: string | undefined,
+): string | undefined {
+  if (!goalDocumentId) return undefined;
+  return trimOptionalString(graph.document.get(goalDocumentId).description);
+}
+
+function buildBranchSummary(
+  graph: Pick<ProductGraphClient, "document">,
+  entity: ReturnType<ProductGraphClient["workflowBranch"]["get"]>,
+) {
+  const goalSummary = readGoalSummary(graph, entity.goalDocument);
   return {
     entity: "branch",
     id: entity.id,
@@ -557,7 +569,7 @@ function buildBranchSummary(entity: ReturnType<ProductGraphClient["workflowBranc
     projectId: entity.project,
     branchKey: entity.branchKey,
     state: decodeWorkflowBranchState(entity.state),
-    goalSummary: entity.goalSummary,
+    ...(goalSummary ? { goalSummary } : {}),
     ...(entity.goalDocument ? { goalDocumentId: entity.goalDocument } : {}),
     ...(entity.contextDocument ? { contextDocumentId: entity.contextDocument } : {}),
     ...(entity.queueRank !== undefined ? { queueRank: entity.queueRank } : {}),
@@ -775,7 +787,6 @@ function mutateWorkflow(
         project: project.id,
         branchKey,
         state: workflowBranchStateIds[requestedState],
-        goalSummary: requireString(input.goalSummary, "Goal summary"),
         ...(input.goalDocumentId !== undefined && input.goalDocumentId !== null
           ? {
               goalDocument: requireDocument(
@@ -801,7 +812,7 @@ function mutateWorkflow(
       return {
         action: input.action,
         created: true,
-        summary: buildBranchSummary(graph.workflowBranch.get(branchId)),
+        summary: buildBranchSummary(graph, graph.workflowBranch.get(branchId)),
       };
     }
     case "updateBranch": {
@@ -812,9 +823,6 @@ function mutateWorkflow(
         const branchKey = requireString(input.branchKey, "Branch key");
         requireUniqueBranchKey(graph, branchKey, branch.id);
         patch.branchKey = branchKey;
-      }
-      if (input.goalSummary !== undefined) {
-        patch.goalSummary = requireString(input.goalSummary, "Goal summary");
       }
       if (input.goalDocumentId !== undefined) {
         if (input.goalDocumentId === null) {
@@ -851,7 +859,7 @@ function mutateWorkflow(
       return {
         action: input.action,
         created: false,
-        summary: buildBranchSummary(graph.workflowBranch.get(branch.id)),
+        summary: buildBranchSummary(graph, graph.workflowBranch.get(branch.id)),
       };
     }
     case "setBranchState": {
@@ -898,7 +906,7 @@ function mutateWorkflow(
       return {
         action: input.action,
         created: false,
-        summary: buildBranchSummary(graph.workflowBranch.get(branch.id)),
+        summary: buildBranchSummary(graph, graph.workflowBranch.get(branch.id)),
       };
     }
     case "attachBranchRepositoryTarget": {

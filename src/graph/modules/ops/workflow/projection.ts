@@ -10,6 +10,7 @@ import {
   type InvalidationEvent,
 } from "../../../runtime/projection.js";
 import opsIds from "../../ops.json";
+import { pkm } from "../../pkm.js";
 import {
   agentSession,
   agentSessionEvent,
@@ -118,6 +119,7 @@ const workflowReviewInvalidationTypeIds = new Set(
     workflowDecision,
     contextBundle,
     contextBundleEntry,
+    pkm.document,
   ].flatMap((typeDef) => typeIdentityKeys(typeDef)),
 );
 

@@ -51,13 +51,25 @@ function createWorkflowProjectionFixture() {
     createdAt: date("2026-01-01T00:00:00.000Z"),
     updatedAt: date("2026-01-02T00:00:00.000Z"),
   });
+  const branch1GoalId = graph.document.create({
+    name: "Workflow runtime contract goal",
+    description: "Define the canonical branch board and commit queue contract.",
+    createdAt: date("2026-01-01T00:00:00.000Z"),
+    updatedAt: date("2026-01-05T00:00:00.000Z"),
+  });
+  const branch2GoalId = graph.document.create({
+    name: "Workflow shell polish goal",
+    description: "Tighten the first read-only workflow shell.",
+    createdAt: date("2026-01-02T00:00:00.000Z"),
+    updatedAt: date("2026-01-04T00:00:00.000Z"),
+  });
   const branch1Id = graph.workflowBranch.create({
     name: "Workflow runtime contract",
     project: projectId,
     branchKey: "branch:workflow-runtime-contract",
     state: ops.workflowBranchState.values.active.id,
     queueRank: 1,
-    goalSummary: "Define the canonical branch board and commit queue contract.",
+    goalDocument: branch1GoalId,
     createdAt: date("2026-01-01T00:00:00.000Z"),
     updatedAt: date("2026-01-05T00:00:00.000Z"),
   });
@@ -67,7 +79,7 @@ function createWorkflowProjectionFixture() {
     branchKey: "branch:workflow-shell-polish",
     state: ops.workflowBranchState.values.ready.id,
     queueRank: 2,
-    goalSummary: "Tighten the first read-only workflow shell.",
+    goalDocument: branch2GoalId,
     createdAt: date("2026-01-02T00:00:00.000Z"),
     updatedAt: date("2026-01-04T00:00:00.000Z"),
   });

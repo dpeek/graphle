@@ -165,7 +165,7 @@ function renderBranchDetailBody(model: WorkflowTuiWorkflowSurfaceModel) {
     `State: ${selectedRow.workflowBranch.state}`,
     `Key: ${selectedRow.workflowBranch.branchKey}`,
     `Queue rank: ${selectedRow.workflowBranch.queueRank ?? "unranked"}`,
-    `Goal: ${selectedRow.workflowBranch.goalSummary}`,
+    `Goal: ${selectedRow.workflowBranch.goalSummary ?? "Not recorded"}`,
     `Repository branch: ${renderRepositoryObservation(selectedRow.repositoryBranch)}`,
     `Latest session: ${renderLatestSession(selectedQueue)}`,
     `Projected at: ${formatTimestamp(model.branchBoard.freshness.projectedAt)}`,

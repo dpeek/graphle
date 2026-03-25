@@ -114,7 +114,7 @@ function titleNodeFields(label: string, descriptionLabel = "Description") {
 export const document = defineType({
   values: { key: "pkm:document", name: "Document" },
   fields: {
-    ...titleNodeFields("Document title", "Summary"),
+    ...titleNodeFields("Document title"),
     isArchived: {
       ...booleanTypeModule.field({
         cardinality: "one",

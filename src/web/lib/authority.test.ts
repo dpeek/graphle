@@ -371,7 +371,6 @@ async function seedWorkflowProjectionReadFixture(
     projectId: fixture.projectId,
     title: "Backlog docs",
     branchKey: "branch:backlog-docs",
-    goalSummary: "Document backlog branch guidance.",
     queueRank: 3,
     state: "backlog",
   });
@@ -380,7 +379,6 @@ async function seedWorkflowProjectionReadFixture(
     projectId: fixture.projectId,
     title: "Unranked polish",
     branchKey: "branch:unranked-polish",
-    goalSummary: "Polish the workflow shell after the ranked work lands.",
     state: "ready",
   });
   const commit1 = await executeWorkflowMutation(authority, authorization, {
@@ -1746,7 +1744,6 @@ describe("web authority", () => {
       projectId: project.summary.id,
       title: "Workflow authority",
       branchKey: "branch:workflow-authority",
-      goalSummary: "Implement workflow mutation commands",
       state: "ready",
     });
 
@@ -1851,7 +1848,6 @@ describe("web authority", () => {
       projectId: project.summary.id,
       title: "Unmapped branch",
       branchKey: "branch:unmapped",
-      goalSummary: "Try to activate without a repository target",
       state: "ready",
     });
     const commit = await executeWorkflowMutation(authority, authorization, {
@@ -2135,7 +2131,6 @@ describe("web authority", () => {
       projectId: fixture.projectId,
       title: "Other branch",
       branchKey: "branch:other-branch",
-      goalSummary: "Exercise commit-queue cursor mismatch handling.",
       state: "ready",
     });
 
@@ -2225,7 +2220,6 @@ describe("web authority", () => {
       projectId: fixture.projectId,
       title: "Fresh branch",
       branchKey: "branch:fresh-branch",
-      goalSummary: "Force a branch-board projection rebuild.",
       queueRank: 2,
       state: "ready",
     });
@@ -2790,7 +2784,6 @@ describe("web authority", () => {
       projectId: project.summary.id,
       title: "Route branch",
       branchKey: "branch:route-branch",
-      goalSummary: "Exercise route failures",
       state: "ready",
     });
     const commit = await executeWorkflowMutation(authority, authorization, {

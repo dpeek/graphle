@@ -9,6 +9,7 @@ import {
   type StoreSnapshot,
 } from "@io/core/graph";
 import { core } from "@io/core/graph/modules";
+import { ops } from "@io/core/graph/modules/ops";
 
 import { createAnonymousAuthorizationContext, issueBearerShareToken } from "../lib/auth-bridge.js";
 import { createTestWebAppAuthority } from "../lib/authority-test-helpers.js";
@@ -1210,5 +1211,98 @@ describe("web worker admission flows", () => {
         expect.objectContaining({ roleKey: "graph:owner" }),
       ]),
     );
+  });
+
+  it("accepts graph-member updates after session access activation", async () => {
+    const { durableObject, env } = createEndToEndWorkerEnv();
+    const authority = await getDurableAuthority(durableObject);
+    const workerGraph = { ...core, ...ops } as const;
+
+    await authority.executeCommand(
+      {
+        kind: "set-admission-approval",
+        input: {
+          email: "approved@example.com",
+          graphId: "graph:global",
+          roleKeys: ["graph:member"],
+        },
+      },
+      { authorization: authorityAuthorization },
+    );
+
+    const seedStore = createStore(
+      authority.readSnapshot({ authorization: authorityAuthorization }),
+    );
+    const seedGraph = createTypeClient(seedStore, workerGraph);
+    const beforeCreate = seedStore.snapshot();
+    const envVarId = seedGraph.envVar.create({
+      description: "Original description",
+      name: "OPENAI_API_KEY",
+    });
+    await authority.applyTransaction(
+      buildGraphWriteTransaction(beforeCreate, seedStore.snapshot(), "tx:create-env-var"),
+      {
+        authorization: authorityAuthorization,
+        writeScope: "authority-only",
+      },
+    );
+
+    const handler = createWorkerFetchHandler({
+      async getBetterAuthSession() {
+        return {
+          session: { id: "session-activated-member" },
+          user: { id: "user-activated-member", email: "approved@example.com" },
+        };
+      },
+    });
+
+    const activation = await handler.fetch(
+      new Request("https://web.local/api/access/activate", {
+        method: "POST",
+      }),
+      env,
+    );
+    expect(activation.status).toBe(200);
+    expect(await activation.json()).toMatchObject({
+      roleKeys: ["graph:member"],
+      capabilityVersion: 1,
+    });
+
+    const mutationStore = createStore(
+      authority.readSnapshot({ authorization: authorityAuthorization }),
+    );
+    const mutationGraph = createTypeClient(mutationStore, workerGraph);
+    const beforeUpdate = mutationStore.snapshot();
+    mutationGraph.envVar.update(envVarId, {
+      description: "Updated by activated graph member",
+    });
+    const transaction = buildGraphWriteTransaction(
+      beforeUpdate,
+      mutationStore.snapshot(),
+      "tx:update-env-var",
+    );
+
+    const response = await handler.fetch(
+      new Request("https://web.local/api/tx", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify(transaction),
+      }),
+      env,
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      txId: "tx:update-env-var",
+      writeScope: "client-tx",
+    });
+    expect(
+      createTypeClient(
+        createStore(authority.readSnapshot({ authorization: authorityAuthorization })),
+        workerGraph,
+      ).envVar.get(envVarId)?.description,
+    ).toBe("Updated by activated graph member");
   });
 });

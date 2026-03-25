@@ -80,7 +80,6 @@ export async function createTestWorkflowFixture(
     projectId: project.summary.id,
     title: "Workflow authority",
     branchKey: "branch:workflow-authority",
-    goalSummary: "Implement workflow authority commands",
     state: "ready",
   });
   const repositoryBranch = await executeTestWorkflowMutation(authority, authorization, {

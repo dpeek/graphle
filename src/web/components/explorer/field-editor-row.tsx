@@ -269,7 +269,10 @@ export function PredicateRow({
   const issueLabel =
     validationMessages.length > 0
       ? "invalid"
-      : status.tone === "present" || status.label === "unset" || shouldHideMissingStatus
+      : status.tone === "present" ||
+          status.label === "unset" ||
+          status.label === "empty" ||
+          shouldHideMissingStatus
         ? null
         : status.label;
   const editorContent =

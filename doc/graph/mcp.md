@@ -175,7 +175,7 @@ Output should avoid trying to be a generic query language. The first version
 can return:
 
 - `id`
-- a best-effort preview assembled from visible fields like `name`, `label`,
+- a best-effort preview assembled from visible fields like `name`,
   `headline`, `slug`, `updatedAt`
 
 This is enough for agents to discover candidate ids before fetching full

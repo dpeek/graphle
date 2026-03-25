@@ -4,7 +4,8 @@
 
 `web` owns the TanStack Router SPA that runs on the Worker shell. It provides
 operator-facing browser surfaces on top of the synced graph runtime, including
-the graph explorer and the dedicated sync monitor.
+the workflow branch browser, the graph explorer, and the dedicated sync
+monitor.
 The current explorer now uses the canonical type-first `/graph` route and
 search-param selection model described in `./explorer.md`, plus a shared
 inspector shell, draft-backed generic create flow for supported entity types,
@@ -57,12 +58,13 @@ generic shared command/read transports.
 ## Layout
 
 - `../../src/web/router.tsx`, `../../src/web/routeTree.gen.ts`: router assembly
-  and generated route tree for the canonical `/graph` explorer route
+  and generated route tree for the SPA routes, including `/workflow` and
+  `/graph`
 - `../../auth.ts`: Better Auth CLI config entrypoint that keeps schema
   generation on a dedicated auth-store path without coupling it to the Worker's
   runtime bindings
-- `../../src/web/routes/`: top-level pages including `sync`, `views`, and the
-  graph explorer routes
+- `../../src/web/routes/`: top-level pages including `workflow`, `sync`,
+  `views`, and the graph explorer routes
 - `../../src/web/components/home-page.tsx`: session-aware landing page that
   keeps the signed-out auth entry flow and the signed-in bootstrap summary in
   one place
@@ -71,12 +73,20 @@ generic shared command/read transports.
   keeps graph surfaces from booting until session state is known
 - `../../src/web/components/graph-runtime-bootstrap.tsx`: shared synced graph
   runtime bootstrap for browser pages
+- `../../src/web/components/entity-type-browser.tsx`: reusable list/detail
+  browser for one entity type keyed only by the target type id plus the list
+  title, reusing the generic entity inspector for the selected record plus the
+  explorer's generic draft-backed create flow inside a shared dialog with the
+  base dialog header and footer primitives
+- `../../src/web/components/workflow-page.tsx`: `/workflow` composition that
+  mounts the shared type browser for `ops:workflowBranch`
 - `../../src/web/components/explorer/index.ts`: explorer entrypoint for the
   graph and sync pages
 - `../../src/web/components/explorer/`: graph explorer modules split by
   responsibility, including shared catalog/navigation helpers, the unified
-  inspector shell, draft-backed generic create bindings, field editors, and the
-  sync inspector
+  inspector shell, draft-backed generic create bindings, field editors, the
+  sync inspector, and the `/graph` entity-selection path now reusing the shared
+  typed browser component for record lists plus default entity editing
 - `../../src/web/components/sync-page.tsx`: top-level sync monitor for
   authority cursor, pending writes, recent authoritative activity, and
   surfaced write-scope diagnostics for acknowledged and pulled writes, plus

@@ -31,19 +31,21 @@ function resolveEntityPreviewIconId(
 
 export function EntityListItem({
   active,
+  className,
   entity,
   onSelect,
+  props,
   store,
   typeEntry,
 }: {
   active: boolean;
+  className?: string;
   entity: AnyEntityRef;
   onSelect: () => void;
+  props?: Record<string, string>;
   store: ExplorerRuntime["store"];
   typeEntry: EntityCatalogEntry;
 }) {
-  const fields = asNodeMetadataFields(entity.fields);
-  const label = usePredicateField(fields.label).value;
   const iconSlotValue = useStoreSlotValue(
     store,
     entity.id,
@@ -51,14 +53,13 @@ export function EntityListItem({
   );
   const iconId = resolveEntityPreviewIconId(entity.id, iconSlotValue, typeEntry);
   const title = getEntityLabel(entity, getUntitledEntityLabel(typeEntry.name));
-  const subtitle =
-    typeof label === "string" && label.length > 0 && label !== title ? label : undefined;
 
   return (
     <ListButton
       active={active}
+      className={className}
       onClick={onSelect}
-      props={{ "data-explorer-item-entity": entity.id }}
+      props={{ "data-explorer-item-entity": entity.id, ...props }}
     >
       <div className="flex items-start gap-3">
         {typeof iconId === "string" && iconId.length > 0 ? (
@@ -66,7 +67,6 @@ export function EntityListItem({
         ) : null}
         <div className="space-y-1">
           <div className="text-sm font-medium">{title}</div>
-          {subtitle ? <div className="text-xs text-slate-400">{subtitle}</div> : null}
         </div>
       </div>
     </ListButton>

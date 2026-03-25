@@ -7,7 +7,7 @@ import {
   type WorkflowProjectionGraphClient,
   type WorkflowProjectionIndex,
 } from "../graph/modules/ops/workflow/query.js";
-import { workflowSchema } from "../graph/modules/ops/workflow/schema.js";
+import { workflowProjectionSchema } from "../graph/modules/ops/workflow/schema.js";
 import { createHttpGraphClient } from "../graph/runtime/http-client.js";
 import { createWorkflowTuiWorkflowModel, type WorkflowTuiWorkflowSurfaceModel } from "./model.js";
 import { resolveWorkflowTuiStartupContract, type WorkflowTuiStartupContract } from "./startup.js";
@@ -34,7 +34,7 @@ export interface WorkflowTuiRuntimeBootstrap {
 
 export interface WorkflowTuiRuntimeBootstrapDependencies {
   readonly createGraphClient?: (
-    namespace: typeof workflowSchema,
+    namespace: typeof workflowProjectionSchema,
     options: {
       readonly requestedScope: WorkflowTuiStartupContract["graph"]["requestedScope"];
       readonly url: string;
@@ -247,7 +247,7 @@ export async function createWorkflowTuiRuntimeBootstrap(
 
   let runtimeClient: WorkflowTuiRuntimeClient;
   try {
-    runtimeClient = await createGraphClient(workflowSchema, {
+    runtimeClient = await createGraphClient(workflowProjectionSchema, {
       requestedScope: startup.graph.requestedScope,
       url: startup.graph.url,
     });

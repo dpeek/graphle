@@ -82,7 +82,6 @@ function createWorkflowQueryFixture(options: WorkflowQueryFixtureOptions = {}) {
     branchKey: "branch:workflow-runtime-contract",
     state: ops.workflowBranchState.values.active.id,
     queueRank: 1,
-    goalSummary: "Define the canonical branch board and commit queue contract.",
     goalDocument: branchGoalDocumentId,
     contextDocument: branchContextDocumentId,
     createdAt: date("2026-01-01T00:00:00.000Z"),
@@ -94,7 +93,6 @@ function createWorkflowQueryFixture(options: WorkflowQueryFixtureOptions = {}) {
     branchKey: "branch:backlog-docs",
     state: ops.workflowBranchState.values.backlog.id,
     queueRank: 3,
-    goalSummary: "Document backlog branch guidance.",
     createdAt: date("2026-01-02T00:00:00.000Z"),
     updatedAt: date("2026-01-03T00:00:00.000Z"),
   });
@@ -103,7 +101,6 @@ function createWorkflowQueryFixture(options: WorkflowQueryFixtureOptions = {}) {
     project: projectId,
     branchKey: "branch:unranked-polish",
     state: ops.workflowBranchState.values.ready.id,
-    goalSummary: "Polish the workflow shell after the ranked work lands.",
     createdAt: date("2026-01-03T00:00:00.000Z"),
     updatedAt: date("2026-01-07T00:00:00.000Z"),
   });
