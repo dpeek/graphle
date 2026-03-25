@@ -38,6 +38,8 @@ package.
   and commit-queue surface from synced workflow projection reads
 - creates a synced workflow HTTP client at startup using the fixed workflow
   review module scope before resolving the first project-backed workflow shell
+- boots that client with the full synced workflow and PKM type surface so
+  startup validation can accept all entities present in the review scope
 - the default local graph served from `http://io.localhost:1355/` now seeds one
   workflow project, repository, branch, commit, and running session so a fresh
   local `io tui` can hydrate without extra graph setup

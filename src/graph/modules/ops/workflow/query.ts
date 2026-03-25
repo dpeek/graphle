@@ -5,6 +5,8 @@ import type {
   RetainedProjectionRowRecord,
 } from "../../../runtime/projection.js";
 import { findRetainedProjectionRecord } from "../../../runtime/projection.js";
+import { defineNamespace } from "../../../runtime/schema.js";
+import { core } from "../../core.js";
 import opsIds from "../../ops.json";
 import { pkm } from "../../pkm.js";
 import type {
@@ -25,19 +27,33 @@ import {
 import { workflowProjectionMetadata } from "./projection.js";
 import {
   agentSession,
+  agentSessionEvent,
+  agentSessionEventPhase,
+  agentSessionEventType,
   agentSessionKind,
+  agentSessionRawLineEncoding,
   agentSessionRuntimeState,
+  agentSessionStatusCode,
+  agentSessionStatusFormat,
+  agentSessionStream,
   agentSessionSubjectKind,
   repositoryBranch,
   repositoryCommit,
   repositoryCommitLeaseState,
   repositoryCommitState,
+  workflowArtifact,
+  workflowArtifactKind,
   workflowBranch,
   workflowBranchState,
   workflowCommit,
   workflowCommitState,
+  workflowDecision,
+  workflowDecisionKind,
   workflowProject,
   workflowRepository,
+  contextBundle,
+  contextBundleEntry,
+  contextBundleEntrySource,
 } from "./type.js";
 
 export const projectBranchScopeFailureCodes = [
@@ -179,8 +195,7 @@ export interface CommitQueueScopeResult {
   readonly rows: readonly CommitQueueScopeCommitRow[];
 }
 
-export const workflowProjectionSchema = {
-  document: pkm.document,
+const workflowProjectionWorkflowSchema = defineNamespace(opsIds, {
   workflowProject,
   workflowRepository,
   workflowBranchState,
@@ -195,6 +210,26 @@ export const workflowProjectionSchema = {
   agentSessionKind,
   agentSessionRuntimeState,
   agentSession,
+  agentSessionEventType,
+  agentSessionEventPhase,
+  agentSessionStatusCode,
+  agentSessionStatusFormat,
+  agentSessionStream,
+  agentSessionRawLineEncoding,
+  agentSessionEvent,
+  workflowArtifactKind,
+  workflowArtifact,
+  workflowDecisionKind,
+  workflowDecision,
+  contextBundle,
+  contextBundleEntrySource,
+  contextBundleEntry,
+});
+
+export const workflowProjectionSchema = {
+  ...core,
+  ...pkm,
+  ...workflowProjectionWorkflowSchema,
 } as const;
 
 type WorkflowProjectionTypeClient = NamespaceClient<typeof workflowProjectionSchema>;

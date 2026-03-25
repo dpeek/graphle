@@ -27,6 +27,7 @@ import {
   workflowProjectionDefinitionHashes,
   workflowProjectionIds,
   workflowProjectionMetadata,
+  workflowProjectionSchema,
   workflowReviewModuleReadScope,
   workflowReviewSyncScopeRequest,
   workflowProjectKeyPattern,
@@ -315,6 +316,28 @@ describe("ops workflow schema", () => {
       workflowProjectBranchBoardProjection,
       workflowBranchCommitQueueProjection,
     ]);
+    expect(Object.keys(workflowProjectionSchema)).toEqual(
+      expect.arrayContaining([
+        "document",
+        "documentBlock",
+        "documentBlockKind",
+        "documentPlacement",
+        "tag",
+        "type",
+        "workflowProject",
+        "workflowRepository",
+        "workflowBranch",
+        "workflowCommit",
+        "repositoryBranch",
+        "repositoryCommit",
+        "agentSession",
+        "agentSessionEvent",
+        "workflowArtifact",
+        "workflowDecision",
+        "contextBundle",
+        "contextBundleEntry",
+      ]),
+    );
     expect(workflowProjectionMetadata).toEqual({
       projectBranchBoard: workflowProjectBranchBoardProjection,
       branchCommitQueue: workflowBranchCommitQueueProjection,
