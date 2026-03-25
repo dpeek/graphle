@@ -246,7 +246,8 @@ actually thinks in.
 `WorkflowBranch`
 
 - long-running logical workstream inside one project
-- owns one desired end-state summary and optional document reference
+- owns one desired end-state summary, one optional goal-document reference, and
+  one optional startup-context document reference
 - parent of zero or more `WorkflowCommit` records
 - may map to one or more `RepositoryBranch` records
 
@@ -254,6 +255,8 @@ actually thinks in.
 
 - smallest logical execution and finalization unit inside a branch
 - represents one intended git commit, not a tracker issue
+- may own one optional startup-context document reference for commit-scoped
+  execution
 - may realize as one or more `RepositoryCommit` records
 
 `RepositoryBranch`
@@ -303,6 +306,80 @@ actually thinks in.
 
 - ordered member of a `ContextBundle`
 - preserves source, order, and inclusion reason for one retrieved item
+
+### Design choice: workflow references foundation documents
+
+This branch should not invent a workflow-local markdown payload shape. The
+reusable markdown-bearing type belongs in a foundation `document` module, and
+workflow should only point at it.
+
+Recommended foundation contracts this branch should depend on:
+
+`Document`
+
+- canonical reusable markdown document for notes, specs, blog drafts, docs, and
+  agent context
+- carries stable identity, title, optional slug, summary, and tags
+- does not carry a built-in domain `kind` enum in the foundation contract
+
+`DocumentBlock`
+
+- ordered block inside one `Document`
+- allows inline markdown plus ordered graph and repository references in one
+  composition
+- should support at least:
+  - `kind: "markdown"` for authored text
+  - `kind: "entity"` for references to another `Document`,
+    `WorkflowArtifact`, `WorkflowDecision`, or other graph entity
+  - `kind: "repo-path"` for repository markdown includes
+
+`DocumentPlacement`
+
+- places one `Document` into one external tree or outline
+- owns `parentPlacementId`, ordering, and any tree-local label overrides
+- keeps hierarchy outside the content-bearing document so the same document can
+  appear in multiple trees
+
+`DocumentLink`
+
+- typed cross-reference between one `Document` and another graph entity when a
+  full inline block is not needed
+- optional follow-on contract; `DocumentBlock.kind = "entity"` is enough for the
+  first milestone
+
+Implications:
+
+- the previous `Topic` shape was too opinionated to be the shared markdown type
+  because it bakes in `kind`, one intrinsic parent tree, and topic-local
+  semantics
+- tags remain the primary faceted grouping tool
+- trees become an external placement concern rather than an intrinsic document
+  field
+- use-case-specific semantics such as published post, ADR, runbook, or branch
+  memory should be modeled by linked records or tags, not by growing one core
+  enum
+
+Recommended graph-versus-disk boundary:
+
+- repository files remain on disk and git remains authoritative for them
+- graph `Document` entities are authoritative for durable cross-session agent
+  memory, reusable notes, specs, and other platform-native context
+- a `DocumentBlock.kind = "repo-path"` block may reference a repository file
+  when the source of truth should stay in the repo
+- do not make one markdown body dual-authoritative in both graph and repo in
+  the first milestone
+
+Recommended workflow usage:
+
+- `WorkflowBranch.goalDocumentId` points at the reusable end-state or planning
+  document for the branch
+- `WorkflowBranch.contextDocumentId` points at the primary branch startup and
+  memory document that the agent may update over time
+- `WorkflowCommit.contextDocumentId` points at the primary commit startup and
+  memory document for commit-scoped execution
+- session launch starts from the relevant context document, expands its ordered
+  includes under budget, and freezes the resulting rendered text into the
+  immutable `ContextBundle`
 
 ### Canonical identifiers
 
@@ -358,8 +435,8 @@ interface WorkflowBranch {
   state: WorkflowBranchState;
   queueRank?: number;
   goalSummary: string;
-  goalDocumentPath?: string;
-  goalDocumentBlobId?: string;
+  goalDocumentId?: string;
+  contextDocumentId?: string;
   activeCommitId?: string;
   latestSessionId?: string;
   createdAt: string;
@@ -375,6 +452,7 @@ interface WorkflowCommit {
   state: WorkflowCommitState;
   order: number;
   parentCommitId?: string;
+  contextDocumentId?: string;
   latestSessionId?: string;
   createdAt: string;
   updatedAt: string;
@@ -568,6 +646,7 @@ interface ContextBundleEntry {
     | "builtin"
     | "entrypoint"
     | "registered"
+    | "document"
     | "repo-path"
     | "synthesized"
     | "graph"
@@ -868,6 +947,12 @@ interface CommitQueueScopeResult {
   - one immutable `ContextBundle`
   - ordered `ContextBundleEntry[]`
   - optional rendered prompt body for the specific session
+- resolution rule:
+  - start from the branch or commit `contextDocumentId` when present
+  - expand ordered `DocumentBlock` includes for linked documents, decisions,
+    artifacts, and repo paths
+  - freeze the fully rendered prompt plus ordered provenance entries onto the
+    resulting `ContextBundle`
 - failure shape:
   - `subject-not-found`
   - `policy-denied`
@@ -1478,8 +1563,9 @@ First action-set rule for Slice 3:
 - Should active commit execution happen directly on one managed repository
   branch worktree, or should the first implementation reserve an ephemeral
   child branch while still presenting one logical parent branch in the UI?
-- Should the branch end-state document start as a repo-path reference, a blob
-  reference, or an inline summary plus optional document ref?
+- Should the foundation `Document` contract own explicit revision snapshots, or
+  is append-only graph history plus retained workflow artifacts sufficient in
+  the first milestone?
 - How much git health data should be stored durably versus recomputed on every
   TUI attach?
 - When branch planning gets more sophisticated, should backlog ranking stay a

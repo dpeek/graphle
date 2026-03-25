@@ -5,6 +5,7 @@ import { bootstrap, createStore, createTypeClient } from "@io/core/graph";
 import { createIdMap } from "../../../runtime/identity.js";
 import { core } from "../../core.js";
 import { ops } from "../../ops.js";
+import { pkm } from "../../pkm.js";
 import {
   agentSessionKeyPattern,
   commitQueueScopeFailureCodes,
@@ -33,7 +34,7 @@ import {
   workflowSchema,
 } from "./schema.js";
 
-const productGraph = { ...core, ...ops } as const;
+const productGraph = { ...core, ...pkm, ...ops } as const;
 
 const lifecycleContext = {
   event: "create" as const,
@@ -343,8 +344,11 @@ describe("ops workflow schema", () => {
         "ops:workflowBranchState.backlog",
         "ops:workflowBranch",
         "ops:workflowBranch:activeCommit",
+        "ops:workflowBranch:contextDocument",
+        "ops:workflowBranch:goalDocument",
         "ops:workflowCommitState",
         "ops:workflowCommit",
+        "ops:workflowCommit:contextDocument",
         "ops:workflowCommit:parentCommit",
         "ops:repositoryBranch",
         "ops:repositoryBranch:workflowBranch",
@@ -379,6 +383,7 @@ describe("ops workflow schema", () => {
         "ops:contextBundle:bundleKey",
         "ops:contextBundle:session",
         "ops:contextBundleEntrySource",
+        "ops:contextBundleEntrySource.document",
         "ops:contextBundleEntrySource.repo-path",
         "ops:contextBundleEntry",
         "ops:contextBundleEntry:bundle",
@@ -390,8 +395,11 @@ describe("ops workflow schema", () => {
   it("resolves workflow lineage, retained execution refs, and event enums through the canonical ops namespace", () => {
     expect(String(ops.workflowRepository.fields.project.range)).toBe(ops.workflowProject.values.id);
     expect(String(ops.workflowBranch.fields.project.range)).toBe(ops.workflowProject.values.id);
+    expect(String(ops.workflowBranch.fields.goalDocument.range)).toBe(pkm.document.values.id);
+    expect(String(ops.workflowBranch.fields.contextDocument.range)).toBe(pkm.document.values.id);
     expect(String(ops.workflowBranch.fields.activeCommit.range)).toBe(ops.workflowCommit.values.id);
     expect(String(ops.workflowCommit.fields.branch.range)).toBe(ops.workflowBranch.values.id);
+    expect(String(ops.workflowCommit.fields.contextDocument.range)).toBe(pkm.document.values.id);
     expect(String(ops.repositoryBranch.fields.repository.range)).toBe(
       ops.workflowRepository.values.id,
     );
@@ -524,11 +532,13 @@ describe("ops workflow schema", () => {
     expect(ops.agentSessionEvent.fields.timestamp.onCreate?.(lifecycleContext)).toBe(
       lifecycleContext.now,
     );
+    expect(ops.contextBundleEntrySource.options.document.id).toEqual(expect.any(String));
   });
 
   it("preserves retained execution provenance across sessions, artifacts, decisions, and bundles", () => {
     const store = createStore();
     bootstrap(store, core);
+    bootstrap(store, pkm);
     bootstrap(store, ops);
     const graph = createTypeClient(store, productGraph);
 

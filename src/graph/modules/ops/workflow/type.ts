@@ -8,6 +8,7 @@ import { defineDefaultEnumTypeModule } from "../../core/enum-module.js";
 import { jsonTypeModule } from "../../core/json/index.js";
 import { numberTypeModule } from "../../core/number/index.js";
 import { stringTypeModule } from "../../core/string/index.js";
+import { pkm } from "../../pkm.js";
 
 function resolvedEnumValue(value: { key: string; id?: string }): string {
   return value.id ?? value.key;
@@ -271,8 +272,13 @@ export const workflowBranch = defineType({
       operators: ["contains", "equals"] as const,
       defaultOperator: "contains",
     }),
-    goalDocumentPath: optionalStringField("Goal document path", {
-      defaultOperator: "prefix",
+    goalDocument: existingEntityReferenceField(pkm.document, {
+      cardinality: "one?",
+      label: "Goal document",
+    }),
+    contextDocument: existingEntityReferenceField(pkm.document, {
+      cardinality: "one?",
+      label: "Context document",
     }),
     activeCommit: existingEntityReferenceField("ops:workflowCommit", {
       cardinality: "one?",
@@ -345,6 +351,10 @@ export const workflowCommit = defineType({
       cardinality: "one?",
       excludeSubject: true,
       label: "Parent commit",
+    }),
+    contextDocument: existingEntityReferenceField(pkm.document, {
+      cardinality: "one?",
+      label: "Context document",
     }),
   },
 });
@@ -1213,6 +1223,9 @@ export const contextBundleEntrySource = defineEnum({
     },
     registered: {
       name: "Registered",
+    },
+    document: {
+      name: "Document",
     },
     "repo-path": {
       name: "Repo path",

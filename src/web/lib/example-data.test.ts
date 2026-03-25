@@ -4,17 +4,12 @@ import { bootstrap, createStore, createTypeClient } from "@io/core/graph";
 import { core } from "@io/core/graph/modules";
 import { ops } from "@io/core/graph/modules/ops";
 import { pkm } from "@io/core/graph/modules/pkm";
-import { topicKind } from "@io/core/graph/modules/pkm/topic";
 
 import { seedExampleGraph } from "./example-data.js";
 
 const productGraph = { ...core, ...pkm, ...ops } as const;
 
-function resolvedEnumValue(value: { key: string; id?: string }): string {
-  return value.id ?? value.key;
-}
-
-test("seedExampleGraph backfills workflow data without duplicating older example topics", () => {
+test("seedExampleGraph backfills workflow data without duplicating older example documents", () => {
   const store = createStore();
   bootstrap(store, core);
   bootstrap(store, pkm);
@@ -31,33 +26,25 @@ test("seedExampleGraph backfills workflow data without duplicating older example
     key: "docs",
     name: "Docs",
   });
-  const graphExplorer = graph.topic.create({
-    content: "Shared explorer surface for the canonical product graph.",
-    kind: resolvedEnumValue(topicKind.values.module),
+  const graphExplorer = graph.document.create({
+    description: "Shared explorer surface for the canonical product graph.",
     name: "Graph Explorer",
     isArchived: false,
-    order: 1,
     slug: "graph-explorer",
     tags: [graphTag, docsTag],
   });
-  graph.topic.create({
-    content: "Total snapshots bootstrap clients before ordered incremental updates.",
-    kind: resolvedEnumValue(topicKind.values.workflow),
+  graph.document.create({
+    description: "Total snapshots bootstrap clients before ordered incremental updates.",
     name: "Runtime Sync",
     isArchived: false,
-    order: 2,
-    parent: graphExplorer,
-    references: [graphExplorer],
+    slug: "runtime-sync",
     tags: [graphTag],
   });
-  graph.topic.create({
-    content: "Rotate env-var secrets through authority-only commands.",
-    kind: resolvedEnumValue(topicKind.values.runbook),
+  graph.document.create({
+    description: "Rotate env-var secrets through authority-only commands.",
     name: "Secret Rotation",
     isArchived: false,
-    order: 3,
-    parent: graphExplorer,
-    references: [graphExplorer],
+    slug: "secret-rotation",
     tags: [docsTag],
   });
 
@@ -69,7 +56,9 @@ test("seedExampleGraph backfills workflow data without duplicating older example
   expect(first.docsTag).toBe(docsTag);
   expect(first.graphExplorer).toBe(graphExplorer);
   expect(graph.tag.list()).toHaveLength(2);
-  expect(graph.topic.list()).toHaveLength(3);
+  expect(graph.document.list()).toHaveLength(3);
+  expect(graph.documentPlacement.list()).toHaveLength(3);
+  expect(graph.documentBlock.list()).toHaveLength(3);
   expect(graph.workflowProject.list()).toHaveLength(1);
   expect(graph.workflowRepository.list()).toHaveLength(1);
   expect(graph.workflowBranch.list()).toHaveLength(1);

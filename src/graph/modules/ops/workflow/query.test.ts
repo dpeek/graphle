@@ -4,6 +4,7 @@ import { bootstrap, createStore, createTypeClient } from "@io/core/graph";
 
 import { core } from "../../core.js";
 import { ops } from "../../ops.js";
+import { pkm } from "../../pkm.js";
 import {
   createRetainedWorkflowProjectionState,
   createWorkflowProjectionIndex,
@@ -12,7 +13,7 @@ import {
   workflowProjectionMetadata,
 } from "./schema.js";
 
-const productGraph = { ...core, ...ops } as const;
+const productGraph = { ...core, ...pkm, ...ops } as const;
 
 function date(value: string): Date {
   return new Date(value);
@@ -31,6 +32,7 @@ type WorkflowQueryFixtureOptions = {
 function createWorkflowQueryFixture(options: WorkflowQueryFixtureOptions = {}) {
   const store = createStore();
   bootstrap(store, core);
+  bootstrap(store, pkm);
   bootstrap(store, ops);
   const graph = createTypeClient(store, productGraph);
   const includeRepository = options.includeRepository ?? true;
@@ -56,6 +58,24 @@ function createWorkflowQueryFixture(options: WorkflowQueryFixtureOptions = {}) {
         updatedAt: date("2026-01-02T00:00:00.000Z"),
       })
     : undefined;
+  const branchGoalDocumentId = graph.document.create({
+    name: "Workflow runtime contract goal",
+    description: "Define the canonical branch board and commit queue contract.",
+    createdAt: date("2026-01-01T00:00:00.000Z"),
+    updatedAt: date("2026-01-05T00:00:00.000Z"),
+  });
+  const branchContextDocumentId = graph.document.create({
+    name: "Workflow runtime contract context",
+    description: "Primary branch startup memory.",
+    createdAt: date("2026-01-01T00:00:00.000Z"),
+    updatedAt: date("2026-01-05T00:00:00.000Z"),
+  });
+  const commitContextDocumentId = graph.document.create({
+    name: "Commit queue scope context",
+    description: "Primary commit execution memory.",
+    createdAt: date("2026-01-02T00:00:00.000Z"),
+    updatedAt: date("2026-01-05T12:00:00.000Z"),
+  });
   const activeBranchId = graph.workflowBranch.create({
     name: "Workflow runtime contract",
     project: projectId,
@@ -63,6 +83,8 @@ function createWorkflowQueryFixture(options: WorkflowQueryFixtureOptions = {}) {
     state: ops.workflowBranchState.values.active.id,
     queueRank: 1,
     goalSummary: "Define the canonical branch board and commit queue contract.",
+    goalDocument: branchGoalDocumentId,
+    contextDocument: branchContextDocumentId,
     createdAt: date("2026-01-01T00:00:00.000Z"),
     updatedAt: date("2026-01-05T00:00:00.000Z"),
   });
@@ -101,6 +123,7 @@ function createWorkflowQueryFixture(options: WorkflowQueryFixtureOptions = {}) {
     commitKey: "commit:document-commit-queue-scope",
     state: ops.workflowCommitState.values.active.id,
     order: 2,
+    contextDocument: commitContextDocumentId,
     createdAt: date("2026-01-02T00:00:00.000Z"),
     updatedAt: date("2026-01-05T12:00:00.000Z"),
   });
@@ -250,6 +273,9 @@ function createWorkflowQueryFixture(options: WorkflowQueryFixtureOptions = {}) {
       commit1Id,
       commit2Id,
       commit3Id,
+      branchContextDocumentId,
+      branchGoalDocumentId,
+      commitContextDocumentId,
       noRankBranchId,
       projectId,
     },
@@ -353,10 +379,13 @@ describe("workflow projection query helpers", () => {
     });
 
     expect(firstPage.branch.workflowBranch.activeCommitId).toBe(ids.commit2Id);
+    expect(firstPage.branch.workflowBranch.goalDocumentId).toBe(ids.branchGoalDocumentId);
+    expect(firstPage.branch.workflowBranch.contextDocumentId).toBe(ids.branchContextDocumentId);
     expect(firstPage.branch.activeCommit).toMatchObject({
       workflowCommit: {
         id: ids.commit2Id,
         commitKey: "commit:document-commit-queue-scope",
+        contextDocumentId: ids.commitContextDocumentId,
       },
       repositoryCommit: {
         state: "attached",

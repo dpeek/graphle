@@ -13,8 +13,8 @@ The current architecture is best described as:
 
 - Graph kernel: reusable, in-memory-first graph runtime with persistence and
   sync
-- Web operator surface: Worker-hosted SPA with explorer, sync monitor, topic
-  browser and editor, and graph bootstrap
+- Web operator surface: Worker-hosted SPA with explorer, sync monitor, and
+  graph bootstrap
 - Agent runtime: issue-driven automation layer with scheduling, worktree
   lifecycle, context assembly, Codex runner integration, retained runtime
   files, and TUI
@@ -34,8 +34,7 @@ package surface.
 ### Web package
 
 `web` owns the TanStack Router SPA, Worker entrypoint, graph explorer, sync
-monitor, topic browser and editor, and thin HTTP route helpers around the graph
-authority.
+monitor, and thin HTTP route helpers around the graph authority.
 
 ### Agent package
 
@@ -109,7 +108,6 @@ Current surfaces include:
 
 - graph explorer
 - sync monitor
-- topic browser and editor
 - generic create flows for supported entity types
 - inspector shell
 - field editors

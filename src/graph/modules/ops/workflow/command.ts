@@ -79,7 +79,8 @@ export type WorkflowBranchSummary = WorkflowSummaryBase & {
   readonly activeCommitId?: string;
   readonly branchKey: string;
   readonly entity: "branch";
-  readonly goalDocumentPath?: string;
+  readonly contextDocumentId?: string;
+  readonly goalDocumentId?: string;
   readonly goalSummary: string;
   readonly projectId: string;
   readonly queueRank?: number;
@@ -89,6 +90,7 @@ export type WorkflowBranchSummary = WorkflowSummaryBase & {
 export type WorkflowCommitSummary = WorkflowSummaryBase & {
   readonly branchId: string;
   readonly commitKey: string;
+  readonly contextDocumentId?: string;
   readonly entity: "commit";
   readonly order: number;
   readonly parentCommitId?: string;
@@ -173,7 +175,8 @@ export type WorkflowMutationAction =
   | {
       readonly action: "createBranch";
       readonly branchKey: string;
-      readonly goalDocumentPath?: string | null;
+      readonly contextDocumentId?: string | null;
+      readonly goalDocumentId?: string | null;
       readonly goalSummary: string;
       readonly projectId: string;
       readonly queueRank?: number | null;
@@ -184,7 +187,8 @@ export type WorkflowMutationAction =
       readonly action: "updateBranch";
       readonly branchId: string;
       readonly branchKey?: string;
-      readonly goalDocumentPath?: string | null;
+      readonly contextDocumentId?: string | null;
+      readonly goalDocumentId?: string | null;
       readonly goalSummary?: string;
       readonly queueRank?: number | null;
       readonly title?: string;
@@ -211,6 +215,7 @@ export type WorkflowMutationAction =
       readonly action: "createCommit";
       readonly branchId: string;
       readonly commitKey: string;
+      readonly contextDocumentId?: string | null;
       readonly order: number;
       readonly parentCommitId?: string | null;
       readonly state?: Extract<WorkflowCommitStateValue, "planned" | "ready">;
@@ -220,6 +225,7 @@ export type WorkflowMutationAction =
       readonly action: "updateCommit";
       readonly commitId: string;
       readonly commitKey?: string;
+      readonly contextDocumentId?: string | null;
       readonly order?: number;
       readonly parentCommitId?: string | null;
       readonly title?: string;
@@ -268,7 +274,10 @@ export const workflowMutationCommand = {
       { predicateId: edgeId(workflowProject.fields.projectKey) },
       { predicateId: edgeId(workflowRepository.fields.repositoryKey) },
       { predicateId: edgeId(workflowBranch.fields.state) },
+      { predicateId: edgeId(workflowBranch.fields.goalDocument) },
+      { predicateId: edgeId(workflowBranch.fields.contextDocument) },
       { predicateId: edgeId(workflowBranch.fields.activeCommit) },
+      { predicateId: edgeId(workflowCommit.fields.contextDocument) },
       { predicateId: edgeId(workflowCommit.fields.state) },
     ],
   },

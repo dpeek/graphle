@@ -6,6 +6,7 @@ import type {
 } from "../../../runtime/projection.js";
 import { findRetainedProjectionRecord } from "../../../runtime/projection.js";
 import opsIds from "../../ops.json";
+import { pkm } from "../../pkm.js";
 import type {
   RepositoryBranchSummary,
   RepositoryCommitSummary,
@@ -179,6 +180,7 @@ export interface CommitQueueScopeResult {
 }
 
 const workflowProjectionGraph = {
+  document: pkm.document,
   workflowProject,
   workflowRepository,
   workflowBranchState,
@@ -1370,7 +1372,8 @@ function buildBranchSummary(entity: WorkflowBranchEntity): WorkflowBranchSummary
     branchKey: entity.branchKey,
     state: decodeWorkflowBranchState(entity.state),
     goalSummary: entity.goalSummary,
-    ...(entity.goalDocumentPath ? { goalDocumentPath: entity.goalDocumentPath } : {}),
+    ...(entity.goalDocument ? { goalDocumentId: entity.goalDocument } : {}),
+    ...(entity.contextDocument ? { contextDocumentId: entity.contextDocument } : {}),
     ...(entity.queueRank !== undefined ? { queueRank: entity.queueRank } : {}),
     ...(entity.activeCommit ? { activeCommitId: entity.activeCommit } : {}),
     createdAt: entity.createdAt.toISOString(),
@@ -1388,6 +1391,7 @@ function buildCommitSummary(entity: WorkflowCommitEntity): WorkflowCommitSummary
     state: decodeWorkflowCommitState(entity.state),
     order: entity.order,
     ...(entity.parentCommit ? { parentCommitId: entity.parentCommit } : {}),
+    ...(entity.contextDocument ? { contextDocumentId: entity.contextDocument } : {}),
     createdAt: entity.createdAt.toISOString(),
     updatedAt: entity.updatedAt.toISOString(),
   };

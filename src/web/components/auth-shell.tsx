@@ -22,6 +22,11 @@ type AuthSessionFeedback =
     };
 
 type UseWebAuthSessionResult = WebAuthViewState & Pick<AuthSessionQuery, "refetch">;
+type GraphAccessActivationState =
+  | { status: "idle" }
+  | { status: "activating" }
+  | { status: "ready" }
+  | { status: "error"; message: string };
 
 function readDefaultName(email: string): string {
   const localPart = email.split("@", 1)[0]?.trim();
@@ -369,6 +374,75 @@ export function GraphAccessGate({
   readonly title: string;
 }) {
   const auth = useWebAuthSession();
+  const [activationState, setActivationState] = useState<GraphAccessActivationState>({
+    status: "idle",
+  });
+  const [activationAttempt, setActivationAttempt] = useState(0);
+
+  useEffect(() => {
+    if (auth.status !== "ready") {
+      setActivationState({ status: "idle" });
+      return;
+    }
+
+    let cancelled = false;
+    setActivationState({ status: "activating" });
+
+    void fetch("/api/access/activate", {
+      method: "POST",
+      credentials: "same-origin",
+    })
+      .then(async (response) => {
+        if (cancelled) return;
+
+        if (response.ok) {
+          setActivationState({ status: "ready" });
+          return;
+        }
+
+        const payload = (await response.json().catch(() => undefined)) as
+          | { readonly error?: string }
+          | undefined;
+        setActivationState({
+          status: "error",
+          message:
+            payload?.error ??
+            `Unable to activate graph access with ${response.status} ${response.statusText}.`,
+        });
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        setActivationState({
+          status: "error",
+          message: error instanceof Error ? error.message : String(error),
+        });
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activationAttempt, auth.status, auth.sessionId]);
+
+  if (auth.status === "ready" && activationState.status !== "ready") {
+    if (activationState.status === "error") {
+      return (
+        <AuthSessionErrorCard
+          description={activationState.message}
+          onRetry={() => {
+            setActivationAttempt((current) => current + 1);
+          }}
+          title="Graph access activation failed"
+        />
+      );
+    }
+
+    return (
+      <AuthSessionLoadingCard
+        description="Activating graph-member access before graph-backed routes mount."
+        title="Activating graph access"
+      />
+    );
+  }
 
   return (
     <GraphAccessGateView

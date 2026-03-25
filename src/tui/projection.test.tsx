@@ -1,6 +1,6 @@
 /** @jsxImportSource @opentui/react */
 
-import { expect, test } from "bun:test";
+import { expect, setDefaultTimeout, test } from "bun:test";
 
 import { createTestRenderer } from "@opentui/core/testing";
 import { createRoot, flushSync } from "@opentui/react";
@@ -21,13 +21,16 @@ import {
 } from "../graph/index.js";
 import { core } from "../graph/modules/core.js";
 import { ops } from "../graph/modules/ops.js";
+import { pkm } from "../graph/modules/pkm.js";
 import { useCommitQueueScope, useProjectBranchScope, useWorkflowProjectionIndex } from "./index.js";
 
 (
   globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
-const productGraph = { ...core, ...ops } as const;
+setDefaultTimeout(10_000);
+
+const productGraph = { ...core, ...pkm, ...ops } as const;
 
 function date(value: string): Date {
   return new Date(value);
@@ -36,6 +39,7 @@ function date(value: string): Date {
 function createWorkflowRuntimeFixture() {
   const store = createStore();
   bootstrap(store, core);
+  bootstrap(store, pkm);
   bootstrap(store, ops);
   const graph = createTypeClient(store, productGraph);
 

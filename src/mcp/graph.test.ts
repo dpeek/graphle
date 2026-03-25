@@ -20,7 +20,6 @@ import {
 import { core } from "../graph/modules/index.js";
 import { ops } from "../graph/modules/ops.js";
 import { pkm } from "../graph/modules/pkm.js";
-import { topicKind } from "../graph/modules/pkm/topic/schema.js";
 import { kitchenSink } from "../graph/testing/kitchen-sink.js";
 import { createGraphMcpServer, createGraphMcpSession } from "./graph.js";
 
@@ -87,12 +86,11 @@ function createProductAuthority() {
   if (!productAuthoritySnapshot) {
     productAuthoritySnapshot = createAuthority(productGraph, (graph) => {
       graph.envVar.create({ name: "OPENAI_API_KEY" });
-      graph.topic.create({
-        content: "Seeded topic",
+      graph.document.create({
+        description: "Seeded document",
         isArchived: false,
-        kind: resolvedEnumValue(topicKind.values.module),
         name: "Graph MCP",
-        order: 1,
+        slug: "graph-mcp",
       });
     }).store.snapshot();
   }
@@ -241,7 +239,9 @@ describe("createGraphMcpSession", () => {
     expect(status.lastSyncedAt).toBeDefined();
     expect(status.entityTypeCounts).toEqual(
       expect.arrayContaining([
-        { count: 1, name: "topic", type: "pkm:topic" },
+        { count: 1, name: "document", type: "pkm:document" },
+        { count: 0, name: "documentBlock", type: "pkm:documentBlock" },
+        { count: 0, name: "documentPlacement", type: "pkm:documentPlacement" },
         { count: 1, name: "envVar", type: "ops:envVar" },
         { count: 0, name: "workflowProject", type: "ops:workflowProject" },
         { count: 0, name: "workflowRepository", type: "ops:workflowRepository" },
@@ -251,7 +251,7 @@ describe("createGraphMcpSession", () => {
         { count: 0, name: "repositoryCommit", type: "ops:repositoryCommit" },
       ]),
     );
-    expect(status.entityTypeCounts).toHaveLength(14);
+    expect(status.entityTypeCounts).toHaveLength(16);
   });
 
   it("forwards the bearer token into graph session transport requests", async () => {
@@ -348,27 +348,27 @@ describe("createGraphMcpServer", () => {
       expect(types).toContainEqual(
         expect.objectContaining({
           kind: "entity",
-          type: "pkm:topic",
+          type: "pkm:document",
         }),
       );
       expect(types).toContainEqual(
         expect.objectContaining({
           kind: "enum",
-          type: "pkm:topicKind",
+          type: "pkm:documentBlockKind",
         }),
       );
 
-      const topicType = types.find((type) => type.type === "pkm:topic");
-      expect(topicType?.fields).toContainEqual(
+      const documentType = types.find((type) => type.type === "pkm:document");
+      expect(documentType?.fields).toContainEqual(
         expect.objectContaining({
-          path: "content",
-          range: "core:markdown",
+          path: "description",
+          range: "core:string",
           writePolicy: "client-tx",
         }),
       );
 
       const entitiesResult = await callTool(client, "graph.listEntities", {
-        type: "pkm:topic",
+        type: "pkm:document",
       });
       expect(entitiesResult.isError).toBe(false);
 
@@ -377,7 +377,7 @@ describe("createGraphMcpServer", () => {
         totalCount: number;
         type: string;
       };
-      expect(entities.type).toBe("pkm:topic");
+      expect(entities.type).toBe("pkm:document");
       expect(entities.totalCount).toBe(1);
       expect(entities.entities).toHaveLength(1);
       expect(entities.entities[0]?.preview).toMatchObject({
@@ -549,13 +549,12 @@ describe("createGraphMcpServer", () => {
 
     try {
       const created = await callTool(client, "graph.createEntity", {
-        type: "pkm:topic",
+        type: "pkm:document",
         values: {
-          content: "Created through MCP",
+          description: "Created through MCP",
           isArchived: false,
-          kind: resolvedEnumValue(topicKind.values.module),
-          name: "Writable Topic",
-          order: 2,
+          name: "Writable Document",
+          slug: "writable-document",
         },
       });
       expect(created.isError).toBe(false);
@@ -566,49 +565,48 @@ describe("createGraphMcpServer", () => {
 
       expect(created.structuredContent).toMatchObject({
         entity: {
-          content: "Created through MCP",
+          description: "Created through MCP",
           id: expect.any(String),
           isArchived: false,
-          kind: resolvedEnumValue(topicKind.values.module),
-          name: "Writable Topic",
-          order: 2,
+          name: "Writable Document",
+          slug: "writable-document",
         },
-        type: "pkm:topic",
+        type: "pkm:document",
       });
       expect(typeof createdId).toBe("string");
 
       const updated = await callTool(client, "graph.updateEntity", {
         id: createdId,
         patch: {
-          content: "Updated through MCP",
-          name: "Writable Topic Updated",
+          description: "Updated through MCP",
+          name: "Writable Document Updated",
         },
-        type: "pkm:topic",
+        type: "pkm:document",
       });
       expect(updated.isError).toBe(false);
       expect(updated.structuredContent).toMatchObject({
         entity: {
-          content: "Updated through MCP",
+          description: "Updated through MCP",
           id: createdId,
-          name: "Writable Topic Updated",
+          name: "Writable Document Updated",
         },
-        type: "pkm:topic",
+        type: "pkm:document",
       });
 
       const deleted = await callTool(client, "graph.deleteEntity", {
         id: createdId,
-        type: "pkm:topic",
+        type: "pkm:document",
       });
       expect(deleted.isError).toBe(false);
       expect(deleted.structuredContent).toEqual({
         deleted: true,
         id: createdId,
-        type: "pkm:topic",
+        type: "pkm:document",
       });
 
       const missing = await callTool(client, "graph.getEntity", {
         id: createdId,
-        type: "pkm:topic",
+        type: "pkm:document",
       });
       expect(missing.isError).toBe(true);
       expect(missing.structuredContent).toMatchObject({
@@ -616,7 +614,7 @@ describe("createGraphMcpServer", () => {
           code: "graph.missingEntity",
           details: {
             id: createdId,
-            type: "pkm:topic",
+            type: "pkm:document",
           },
         },
       });

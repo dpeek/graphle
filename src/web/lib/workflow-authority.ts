@@ -42,6 +42,7 @@ const workflowBranchTypeId = ops.workflowBranch.values.id as string;
 const workflowCommitTypeId = ops.workflowCommit.values.id as string;
 const repositoryBranchTypeId = ops.repositoryBranch.values.id as string;
 const repositoryCommitTypeId = ops.repositoryCommit.values.id as string;
+const documentTypeId = pkm.document.values.id as string;
 
 const inferredProjectLimitMessage =
   "Branch 6 v1 supports exactly one inferred workflow project per graph.";
@@ -345,6 +346,17 @@ function requireRepositoryCommit(
   return graph.repositoryCommit.get(repositoryCommitId);
 }
 
+function requireDocument(graph: ProductGraphClient, store: Store, documentId: string) {
+  if (!hasEntityOfType(store, documentId, documentTypeId)) {
+    throw new WorkflowMutationError(
+      404,
+      `Document "${documentId}" was not found.`,
+      "subject-not-found",
+    );
+  }
+  return graph.document.get(documentId);
+}
+
 function requireUniqueProjectKey(
   graph: ProductGraphClient,
   projectKey: string,
@@ -546,7 +558,8 @@ function buildBranchSummary(entity: ReturnType<ProductGraphClient["workflowBranc
     branchKey: entity.branchKey,
     state: decodeWorkflowBranchState(entity.state),
     goalSummary: entity.goalSummary,
-    ...(entity.goalDocumentPath ? { goalDocumentPath: entity.goalDocumentPath } : {}),
+    ...(entity.goalDocument ? { goalDocumentId: entity.goalDocument } : {}),
+    ...(entity.contextDocument ? { contextDocumentId: entity.contextDocument } : {}),
     ...(entity.queueRank !== undefined ? { queueRank: entity.queueRank } : {}),
     ...(entity.activeCommit ? { activeCommitId: entity.activeCommit } : {}),
     createdAt: entity.createdAt.toISOString(),
@@ -564,6 +577,7 @@ function buildCommitSummary(entity: ReturnType<ProductGraphClient["workflowCommi
     state: decodeWorkflowCommitState(entity.state),
     order: entity.order,
     ...(entity.parentCommit ? { parentCommitId: entity.parentCommit } : {}),
+    ...(entity.contextDocument ? { contextDocumentId: entity.contextDocument } : {}),
     createdAt: entity.createdAt.toISOString(),
     updatedAt: entity.updatedAt.toISOString(),
   } satisfies WorkflowMutationSummary;
@@ -762,7 +776,24 @@ function mutateWorkflow(
         branchKey,
         state: workflowBranchStateIds[requestedState],
         goalSummary: requireString(input.goalSummary, "Goal summary"),
-        goalDocumentPath: trimOptionalString(input.goalDocumentPath),
+        ...(input.goalDocumentId !== undefined && input.goalDocumentId !== null
+          ? {
+              goalDocument: requireDocument(
+                graph,
+                store,
+                requireString(input.goalDocumentId, "Goal document id"),
+              ).id,
+            }
+          : {}),
+        ...(input.contextDocumentId !== undefined && input.contextDocumentId !== null
+          ? {
+              contextDocument: requireDocument(
+                graph,
+                store,
+                requireString(input.contextDocumentId, "Context document id"),
+              ).id,
+            }
+          : {}),
         ...(input.queueRank !== undefined && input.queueRank !== null
           ? { queueRank: input.queueRank }
           : {}),
@@ -785,11 +816,26 @@ function mutateWorkflow(
       if (input.goalSummary !== undefined) {
         patch.goalSummary = requireString(input.goalSummary, "Goal summary");
       }
-      if (input.goalDocumentPath !== undefined) {
-        if (input.goalDocumentPath === null) {
-          clearSingleValue(store, branch.id, edgeId(ops.workflowBranch.fields.goalDocumentPath));
+      if (input.goalDocumentId !== undefined) {
+        if (input.goalDocumentId === null) {
+          clearSingleValue(store, branch.id, edgeId(ops.workflowBranch.fields.goalDocument));
         } else {
-          patch.goalDocumentPath = requireString(input.goalDocumentPath, "Goal document path");
+          patch.goalDocument = requireDocument(
+            graph,
+            store,
+            requireString(input.goalDocumentId, "Goal document id"),
+          ).id;
+        }
+      }
+      if (input.contextDocumentId !== undefined) {
+        if (input.contextDocumentId === null) {
+          clearSingleValue(store, branch.id, edgeId(ops.workflowBranch.fields.contextDocument));
+        } else {
+          patch.contextDocument = requireDocument(
+            graph,
+            store,
+            requireString(input.contextDocumentId, "Context document id"),
+          ).id;
         }
       }
       if (input.queueRank !== undefined) {
@@ -1044,6 +1090,15 @@ function mutateWorkflow(
         state: workflowCommitStateIds[requestedState],
         order: input.order,
         ...(parentCommitId ? { parentCommit: parentCommitId } : {}),
+        ...(input.contextDocumentId !== undefined && input.contextDocumentId !== null
+          ? {
+              contextDocument: requireDocument(
+                graph,
+                store,
+                requireString(input.contextDocumentId, "Context document id"),
+              ).id,
+            }
+          : {}),
       });
       return {
         action: input.action,
@@ -1085,6 +1140,17 @@ function mutateWorkflow(
             );
           }
           patch.parentCommit = parentCommit.id;
+        }
+      }
+      if (input.contextDocumentId !== undefined) {
+        if (input.contextDocumentId === null) {
+          clearSingleValue(store, commit.id, edgeId(ops.workflowCommit.fields.contextDocument));
+        } else {
+          patch.contextDocument = requireDocument(
+            graph,
+            store,
+            requireString(input.contextDocumentId, "Context document id"),
+          ).id;
         }
       }
       if (Object.keys(patch).length > 0) {

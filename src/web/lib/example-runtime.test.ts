@@ -8,9 +8,9 @@ import { createExampleRuntime } from "./example-runtime.js";
 
 setDefaultTimeout(20_000);
 
-function createTopicNameWriteTransaction(
+function createDocumentNameWriteTransaction(
   store: ReturnType<typeof createExampleRuntime>["authority"]["store"],
-  topicId: string,
+  documentId: string,
   name: string,
   txId: string,
   options: {
@@ -18,7 +18,7 @@ function createTopicNameWriteTransaction(
     edgeId?: string;
   } = {},
 ): GraphWriteTransaction {
-  const retractOps = store.facts(topicId, edgeId(pkm.topic.fields.name)).map((edge) => ({
+  const retractOps = store.facts(documentId, edgeId(pkm.document.fields.name)).map((edge) => ({
     op: "retract" as const,
     edgeId: edge.id,
   }));
@@ -26,8 +26,8 @@ function createTopicNameWriteTransaction(
     op: "assert" as const,
     edge: {
       id: options.edgeId ?? store.newNode(),
-      s: topicId,
-      p: edgeId(pkm.topic.fields.name),
+      s: documentId,
+      p: edgeId(pkm.document.fields.name),
       o: name,
     },
   };
@@ -71,16 +71,16 @@ describe("example runtime sync integration", () => {
     const syncPayloadCount = runtime.authority.getSyncPayloadCount();
 
     if (!baseCursor) throw new Error("Expected peer bootstrap cursor.");
-    expect(runtime.graph.topic.get(runtime.ids.graphExplorer).name).toBe("Graph Explorer");
-    expect(peer.graph.topic.get(runtime.ids.graphExplorer).name).toBe("Graph Explorer");
+    expect(runtime.graph.document.get(runtime.ids.graphExplorer).name).toBe("Graph Explorer");
+    expect(peer.graph.document.get(runtime.ids.graphExplorer).name).toBe("Graph Explorer");
 
     const first = await runtime.commitLocalMutation(runtime, "tx:runtime:1", (graph) => {
-      graph.topic.update(runtime.ids.graphExplorer, {
+      graph.document.update(runtime.ids.graphExplorer, {
         name: "Graph Explorer Runtime",
       });
     });
     const second = await runtime.commitLocalMutation(runtime, "tx:runtime:2", (graph) => {
-      graph.topic.update(runtime.ids.graphExplorer, {
+      graph.document.update(runtime.ids.graphExplorer, {
         name: "Graph Explorer Runtime Two",
       });
     });
@@ -95,13 +95,13 @@ describe("example runtime sync integration", () => {
       cursor: "example:2",
       replayed: false,
     });
-    expect(runtime.authority.graph.topic.get(runtime.ids.graphExplorer).name).toBe(
+    expect(runtime.authority.graph.document.get(runtime.ids.graphExplorer).name).toBe(
       "Graph Explorer Runtime Two",
     );
-    expect(runtime.graph.topic.get(runtime.ids.graphExplorer).name).toBe(
+    expect(runtime.graph.document.get(runtime.ids.graphExplorer).name).toBe(
       "Graph Explorer Runtime Two",
     );
-    expect(peer.graph.topic.get(runtime.ids.graphExplorer).name).toBe("Graph Explorer");
+    expect(peer.graph.document.get(runtime.ids.graphExplorer).name).toBe("Graph Explorer");
 
     const applied = await peer.sync.sync();
 
@@ -120,7 +120,9 @@ describe("example runtime sync integration", () => {
       completeness: "complete",
       freshness: "current",
     });
-    expect(peer.graph.topic.get(runtime.ids.graphExplorer).name).toBe("Graph Explorer Runtime Two");
+    expect(peer.graph.document.get(runtime.ids.graphExplorer).name).toBe(
+      "Graph Explorer Runtime Two",
+    );
     expect(peer.sync.getState()).toMatchObject({
       status: "ready",
       cursor: second.cursor,
@@ -372,7 +374,7 @@ describe("example runtime sync integration", () => {
     ]);
 
     const result = runtime.authority.applyTransaction(
-      createTopicNameWriteTransaction(
+      createDocumentNameWriteTransaction(
         runtime.authority.store,
         runtime.ids.graphExplorer,
         "Graph Explorer Pull",
@@ -393,7 +395,7 @@ describe("example runtime sync integration", () => {
     expect(applied.after).toBe(baseCursor);
     expect(applied.cursor).toBe(result.cursor);
     expect(applied.transactions).toEqual([result]);
-    expect(runtime.graph.topic.get(runtime.ids.graphExplorer).name).toBe("Graph Explorer Pull");
+    expect(runtime.graph.document.get(runtime.ids.graphExplorer).name).toBe("Graph Explorer Pull");
     expect(runtime.sync.getState()).toMatchObject({
       status: "ready",
       cursor: result.cursor,
@@ -418,7 +420,7 @@ describe("example runtime sync integration", () => {
   it("records reset fallbacks until the caller recovers with a total snapshot", async () => {
     const runtime = createExampleRuntime();
     const acknowledged = await runtime.commitLocalMutation(runtime, "tx:runtime:reset", (graph) => {
-      graph.topic.update(runtime.ids.graphExplorer, {
+      graph.document.update(runtime.ids.graphExplorer, {
         name: "Graph Explorer Reset",
       });
     });

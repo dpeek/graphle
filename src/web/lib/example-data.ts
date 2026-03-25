@@ -2,7 +2,6 @@ import type { NamespaceClient } from "@io/core/graph";
 import { core } from "@io/core/graph/modules";
 import { ops } from "@io/core/graph/modules/ops";
 import { pkm } from "@io/core/graph/modules/pkm";
-import { topicKind } from "@io/core/graph/modules/pkm/topic";
 
 const exampleGraph = { ...pkm, ...ops } as const;
 
@@ -59,44 +58,119 @@ export function seedExampleGraph(
   );
 
   const graphExplorer = resolveEntityId(
-    graph.topic.list().find((topic) => topic.slug === "graph-explorer"),
+    graph.document.list().find((document) => document.slug === "graph-explorer"),
     () =>
-      graph.topic.create({
-        content: "Shared explorer surface for the canonical product graph.",
-        kind: resolvedEnumValue(topicKind.values.module),
+      graph.document.create({
+        description: "Shared explorer surface for the canonical product graph.",
         name: "Graph Explorer",
         isArchived: false,
-        order: 1,
         slug: "graph-explorer",
         tags: [graphTag, docsTag],
       }),
   );
   const runtimeSync = resolveEntityId(
-    graph.topic.list().find((topic) => topic.name === "Runtime Sync"),
+    graph.document.list().find((document) => document.name === "Runtime Sync"),
     () =>
-      graph.topic.create({
-        content: "Total snapshots bootstrap clients before ordered incremental updates.",
-        kind: resolvedEnumValue(topicKind.values.workflow),
+      graph.document.create({
+        description: "Total snapshots bootstrap clients before ordered incremental updates.",
         name: "Runtime Sync",
         isArchived: false,
-        order: 2,
-        parent: graphExplorer,
-        references: [graphExplorer],
+        slug: "runtime-sync",
         tags: [graphTag],
       }),
   );
   const secretRotation = resolveEntityId(
-    graph.topic.list().find((topic) => topic.name === "Secret Rotation"),
+    graph.document.list().find((document) => document.name === "Secret Rotation"),
     () =>
-      graph.topic.create({
-        content: "Rotate env-var secrets through authority-only commands.",
-        kind: resolvedEnumValue(topicKind.values.runbook),
+      graph.document.create({
+        description: "Rotate env-var secrets through authority-only commands.",
         name: "Secret Rotation",
         isArchived: false,
-        order: 3,
-        parent: graphExplorer,
-        references: [runtimeSync],
+        slug: "secret-rotation",
         tags: [docsTag],
+      }),
+  );
+  const docsTreeKey = "example-docs";
+  const graphExplorerPlacement = resolveEntityId(
+    graph.documentPlacement
+      .list()
+      .find(
+        (placement) => placement.treeKey === docsTreeKey && placement.document === graphExplorer,
+      ),
+    () =>
+      graph.documentPlacement.create({
+        name: "Graph Explorer",
+        document: graphExplorer,
+        order: 1,
+        slug: "graph-explorer",
+        treeKey: docsTreeKey,
+      }),
+  );
+  resolveEntityId(
+    graph.documentPlacement
+      .list()
+      .find((placement) => placement.treeKey === docsTreeKey && placement.document === runtimeSync),
+    () =>
+      graph.documentPlacement.create({
+        name: "Runtime Sync",
+        document: runtimeSync,
+        order: 2,
+        parentPlacement: graphExplorerPlacement,
+        slug: "runtime-sync",
+        treeKey: docsTreeKey,
+      }),
+  );
+  resolveEntityId(
+    graph.documentPlacement
+      .list()
+      .find(
+        (placement) => placement.treeKey === docsTreeKey && placement.document === secretRotation,
+      ),
+    () =>
+      graph.documentPlacement.create({
+        name: "Secret Rotation",
+        document: secretRotation,
+        order: 3,
+        parentPlacement: graphExplorerPlacement,
+        slug: "secret-rotation",
+        treeKey: docsTreeKey,
+      }),
+  );
+  resolveEntityId(
+    graph.documentBlock
+      .list()
+      .find((block) => block.document === graphExplorer && block.order === 0),
+    () =>
+      graph.documentBlock.create({
+        content: "Shared explorer surface for the canonical product graph.",
+        document: graphExplorer,
+        kind: resolvedEnumValue(pkm.documentBlockKind.values.markdown),
+        name: "Overview",
+        order: 0,
+      }),
+  );
+  resolveEntityId(
+    graph.documentBlock.list().find((block) => block.document === runtimeSync && block.order === 0),
+    () =>
+      graph.documentBlock.create({
+        content: "Total snapshots bootstrap clients before ordered incremental updates.",
+        document: runtimeSync,
+        kind: resolvedEnumValue(pkm.documentBlockKind.values.markdown),
+        name: "Overview",
+        order: 0,
+      }),
+  );
+  resolveEntityId(
+    graph.documentBlock
+      .list()
+      .find((block) => block.document === secretRotation && block.order === 0),
+    () =>
+      graph.documentBlock.create({
+        content: "Rotate env-var secrets through authority-only commands.",
+        document: secretRotation,
+        kind: resolvedEnumValue(pkm.documentBlockKind.values.markdown),
+        name: "Overview",
+        order: 0,
       }),
   );
   const workflowProject = resolveEntityId(

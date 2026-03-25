@@ -129,59 +129,59 @@
 }
 
 @layer components {
-  .topic-markdown {
+  .graph-markdown {
     @apply max-w-none text-sm leading-7 text-foreground;
   }
 
-  .topic-markdown :is(h1, h2, h3, h4) {
+  .graph-markdown :is(h1, h2, h3, h4) {
     @apply mt-6 mb-3 font-semibold tracking-tight text-foreground first:mt-0;
   }
 
-  .topic-markdown h1 {
+  .graph-markdown h1 {
     @apply text-2xl;
   }
 
-  .topic-markdown h2 {
+  .graph-markdown h2 {
     @apply border-border/60 border-b pb-2 text-xl;
   }
 
-  .topic-markdown h3 {
+  .graph-markdown h3 {
     @apply text-lg;
   }
 
-  .topic-markdown :is(p, ul, ol, pre, blockquote, table) {
+  .graph-markdown :is(p, ul, ol, pre, blockquote, table) {
     @apply my-3;
   }
 
-  .topic-markdown :is(ul, ol) {
+  .graph-markdown :is(ul, ol) {
     @apply pl-6;
   }
 
-  .topic-markdown ul {
+  .graph-markdown ul {
     @apply list-disc;
   }
 
-  .topic-markdown ol {
+  .graph-markdown ol {
     @apply list-decimal;
   }
 
-  .topic-markdown a {
+  .graph-markdown a {
     @apply text-sky-700 underline decoration-sky-300 underline-offset-2;
   }
 
-  .topic-markdown code {
+  .graph-markdown code {
     @apply bg-muted/60 rounded px-1.5 py-0.5 font-mono text-[0.92em];
   }
 
-  .topic-markdown pre {
+  .graph-markdown pre {
     @apply bg-slate-950 text-slate-50 overflow-x-auto rounded-[1rem] p-4;
   }
 
-  .topic-markdown pre code {
+  .graph-markdown pre code {
     @apply bg-transparent p-0 text-inherit;
   }
 
-  .topic-markdown blockquote {
+  .graph-markdown blockquote {
     @apply border-l-4 border-sky-200 pl-4 text-muted-foreground italic;
   }
 

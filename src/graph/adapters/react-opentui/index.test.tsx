@@ -13,7 +13,7 @@ import {
   createTotalSyncPayload,
   createTypeClient,
 } from "../../index.js";
-import { core, ops } from "../../modules/index.js";
+import { core, ops, pkm } from "../../modules/index.js";
 import { useOptionalMutationRuntime } from "../../runtime/react/index.js";
 import {
   GraphRuntimeProvider,
@@ -26,7 +26,7 @@ import {
   globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
-const productGraph = { ...core, ...ops } as const;
+const productGraph = { ...core, ...pkm, ...ops } as const;
 
 function date(value: string): Date {
   return new Date(value);
@@ -35,6 +35,7 @@ function date(value: string): Date {
 function createWorkflowRuntimeFixture() {
   const store = createStore();
   bootstrap(store, core);
+  bootstrap(store, pkm);
   bootstrap(store, ops);
   const graph = createTypeClient(store, productGraph);
 

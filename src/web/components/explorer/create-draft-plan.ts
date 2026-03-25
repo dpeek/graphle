@@ -141,7 +141,7 @@ export function buildCreateDefaults(
     Object.assign(defaults, setDraftValue(defaults, field.path, field.fieldName, optionId));
   }
 
-  if (entry.key === "pkm:topic") {
+  if (entry.key === "pkm:documentBlock" || entry.key === "pkm:documentPlacement") {
     return setDraftValue(defaults, [], "order", entry.count);
   }
 

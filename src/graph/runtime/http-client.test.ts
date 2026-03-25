@@ -662,14 +662,14 @@ describe("createHttpGraphClient", () => {
     bootstrap(authorityStore, core);
     bootstrap(authorityStore, pkm);
 
-    const topicTypeId = typeId(pkm.topic);
-    const topicNamePredicateId = edgeId(core.node.fields.name);
-    const currentNameEdge = authorityStore.facts(topicTypeId, topicNamePredicateId)[0];
-    if (!currentNameEdge) throw new Error("Expected bootstrapped topic name edge.");
+    const documentTypeId = typeId(pkm.document);
+    const documentNamePredicateId = edgeId(core.node.fields.name);
+    const currentNameEdge = authorityStore.facts(documentTypeId, documentNamePredicateId)[0];
+    if (!currentNameEdge) throw new Error("Expected bootstrapped document name edge.");
 
     authorityStore.batch(() => {
       authorityStore.retract(currentNameEdge.id);
-      authorityStore.assert(topicTypeId, topicNamePredicateId, "Topics");
+      authorityStore.assert(documentTypeId, documentNamePredicateId, "Documents");
     });
 
     const payload = createTotalSyncPayload(authorityStore, {
@@ -686,6 +686,6 @@ describe("createHttpGraphClient", () => {
       mode: "total",
       cursor: "server:1",
     });
-    expect(client.graph.topic.get(topicTypeId)?.name).toBe("Topics");
+    expect(client.graph.document.get(documentTypeId)?.name).toBe("Documents");
   });
 });

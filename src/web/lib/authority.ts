@@ -678,13 +678,14 @@ function formatPolicyErrorMessage(error: PolicyError): string {
 function createFallbackPolicyDescriptor(
   field: CompiledFieldDefinition["field"],
 ): PredicatePolicyDescriptor {
+  const transportVisibility = field.authority?.visibility ?? "replicated";
+  const requiredWriteScope = field.authority?.write ?? "client-tx";
   return {
     predicateId: edgeId(field),
-    transportVisibility: field.authority?.visibility ?? "replicated",
-    requiredWriteScope: field.authority?.write ?? "client-tx",
-    readAudience:
-      (field.authority?.visibility ?? "replicated") === "authority-only" ? "authority" : "public",
-    writeAudience: "authority",
+    transportVisibility,
+    requiredWriteScope,
+    readAudience: transportVisibility === "authority-only" ? "authority" : "public",
+    writeAudience: requiredWriteScope === "client-tx" ? "graph-member-edit" : "authority",
     shareable: false,
   } satisfies PredicatePolicyDescriptor;
 }

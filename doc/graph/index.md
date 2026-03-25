@@ -80,7 +80,7 @@ The graph package publishes these subpaths from `../../package.json`:
   `@io/core/graph/modules/pkm`: namespace assembly entrypoints
 - `@io/core/graph/modules/ops/env-var`,
   `@io/core/graph/modules/ops/workflow`,
-  `@io/core/graph/modules/pkm/topic`: exported slice entrypoints
+  `@io/core/graph/modules/pkm/document`: exported slice entrypoints
 - `@io/core/graph/adapters/react-dom`,
   `@io/core/graph/adapters/react-opentui`: host-specific adapter package roots
 
@@ -103,8 +103,8 @@ subpaths.
 - `../../src/graph/modules/core/`: built-in scalar, enum, and helper modules
 - `../../src/graph/modules/ops/env-var/schema.ts`,
   `../../src/graph/modules/ops/workflow/schema.ts`,
-  `../../src/graph/modules/pkm/topic/schema.ts`: slice entrypoints that back
-  the exported `ops/env-var`, `ops/workflow`, and `pkm/topic` subpaths
+  `../../src/graph/modules/pkm/document/schema.ts`: slice entrypoints that back
+  the exported `ops/env-var`, `ops/workflow`, and `pkm/document` subpaths
 - `../../src/graph/adapters/react-dom/`: DOM capability registries, default
   field views/editors, filter resolvers, icon rendering, and field-family
   modules

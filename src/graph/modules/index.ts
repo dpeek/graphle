@@ -4,4 +4,4 @@ export { ops } from "./ops.js";
 export * from "./ops/env-var/schema.js";
 export * from "./ops/workflow/schema.js";
 export { pkm } from "./pkm.js";
-export * from "./pkm/topic/schema.js";
+export * from "./pkm/document/schema.js";

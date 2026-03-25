@@ -4,7 +4,7 @@
 
 `web` owns the TanStack Router SPA that runs on the Worker shell. It provides
 operator-facing browser surfaces on top of the synced graph runtime, including
-the graph explorer, the dedicated sync monitor, and the topic browser/editor.
+the graph explorer and the dedicated sync monitor.
 The current explorer now uses the canonical type-first `/graph` route and
 search-param selection model described in `./explorer.md`, plus a shared
 inspector shell, draft-backed generic create flow for supported entity types,
@@ -28,7 +28,7 @@ package. The terminal sibling surface lives in `../../src/tui/*`.
 - keep graph-aware field resolver, predicate mutation, and typed preview logic
   in `../../src/graph/runtime/react/*` and
   `../../src/graph/adapters/react-dom/*`
-- keep route/page composition, explorer state, topic workflows, and Worker
+- keep route/page composition, explorer state, and Worker
   authority wiring in `../../src/web/*`
 
 In practice, `web` should compose `@io/web` primitives such as shared inputs,
@@ -61,7 +61,7 @@ generic shared command/read transports.
 - `../../auth.ts`: Better Auth CLI config entrypoint that keeps schema
   generation on a dedicated auth-store path without coupling it to the Worker's
   runtime bindings
-- `../../src/web/routes/`: top-level pages including `topics`, `sync`, and the
+- `../../src/web/routes/`: top-level pages including `sync`, `views`, and the
   graph explorer routes
 - `../../src/web/components/home-page.tsx`: session-aware landing page that
   keeps the signed-out auth entry flow and the signed-in bootstrap summary in
@@ -87,12 +87,6 @@ generic shared command/read transports.
   whole-graph recovery and the first named
   `ops/workflow` review scope, inspect delivered scope metadata, and trigger
   scoped refreshes over the shared `/api/sync` transport contract
-- `../../src/web/components/topic-browser-page.tsx`: topic browsing, metadata
-  editing, shared Base UI entity-reference combobox editing with inline chips
-  and icon-aware option rows, tag create-on-enter flows on top of that shared
-  combobox, shared Base UI combobox-backed predicate pickers for enum and other
-  closed-option fields, markdown authoring UI, and shared `ColorInput`-backed
-  color predicate editing with an inline swatch trigger in the input chrome
 - `../../src/web/components/app-shell.tsx`: shared shell and navigation
 - `../../lib/web/src/markdown.tsx`: shared markdown renderer with Bun-first and
   `react-markdown` fallback behavior reused by graph field views and previews

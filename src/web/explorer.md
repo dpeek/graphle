@@ -150,7 +150,7 @@ hand-picked entity catalog.
 That means the column includes ordinary product types and core support types
 such as:
 
-- `pkm:topic`
+- `pkm:document`
 - `ops:envVar`
 - `core:tag`
 - `core:icon`
@@ -158,7 +158,7 @@ such as:
 - `core:predicate`
 - `core:secretHandle`
 - scalar and enum definitions such as `core:string`, `core:markdown`, and
-  `pkm:topicKind`
+  `pkm:documentBlockKind`
 
 ### Column 2: Targets
 
@@ -617,8 +617,7 @@ should still land incrementally.
 - implement the draft create layer
 - render `New <Type>` through the shared inspector
 - remove env-var-specific create UI
-- move topic creation toward the same foundation where the generic flow is
-  sufficient
+- keep document-backed create flows on the same generic foundation
 - keep type-specific defaults additive rather than screen-specific
 
 ### Phase 6: Finish cleanup

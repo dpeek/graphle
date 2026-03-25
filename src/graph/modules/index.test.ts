@@ -75,7 +75,13 @@ import {
   workflowSchema,
 } from "./ops/workflow/schema.js";
 import { pkm as canonicalPkm } from "./pkm.js";
-import { topic, topicKind, topicSchema } from "./pkm/topic/schema.js";
+import {
+  document,
+  documentBlock,
+  documentBlockKind,
+  documentPlacement,
+  documentSchema,
+} from "./pkm/document/schema.js";
 
 function resolvedTypeId(typeDef: { values: { key: string } }): string {
   const values = typeDef.values as { key: string; id?: string };
@@ -200,8 +206,10 @@ describe("module entry surfaces", () => {
     expect(String(canonicalCore.admissionPolicy.fields.signupPolicy.range)).toBe(
       resolvedTypeId(admissionSignupPolicy),
     );
-    expect(canonicalPkm.topic.values.key).toBe(topic.values.key);
-    expect(canonicalPkm.topicKind.values.key).toBe(topicKind.values.key);
+    expect(canonicalPkm.document.values.key).toBe(document.values.key);
+    expect(canonicalPkm.documentBlock.values.key).toBe(documentBlock.values.key);
+    expect(canonicalPkm.documentBlockKind.values.key).toBe(documentBlockKind.values.key);
+    expect(canonicalPkm.documentPlacement.values.key).toBe(documentPlacement.values.key);
     expect(canonicalOps.envVar.values.key).toBe(envVar.values.key);
     expect(canonicalOps.workflowProject.values.key).toBe(workflowProject.values.key);
     expect(canonicalOps.workflowRepository.values.key).toBe(workflowRepository.values.key);
@@ -283,21 +291,26 @@ describe("module entry surfaces", () => {
     });
   });
 
-  it("exports the topic slice from the canonical pkm module tree", () => {
-    expect(topicSchema).toEqual({
-      topic,
-      topicKind,
+  it("exports the document slice from the canonical pkm module tree", () => {
+    expect(documentSchema).toEqual({
+      document,
+      documentBlockKind,
+      documentBlock,
+      documentPlacement,
     });
-    expect(String(topic.fields.kind.range)).toBe(resolvedTypeId(topicKind));
-    expect(String(topic.fields.content.range)).toBe(resolvedTypeId(core.markdown));
-    expect(String(topic.fields.tags.range)).toBe(resolvedTypeId(core.tag));
-    expect(String(topic.fields.parent.range)).toBe(resolvedTypeId(topic));
-    expect(topic.fields.parent.meta.reference).toEqual({
+    expect(String(document.fields.tags.range)).toBe(resolvedTypeId(core.tag));
+    expect(String(documentBlock.fields.document.range)).toBe(resolvedTypeId(document));
+    expect(String(documentBlock.fields.kind.range)).toBe(resolvedTypeId(documentBlockKind));
+    expect(String(documentBlock.fields.entity.range)).toBe(resolvedTypeId(core.node));
+    expect(String(documentPlacement.fields.document.range)).toBe(resolvedTypeId(document));
+    expect(String(documentPlacement.fields.parentPlacement.range)).toBe(
+      resolvedTypeId(documentPlacement),
+    );
+    expect(documentPlacement.fields.parentPlacement.meta.reference).toEqual({
       selection: "existing-only",
       create: false,
       excludeSubject: true,
     });
-    expect(String(topic.fields.references.range)).toBe(resolvedTypeId(topic));
   });
 
   it("exports the workflow slice from the canonical ops module tree", () => {
@@ -357,6 +370,10 @@ describe("module entry surfaces", () => {
       "core",
       "ops",
       "pkm",
+      "document",
+      "documentBlock",
+      "documentBlockKind",
+      "documentPlacement",
       "node",
       "icon",
       "iconReferenceField",
@@ -378,8 +395,6 @@ describe("module entry surfaces", () => {
       "principal",
       "authSubjectProjection",
       "principalRoleBinding",
-      "topic",
-      "topicKind",
       "jsonTypeModule",
       "markdownTypeModule",
       "svgTypeModule",
@@ -409,8 +424,10 @@ describe("module entry surfaces", () => {
     expect(canonicalOps.contextBundle.values.key).toBe(contextBundle.values.key);
     expect(canonicalOps.contextBundleEntry.values.key).toBe(contextBundleEntry.values.key);
     expect(moduleExports.workflowMutationCommand).toBe(workflowMutationCommand);
-    expect(canonicalPkm.topic.values.key).toBe(topic.values.key);
-    expect(canonicalPkm.topicKind.values.key).toBe(topicKind.values.key);
+    expect(canonicalPkm.document.values.key).toBe(document.values.key);
+    expect(canonicalPkm.documentBlock.values.key).toBe(documentBlock.values.key);
+    expect(canonicalPkm.documentBlockKind.values.key).toBe(documentBlockKind.values.key);
+    expect(canonicalPkm.documentPlacement.values.key).toBe(documentPlacement.values.key);
     expect(String(canonicalCore.type.fields.icon.range)).toBe(resolvedTypeId(icon));
     expect(String(canonicalCore.predicate.fields.icon.range)).toBe(resolvedTypeId(icon));
     expect(typeof moduleExports.core.node.values.id).toBe("string");
@@ -418,7 +435,7 @@ describe("module entry surfaces", () => {
     expect(typeof moduleExports.ops.envVar.values.id).toBe("string");
     expect(typeof moduleExports.ops.workflowProject.values.id).toBe("string");
     expect(typeof moduleExports.ops.agentSession.values.id).toBe("string");
-    expect(typeof moduleExports.pkm.topic.values.id).toBe("string");
+    expect(typeof moduleExports.pkm.document.values.id).toBe("string");
     expect(moduleExports.node.values.key).toBe(canonicalCore.node.values.key);
     expect(moduleExports.icon.values.key).toBe(canonicalCore.icon.values.key);
     expect(moduleExports.iconReferenceField).toBe(iconReferenceField);
@@ -443,8 +460,14 @@ describe("module entry surfaces", () => {
     expect(moduleExports.principalRoleBinding.values.key).toBe(
       canonicalCore.principalRoleBinding.values.key,
     );
-    expect(moduleExports.topic.values.key).toBe(canonicalPkm.topic.values.key);
-    expect(moduleExports.topicKind.values.key).toBe(canonicalPkm.topicKind.values.key);
+    expect(moduleExports.document.values.key).toBe(canonicalPkm.document.values.key);
+    expect(moduleExports.documentBlock.values.key).toBe(canonicalPkm.documentBlock.values.key);
+    expect(moduleExports.documentBlockKind.values.key).toBe(
+      canonicalPkm.documentBlockKind.values.key,
+    );
+    expect(moduleExports.documentPlacement.values.key).toBe(
+      canonicalPkm.documentPlacement.values.key,
+    );
     expect(moduleExports.jsonTypeModule).toBe(jsonTypeModule);
     expect(moduleExports.markdownTypeModule).toBe(markdownTypeModule);
     expect(moduleExports.moneyTypeModule).toBe(moneyTypeModule);

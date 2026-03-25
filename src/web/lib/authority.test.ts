@@ -176,6 +176,16 @@ const shareProbeNamespace = defineNamespace(createIdMap({ shareProbe }).map, {
 const shareProofGraph = { ...productGraph, ...shareProbeNamespace } as const;
 const shareProbeSharedNotePredicateId = edgeId(shareProbe.fields.sharedNote);
 const shareProbePrivateNotePredicateId = edgeId(shareProbe.fields.privateNote);
+const editableNote = defineType({
+  values: { key: "test:editableNote", name: "Editable Note" },
+  fields: {
+    ...core.node.fields,
+  },
+});
+const editableNoteNamespace = defineNamespace(createIdMap({ editableNote }).map, {
+  editableNote,
+});
+const editableNoteGraph = { ...productGraph, ...editableNoteNamespace } as const;
 
 setDefaultTimeout(20_000);
 
@@ -1593,7 +1603,7 @@ describe("web authority", () => {
     });
   });
 
-  it("denies direct transactions without authority access by default", async () => {
+  it("allows graph members to apply direct client transactions for ordinary fields", async () => {
     const authorization = createHumanAuthorizationContext();
     const storage = createInMemoryTestWebAppAuthorityStorage();
     const authority = await createTestWebAppAuthority(storage.storage);
@@ -1610,20 +1620,17 @@ describe("web authority", () => {
     const transaction = buildGraphWriteTransaction(
       before,
       mutationStore.snapshot(),
-      "tx:forbidden",
+      "tx:create-env-var",
     );
 
-    await expect(authority.applyTransaction(transaction, { authorization })).rejects.toMatchObject({
-      result: expect.objectContaining({
-        issues: expect.arrayContaining([
-          expect.objectContaining({
-            code: "policy.write.forbidden",
-            message: expect.stringContaining("policy.write.forbidden"),
-          }),
-        ]),
-      }),
-    });
-    expect(storage.read()?.writeHistory.results.length ?? 0).toBe(0);
+    await expect(authority.applyTransaction(transaction, { authorization })).resolves.toMatchObject(
+      {
+        replayed: false,
+        txId: "tx:create-env-var",
+        writeScope: "client-tx",
+      },
+    );
+    expect(storage.read()?.writeHistory.results.length ?? 0).toBe(1);
   });
 
   it("denies authority commands without authority access and surfaces stable vocabulary", async () => {
@@ -4191,6 +4198,73 @@ describe("web authority", () => {
         capabilityWriteNotePredicateId,
       ),
     ).toBe("Allowed capability write");
+  });
+
+  it("allows graph-member predicate edits when lifecycle-managed updatedAt is included", async () => {
+    const authorityAuthorization = createAuthorityAuthorizationContext();
+    const memberAuthorization = createHumanAuthorizationContext();
+    const storage = createInMemoryTestWebAppAuthorityStorage();
+    const authority = await createTestWebAppAuthority(storage.storage, {
+      graph: editableNoteGraph,
+    });
+    const { mutationGraph: seedGraph, mutationStore: seedStore } = createMutationStoreForGraph(
+      authority.readSnapshot({ authorization: authorityAuthorization }),
+      editableNoteGraph,
+    );
+    const beforeCreate = seedStore.snapshot();
+    const noteId = seedGraph.editableNote.create({
+      name: "Original note",
+    });
+
+    await authority.applyTransaction(
+      buildGraphWriteTransaction(beforeCreate, seedStore.snapshot(), "tx:create-editable-note"),
+      {
+        authorization: authorityAuthorization,
+        writeScope: "authority-only",
+      },
+    );
+
+    const { mutationGraph, mutationStore } = createMutationStoreForGraph(
+      authority.readSnapshot({ authorization: authorityAuthorization }),
+      editableNoteGraph,
+    );
+    const beforeUpdate = mutationStore.snapshot();
+    mutationGraph.editableNote.update(noteId, {
+      name: "Renamed note",
+    });
+    const transaction = buildGraphWriteTransaction(
+      beforeUpdate,
+      mutationStore.snapshot(),
+      "tx:update-editable-note-name",
+    );
+
+    expect(
+      transaction.ops.some(
+        (operation) =>
+          operation.op === "assert" && operation.edge.p === edgeId(core.node.fields.updatedAt),
+      ),
+    ).toBe(true);
+
+    await expect(
+      authority.applyTransaction(transaction, {
+        authorization: memberAuthorization,
+      }),
+    ).resolves.toMatchObject({
+      replayed: false,
+      txId: "tx:update-editable-note-name",
+      writeScope: "client-tx",
+    });
+
+    expect(
+      authority
+        .readSnapshot({ authorization: authorityAuthorization })
+        .edges.some(
+          (edge) =>
+            edge.s === noteId &&
+            edge.p === edgeId(core.node.fields.name) &&
+            edge.o === "Renamed note",
+        ),
+    ).toBe(true);
   });
 
   it("repairs missing exact subject projections by linking them to the existing auth-user principal", async () => {

@@ -27,7 +27,7 @@ function MarkdownFieldView({ predicate }: AnyFieldProps) {
 
   return (
     <div data-web-field-kind="markdown">
-      <MarkdownRenderer className="topic-markdown" content={content} />
+      <MarkdownRenderer className="graph-markdown" content={content} />
     </div>
   );
 }
@@ -74,7 +74,7 @@ export function MarkdownFieldEditor({
             className={sourcePreviewPanelClassName}
             data-web-markdown-preview={deferredDraft === draft ? "ready" : "deferred"}
           >
-            <MarkdownRenderer className="topic-markdown" content={deferredDraft} />
+            <MarkdownRenderer className="graph-markdown" content={deferredDraft} />
           </div>
         ) : (
           <EmptyPreview attribute="markdown">

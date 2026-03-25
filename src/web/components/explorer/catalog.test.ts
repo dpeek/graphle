@@ -32,25 +32,35 @@ describe("explorer catalog", () => {
     const catalog = byKey(entries);
 
     expect(entries).toHaveLength(Object.values(explorerNamespace).length);
-    expect(catalog.get("pkm:topic")).toMatchObject({
-      key: "pkm:topic",
+    expect(catalog.get("pkm:document")).toMatchObject({
+      key: "pkm:document",
       kind: "entity",
       dataCount: 3,
     });
-    expect(catalog.get("pkm:topic")?.fieldDefs.map((field) => field.pathLabel)).toEqual(
-      expect.arrayContaining(["content", "kind", "references"]),
+    expect(catalog.get("pkm:document")?.fieldDefs.map((field) => field.pathLabel)).toEqual(
+      expect.arrayContaining(["description", "isArchived", "slug", "tags"]),
     );
     expect(catalog.get("core:tag")).toMatchObject({
       key: "core:tag",
       kind: "entity",
       dataCount: 2,
     });
-    expect(catalog.get("pkm:topicKind")).toMatchObject({
-      key: "pkm:topicKind",
+    expect(catalog.get("pkm:documentBlock")).toMatchObject({
+      key: "pkm:documentBlock",
+      kind: "entity",
+      dataCount: 3,
+    });
+    expect(catalog.get("pkm:documentPlacement")).toMatchObject({
+      key: "pkm:documentPlacement",
+      kind: "entity",
+      dataCount: 3,
+    });
+    expect(catalog.get("pkm:documentBlockKind")).toMatchObject({
+      key: "pkm:documentBlockKind",
       kind: "enum",
       dataCount: 0,
     });
-    expect(catalog.get("pkm:topicKind")?.optionDefs.length).toBeGreaterThan(0);
+    expect(catalog.get("pkm:documentBlockKind")?.optionDefs.length).toBeGreaterThan(0);
     expect(catalog.get("core:string")).toMatchObject({
       key: "core:string",
       kind: "scalar",
@@ -65,12 +75,14 @@ describe("explorer catalog", () => {
 
     expect(entries).toHaveLength(Object.values(explorerNamespace).filter(isEntityType).length);
     expect(entries.every((entry) => entry.typeDef.kind === "entity")).toBe(true);
-    expect(catalog.get("pkm:topic")).toMatchObject({
-      key: "pkm:topic",
+    expect(catalog.get("pkm:document")).toMatchObject({
+      key: "pkm:document",
       count: 3,
     });
-    expect(typeof catalog.get("pkm:topic")?.create).toBe("function");
-    expect(typeof catalog.get("pkm:topic")?.validateCreate).toBe("function");
+    expect(typeof catalog.get("pkm:document")?.create).toBe("function");
+    expect(typeof catalog.get("pkm:document")?.validateCreate).toBe("function");
+    expect(catalog.get("pkm:documentBlock")?.count).toBe(3);
+    expect(catalog.get("pkm:documentPlacement")?.count).toBe(3);
     expect(catalog.get("ops:envVar")?.count).toBe(0);
     expect(catalog.get("core:icon")?.count).toBeGreaterThan(0);
     expect(catalog.get("core:tag")?.count).toBe(2);

@@ -114,8 +114,8 @@ describe("graph icons", () => {
       name: "Planning",
       svg: graphIconSeeds.string.svg,
     });
-    const topicTypeId = typeId(pkm.topic);
-    graph.type.ref(topicTypeId).fields.icon.set(iconId);
+    const documentTypeId = typeId(pkm.document);
+    graph.type.ref(documentTypeId).fields.icon.set(iconId);
 
     const blockedDelete = graph.icon.validateDelete(iconId);
     expect(blockedDelete).toMatchObject({
@@ -128,14 +128,14 @@ describe("graph icons", () => {
       expect.arrayContaining([
         expect.objectContaining({
           code: "reference.missing",
-          nodeId: topicTypeId,
+          nodeId: documentTypeId,
           predicateKey: core.type.fields.icon.key,
           source: "runtime",
         }),
       ]),
     );
 
-    graph.type.ref(topicTypeId).fields.icon.clear();
+    graph.type.ref(documentTypeId).fields.icon.clear();
 
     const allowedDelete = graph.icon.validateDelete(iconId);
     expect(allowedDelete).toMatchObject({

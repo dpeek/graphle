@@ -276,7 +276,7 @@ Responsibilities:
 Current built-in route contributions in the repo are effectively:
 
 - `/`
-- `/topics`
+- `/views`
 - `/graph`
 - `/sync`
 
@@ -542,7 +542,7 @@ Current repo anchors:
 - `src/web/components/graph-runtime-bootstrap.tsx`
 - `src/web/components/graph-explorer-page.tsx`
 - `src/web/components/sync-page.tsx`
-- `src/web/components/topic-browser-page.tsx`
+- `src/web/components/views-page.tsx`
 
 Responsibilities:
 
@@ -774,8 +774,7 @@ Rules:
 
 ### 3. Edit an entity through a module or built-in surface
 
-1. Initiator: user changes a field in a module screen, the topic browser, or
-   the explorer.
+1. Initiator: user changes a field in a module screen or the explorer.
 2. Components involved: mounted surface, surface host context, Branch 1 command
    or transaction path, browser sync runtime.
 3. Contract boundaries crossed:
@@ -999,7 +998,7 @@ Rules:
   logic, and surface host context
 - `src/web/components/graph-explorer-page.tsx`,
   `src/web/components/sync-page.tsx`, and
-  `src/web/components/topic-browser-page.tsx`: register existing built-in
+  `src/web/components/views-page.tsx`: register existing built-in
   surfaces through the same host contract
 - `src/web/lib/server-routes.ts` and `src/web/worker/index.ts`: split future
   bootstrap/session delivery from raw graph sync and mutation routes

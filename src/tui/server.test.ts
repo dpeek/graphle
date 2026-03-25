@@ -6,6 +6,7 @@ import type { Workflow } from "../agent/types.js";
 import { core } from "../graph/modules/core.js";
 import { ops } from "../graph/modules/ops.js";
 import { workflowSchema } from "../graph/modules/ops/workflow/schema.js";
+import { pkm } from "../graph/modules/pkm.js";
 import {
   createWorkflowTuiStartupFailureModel,
   createWorkflowTuiStartupLoadingModel,
@@ -18,7 +19,7 @@ import {
 import { resolveWorkflowTuiStartupContract } from "./startup.js";
 import type { WorkflowTui, WorkflowTuiOptions } from "./tui.js";
 
-const productGraph = { ...core, ...ops } as const;
+const productGraph = { ...core, ...pkm, ...ops } as const;
 
 function date(value: string): Date {
   return new Date(value);
@@ -97,6 +98,7 @@ function createWorkflowGraphFixture(
   const projectCount = options.projectCount ?? 1;
   const store = createStore();
   bootstrap(store, core);
+  bootstrap(store, pkm);
   bootstrap(store, ops);
   const graph = createTypeClient(store, productGraph);
   const projectIds: string[] = [];

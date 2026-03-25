@@ -24,7 +24,7 @@
     "./graph/modules/ops/env-var": "./src/graph/modules/ops/env-var/schema.ts",
     "./graph/modules/ops/workflow": "./src/graph/modules/ops/workflow/schema.ts",
     "./graph/modules/pkm": "./src/graph/modules/pkm.ts",
-    "./graph/modules/pkm/topic": "./src/graph/modules/pkm/topic/schema.ts",
+    "./graph/modules/pkm/document": "./src/graph/modules/pkm/document/schema.ts",
     "./graph/adapters/react-dom": "./src/graph/adapters/react-dom/index.ts",
     "./graph/adapters/react-opentui": "./src/graph/adapters/react-opentui/index.ts",
     "./lib": "./src/lib/index.ts",

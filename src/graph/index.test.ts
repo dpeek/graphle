@@ -35,7 +35,7 @@ const canonicalGraphSubpaths = [
   "./graph/modules/ops/env-var",
   "./graph/modules/ops/workflow",
   "./graph/modules/pkm",
-  "./graph/modules/pkm/topic",
+  "./graph/modules/pkm/document",
   "./graph/adapters/react-dom",
   "./graph/adapters/react-opentui",
 ] as const;
@@ -151,8 +151,10 @@ const requiredModulesExports = [
   "ops",
   "pkm",
   "stringTypeModule",
-  "topic",
-  "topicKind",
+  "document",
+  "documentBlock",
+  "documentBlockKind",
+  "documentPlacement",
 ] as const;
 
 const requiredEnvVarExports = [
@@ -195,12 +197,14 @@ const requiredWorkflowExports = [
   "workflowSchema",
 ] as const;
 
-const requiredTopicExports = [
-  "topic",
-  "topicKind",
-  "topicKindType",
-  "topicKindTypeModule",
-  "topicSchema",
+const requiredDocumentExports = [
+  "document",
+  "documentBlock",
+  "documentBlockKind",
+  "documentBlockKindType",
+  "documentBlockKindTypeModule",
+  "documentPlacement",
+  "documentSchema",
 ] as const;
 
 function expectNamedExports(
@@ -450,7 +454,7 @@ describe("@io/core/graph package entry surfaces", () => {
       pkmExports,
       envVarExports,
       workflowExports,
-      topicExports,
+      documentExports,
     ] = await Promise.all([
       import("@io/core/graph/modules"),
       import("@io/core/graph/modules/core"),
@@ -458,7 +462,7 @@ describe("@io/core/graph package entry surfaces", () => {
       import("@io/core/graph/modules/pkm"),
       import("@io/core/graph/modules/ops/env-var"),
       import("@io/core/graph/modules/ops/workflow"),
-      import("@io/core/graph/modules/pkm/topic"),
+      import("@io/core/graph/modules/pkm/document"),
     ]);
 
     expectNamedExports(moduleExports, requiredModulesExports);
@@ -467,9 +471,9 @@ describe("@io/core/graph package entry surfaces", () => {
     expect(Object.keys(pkmExports)).toEqual(["pkm"]);
     expectNamedExports(envVarExports, requiredEnvVarExports);
     expectNamedExports(workflowExports, requiredWorkflowExports);
-    expectNamedExports(topicExports, requiredTopicExports);
+    expectNamedExports(documentExports, requiredDocumentExports);
     expect(typeof opsExports.ops.envVar.values.id).toBe("string");
     expect(typeof opsExports.ops.workflowProject.values.id).toBe("string");
-    expect(typeof pkmExports.pkm.topic.values.id).toBe("string");
+    expect(typeof pkmExports.pkm.document.values.id).toBe("string");
   });
 });

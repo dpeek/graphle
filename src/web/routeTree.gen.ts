@@ -10,7 +10,6 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as ViewsRouteImport } from './routes/views'
-import { Route as TopicsRouteImport } from './routes/topics'
 import { Route as SyncRouteImport } from './routes/sync'
 import { Route as GraphRouteImport } from './routes/graph'
 import { Route as IndexRouteImport } from './routes/index'
@@ -18,11 +17,6 @@ import { Route as IndexRouteImport } from './routes/index'
 const ViewsRoute = ViewsRouteImport.update({
   id: '/views',
   path: '/views',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const TopicsRoute = TopicsRouteImport.update({
-  id: '/topics',
-  path: '/topics',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SyncRoute = SyncRouteImport.update({
@@ -45,14 +39,12 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/graph': typeof GraphRoute
   '/sync': typeof SyncRoute
-  '/topics': typeof TopicsRoute
   '/views': typeof ViewsRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/graph': typeof GraphRoute
   '/sync': typeof SyncRoute
-  '/topics': typeof TopicsRoute
   '/views': typeof ViewsRoute
 }
 export interface FileRoutesById {
@@ -60,22 +52,20 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/graph': typeof GraphRoute
   '/sync': typeof SyncRoute
-  '/topics': typeof TopicsRoute
   '/views': typeof ViewsRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/graph' | '/sync' | '/topics' | '/views'
+  fullPaths: '/' | '/graph' | '/sync' | '/views'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/graph' | '/sync' | '/topics' | '/views'
-  id: '__root__' | '/' | '/graph' | '/sync' | '/topics' | '/views'
+  to: '/' | '/graph' | '/sync' | '/views'
+  id: '__root__' | '/' | '/graph' | '/sync' | '/views'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   GraphRoute: typeof GraphRoute
   SyncRoute: typeof SyncRoute
-  TopicsRoute: typeof TopicsRoute
   ViewsRoute: typeof ViewsRoute
 }
 
@@ -86,13 +76,6 @@ declare module '@tanstack/react-router' {
       path: '/views'
       fullPath: '/views'
       preLoaderRoute: typeof ViewsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/topics': {
-      id: '/topics'
-      path: '/topics'
-      fullPath: '/topics'
-      preLoaderRoute: typeof TopicsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/sync': {
@@ -123,7 +106,6 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   GraphRoute: GraphRoute,
   SyncRoute: SyncRoute,
-  TopicsRoute: TopicsRoute,
   ViewsRoute: ViewsRoute,
 }
 export const routeTree = rootRouteImport

@@ -163,7 +163,7 @@ Built-in graph modules live under `../../src/graph/modules/`:
   `../../src/graph/modules/ops.ts`,
   `../../src/graph/modules/pkm.ts`: namespace assembly entrypoints
 - `../../src/graph/modules/ops/env-var/schema.ts` and
-  `../../src/graph/modules/pkm/topic/schema.ts`: exported slice subpaths
+  `../../src/graph/modules/pkm/document/schema.ts`: exported slice subpaths
 
 Examples:
 

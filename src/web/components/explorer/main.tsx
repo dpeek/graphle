@@ -84,7 +84,7 @@ export function Explorer({
 
   const initialSearchParams = readExplorerSearchParams();
   const defaultTypeId =
-    typeEntryById.get(typeId(pkm.topic))?.id ?? typeEntries[0]?.id ?? typeId(pkm.topic);
+    typeEntryById.get(typeId(pkm.document))?.id ?? typeEntries[0]?.id ?? typeId(pkm.document);
 
   function canCreateType(typeIdValue: string): boolean {
     return createPlanByTypeId.get(typeIdValue)?.supported ?? false;

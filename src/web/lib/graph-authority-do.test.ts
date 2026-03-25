@@ -3042,16 +3042,16 @@ describe("web graph authority durable object", () => {
     });
   });
 
-  it("surfaces stable deny vocabulary for unauthorized transaction requests", async () => {
+  it("accepts direct client transactions for ordinary graph-member writes", async () => {
     const { state } = createSqliteDurableObjectState();
     const durableObject = createTestDurableObject(state);
     const initialSync = await readSyncPayload(durableObject);
     const createdEnvVar = buildTransactionFromSnapshot(
       initialSync.snapshot ?? { edges: [], retracted: [] },
-      "tx:forbidden-env-var",
+      "tx:create-env-var",
       (graph) =>
         graph.envVar.create({
-          description: "Blocked without authority access",
+          description: "Created through a graph-member client transaction",
           name: "OPENAI_API_KEY",
         }),
     );
@@ -3070,9 +3070,16 @@ describe("web graph authority durable object", () => {
       ),
     );
 
-    expect(response.status).toBe(400);
-    expect(await response.json()).toEqual({
-      error: expect.stringContaining("policy.write.forbidden"),
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      cursor: expect.any(String),
+      replayed: false,
+      transaction: expect.objectContaining({
+        id: "tx:create-env-var",
+        ops: expect.arrayContaining(createdEnvVar.transaction.ops),
+      }),
+      txId: "tx:create-env-var",
+      writeScope: "client-tx",
     });
   });
 

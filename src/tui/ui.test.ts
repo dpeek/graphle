@@ -7,6 +7,7 @@ import { act } from "react";
 import { core } from "../graph/modules/core.js";
 import { ops } from "../graph/modules/ops.js";
 import { createWorkflowProjectionIndex } from "../graph/modules/ops/workflow/query.js";
+import { pkm } from "../graph/modules/pkm.js";
 import { buildWorkflowTuiRootComponentModel } from "./layout.js";
 import {
   createWorkflowTuiStartupFailureModel,
@@ -22,7 +23,7 @@ import { createWorkflowTui } from "./tui.js";
   globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
-const productGraph = { ...core, ...ops } as const;
+const productGraph = { ...core, ...pkm, ...ops } as const;
 
 function date(value: string): Date {
   return new Date(value);
@@ -31,6 +32,7 @@ function date(value: string): Date {
 function createWorkflowProjectionFixture() {
   const store = createStore();
   bootstrap(store, core);
+  bootstrap(store, pkm);
   bootstrap(store, ops);
   const graph = createTypeClient(store, productGraph);
 

@@ -9,7 +9,7 @@ that backs the published module subpaths.
 
 - `@io/core/graph/modules`: `../../src/graph/modules/index.ts`; re-exports
   `core`, `ops`, and `pkm` plus representative built-ins such as
-  `stringTypeModule`, `envVar`, and `topic`
+  `stringTypeModule`, `envVar`, and `document`
 - `@io/core/graph/modules/core`: `../../src/graph/modules/core.ts`; canonical
   `core:` namespace assembly
 - `@io/core/graph/modules/ops`: `../../src/graph/modules/ops.ts`; canonical
@@ -20,8 +20,8 @@ that backs the published module subpaths.
   `../../src/graph/modules/ops/env-var/schema.ts`
 - `@io/core/graph/modules/ops/workflow`:
   `../../src/graph/modules/ops/workflow/schema.ts`
-- `@io/core/graph/modules/pkm/topic`:
-  `../../src/graph/modules/pkm/topic/schema.ts`
+- `@io/core/graph/modules/pkm/document`:
+  `../../src/graph/modules/pkm/document/schema.ts`
 
 The namespace subpaths export only their namespace objects. The module root
 re-exports the namespaces plus representative built-ins and slice symbols.
@@ -40,6 +40,8 @@ re-exports the namespaces plus representative built-ins and slice symbols.
   `../../src/graph/modules/pkm/<slice>/schema.ts`: exported slice entrypoints
 - `../../src/graph/modules/ops/workflow/`: Branch 6 workflow root plus
   repository execution mappings, state enums, and key validators
+- `../../src/graph/modules/pkm/document/`: reusable markdown documents, ordered
+  document blocks, and external placement trees
 - type-specific directories keep schema, metadata, filters, and helper enums
   together with common files such as `type.ts`, `meta.ts`, `filter.ts`,
   `kind.ts`, `index.ts`, and `data.ts`

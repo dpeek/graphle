@@ -4,13 +4,14 @@ import { createHttpGraphClient } from "../graph/index.js";
 
 export async function run() {
   const client = await createHttpGraphClient(pkm);
-  const topics = await client.graph.topic.query({
+  const documents = await client.graph.document.query({
     select: {
-      content: true,
+      description: true,
       id: true,
       name: true,
+      slug: true,
     },
   });
 
-  console.log(topics);
+  console.log(documents);
 }

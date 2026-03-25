@@ -20,7 +20,7 @@ export function readExplorerSearchParams(): URLSearchParams {
 export function readExplorerSelectionFromSearchParams(
   searchParams: URLSearchParams,
 ): ExplorerSelection {
-  const defaultTypeId = typeId(pkm.topic);
+  const defaultTypeId = typeId(pkm.document);
   return {
     target: searchParams.get("target") ?? schemaTarget,
     typeId: searchParams.get("type") ?? defaultTypeId,
