@@ -107,15 +107,16 @@ command registries.
   DOM field editors and future browser editors that need the same chrome, but
   without moving graph predicate semantics into `@io/web`
 - `../../src/web/lib/graph-authority-do.ts`: SQLite-backed Durable Object
-  adapter that bootstraps graph tables in the constructor, hydrates retained
-  history during authority init, commits graph and secret side-storage changes
-  in one Durable Object storage transaction, prunes old transaction rows, and
-  now exposes internal Worker-only auth-subject lookup-and-repair plus
-  bearer-share hash lookup seams, alongside the shared generic serialized query
-  route plus the workflow projection compatibility route ahead of future
-  transport expansion
+  adapter entrypoint that bootstraps graph tables in the constructor, hydrates
+  retained history during authority init, commits graph and secret side-storage
+  changes in one Durable Object storage transaction, and routes between the
+  internal Worker-only auth helpers plus the public sync, command, generic
+  serialized query, and workflow surfaces
 - `../../src/web/lib/query-transport.ts`: web-owned `POST /api/query` path
   constant plus the shared generic serialized-query client helper re-export
+- `../../src/web/lib/graph-authority-internal-routes.ts`: web-only
+  session-principal lookup-and-repair plus bearer-share hash lookup handlers
+  kept separate from the Durable Object storage composition entrypoint
 - `../../src/web/lib/better-auth.ts`: shared Better Auth option/factory helper
   for the dedicated `AUTH_DB` binding, optional trusted-origin wiring, the
   stable `/api/auth` base path, and the minimal email/password browser demo
