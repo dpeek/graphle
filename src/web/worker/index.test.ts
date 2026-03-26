@@ -20,6 +20,7 @@ import {
   webGraphAuthorityBearerShareLookupPath,
   webGraphAuthoritySessionPrincipalLookupPath,
 } from "../lib/graph-authority-do.js";
+import { webSerializedQueryPath } from "../lib/query-transport.js";
 import { readRequestAuthorizationContext } from "../lib/server-routes.js";
 import { webWorkflowLivePath } from "../lib/workflow-live-transport.js";
 import { webWorkflowReadPath } from "../lib/workflow-transport.js";
@@ -420,6 +421,58 @@ describe("web worker route forwarding", () => {
 
     expect(response.status).toBe(200);
     expect(authorityPaths).toEqual([webWorkflowReadPath]);
+    expect(principalLookupPaths).toEqual([webGraphAuthoritySessionPrincipalLookupPath]);
+    expect(readForwardedAuthorization()).toEqual({
+      graphId: "graph:global",
+      principalId: "principal:user-better-auth",
+      principalKind: "human",
+      sessionId: "session-better-auth",
+      roleKeys: ["graph:member"],
+      capabilityGrantIds: ["grant-1"],
+      capabilityVersion: 4,
+      policyVersion: 0,
+    });
+  });
+
+  it("forwards authenticated generic serialized queries over the shared query route", async () => {
+    const { authorityPaths, env, principalLookupPaths, readForwardedAuthorization } =
+      createWorkerEnv({
+        principalLookupResponse: Response.json({
+          principalId: "principal:user-better-auth",
+          principalKind: "human",
+          roleKeys: ["graph:member"],
+          capabilityGrantIds: ["grant-1"],
+          capabilityVersion: 4,
+        }),
+      });
+    const handler = createWorkerFetchHandler({
+      async getBetterAuthSession() {
+        return {
+          session: { id: "session-better-auth" },
+          user: { id: "user-better-auth" },
+        };
+      },
+    });
+
+    const response = await handler.fetch(
+      new Request(`https://web.local${webSerializedQueryPath}`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          version: 1,
+          query: {
+            kind: "entity",
+            entityId: "entity:test",
+          },
+        }),
+      }),
+      env,
+    );
+
+    expect(response.status).toBe(200);
+    expect(authorityPaths).toEqual([webSerializedQueryPath]);
     expect(principalLookupPaths).toEqual([webGraphAuthoritySessionPrincipalLookupPath]);
     expect(readForwardedAuthorization()).toEqual({
       graphId: "graph:global",

@@ -1,6 +1,11 @@
 import { describe, expect, it } from "bun:test";
 
-import { defineInvalidationEvent, type AuthorizationContext } from "@io/core/graph";
+import {
+  defineInvalidationEvent,
+  type AuthorizationContext,
+  type QueryResultPage,
+  type SerializedQueryResponse,
+} from "@io/core/graph";
 import { workflowReviewModuleReadScope } from "@io/core/graph/modules/ops/workflow";
 
 import {
@@ -8,7 +13,12 @@ import {
   WebAppAuthorityWorkflowLiveScopeError,
   WebAppAuthorityWorkflowReadError,
 } from "./authority.js";
-import { handleWorkflowLiveRequest, handleWorkflowReadRequest } from "./server-routes.js";
+import { webSerializedQueryPath } from "./query-transport.js";
+import {
+  handleSerializedQueryRequest,
+  handleWorkflowLiveRequest,
+  handleWorkflowReadRequest,
+} from "./server-routes.js";
 import { createWorkflowReviewLiveScopeRouter } from "./workflow-live-scope-router.js";
 import type { WorkflowReviewLiveRegistrationTarget } from "./workflow-live-transport.js";
 
@@ -25,12 +35,18 @@ const authorization: AuthorizationContext = {
 
 function createWorkflowReadAuthority(
   overrides: {
+    readonly executeSerializedQuery?: WebAppAuthority["executeSerializedQuery"];
     readonly readProjectBranchScope?: WebAppAuthority["readProjectBranchScope"];
     readonly readCommitQueueScope?: WebAppAuthority["readCommitQueueScope"];
     readonly planWorkflowReviewLiveRegistration?: WebAppAuthority["planWorkflowReviewLiveRegistration"];
   } = {},
 ): WebAppAuthority {
   return {
+    executeSerializedQuery:
+      overrides.executeSerializedQuery ??
+      (async () => {
+        throw new Error("Unexpected serialized query execution.");
+      }),
     readProjectBranchScope:
       overrides.readProjectBranchScope ??
       (() => {
@@ -47,6 +63,17 @@ function createWorkflowReadAuthority(
         throw new Error("Unexpected workflow live registration.");
       }),
   } as unknown as WebAppAuthority;
+}
+
+function createQueryResultPage(kind: QueryResultPage["kind"] = "entity"): QueryResultPage {
+  return {
+    kind,
+    items: [{ key: "entity:test", entityId: "entity:test", payload: { title: "Test entity" } }],
+    freshness: {
+      completeness: "complete",
+      freshness: "current",
+    },
+  };
 }
 
 describe("workflow read server routes", () => {
@@ -150,6 +177,141 @@ describe("workflow read server routes", () => {
       error: 'Workflow branch "branch:missing" was not found in the current projection.',
       code: "branch-not-found",
     });
+  });
+});
+
+describe("serialized query server routes", () => {
+  it("rejects invalid serialized query envelopes with the stable invalid-query code", async () => {
+    const response = await handleSerializedQueryRequest(
+      new Request(`https://web.local${webSerializedQueryPath}`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          query: {
+            kind: "entity",
+            entityId: "entity:test",
+          },
+        }),
+      }),
+      createWorkflowReadAuthority(),
+      authorization,
+    );
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      ok: false,
+      error: "Serialized query request.version must be an integer.",
+      code: "invalid-query",
+    } satisfies SerializedQueryResponse);
+  });
+
+  it("maps serialized policy-denied failures onto the HTTP response", async () => {
+    const response = await handleSerializedQueryRequest(
+      new Request(`https://web.local${webSerializedQueryPath}`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          version: 1,
+          query: {
+            kind: "entity",
+            entityId: "entity:test",
+          },
+        }),
+      }),
+      createWorkflowReadAuthority({
+        async executeSerializedQuery() {
+          return {
+            ok: false,
+            error: "Read access to entity:test is denied.",
+            code: "policy-denied",
+          };
+        },
+      }),
+      authorization,
+    );
+
+    expect(response.status).toBe(403);
+    expect(await response.json()).toEqual({
+      ok: false,
+      error: "Read access to entity:test is denied.",
+      code: "policy-denied",
+    } satisfies SerializedQueryResponse);
+  });
+
+  it("keeps projection-stale failures on the generic route as conflicts", async () => {
+    const response = await handleSerializedQueryRequest(
+      new Request(`https://web.local${webSerializedQueryPath}`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          version: 1,
+          query: {
+            kind: "collection",
+            indexId: "ops/workflow:branch-commit-queue",
+            window: {
+              after: "projection:stale",
+              limit: 1,
+            },
+          },
+        }),
+      }),
+      createWorkflowReadAuthority({
+        async executeSerializedQuery() {
+          return {
+            ok: false,
+            error: "Cursor projection:stale is stale for the current workflow projection.",
+            code: "projection-stale",
+          };
+        },
+      }),
+      authorization,
+    );
+
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({
+      ok: false,
+      error: "Cursor projection:stale is stale for the current workflow projection.",
+      code: "projection-stale",
+    } satisfies SerializedQueryResponse);
+  });
+
+  it("returns successful serialized query pages without workflow-specific envelopes", async () => {
+    const response = await handleSerializedQueryRequest(
+      new Request(`https://web.local${webSerializedQueryPath}`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          version: 1,
+          query: {
+            kind: "entity",
+            entityId: "entity:test",
+          },
+        }),
+      }),
+      createWorkflowReadAuthority({
+        async executeSerializedQuery() {
+          return {
+            ok: true,
+            result: createQueryResultPage(),
+          };
+        },
+      }),
+      authorization,
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      ok: true,
+      result: createQueryResultPage(),
+    } satisfies SerializedQueryResponse);
   });
 });
 

@@ -2,6 +2,11 @@ import { applyHttpSyncRequest } from "./http-sync-request";
 import { createGraphId } from "./id";
 import type { AnyTypeOutput } from "./schema";
 import {
+  validateSerializedQueryResponse,
+  type QueryResultPage,
+  type SerializedQueryRequest,
+} from "./serialized-query";
+import {
   createSyncedTypeClient,
   type AuthoritativeGraphWriteResult,
   type GraphWriteTransaction,
@@ -14,6 +19,7 @@ import {
 export type FetchImpl = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
 export const defaultHttpGraphUrl = "http://io.localhost:1355/";
+export const defaultHttpSerializedQueryPath = "/api/query";
 
 export type HttpGraphClientOptions = {
   readonly bearerToken?: string;
@@ -24,6 +30,26 @@ export type HttpGraphClientOptions = {
   readonly createTxId?: () => string;
   readonly requestedScope?: SyncScopeRequest;
 };
+
+export type HttpSerializedQueryClientOptions = {
+  readonly bearerToken?: string;
+  readonly fetch?: FetchImpl;
+  readonly path?: string;
+  readonly signal?: AbortSignal;
+  readonly url?: string;
+};
+
+export class HttpSerializedQueryClientError extends Error {
+  readonly status: number;
+  readonly code?: string;
+
+  constructor(message: string, status: number, code?: string) {
+    super(message);
+    this.name = "HttpSerializedQueryClientError";
+    this.status = status;
+    this.code = code;
+  }
+}
 
 function readErrorMessage(
   status: number,
@@ -46,6 +72,10 @@ function resolveEndpointUrl(path: string, baseUrl: string): string {
   return new URL(path, baseUrl).toString();
 }
 
+function resolveOptionalEndpointUrl(path: string, baseUrl?: string): string {
+  return baseUrl ? resolveEndpointUrl(path, baseUrl) : path;
+}
+
 function createHttpRequestHeaders(
   bearerToken: string | undefined,
   headers: Record<string, string>,
@@ -58,6 +88,48 @@ function createHttpRequestHeaders(
     ...headers,
     authorization: `Bearer ${bearerToken}`,
   };
+}
+
+function readErrorCode(payload: unknown): string | undefined {
+  return typeof (payload as { code?: unknown })?.code === "string"
+    ? (payload as { code: string }).code
+    : undefined;
+}
+
+export async function requestSerializedQuery(
+  request: SerializedQueryRequest,
+  options: HttpSerializedQueryClientOptions = {},
+): Promise<QueryResultPage> {
+  const fetchImpl = options.fetch ?? globalThis.fetch;
+  const bearerToken = options.bearerToken?.trim() || undefined;
+  const response = await fetchImpl(
+    resolveOptionalEndpointUrl(options.path ?? defaultHttpSerializedQueryPath, options.url),
+    {
+      method: "POST",
+      credentials: "same-origin",
+      headers: createHttpRequestHeaders(bearerToken, {
+        accept: "application/json",
+        "content-type": "application/json",
+      }),
+      body: JSON.stringify(request),
+      signal: options.signal,
+    },
+  );
+
+  const payload = validateSerializedQueryResponse(await response.json().catch(() => undefined));
+  if (!response.ok) {
+    throw new HttpSerializedQueryClientError(
+      readErrorMessage(response.status, response.statusText, payload, "Serialized query failed"),
+      response.status,
+      readErrorCode(payload),
+    );
+  }
+
+  if (!payload.ok) {
+    throw new HttpSerializedQueryClientError(payload.error, response.status, payload.code);
+  }
+
+  return payload.result;
 }
 
 export function createHttpGraphTxIdFactory(prefix = "cli"): () => string {

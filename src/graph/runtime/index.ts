@@ -8,6 +8,7 @@ export * from "./http-sync-request";
 export * from "./id";
 export * from "./identity";
 export * from "./projection";
+export * from "./serialized-query";
 export * from "./schema";
 export * from "./store";
 export * from "./sync";

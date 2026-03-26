@@ -40,12 +40,13 @@ types, move it to `@io/web`. If it is deciding how a graph predicate validates,
 mutates, or previews, leave that code in `graph` even when the surrounding
 chrome comes from `@io/web`.
 
-The current `POST /api/commands`, `POST /api/workflow-read`, and
-`POST /api/workflow-live` routes are part of that same package boundary. They
-are web-owned proofs for the shipped `write-secret-field` command envelope, the
-first workflow projection read envelope, and the first ephemeral workflow
-review live-registration envelope, not published graph-owned registries or
-generic shared command/read transports.
+The current `POST /api/commands`, `POST /api/query`, `POST /api/workflow-read`,
+and `POST /api/workflow-live` routes are part of that same package boundary.
+`/api/query` is now the reusable web transport path for the generic serialized
+query envelope, while `/api/workflow-read` remains the workflow-specific proof
+and compatibility surface for the first shipped board and commit-queue reads.
+Those routes are still web-owned surfaces rather than published graph-owned
+command registries.
 
 ## Docs
 
@@ -110,8 +111,11 @@ generic shared command/read transports.
   history during authority init, commits graph and secret side-storage changes
   in one Durable Object storage transaction, prunes old transaction rows, and
   now exposes internal Worker-only auth-subject lookup-and-repair plus
-  bearer-share hash lookup seams, alongside the first public workflow
-  projection read route ahead of future transport expansion
+  bearer-share hash lookup seams, alongside the shared generic serialized query
+  route plus the workflow projection compatibility route ahead of future
+  transport expansion
+- `../../src/web/lib/query-transport.ts`: web-owned `POST /api/query` path
+  constant plus the shared generic serialized-query client helper re-export
 - `../../src/web/lib/better-auth.ts`: shared Better Auth option/factory helper
   for the dedicated `AUTH_DB` binding, optional trusted-origin wiring, the
   stable `/api/auth` base path, and the minimal email/password browser demo
@@ -121,7 +125,8 @@ generic shared command/read transports.
 - `../../src/web/lib/workflow-transport.ts`: shared `POST /api/workflow-read`
   request and response envelopes plus the fetch helper that browser, TUI, or
   MCP callers can reuse for the first shipped `ProjectBranchScope` and
-  `CommitQueueScope` proof
+  `CommitQueueScope` compatibility proof while generic serialized-query callers
+  move to `../../src/graph/runtime/http-client.ts`
 - `../../src/web/lib/workflow-live-transport.ts`: shared
   `POST /api/workflow-live` request and response envelopes plus the fetch
   helper that callers can reuse for the first ephemeral workflow review live
@@ -194,9 +199,9 @@ generic shared command/read transports.
   through the Durable Object's internal lookup-and-repair seam, exposes the
   explicit `POST /api/access/activate` initial role-binding workflow for the
   current authenticated principal, forwards the
-  first `POST /api/workflow-read` and `POST /api/workflow-live` proofs
-  alongside `/api/sync`, `/api/tx`, and `/api/commands`, hashes issued bearer
-  share tokens locally before calling the Durable Object's internal
+  `POST /api/query`, `POST /api/workflow-read`, and `POST /api/workflow-live`
+  routes alongside `/api/sync`, `/api/tx`, and `/api/commands`, hashes issued
+  bearer share tokens locally before calling the Durable Object's internal
   bearer-share lookup seam, lowers successful bearer lookups into anonymous
   shared-read `GET /api/sync` requests only, strips raw `Authorization` and
   `Cookie` headers before forwarding to the Durable Object, and fails closed

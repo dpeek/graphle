@@ -40,7 +40,16 @@ import {
   type PolicyError,
   type InvalidationEvent,
   type PredicatePolicyDescriptor,
+  type QueryLiteral,
+  type QueryResultItem,
+  type QueryResultPage,
   readPredicateValue as decodePredicateValue,
+  type SerializedQueryRequest,
+  type SerializedQueryResponse,
+  SerializedQueryValidationError,
+  normalizeSerializedQueryRequest,
+  type NormalizedQueryFilter,
+  type NormalizedQueryRequest,
   type ReplicationReadAuthorizer,
   type SyncDiagnostics,
   type Store,
@@ -66,11 +75,14 @@ import {
   type CommitQueueScopeFailureCode,
   type CommitQueueScopeQuery,
   type CommitQueueScopeResult,
+  projectBranchScopeOrderFieldValues,
   type ProjectBranchScopeFailureCode,
   type ProjectBranchScopeQuery,
   type ProjectBranchScopeResult,
   type RetainedWorkflowProjectionState,
   WorkflowProjectionQueryError,
+  workflowBranchStateValues,
+  workflowBuiltInQuerySurfaces,
   workflowProjectionSchema,
   workflowReviewModuleReadScope,
   type WorkflowMutationAction,
@@ -376,6 +388,10 @@ export type WebAppAuthority = Omit<
     query: CommitQueueScopeQuery,
     options: WebAppAuthorityReadOptions,
   ): CommitQueueScopeResult;
+  executeSerializedQuery(
+    request: SerializedQueryRequest,
+    options: WebAppAuthorityReadOptions,
+  ): Promise<SerializedQueryResponse>;
   planWorkflowReviewLiveRegistration(
     cursor: string,
     options: WebAppAuthorityReadOptions,
@@ -1005,6 +1021,30 @@ function createReadPolicyError(error: PolicyError): WebAppAuthorityReadError {
       refreshRequired: error.refreshRequired,
     },
   );
+}
+
+class UnsupportedSerializedQueryPlanError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "UnsupportedSerializedQueryPlanError";
+  }
+}
+
+class StaleSerializedQueryCursorError extends Error {
+  constructor(cursor: string) {
+    super(
+      `Cursor "${cursor}" is stale for the current serialized query. Restart from the first page or refresh the active query and retry.`,
+    );
+    this.name = "StaleSerializedQueryCursorError";
+  }
+}
+
+function createSerializedQueryErrorResponse(error: string, code: string): SerializedQueryResponse {
+  return {
+    ok: false,
+    error,
+    code,
+  };
 }
 
 type WorkflowProjectionReadFailureCode =
@@ -3385,6 +3425,564 @@ export async function createWebAppAuthority(
     );
   }
 
+  function createReadableQueryStore(options: WebAppAuthorityReadOptions): Store {
+    return createStore(readSnapshot(options));
+  }
+
+  function buildEntityQueryItem(store: Store, subjectId: string): QueryResultItem {
+    const predicateIds = [...new Set(store.facts(subjectId).map((edge) => edge.p))].sort();
+    const payload: Record<string, unknown> = {};
+
+    for (const predicateId of predicateIds) {
+      const fieldDefinition = compiledFieldIndex.get(predicateId);
+      if (!fieldDefinition) {
+        continue;
+      }
+      const value = decodePredicateValue(
+        store,
+        subjectId,
+        fieldDefinition.field,
+        scalarByKey,
+        typeByKey,
+      );
+      if (value !== undefined) {
+        payload[predicateId] = value;
+      }
+    }
+
+    return {
+      key: subjectId,
+      entityId: subjectId,
+      payload,
+    };
+  }
+
+  function executeEntitySerializedQuery(
+    query: Extract<NormalizedQueryRequest["query"], { readonly kind: "entity" }>,
+    options: WebAppAuthorityReadOptions,
+  ): QueryResultPage {
+    const store = createReadableQueryStore(options);
+    return {
+      kind: "entity",
+      items: [buildEntityQueryItem(store, query.entityId)],
+      freshness: {
+        completeness: "complete",
+        freshness: "current",
+      },
+    };
+  }
+
+  function executeNeighborhoodSerializedQuery(
+    query: Extract<NormalizedQueryRequest["query"], { readonly kind: "neighborhood" }>,
+    options: WebAppAuthorityReadOptions,
+  ): QueryResultPage {
+    const snapshot = readSnapshot(options);
+    const store = createStore(snapshot);
+    const subjectIds = new Set(snapshot.edges.map((edge) => edge.s));
+    const traversablePredicates = query.predicateIds ? new Set(query.predicateIds) : undefined;
+    const maxDepth = query.depth ?? 1;
+    const visited = new Set([query.rootId]);
+    const orderedSubjectIds = [query.rootId];
+    const queue = [{ subjectId: query.rootId, depth: 0 }];
+
+    while (queue.length > 0) {
+      const current = queue.shift();
+      if (!current || current.depth >= maxDepth) {
+        continue;
+      }
+
+      for (const edge of store.facts(current.subjectId)) {
+        if (traversablePredicates && !traversablePredicates.has(edge.p)) {
+          continue;
+        }
+        if (!subjectIds.has(edge.o) || visited.has(edge.o)) {
+          continue;
+        }
+        visited.add(edge.o);
+        orderedSubjectIds.push(edge.o);
+        queue.push({
+          subjectId: edge.o,
+          depth: current.depth + 1,
+        });
+      }
+    }
+
+    return {
+      kind: "neighborhood",
+      items: orderedSubjectIds.map((subjectId) => buildEntityQueryItem(store, subjectId)),
+      freshness: {
+        completeness: "complete",
+        freshness: "current",
+      },
+    };
+  }
+
+  function requireStringQueryLiteral(value: QueryLiteral, label: string): string {
+    if (typeof value !== "string" || value.length === 0) {
+      throw new UnsupportedSerializedQueryPlanError(`${label} must resolve to a non-empty string.`);
+    }
+    return value;
+  }
+
+  function requireBooleanQueryLiteral(value: QueryLiteral, label: string): boolean {
+    if (typeof value !== "boolean") {
+      throw new UnsupportedSerializedQueryPlanError(`${label} must resolve to a boolean.`);
+    }
+    return value;
+  }
+
+  const serializedQueryPageCursorPrefix = "serialized-query:";
+
+  type SerializedQueryPageCursor = {
+    readonly version: 1;
+    readonly identityHash: string;
+    readonly cursor: string;
+  };
+
+  function encodeSerializedQueryPageCursor(cursor: SerializedQueryPageCursor): string {
+    return `${serializedQueryPageCursorPrefix}${Buffer.from(
+      JSON.stringify(cursor),
+      "utf8",
+    ).toString("base64url")}`;
+  }
+
+  function decodeSerializedQueryPageCursor(cursor: string, identityHash: string): string {
+    const encoded = cursor.startsWith(serializedQueryPageCursorPrefix)
+      ? cursor.slice(serializedQueryPageCursorPrefix.length)
+      : "";
+    if (!encoded) {
+      throw new StaleSerializedQueryCursorError(cursor);
+    }
+
+    try {
+      const parsed = JSON.parse(
+        Buffer.from(encoded, "base64url").toString("utf8"),
+      ) as Partial<SerializedQueryPageCursor>;
+      if (
+        parsed.version !== 1 ||
+        typeof parsed.identityHash !== "string" ||
+        parsed.identityHash !== identityHash ||
+        typeof parsed.cursor !== "string" ||
+        parsed.cursor.length === 0
+      ) {
+        throw new Error("stale");
+      }
+      return parsed.cursor;
+    } catch {
+      throw new StaleSerializedQueryCursorError(cursor);
+    }
+  }
+
+  function resolveSerializedQueryPageCursor(
+    pageCursor: string | undefined,
+    identityHash: string,
+  ): string | undefined {
+    if (!pageCursor) {
+      return undefined;
+    }
+    return decodeSerializedQueryPageCursor(pageCursor, identityHash);
+  }
+
+  function bindSerializedQueryPageCursor(
+    page: QueryResultPage,
+    identityHash: string,
+  ): QueryResultPage {
+    if (!page.nextCursor) {
+      return page;
+    }
+
+    return {
+      ...page,
+      nextCursor: encodeSerializedQueryPageCursor({
+        version: 1,
+        identityHash,
+        cursor: page.nextCursor,
+      }),
+    };
+  }
+
+  function planWorkflowProjectBranchCollectionQuery(
+    query: Extract<NormalizedQueryRequest["query"], { readonly kind: "collection" }>,
+    pageCursor: string | undefined,
+  ): ProjectBranchScopeQuery {
+    let projectId: string | undefined;
+    const states = new Set<(typeof workflowBranchStateValues)[number]>();
+    let hasActiveCommit: boolean | undefined;
+    let showUnmanagedRepositoryBranches: boolean | undefined;
+
+    const applyFilter = (filter: NormalizedQueryFilter | undefined): void => {
+      if (!filter) {
+        return;
+      }
+      if (filter.op === "and") {
+        for (const clause of filter.clauses) {
+          applyFilter(clause);
+        }
+        return;
+      }
+      if (filter.op === "eq") {
+        if (filter.fieldId === "projectId") {
+          projectId = requireStringQueryLiteral(filter.value, 'Collection filter "projectId"');
+          return;
+        }
+        if (filter.fieldId === "state") {
+          const state = requireStringQueryLiteral(filter.value, 'Collection filter "state"');
+          if (
+            !workflowBranchStateValues.includes(state as (typeof workflowBranchStateValues)[number])
+          ) {
+            throw new UnsupportedSerializedQueryPlanError(
+              `Collection filter "state" must be one of: ${workflowBranchStateValues.join(", ")}.`,
+            );
+          }
+          states.add(state as (typeof workflowBranchStateValues)[number]);
+          return;
+        }
+        if (filter.fieldId === "hasActiveCommit") {
+          hasActiveCommit = requireBooleanQueryLiteral(
+            filter.value,
+            'Collection filter "hasActiveCommit"',
+          );
+          return;
+        }
+        if (filter.fieldId === "showUnmanagedRepositoryBranches") {
+          showUnmanagedRepositoryBranches = requireBooleanQueryLiteral(
+            filter.value,
+            'Collection filter "showUnmanagedRepositoryBranches"',
+          );
+          return;
+        }
+      }
+      if (filter.op === "in" && filter.fieldId === "state") {
+        for (const value of filter.values) {
+          const state = requireStringQueryLiteral(value, 'Collection filter "state"');
+          if (
+            !workflowBranchStateValues.includes(state as (typeof workflowBranchStateValues)[number])
+          ) {
+            throw new UnsupportedSerializedQueryPlanError(
+              `Collection filter "state" must be one of: ${workflowBranchStateValues.join(", ")}.`,
+            );
+          }
+          states.add(state as (typeof workflowBranchStateValues)[number]);
+        }
+        return;
+      }
+
+      throw new UnsupportedSerializedQueryPlanError(
+        `Collection query "${query.indexId}" only supports "and", "eq", and "in" filters over projectId, state, hasActiveCommit, and showUnmanagedRepositoryBranches.`,
+      );
+    };
+
+    applyFilter(query.filter);
+
+    if (!projectId) {
+      throw new UnsupportedSerializedQueryPlanError(
+        `Collection query "${query.indexId}" requires an equality filter for "projectId".`,
+      );
+    }
+
+    const order = query.order?.map((clause) => {
+      if (
+        !projectBranchScopeOrderFieldValues.includes(
+          clause.fieldId as (typeof projectBranchScopeOrderFieldValues)[number],
+        )
+      ) {
+        throw new UnsupportedSerializedQueryPlanError(
+          `Collection query "${query.indexId}" only supports order fields: ${projectBranchScopeOrderFieldValues.join(", ")}.`,
+        );
+      }
+
+      return {
+        field: clause.fieldId as (typeof projectBranchScopeOrderFieldValues)[number],
+        direction: clause.direction,
+      };
+    });
+
+    return {
+      projectId,
+      ...(pageCursor ? { cursor: pageCursor } : {}),
+      ...(query.window ? { limit: query.window.limit } : {}),
+      ...(order ? { order } : {}),
+      ...(states.size > 0 ||
+      hasActiveCommit !== undefined ||
+      showUnmanagedRepositoryBranches !== undefined
+        ? {
+            filter: {
+              ...(states.size > 0 ? { states: [...states] } : {}),
+              ...(hasActiveCommit !== undefined ? { hasActiveCommit } : {}),
+              ...(showUnmanagedRepositoryBranches !== undefined
+                ? { showUnmanagedRepositoryBranches }
+                : {}),
+            },
+          }
+        : {}),
+    };
+  }
+
+  function planWorkflowCommitQueueCollectionQuery(
+    query: Extract<NormalizedQueryRequest["query"], { readonly kind: "collection" }>,
+    pageCursor: string | undefined,
+  ): CommitQueueScopeQuery {
+    let branchId: string | undefined;
+
+    const applyFilter = (filter: NormalizedQueryFilter | undefined): void => {
+      if (!filter) {
+        return;
+      }
+      if (filter.op === "and") {
+        for (const clause of filter.clauses) {
+          applyFilter(clause);
+        }
+        return;
+      }
+      if (filter.op === "eq" && filter.fieldId === "branchId") {
+        branchId = requireStringQueryLiteral(filter.value, 'Collection filter "branchId"');
+        return;
+      }
+
+      throw new UnsupportedSerializedQueryPlanError(
+        `Collection query "${query.indexId}" only supports an equality filter for "branchId".`,
+      );
+    };
+
+    if (query.order && query.order.length > 0) {
+      throw new UnsupportedSerializedQueryPlanError(
+        `Collection query "${query.indexId}" does not support custom ordering.`,
+      );
+    }
+
+    applyFilter(query.filter);
+
+    if (!branchId) {
+      throw new UnsupportedSerializedQueryPlanError(
+        `Collection query "${query.indexId}" requires an equality filter for "branchId".`,
+      );
+    }
+
+    return {
+      branchId,
+      ...(pageCursor ? { cursor: pageCursor } : {}),
+      ...(query.window ? { limit: query.window.limit } : {}),
+    };
+  }
+
+  function mapWorkflowProjectBranchCollectionResult(
+    result: ProjectBranchScopeResult,
+  ): QueryResultPage {
+    return {
+      kind: "collection",
+      items: [
+        ...result.rows.map((row) => ({
+          key: row.workflowBranch.id,
+          entityId: row.workflowBranch.id,
+          payload: {
+            kind: "workflow-project-branch-row",
+            project: result.project,
+            repository: result.repository,
+            row,
+          },
+        })),
+        ...result.unmanagedRepositoryBranches.map((row) => ({
+          key: `repository-branch:${row.repositoryBranch.id}`,
+          entityId: row.repositoryBranch.id,
+          payload: {
+            kind: "workflow-unmanaged-repository-branch",
+            project: result.project,
+            repository: result.repository,
+            row,
+          },
+        })),
+      ],
+      ...(result.nextCursor ? { nextCursor: result.nextCursor } : {}),
+      freshness: {
+        completeness: "complete",
+        freshness: "current",
+        projectedAt: result.freshness.projectedAt,
+        projectionCursor: result.freshness.projectionCursor,
+      },
+    };
+  }
+
+  function mapWorkflowCommitQueueCollectionResult(result: CommitQueueScopeResult): QueryResultPage {
+    return {
+      kind: "collection",
+      items: result.rows.map((row) => ({
+        key: row.workflowCommit.id,
+        entityId: row.workflowCommit.id,
+        payload: {
+          kind: "workflow-commit-queue-row",
+          branch: result.branch,
+          row,
+        },
+      })),
+      ...(result.nextCursor ? { nextCursor: result.nextCursor } : {}),
+      freshness: {
+        completeness: "complete",
+        freshness: "current",
+        projectedAt: result.freshness.projectedAt,
+        projectionCursor: result.freshness.projectionCursor,
+      },
+    };
+  }
+
+  function executeCollectionSerializedQuery(
+    query: Extract<NormalizedQueryRequest["query"], { readonly kind: "collection" }>,
+    normalizedRequest: NormalizedQueryRequest,
+    options: WebAppAuthorityReadOptions,
+  ): QueryResultPage {
+    const pageCursor = resolveSerializedQueryPageCursor(
+      normalizedRequest.metadata.pageCursor,
+      normalizedRequest.metadata.identityHash,
+    );
+
+    if (
+      query.indexId === workflowBuiltInQuerySurfaces.projectBranchBoard.surfaceId &&
+      workflowBuiltInQuerySurfaces.projectBranchBoard.projectionId
+    ) {
+      return bindSerializedQueryPageCursor(
+        mapWorkflowProjectBranchCollectionResult(
+          readProjectBranchScope(
+            planWorkflowProjectBranchCollectionQuery(query, pageCursor),
+            options,
+          ),
+        ),
+        normalizedRequest.metadata.identityHash,
+      );
+    }
+
+    if (
+      query.indexId === workflowBuiltInQuerySurfaces.branchCommitQueue.surfaceId &&
+      workflowBuiltInQuerySurfaces.branchCommitQueue.projectionId
+    ) {
+      return bindSerializedQueryPageCursor(
+        mapWorkflowCommitQueueCollectionResult(
+          readCommitQueueScope(planWorkflowCommitQueueCollectionQuery(query, pageCursor), options),
+        ),
+        normalizedRequest.metadata.identityHash,
+      );
+    }
+
+    throw new UnsupportedSerializedQueryPlanError(
+      `Collection query "${query.indexId}" is not a registered built-in serialized-query surface.`,
+    );
+  }
+
+  function matchesWorkflowReviewScopeQuery(
+    query: Extract<NormalizedQueryRequest["query"], { readonly kind: "scope" }>,
+  ): boolean {
+    if (query.scopeId) {
+      return query.scopeId === workflowBuiltInQuerySurfaces.reviewScope.surfaceId;
+    }
+    if (!query.definition || query.definition.kind !== "module") {
+      return false;
+    }
+    if (query.definition.projectionId || query.definition.roots) {
+      return false;
+    }
+    if (
+      query.definition.scopeId &&
+      query.definition.scopeId !== workflowReviewModuleReadScope.scopeId
+    ) {
+      return false;
+    }
+    const moduleIds = query.definition.moduleIds ?? [];
+    return moduleIds.length === 1 && moduleIds[0] === workflowReviewModuleReadScope.moduleId;
+  }
+
+  function executeScopeSerializedQuery(
+    query: Extract<NormalizedQueryRequest["query"], { readonly kind: "scope" }>,
+    options: WebAppAuthorityReadOptions,
+  ): QueryResultPage {
+    if (query.window) {
+      throw new UnsupportedSerializedQueryPlanError(
+        `Scope query "${query.scopeId ?? "inline"}" does not support windowed pagination.`,
+      );
+    }
+    if (!matchesWorkflowReviewScopeQuery(query)) {
+      throw new UnsupportedSerializedQueryPlanError(
+        `Scope query "${query.scopeId ?? "inline"}" is not a registered built-in serialized-query surface.`,
+      );
+    }
+
+    const payload = createSyncPayload({
+      authorization: options.authorization,
+      scope: {
+        kind: "module",
+        moduleId: workflowReviewModuleReadScope.moduleId,
+        scopeId: workflowReviewModuleReadScope.scopeId,
+      },
+    });
+    const store = createStore(payload.snapshot);
+    const subjectIds = [...new Set(payload.snapshot.edges.map((edge) => edge.s))].sort();
+
+    return {
+      kind: "scope",
+      items: subjectIds.map((subjectId) => buildEntityQueryItem(store, subjectId)),
+      freshness: {
+        completeness: payload.completeness,
+        freshness: payload.freshness,
+        scopeCursor: payload.cursor,
+      },
+    };
+  }
+
+  function executeNormalizedSerializedQuery(
+    normalizedRequest: NormalizedQueryRequest,
+    options: WebAppAuthorityReadOptions,
+  ): QueryResultPage {
+    switch (normalizedRequest.query.kind) {
+      case "entity":
+        return executeEntitySerializedQuery(normalizedRequest.query, options);
+      case "neighborhood":
+        return executeNeighborhoodSerializedQuery(normalizedRequest.query, options);
+      case "collection":
+        return executeCollectionSerializedQuery(
+          normalizedRequest.query,
+          normalizedRequest,
+          options,
+        );
+      case "scope":
+        return executeScopeSerializedQuery(normalizedRequest.query, options);
+    }
+  }
+
+  async function executeSerializedQuery(
+    request: SerializedQueryRequest,
+    options: WebAppAuthorityReadOptions,
+  ): Promise<SerializedQueryResponse> {
+    try {
+      const normalizedRequest = await normalizeSerializedQueryRequest(request, {
+        executionContext: {
+          ...(options.authorization.principalId
+            ? { principalId: options.authorization.principalId }
+            : {}),
+          policyFilterVersion: createPolicyFilterVersion(options.authorization.policyVersion),
+        },
+      });
+
+      return {
+        ok: true,
+        result: executeNormalizedSerializedQuery(normalizedRequest, options),
+      };
+    } catch (error) {
+      if (error instanceof SerializedQueryValidationError) {
+        return createSerializedQueryErrorResponse(error.message, "invalid-query");
+      }
+      if (error instanceof UnsupportedSerializedQueryPlanError) {
+        return createSerializedQueryErrorResponse(error.message, "unsupported-query");
+      }
+      if (error instanceof StaleSerializedQueryCursorError) {
+        return createSerializedQueryErrorResponse(error.message, "projection-stale");
+      }
+      if (error instanceof WebAppAuthorityWorkflowReadError) {
+        return createSerializedQueryErrorResponse(error.message, error.code);
+      }
+      if (error instanceof WebAppAuthorityReadError) {
+        return createSerializedQueryErrorResponse(error.message, "policy-denied");
+      }
+      throw error;
+    }
+  }
+
   function createAuthorizedWorkflowProjection(authorization: AuthorizationContext) {
     assertWorkflowProjectionReadable(authority.store, authorization, compiledFieldIndex);
     if (retainedWorkflowProjectionRef.current) {
@@ -4188,6 +4786,7 @@ export async function createWebAppAuthority(
     ...authorityApi,
     activateSessionPrincipalRoleBindings,
     executeCommand,
+    executeSerializedQuery,
     applyTransaction,
     createSyncPayload,
     getIncrementalSyncResult,

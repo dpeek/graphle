@@ -19,6 +19,7 @@ import {
   webGraphAuthoritySessionPrincipalActivatePath,
   webGraphAuthoritySessionPrincipalLookupPath,
 } from "../lib/graph-authority-do.js";
+import { webSerializedQueryPath } from "../lib/query-transport.js";
 import {
   encodeRequestAuthorizationContext,
   webAppAuthorizationContextHeader,
@@ -140,6 +141,7 @@ function isGraphApiRequest(url: URL): boolean {
     url.pathname === "/api/sync" ||
     url.pathname === "/api/tx" ||
     url.pathname === "/api/commands" ||
+    url.pathname === webSerializedQueryPath ||
     url.pathname === webWorkflowLivePath ||
     url.pathname === webWorkflowReadPath
   );

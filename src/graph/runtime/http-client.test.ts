@@ -4,9 +4,17 @@ import { pkm } from "../modules/pkm.js";
 import { bootstrap } from "./bootstrap";
 import { GraphValidationError, createTypeClient } from "./client";
 import { core } from "./core";
-import { createHttpGraphClient, defaultHttpGraphUrl, type FetchImpl } from "./http-client";
+import {
+  createHttpGraphClient,
+  defaultHttpGraphUrl,
+  defaultHttpSerializedQueryPath,
+  HttpSerializedQueryClientError,
+  requestSerializedQuery,
+  type FetchImpl,
+} from "./http-client";
 import { createIdMap, defineNamespace } from "./identity";
 import { defineType, edgeId, typeId } from "./schema";
+import { serializedQueryVersion, type QueryResultPage } from "./serialized-query";
 import { createStore, type StoreSnapshot } from "./store";
 import {
   type AuthoritativeGraphRetainedHistoryPolicy,
@@ -728,5 +736,129 @@ describe("createHttpGraphClient", () => {
       cursor: "server:1",
     });
     expect(client.graph.document.get(documentTypeId)?.name).toBe("Documents");
+  });
+});
+
+describe("requestSerializedQuery", () => {
+  it("posts generic serialized queries to the shared query route", async () => {
+    const result: QueryResultPage = {
+      kind: "entity",
+      items: [
+        {
+          key: "entity:test",
+          entityId: "entity:test",
+          payload: { name: "Seeded item" },
+        },
+      ],
+      freshness: {
+        completeness: "complete",
+        freshness: "current",
+      },
+    };
+
+    const response = await requestSerializedQuery(
+      {
+        version: serializedQueryVersion,
+        query: {
+          kind: "entity",
+          entityId: "entity:test",
+        },
+      },
+      {
+        fetch: async (input, init) => {
+          expect(input).toBe(defaultHttpSerializedQueryPath);
+          expect(init?.method).toBe("POST");
+          expect(init?.credentials).toBe("same-origin");
+          expect(init?.headers).toEqual({
+            accept: "application/json",
+            "content-type": "application/json",
+          });
+          expect(JSON.parse(String(init?.body))).toEqual({
+            version: serializedQueryVersion,
+            query: {
+              kind: "entity",
+              entityId: "entity:test",
+            },
+          });
+
+          return Response.json({
+            ok: true,
+            result,
+          });
+        },
+      },
+    );
+
+    expect(response).toEqual(result);
+  });
+
+  it("surfaces generic serialized query failures with the stable failure code", async () => {
+    await expect(
+      requestSerializedQuery(
+        {
+          version: serializedQueryVersion,
+          query: {
+            kind: "entity",
+            entityId: "entity:test",
+          },
+        },
+        {
+          fetch: async () =>
+            Response.json(
+              {
+                ok: false,
+                error: "Read access to entity:test is denied.",
+                code: "policy-denied",
+              },
+              { status: 403 },
+            ),
+        },
+      ),
+    ).rejects.toMatchObject({
+      name: HttpSerializedQueryClientError.name,
+      status: 403,
+      code: "policy-denied",
+    });
+  });
+
+  it("resolves the generic query route against an explicit base URL and bearer token", async () => {
+    const response = await requestSerializedQuery(
+      {
+        version: serializedQueryVersion,
+        query: {
+          kind: "entity",
+          entityId: "entity:test",
+        },
+      },
+      {
+        bearerToken: "share-token",
+        url: "https://web.local/app/",
+        fetch: async (input, init) => {
+          expect(input).toBe("https://web.local/api/query");
+          const headers = (init?.headers ?? {}) as Record<string, string>;
+          expect(headers.authorization).toBe("Bearer share-token");
+          return Response.json({
+            ok: true,
+            result: {
+              kind: "entity",
+              items: [],
+              freshness: {
+                completeness: "complete",
+                freshness: "current",
+              },
+            } satisfies QueryResultPage,
+          });
+        },
+      },
+    );
+
+    expect(response).toEqual({
+      kind: "entity",
+      items: [],
+      freshness: {
+        completeness: "complete",
+        freshness: "current",
+      },
+    } satisfies QueryResultPage);
   });
 });

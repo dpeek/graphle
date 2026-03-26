@@ -1,8 +1,12 @@
 import {
   GraphValidationError,
   readHttpSyncRequest,
+  SerializedQueryValidationError,
+  validateSerializedQueryRequest,
   type AuthorizationContext,
   type GraphWriteTransaction,
+  type SerializedQueryRequest,
+  type SerializedQueryResponse,
 } from "@io/core/graph";
 import {
   projectBranchScopeOrderDirectionValues,
@@ -73,6 +77,21 @@ export class RequestWorkflowLiveError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "RequestWorkflowLiveError";
+  }
+}
+
+function resolveSerializedQueryStatus(code?: string): number {
+  switch (code) {
+    case "policy-denied":
+      return 403;
+    case "projection-stale":
+    case "scope-changed":
+      return 409;
+    case "invalid-query":
+    case "unsupported-query":
+      return 400;
+    default:
+      return 400;
   }
 }
 
@@ -654,6 +673,28 @@ function executeWorkflowLiveRequest(
   }
 }
 
+async function executeSerializedQueryRequest(
+  query: SerializedQueryRequest,
+  authority: WebAppAuthority,
+  authorization: AuthorizationContext,
+): Promise<Response> {
+  const response = await authority.executeSerializedQuery(query, { authorization });
+  if (!response.ok) {
+    return Response.json(response, {
+      status: resolveSerializedQueryStatus(response.code),
+      headers: {
+        "cache-control": "no-store",
+      },
+    });
+  }
+
+  return Response.json(response, {
+    headers: {
+      "cache-control": "no-store",
+    },
+  });
+}
+
 export async function handleTransactionRequest(
   request: Request,
   authority: WebAppAuthority,
@@ -748,6 +789,56 @@ export async function handleWorkflowReadRequest(
       return errorResponse(error.message, error.status);
     }
 
+    if (isHttpError(error)) {
+      return errorResponse(error.message, error.status, httpErrorCode(error));
+    }
+
+    throw error;
+  }
+}
+
+export async function handleSerializedQueryRequest(
+  request: Request,
+  authority: WebAppAuthority,
+  authorization: AuthorizationContext,
+): Promise<Response> {
+  if (request.method !== "POST") {
+    return new Response("Method Not Allowed", {
+      status: 405,
+      headers: { allow: "POST" },
+    });
+  }
+
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return errorResponse("Request body must be valid JSON.", 400);
+  }
+
+  let query: SerializedQueryRequest;
+  try {
+    query = validateSerializedQueryRequest(body);
+  } catch (error) {
+    if (error instanceof SerializedQueryValidationError) {
+      const response = {
+        ok: false,
+        error: error.message,
+        code: "invalid-query",
+      } satisfies SerializedQueryResponse;
+      return Response.json(response, {
+        status: 400,
+        headers: {
+          "cache-control": "no-store",
+        },
+      });
+    }
+    throw error;
+  }
+
+  try {
+    return await executeSerializedQueryRequest(query, authority, authorization);
+  } catch (error) {
     if (isHttpError(error)) {
       return errorResponse(error.message, error.status, httpErrorCode(error));
     }

@@ -25,6 +25,8 @@ import {
   workflowProjectBranchBoardProjection,
   workflowProjectionCatalog,
   workflowProjectionDefinitionHashes,
+  workflowBuiltInQuerySurfaceIds,
+  workflowBuiltInQuerySurfaces,
   workflowProjectionIds,
   workflowProjectionMetadata,
   workflowProjectionSchema,
@@ -350,6 +352,31 @@ describe("ops workflow schema", () => {
       reviewScope: workflowReviewModuleReadScope.definitionHash,
       projectBranchBoard: workflowProjectBranchBoardProjection.definitionHash,
       branchCommitQueue: workflowBranchCommitQueueProjection.definitionHash,
+    });
+    expect(workflowBuiltInQuerySurfaces).toEqual({
+      projectBranchBoard: {
+        surfaceId: workflowProjectBranchBoardProjection.projectionId,
+        queryKind: "collection",
+        sourceKind: "projection",
+        projectionId: workflowProjectBranchBoardProjection.projectionId,
+      },
+      branchCommitQueue: {
+        surfaceId: workflowBranchCommitQueueProjection.projectionId,
+        queryKind: "collection",
+        sourceKind: "projection",
+        projectionId: workflowBranchCommitQueueProjection.projectionId,
+      },
+      reviewScope: {
+        surfaceId: workflowReviewModuleReadScope.scopeId,
+        queryKind: "scope",
+        sourceKind: "scope",
+        scopeId: workflowReviewModuleReadScope.scopeId,
+      },
+    });
+    expect(workflowBuiltInQuerySurfaceIds).toEqual({
+      projectBranchBoard: workflowProjectBranchBoardProjection.projectionId,
+      branchCommitQueue: workflowBranchCommitQueueProjection.projectionId,
+      reviewScope: workflowReviewModuleReadScope.scopeId,
     });
   });
 

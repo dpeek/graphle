@@ -32,7 +32,9 @@ import {
   WebAppAuthorityBearerShareLookupError,
   WebAppAuthoritySessionPrincipalLookupError,
 } from "./authority.js";
+import { webSerializedQueryPath } from "./query-transport.js";
 import {
+  handleSerializedQueryRequest,
   handleWorkflowLiveRequest,
   handleWorkflowReadRequest,
   handleWebCommandRequest,
@@ -1612,6 +1614,7 @@ export class WebGraphAuthorityDurableObject {
       url.pathname !== "/api/sync" &&
       url.pathname !== "/api/tx" &&
       url.pathname !== "/api/commands" &&
+      url.pathname !== webSerializedQueryPath &&
       url.pathname !== webWorkflowLivePath &&
       url.pathname !== webWorkflowReadPath
     ) {
@@ -1648,6 +1651,10 @@ export class WebGraphAuthorityDurableObject {
 
     if (url.pathname === "/api/commands") {
       return handleWebCommandRequest(request, authority, authorization);
+    }
+
+    if (url.pathname === webSerializedQueryPath) {
+      return handleSerializedQueryRequest(request, authority, authorization);
     }
 
     if (url.pathname === webWorkflowLivePath) {

@@ -32,8 +32,20 @@ The repo currently has three different read/query shapes:
 What exists today:
 
 - local typed queries are plain object inputs to the in-process type client
-- `POST /api/workflow-read` already serializes workflow board and commit-queue
-  queries as JSON request bodies
+- `POST /api/query` now carries the shared generic serialized query envelope
+  over the reusable web transport path
+- `POST /api/workflow-read` remains as the workflow-specific compatibility
+  proof for the first board and commit-queue reads
+- `../../src/graph/runtime/serialized-query.ts` now exports the first shared
+  generic serialized query request, response, and validation helpers for
+  Branch 3 transport work
+- `../../src/graph/runtime/http-client.ts` now exports the shared
+  `requestSerializedQuery(...)` helper so browser, MCP, and future callers can
+  issue the generic envelope without depending on workflow-specific request
+  shapes
+- `../../src/web/lib/authority.ts` now exposes one reusable
+  `executeSerializedQuery(...)` seam that normalizes serialized requests and
+  routes the first supported families through bounded authority-owned plans
 - authority-owned workflow reads rebuild from authoritative graph state and
   expose `projectionCursor`, `projectedAt`, pagination, and fail-closed
   `projection-stale` semantics
@@ -326,8 +338,12 @@ type SerializedQueryResponse =
     };
 ```
 
-This is the transport pattern to generalize from the current workflow-specific
-`POST /api/workflow-read` proof.
+This is now the shared transport shape used by `POST /api/query`, generalized
+from the earlier workflow-specific `POST /api/workflow-read` proof.
+
+The checked-in runtime contract lives in
+`../../src/graph/runtime/serialized-query.ts` and is exported through
+`@io/core/graph`.
 
 ### Why transport stays JSON
 
@@ -347,6 +363,82 @@ Transport envelopes must not carry:
 - arbitrary host callbacks
 - unresolved display labels as durable identity
 - hidden policy data that the caller could not already see
+
+### Current validation model
+
+The shared request validator rejects malformed or unsupported envelopes before
+execution.
+
+Current enforced rules:
+
+- `version` must be the shipped transport version
+- `query.kind` must be one of `entity`, `neighborhood`, `collection`, or
+  `scope`
+- collection queries require a non-empty `indexId`
+- scope queries must provide either `scopeId` or `definition`
+- parameter values must stay JSON-safe and scalar-valued
+- when parameter definitions are supplied, request params cannot introduce
+  undeclared names, required params must resolve, and provided/default values
+  must match the declared parameter type
+- filter clauses reject empty boolean groups, empty `in` lists, unknown
+  operators, missing field ids, and unknown parameter references
+- order clauses reject empty lists, duplicate `fieldId` entries, and unknown
+  sort directions
+- windows require an integer `limit > 0`; cursors stay opaque but must be
+  non-empty when provided
+
+### Current normalization model
+
+The shared runtime now also publishes a planner-owned normalization helper in
+`../../src/graph/runtime/serialized-query.ts`:
+`normalizeSerializedQueryRequest(...)`.
+
+It builds one deterministic internal form from the validated transport request:
+
+- declared parameter overrides are bound before execution
+- referenced parameters must resolve from the request or a declared default
+- collection filter `and` and `or` groups normalize into stable clause order
+- collection `in` operands normalize into stable literal order with duplicate
+  values removed
+- scope-definition `moduleIds`, `roots`, and neighborhood `predicateIds`
+  normalize into stable sorted sets
+- pagination cursor state is separated from the normalized query body so the
+  same logical query keeps one query hash across page requests
+
+The normalized result also publishes stable hash metadata:
+
+- `queryHash`:
+  hash of the normalized query body without the page cursor
+- `parameterHash`:
+  hash of the effective bound parameters referenced by the query
+- `executionContextHash`:
+  hash of execution-relevant context such as principal, policy version, scope
+  definition hash, or projection cursor
+- `requestHash`:
+  hash of the normalized query plus the current page cursor
+- `identityHash`:
+  hash derived from `queryHash`, `parameterHash`, and
+  `executionContextHash`
+
+That split gives later pagination, caching, and observability code one stable
+query identity without conflating it with one specific page request.
+
+The shipped `POST /api/query` collection path now uses that split directly:
+
+- first-page responses return opaque generic pagination cursors rather than the
+  underlying projection cursor format
+- follow-up requests validate the cursor against the current normalized query
+  identity before delegating to the bounded workflow projection reader
+- query-identity or principal/policy mismatches fail closed before any silent
+  continuation attempt; projection rebuild mismatches still surface from the
+  underlying reader as `projection-stale`
+
+Response validation uses the same fail-closed model:
+
+- success payloads must provide a recognized result kind, an item array, and a
+  freshness block with explicit `completeness` and `freshness`
+- error payloads must provide a non-empty error string and may include a stable
+  error `code`
 
 ## Durable Graph Model
 
@@ -453,6 +545,25 @@ type QuerySurfaceSpec = {
 
 This catalog is the contract the web query editor uses instead of hard-coded
 per-surface UI logic.
+
+The first built-in authority-owned surfaces are now explicit in
+`../../src/graph/modules/ops/workflow/projection.ts` instead of being only
+route-local knowledge:
+
+- `ops/workflow:project-branch-board`: projection-backed `collection`
+- `ops/workflow:branch-commit-queue`: projection-backed `collection`
+- `scope:ops/workflow:review`: scope-backed `scope`
+
+The current authority planner supports:
+
+- `entity`: authoritative filtered entity reads
+- `neighborhood`: authoritative bounded neighborhood reads
+- the two workflow `collection` surfaces above
+- the shipped workflow review `scope`
+
+Unsupported collection or scope shapes fail closed with explicit
+`unsupported-query` responses; malformed requests fail with `invalid-query`;
+projection cursor mismatches remain `projection-stale`.
 
 ## Query Result Model
 
@@ -727,6 +838,7 @@ materialized scopes.
 Pagination cursors must be tied to:
 
 - normalized query hash
+- parameter hash
 - principal or policy interpretation
 - projection cursor or scope definition hash, when applicable
 
@@ -740,6 +852,10 @@ The generic query container should treat:
 
 as “restart from first page or refresh from the current anchor,” not as a cue
 to silently continue with a stale cursor.
+
+For the shipped generic route, that means callers should discard the old
+cursor, rerun the active query from page 1, or refresh the active query before
+trying to page again.
 
 ### Container behavior on incremental sync
 

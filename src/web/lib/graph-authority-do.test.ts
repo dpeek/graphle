@@ -47,6 +47,7 @@ import {
   webGraphAuthoritySessionPrincipalActivatePath,
   webGraphAuthoritySessionPrincipalLookupPath,
 } from "./graph-authority-do.js";
+import { webSerializedQueryPath } from "./query-transport.js";
 import {
   encodeRequestAuthorizationContext,
   webAppAuthorizationContextHeader,
@@ -860,6 +861,32 @@ async function postWorkflowRead(
     | WorkflowReadResponse
     | { readonly code?: string; readonly error?: string };
 
+  return { response, payload };
+}
+
+async function postSerializedQuery(
+  durableObject: WebGraphAuthorityDurableObject,
+  request: Record<string, unknown>,
+  authorization: AuthorizationContext = testAuthorityAuthorization,
+): Promise<{
+  readonly response: Response;
+  readonly payload: Record<string, unknown>;
+}> {
+  const response = await durableObject.fetch(
+    createAuthorizedRequest(
+      `https://graph-authority.local${webSerializedQueryPath}`,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify(request),
+      },
+      authorization,
+    ),
+  );
+
+  const payload = (await response.json()) as Record<string, unknown>;
   return { response, payload };
 }
 
@@ -1887,6 +1914,225 @@ describe("web graph authority durable object", () => {
     expect(refreshed.payload.result.rows.map((row) => row.workflowCommit.commitKey)).toContain(
       "commit:retained-cursor-invalidated-after-rebuild",
     );
+  });
+
+  it("accepts generic serialized queries over /api/query with stable validation and fail-closed pagination identity", async () => {
+    const { db, state } = createSqliteDurableObjectState();
+    const durableObject = createTestDurableObject(state);
+    const authority = await getDurableAuthority<WebAppAuthority>(durableObject);
+    const fixture = await createTestWorkflowFixture(authority, testAuthorityAuthorization);
+    const otherAuthorityAuthorization = {
+      ...testAuthorityAuthorization,
+      principalId: "principal:authority:other",
+      sessionId: "session:authority:other",
+    };
+
+    const invalid = await postSerializedQuery(durableObject, {
+      query: {
+        kind: "entity",
+        entityId: fixture.branchId,
+      },
+    });
+    expect(invalid.response.status).toBe(400);
+    expect(invalid.payload).toEqual({
+      ok: false,
+      code: "invalid-query",
+      error: "Serialized query request.version must be an integer.",
+    });
+
+    await authority.executeCommand(
+      {
+        kind: "workflow-mutation",
+        input: {
+          action: "createCommit",
+          branchId: fixture.branchId,
+          title: "Generic query retained cursor baseline",
+          commitKey: "commit:generic-query-retained-cursor-baseline",
+          order: 0,
+          state: "ready",
+        },
+      },
+      {
+        authorization: testAuthorityAuthorization,
+      },
+    );
+    await authority.executeCommand(
+      {
+        kind: "workflow-mutation",
+        input: {
+          action: "createCommit",
+          branchId: fixture.branchId,
+          title: "Generic query retained cursor page 2",
+          commitKey: "commit:generic-query-retained-cursor-page-2",
+          order: 1,
+          state: "ready",
+        },
+      },
+      {
+        authorization: testAuthorityAuthorization,
+      },
+    );
+
+    const initialPage = await postSerializedQuery(durableObject, {
+      version: 1,
+      query: {
+        kind: "collection",
+        indexId: "ops/workflow:branch-commit-queue",
+        filter: {
+          op: "eq",
+          fieldId: "branchId",
+          value: {
+            kind: "literal",
+            value: fixture.branchId,
+          },
+        },
+        window: {
+          limit: 1,
+        },
+      },
+    });
+    expect(initialPage.response.status).toBe(200);
+    expect(initialPage.payload.ok).toBe(true);
+
+    const initialResult =
+      initialPage.payload.ok === true &&
+      typeof initialPage.payload.result === "object" &&
+      initialPage.payload.result !== null
+        ? (initialPage.payload.result as { nextCursor?: unknown })
+        : null;
+    if (typeof initialResult?.nextCursor !== "string") {
+      throw new Error("Expected a retained serialized query cursor before restart.");
+    }
+
+    const mismatchedQuery = await postSerializedQuery(durableObject, {
+      version: 1,
+      query: {
+        kind: "collection",
+        indexId: "ops/workflow:project-branch-board",
+        filter: {
+          op: "eq",
+          fieldId: "projectId",
+          value: {
+            kind: "literal",
+            value: fixture.projectId,
+          },
+        },
+        window: {
+          after: initialResult.nextCursor,
+          limit: 1,
+        },
+      },
+    });
+    expect(mismatchedQuery.response.status).toBe(409);
+    expect(mismatchedQuery.payload).toEqual({
+      ok: false,
+      code: "projection-stale",
+      error: expect.stringContaining("stale for the current serialized query"),
+    });
+
+    const mismatchedPrincipal = await postSerializedQuery(
+      durableObject,
+      {
+        version: 1,
+        query: {
+          kind: "collection",
+          indexId: "ops/workflow:branch-commit-queue",
+          filter: {
+            op: "eq",
+            fieldId: "branchId",
+            value: {
+              kind: "literal",
+              value: fixture.branchId,
+            },
+          },
+          window: {
+            after: initialResult.nextCursor,
+            limit: 1,
+          },
+        },
+      },
+      otherAuthorityAuthorization,
+    );
+    expect(mismatchedPrincipal.response.status).toBe(409);
+    expect(mismatchedPrincipal.payload).toEqual({
+      ok: false,
+      code: "projection-stale",
+      error: expect.stringContaining("stale for the current serialized query"),
+    });
+
+    db.exec(
+      `UPDATE io_workflow_projection_checkpoint
+      SET definition_hash = 'projection-def:ops/workflow:branch-commit-queue:v999'
+      WHERE projection_id = ?`,
+      [workflowProjectionMetadata.branchCommitQueue.projectionId],
+    );
+
+    const restarted = createTestDurableObject(state);
+    const restartedAuthority = await getDurableAuthority<WebAppAuthority>(restarted);
+    await restartedAuthority.executeCommand(
+      {
+        kind: "workflow-mutation",
+        input: {
+          action: "createCommit",
+          branchId: fixture.branchId,
+          title: "Generic query retained cursor invalidated after rebuild",
+          commitKey: "commit:generic-query-retained-cursor-invalidated-after-rebuild",
+          order: 2,
+          state: "ready",
+        },
+      },
+      {
+        authorization: testAuthorityAuthorization,
+      },
+    );
+
+    const stale = await postSerializedQuery(restarted, {
+      version: 1,
+      query: {
+        kind: "collection",
+        indexId: "ops/workflow:branch-commit-queue",
+        filter: {
+          op: "eq",
+          fieldId: "branchId",
+          value: {
+            kind: "literal",
+            value: fixture.branchId,
+          },
+        },
+        window: {
+          after: initialResult.nextCursor,
+          limit: 1,
+        },
+      },
+    });
+
+    expect(stale.response.status).toBe(409);
+    expect(stale.payload).toEqual({
+      ok: false,
+      code: "projection-stale",
+      error: expect.stringContaining("is stale for the current workflow projection."),
+    });
+
+    const refreshed = await postSerializedQuery(restarted, {
+      version: 1,
+      query: {
+        kind: "collection",
+        indexId: "ops/workflow:branch-commit-queue",
+        filter: {
+          op: "eq",
+          fieldId: "branchId",
+          value: {
+            kind: "literal",
+            value: fixture.branchId,
+          },
+        },
+        window: {
+          limit: 3,
+        },
+      },
+    });
+    expect(refreshed.response.status).toBe(200);
+    expect(refreshed.payload.ok).toBe(true);
   });
 
   it("registers and removes workflow review live scope interest over the durable workflow live route", async () => {

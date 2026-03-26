@@ -14,12 +14,14 @@ import {
   type AuthorizationContext,
   type GraphWriteTransaction,
   type InvalidationEvent,
+  type SerializedQueryRequest,
   type StoreSnapshot,
 } from "@io/core/graph";
 import { core } from "@io/core/graph/modules";
 import { ops } from "@io/core/graph/modules/ops";
 import {
   type RetainedWorkflowProjectionState,
+  workflowBuiltInQuerySurfaceIds,
   workflowProjectionMetadata,
   workflowReviewDependencyKeys,
   workflowReviewModuleReadScope,
@@ -2111,6 +2113,360 @@ describe("web authority", () => {
     expect(secondCommitPage.freshness.projectionCursor).toBe(branchProjectionCursor);
     expect(secondCommitPage.rows[0]?.repositoryCommit).toBeUndefined();
     expect(secondCommitPage.nextCursor).toBeUndefined();
+  });
+
+  it("executes serialized entity, neighborhood, and scope reads through the reusable authority seam", async () => {
+    const authorization = createAuthorityAuthorizationContext();
+    const { authority, fixture } =
+      await createTestWebAppAuthorityWithWorkflowFixture(authorization);
+
+    await seedWorkflowProjectionReadFixture(authority, authorization, fixture);
+
+    const entity = await authority.executeSerializedQuery(
+      {
+        version: 1,
+        query: {
+          kind: "entity",
+          entityId: fixture.projectId,
+        },
+      } satisfies SerializedQueryRequest,
+      { authorization },
+    );
+    expect(entity.ok).toBe(true);
+    if (!entity.ok) {
+      throw new Error("Expected entity serialized query execution to succeed.");
+    }
+    expect(entity.result.kind).toBe("entity");
+    expect(entity.result.items[0]?.entityId).toBe(fixture.projectId);
+    expect(Object.keys(entity.result.items[0]?.payload ?? {})).not.toHaveLength(0);
+
+    const neighborhood = await authority.executeSerializedQuery(
+      {
+        version: 1,
+        query: {
+          kind: "neighborhood",
+          rootId: fixture.projectId,
+          depth: 1,
+        },
+      } satisfies SerializedQueryRequest,
+      { authorization },
+    );
+    expect(neighborhood.ok).toBe(true);
+    if (!neighborhood.ok) {
+      throw new Error("Expected neighborhood serialized query execution to succeed.");
+    }
+    expect(neighborhood.result.kind).toBe("neighborhood");
+    expect(neighborhood.result.items.map((item) => item.entityId)).toContain(fixture.projectId);
+
+    const scoped = await authority.executeSerializedQuery(
+      {
+        version: 1,
+        query: {
+          kind: "scope",
+          scopeId: workflowBuiltInQuerySurfaceIds.reviewScope,
+        },
+      } satisfies SerializedQueryRequest,
+      { authorization },
+    );
+    expect(scoped.ok).toBe(true);
+    if (!scoped.ok) {
+      throw new Error("Expected scope serialized query execution to succeed.");
+    }
+    expect(scoped.result.kind).toBe("scope");
+    expect(scoped.result.freshness.scopeCursor).toEqual(expect.any(String));
+    expect(scoped.result.items.map((item) => item.entityId)).toContain(fixture.projectId);
+  });
+
+  it("dispatches serialized collection reads onto the registered workflow projection surfaces", async () => {
+    const authorization = createAuthorityAuthorizationContext();
+    const { authority, fixture } =
+      await createTestWebAppAuthorityWithWorkflowFixture(authorization);
+    const seeded = await seedWorkflowProjectionReadFixture(authority, authorization, fixture);
+
+    const branchBoard = await authority.executeSerializedQuery(
+      {
+        version: 1,
+        query: {
+          kind: "collection",
+          indexId: workflowBuiltInQuerySurfaceIds.projectBranchBoard,
+          filter: {
+            op: "eq",
+            fieldId: "projectId",
+            value: {
+              kind: "literal",
+              value: fixture.projectId,
+            },
+          },
+          order: [{ fieldId: "queue-rank", direction: "asc" }],
+          window: {
+            limit: 2,
+          },
+        },
+      } satisfies SerializedQueryRequest,
+      { authorization },
+    );
+    expect(branchBoard.ok).toBe(true);
+    if (!branchBoard.ok) {
+      throw new Error("Expected project-branch serialized collection query to succeed.");
+    }
+    expect(branchBoard.result.kind).toBe("collection");
+    expect(branchBoard.result.items.map((item) => item.entityId)).toEqual([
+      fixture.branchId,
+      seeded.backlogBranchId,
+    ]);
+    expect(branchBoard.result.freshness.projectedAt).toEqual(expect.any(String));
+    expect(branchBoard.result.nextCursor).toEqual(expect.any(String));
+
+    const commitQueue = await authority.executeSerializedQuery(
+      {
+        version: 1,
+        query: {
+          kind: "collection",
+          indexId: workflowBuiltInQuerySurfaceIds.branchCommitQueue,
+          filter: {
+            op: "eq",
+            fieldId: "branchId",
+            value: {
+              kind: "literal",
+              value: fixture.branchId,
+            },
+          },
+          window: {
+            limit: 2,
+          },
+        },
+      } satisfies SerializedQueryRequest,
+      { authorization },
+    );
+    expect(commitQueue.ok).toBe(true);
+    if (!commitQueue.ok) {
+      throw new Error("Expected commit-queue serialized collection query to succeed.");
+    }
+    expect(commitQueue.result.items.map((item) => item.entityId)).toEqual([
+      seeded.commit1Id,
+      seeded.commit2Id,
+    ]);
+    expect(commitQueue.result.freshness.projectionCursor).toBe(
+      branchBoard.result.freshness.projectionCursor,
+    );
+  });
+
+  it("fails closed for unsupported, invalid, stale, and mismatched serialized query pagination", async () => {
+    const authorization = createAuthorityAuthorizationContext();
+    const otherAuthorization = createAuthorityAuthorizationContext({
+      principalId: "principal:authority:other",
+      sessionId: "session:authority:other",
+    });
+    const { authority, fixture } =
+      await createTestWebAppAuthorityWithWorkflowFixture(authorization);
+
+    await seedWorkflowProjectionReadFixture(authority, authorization, fixture);
+
+    const unsupported = await authority.executeSerializedQuery(
+      {
+        version: 1,
+        query: {
+          kind: "collection",
+          indexId: workflowBuiltInQuerySurfaceIds.projectBranchBoard,
+          window: {
+            limit: 2,
+          },
+        },
+      } satisfies SerializedQueryRequest,
+      { authorization },
+    );
+    expect(unsupported).toEqual({
+      ok: false,
+      code: "unsupported-query",
+      error: `Collection query "${workflowBuiltInQuerySurfaceIds.projectBranchBoard}" requires an equality filter for "projectId".`,
+    });
+
+    const invalid = await authority.executeSerializedQuery(
+      {
+        version: 2,
+        query: {
+          kind: "entity",
+          entityId: fixture.projectId,
+        },
+      } as unknown as SerializedQueryRequest,
+      { authorization },
+    );
+    expect(invalid).toEqual({
+      ok: false,
+      code: "invalid-query",
+      error: "Serialized query request.version must be 1.",
+    });
+
+    const firstPage = await authority.executeSerializedQuery(
+      {
+        version: 1,
+        query: {
+          kind: "collection",
+          indexId: workflowBuiltInQuerySurfaceIds.projectBranchBoard,
+          filter: {
+            op: "eq",
+            fieldId: "projectId",
+            value: {
+              kind: "literal",
+              value: fixture.projectId,
+            },
+          },
+          window: {
+            limit: 1,
+          },
+        },
+      } satisfies SerializedQueryRequest,
+      { authorization },
+    );
+    expect(firstPage.ok).toBe(true);
+    if (!firstPage.ok || !firstPage.result.nextCursor) {
+      throw new Error("Expected a first serialized collection page with a follow-up cursor.");
+    }
+
+    const reusedAcrossQuery = await authority.executeSerializedQuery(
+      {
+        version: 1,
+        query: {
+          kind: "collection",
+          indexId: workflowBuiltInQuerySurfaceIds.branchCommitQueue,
+          filter: {
+            op: "eq",
+            fieldId: "branchId",
+            value: {
+              kind: "literal",
+              value: fixture.branchId,
+            },
+          },
+          window: {
+            after: firstPage.result.nextCursor,
+            limit: 1,
+          },
+        },
+      } satisfies SerializedQueryRequest,
+      { authorization },
+    );
+    expect(reusedAcrossQuery).toEqual({
+      ok: false,
+      code: "projection-stale",
+      error: expect.stringContaining("stale for the current serialized query"),
+    });
+
+    const reusedAcrossPrincipal = await authority.executeSerializedQuery(
+      {
+        version: 1,
+        query: {
+          kind: "collection",
+          indexId: workflowBuiltInQuerySurfaceIds.projectBranchBoard,
+          filter: {
+            op: "eq",
+            fieldId: "projectId",
+            value: {
+              kind: "literal",
+              value: fixture.projectId,
+            },
+          },
+          window: {
+            after: firstPage.result.nextCursor,
+            limit: 1,
+          },
+        },
+      } satisfies SerializedQueryRequest,
+      { authorization: otherAuthorization },
+    );
+    expect(reusedAcrossPrincipal).toEqual({
+      ok: false,
+      code: "projection-stale",
+      error: expect.stringContaining("stale for the current serialized query"),
+    });
+
+    const staleProjection = await authority.executeSerializedQuery(
+      {
+        version: 1,
+        query: {
+          kind: "collection",
+          indexId: workflowBuiltInQuerySurfaceIds.projectBranchBoard,
+          filter: {
+            op: "eq",
+            fieldId: "projectId",
+            value: {
+              kind: "literal",
+              value: fixture.projectId,
+            },
+          },
+          window: {
+            after: firstPage.result.nextCursor,
+            limit: 1,
+          },
+        },
+      } satisfies SerializedQueryRequest,
+      { authorization },
+    );
+    expect(staleProjection.ok).toBe(true);
+    if (!staleProjection.ok || !staleProjection.result.nextCursor) {
+      throw new Error("Expected serialized pagination continuation to succeed before rebuild.");
+    }
+
+    await executeWorkflowMutation(authority, authorization, {
+      action: "createBranch",
+      projectId: fixture.projectId,
+      title: "Projection stale branch",
+      branchKey: "branch:projection-stale-serialized-query",
+      state: "ready",
+    });
+
+    const staleAfterRebuild = await authority.executeSerializedQuery(
+      {
+        version: 1,
+        query: {
+          kind: "collection",
+          indexId: workflowBuiltInQuerySurfaceIds.projectBranchBoard,
+          filter: {
+            op: "eq",
+            fieldId: "projectId",
+            value: {
+              kind: "literal",
+              value: fixture.projectId,
+            },
+          },
+          window: {
+            after: staleProjection.result.nextCursor,
+            limit: 1,
+          },
+        },
+      } satisfies SerializedQueryRequest,
+      { authorization },
+    );
+    expect(staleAfterRebuild).toMatchObject({
+      ok: false,
+      code: "projection-stale",
+    });
+    if (staleAfterRebuild.ok) {
+      throw new Error("Expected stale serialized collection execution to fail closed.");
+    }
+    expect(staleAfterRebuild.error).toContain("is stale for the current workflow projection");
+
+    const restartedFromFirstPage = await authority.executeSerializedQuery(
+      {
+        version: 1,
+        query: {
+          kind: "collection",
+          indexId: workflowBuiltInQuerySurfaceIds.projectBranchBoard,
+          filter: {
+            op: "eq",
+            fieldId: "projectId",
+            value: {
+              kind: "literal",
+              value: fixture.projectId,
+            },
+          },
+          window: {
+            limit: 4,
+          },
+        },
+      } satisfies SerializedQueryRequest,
+      { authorization },
+    );
+    expect(restartedFromFirstPage.ok).toBe(true);
   });
 
   it("fails closed when workflow pagination cursors are reused across different projections", async () => {

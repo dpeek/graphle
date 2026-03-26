@@ -189,3 +189,38 @@ export const workflowProjectionDefinitionHashes = Object.freeze({
   projectBranchBoard: workflowProjectBranchBoardProjection.definitionHash,
   branchCommitQueue: workflowBranchCommitQueueProjection.definitionHash,
 });
+
+export type WorkflowBuiltInQuerySurfaceSpec = {
+  readonly queryKind: "collection" | "scope";
+  readonly sourceKind: "projection" | "scope";
+  readonly surfaceId: string;
+  readonly projectionId?: string;
+  readonly scopeId?: string;
+};
+
+export const workflowBuiltInQuerySurfaces = Object.freeze({
+  projectBranchBoard: {
+    surfaceId: workflowProjectBranchBoardProjection.projectionId,
+    queryKind: "collection",
+    sourceKind: "projection",
+    projectionId: workflowProjectBranchBoardProjection.projectionId,
+  } satisfies WorkflowBuiltInQuerySurfaceSpec,
+  branchCommitQueue: {
+    surfaceId: workflowBranchCommitQueueProjection.projectionId,
+    queryKind: "collection",
+    sourceKind: "projection",
+    projectionId: workflowBranchCommitQueueProjection.projectionId,
+  } satisfies WorkflowBuiltInQuerySurfaceSpec,
+  reviewScope: {
+    surfaceId: workflowReviewModuleReadScope.scopeId,
+    queryKind: "scope",
+    sourceKind: "scope",
+    scopeId: workflowReviewModuleReadScope.scopeId,
+  } satisfies WorkflowBuiltInQuerySurfaceSpec,
+});
+
+export const workflowBuiltInQuerySurfaceIds = Object.freeze({
+  projectBranchBoard: workflowBuiltInQuerySurfaces.projectBranchBoard.surfaceId,
+  branchCommitQueue: workflowBuiltInQuerySurfaces.branchCommitQueue.surfaceId,
+  reviewScope: workflowBuiltInQuerySurfaces.reviewScope.surfaceId,
+});
