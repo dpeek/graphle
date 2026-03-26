@@ -1,6 +1,6 @@
 "use client";
 
-import type { QueryLiteral } from "@io/core/graph";
+import type { QueryLiteral } from "@io/graph-client";
 import { Badge } from "@io/web/badge";
 import { Button } from "@io/web/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@io/web/card";

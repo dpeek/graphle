@@ -3,10 +3,12 @@
 ## Purpose
 
 `graph` owns the reusable graph engine: schema authoring, stable ids,
-bootstrap, the append-only store, typed refs, validation, sync, persisted
-authoritative runtimes, type-module contracts, graph-owned icon helpers, and
-the graph-aware adapter layer that binds shared `@io/web` primitives to graph
-predicates.
+bootstrap, the append-only store, persisted authoritative runtimes, type-module
+contracts, graph-owned icon helpers, and the graph-aware adapter layer that
+binds shared `@io/web` primitives to graph predicates. The extracted
+`@io/graph-client` workspace package owns typed refs, local validation, synced
+client composition, and client-facing HTTP/query helpers on top of the graph
+kernel and sync packages.
 
 ## Browser Editor Boundary
 
@@ -84,16 +86,25 @@ The graph package publishes these subpaths from `../../package.json`:
 - `@io/core/graph/adapters/react-dom`,
   `@io/core/graph/adapters/react-opentui`: host-specific adapter package roots
 
-The root `@io/core/graph` surface stays focused on runtime and icon contracts.
-Module namespaces, slice exports, and host adapters stay on their dedicated
-subpaths.
+The workspace also publishes:
+
+- `@io/graph-client`: `../../lib/graph-client/src/index.ts`; typed client
+  construction, refs, local validation, synced-client composition, HTTP sync
+  transport helpers, and serialized-query request/response contracts
+
+The root `@io/core/graph` surface stays focused on runtime, schema, authority,
+and icon contracts. Client APIs now live on `@io/graph-client`. Module
+namespaces, slice exports, and host adapters stay on their dedicated subpaths.
 
 ## Source Layout
 
 - `../../src/graph/runtime/`: runtime kernel, schema authoring contracts, ids,
-  bootstrap, typed client layers, authorization, sync, persisted-authority
-  contracts, HTTP transport helpers, reference-policy helpers, and the
-  file-backed JSON adapter used outside the web Durable Object path
+  additive bootstrap, authorization, persisted-authority contracts,
+  reference-policy helpers, and the file-backed JSON adapter used outside the
+  web Durable Object path
+- `../../lib/graph-client/src/`: typed client layers, local validation,
+  synced-client composition, client-facing HTTP/query transport helpers, and
+  bootstrap-snapshot helpers
 - `../../src/graph/runtime/react/`: host-neutral React helpers for entity and
   predicate access, mutation validation, persisted mutation state, and resolver
   primitives

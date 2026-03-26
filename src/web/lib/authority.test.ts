@@ -3,7 +3,6 @@ import { describe, expect, it, setDefaultTimeout } from "bun:test";
 import {
   createIdMap,
   createStore,
-  createTypeClient,
   applyIdMap,
   defineSecretField,
   defineType,
@@ -12,7 +11,6 @@ import {
   type AuthSubjectRef,
   type AuthorizationContext,
   type InvalidationEvent,
-  type SerializedQueryRequest,
   type GraphStoreSnapshot,
 } from "@io/core/graph";
 import { core } from "@io/core/graph/modules";
@@ -26,7 +24,11 @@ import {
   workflowReviewSyncScopeRequest,
 } from "@io/core/graph/modules/ops/workflow";
 import { pkm } from "@io/core/graph/modules/pkm";
-import { createSyncedTypeClient } from "@io/core/graph/runtime";
+import {
+  createSyncedTypeClient,
+  createTypeClient,
+  type SerializedQueryRequest,
+} from "@io/graph-client";
 import { type GraphWriteTransaction } from "@io/graph-kernel";
 
 import {
@@ -1587,6 +1589,7 @@ describe("web authority", () => {
       authorization: signedInAuthorization,
     });
     const runtime = createSyncedTypeClient(browserGraph, {
+      definitions: productGraph,
       pull(state) {
         return Promise.resolve(
           state.cursor

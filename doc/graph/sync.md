@@ -253,14 +253,14 @@ authoritative sync events:
 
 - `@io/graph-kernel` owns the authoritative write-envelope contract: `AuthoritativeGraphCursor`, `GraphWriteTransaction`, `GraphWriteOperation`, `AuthoritativeWriteScope`, retained-history policy, write results, and the canonical clone/canonicalize/snapshot-diff helpers around them.
 - `@io/graph-sync` owns the sync-specific payload/session contract layered on top of those kernel symbols. Consumers should import kernel-owned write-envelope symbols directly from `@io/graph-kernel`, not through `@io/graph-sync`.
-- `@io/core/graph/runtime` owns synced-client behavior such as `createSyncedTypeClient(...)`, `GraphSyncWriteError`, and the wider `SyncStatus`/`SyncState` model that can report `"pushing"`.
+- `@io/graph-client` owns synced-client behavior such as `createSyncedTypeClient(...)`, `GraphSyncWriteError`, and the wider `SyncStatus`/`SyncState` model that can report `"pushing"`.
 - `@io/core/graph/authority` owns authority orchestration such as persisted authorities and authoritative write sessions.
 - Consumer packages own transport and endpoint policy: when to call `createSyncPayload()` or `getIncrementalSyncResult(...)`, how to expose them over HTTP or another transport, how to construct any `authorizeRead` callback from request-local auth context, and what auth wraps those endpoints.
 - The current web transport proof uses one shared HTTP sync-request shape on
   `GET /api/sync`: optional `after`, plus an explicit scope request via either
   `scopeKind=graph` or
   `scopeKind=module&moduleId=ops/workflow&scopeId=scope:ops/workflow:review`.
-- `createHttpGraphClient(..., { requestedScope })` now forwards that same
+- `@io/graph-client` also owns `createHttpGraphClient(..., { requestedScope })`, which forwards that same
   explicit graph-or-module request on both bootstrap and incremental refreshes,
   so whole-graph recovery stays available without relying on an implicit
   missing-param fallback.

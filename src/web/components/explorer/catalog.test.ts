@@ -1,9 +1,10 @@
 import { describe, expect, it } from "bun:test";
 
-import { bootstrap, createStore, createTypeClient, isEntityType } from "@io/core/graph";
+import { bootstrap, createStore, isEntityType } from "@io/core/graph";
 import { core } from "@io/core/graph/modules";
 import { ops } from "@io/core/graph/modules/ops";
 import { pkm } from "@io/core/graph/modules/pkm";
+import { createTypeClient } from "@io/graph-client";
 
 import { seedExampleGraph } from "../../lib/example-data.js";
 import { buildEntityCatalog, buildTypeCatalog } from "./catalog.js";

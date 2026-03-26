@@ -1,16 +1,18 @@
 import {
   edgeId,
-  fieldGroupMeta,
   isEntityType,
   isFieldsOutput,
   typeId,
   type AnyTypeOutput,
   type EdgeOutput,
-  type EntityRef,
-  type GraphMutationValidationResult,
-  type PredicateRef,
   type GraphStore,
 } from "@io/core/graph";
+import {
+  type EntityRef,
+  fieldGroupMeta,
+  type GraphMutationValidationResult,
+  type PredicateRef,
+} from "@io/graph-client";
 import type { MutableRefObject } from "react";
 
 import { isEdgeOutputValue } from "./create-draft-plan.js";

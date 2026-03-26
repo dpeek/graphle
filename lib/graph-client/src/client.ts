@@ -1,4 +1,6 @@
 import type { GraphStore } from "@io/graph-kernel";
+import { edgeId, typeId } from "@io/graph-kernel";
+import type { AnyTypeOutput, EdgeOutput, TypeOutput } from "@io/graph-kernel";
 
 import { createEntity, createEntityAtId, deleteEntity, updateEntity } from "./client-actions";
 import {
@@ -7,12 +9,12 @@ import {
   collectTypeIndex,
   exposeMutationValidationResult,
   exposeValidationResult,
-  type AllDefs,
   type CreateInputOfType,
   type EntityLookup,
   type EntityRef,
   type NamespaceClient,
   type TypeQuerySpec,
+  requireGraphClientCoreSchema,
 } from "./client-core";
 import { createQueryProjector } from "./client-query";
 import { createEntityRef } from "./client-refs";
@@ -21,9 +23,6 @@ import {
   validateCreateEntity,
   validateUpdateEntity,
 } from "./client-validation";
-import { core } from "./core";
-import { edgeId, typeId } from "./schema";
-import type { AnyTypeOutput, EdgeOutput, TypeOutput } from "./schema";
 
 export * from "./client-core";
 export { validateGraphStore } from "./client-validation";
@@ -58,38 +57,44 @@ export function createEntityWithId<
   );
 }
 
-export function createTypeClient<const T extends Record<string, AnyTypeOutput>>(
+export function createTypeClient<
+  const TNamespace extends Record<string, AnyTypeOutput>,
+  const TDefs extends Record<string, AnyTypeOutput> = TNamespace,
+>(
   store: GraphStore,
-  namespace: T,
-): NamespaceClient<T> {
-  const nodeTypePredicate = core.node.fields.type as EdgeOutput;
+  namespace: TNamespace,
+  definitionsArg?: TDefs,
+): NamespaceClient<TNamespace, TDefs> {
+  const definitions = (definitionsArg ?? (namespace as unknown as TDefs)) as TDefs;
+  const coreSchema = requireGraphClientCoreSchema(definitions);
+  const nodeTypePredicate = coreSchema.node.fields.type as EdgeOutput;
   const nodeTypePredicateId = edgeId(nodeTypePredicate);
-  const scalarByKey = collectScalarCodecs(namespace);
-  const typeByKey = collectTypeIndex(namespace);
-  const enumValuesByRange = collectEnumValueIds(namespace, typeByKey);
+  const scalarByKey = collectScalarCodecs(definitions);
+  const typeByKey = collectTypeIndex(definitions);
+  const enumValuesByRange = collectEnumValueIds(definitions, typeByKey);
   const entityRefs = new Map<string, EntityRef<any, any>>();
-  const getEntityRef = <U extends TypeOutput>(typeDef: U, id: string): EntityRef<U, AllDefs<T>> => {
+  const getEntityRef = <U extends TypeOutput>(typeDef: U, id: string): EntityRef<U, TDefs> => {
     const cacheKey = `${typeId(typeDef)}\0${id}`;
     const cached = entityRefs.get(cacheKey);
-    if (cached) return cached as EntityRef<U, AllDefs<T>>;
+    if (cached) return cached as EntityRef<U, TDefs>;
     const entityRef = createEntityRef(
       store,
       id,
       typeDef,
-      namespace as AllDefs<T>,
+      definitions,
       scalarByKey,
       typeByKey,
       enumValuesByRange,
       entityLookup,
     );
     entityRefs.set(cacheKey, entityRef);
-    return entityRef as EntityRef<U, AllDefs<T>>;
+    return entityRef as EntityRef<U, TDefs>;
   };
-  const listEntityRefs = <U extends TypeOutput>(typeDef: U): EntityRef<U, AllDefs<T>>[] =>
+  const listEntityRefs = <U extends TypeOutput>(typeDef: U): EntityRef<U, TDefs>[] =>
     store
       .facts(undefined, nodeTypePredicateId, typeId(typeDef))
       .map((edge) => getEntityRef(typeDef, edge.s));
-  const entityLookup: EntityLookup<AllDefs<T>> = {
+  const entityLookup: EntityLookup<TDefs> = {
     resolve(typeDef, id) {
       return getEntityRef(typeDef, id);
     },
@@ -99,7 +104,7 @@ export function createTypeClient<const T extends Record<string, AnyTypeOutput>>(
   };
   const hasEntity = <U extends TypeOutput>(typeDef: U, id: string): boolean =>
     store.facts(id, nodeTypePredicateId, typeId(typeDef)).length > 0;
-  const { projectSelectedEntity } = createQueryProjector<T>(
+  const { projectSelectedEntity } = createQueryProjector<TDefs>(
     store,
     scalarByKey,
     typeByKey,
@@ -111,9 +116,9 @@ export function createTypeClient<const T extends Record<string, AnyTypeOutput>>(
     {
       get(_target, key) {
         if (typeof key !== "string") return undefined;
-        const typeDef = namespace[key as keyof T];
+        const typeDef = namespace[key];
         if (!typeDef || typeDef.kind !== "entity") return undefined;
-        const entityType = typeDef as Extract<T[keyof T], { kind: "entity" }>;
+        const entityType = typeDef as Extract<TNamespace[keyof TNamespace], { kind: "entity" }>;
 
         return {
           validateCreate(input: unknown) {
@@ -125,7 +130,7 @@ export function createTypeClient<const T extends Record<string, AnyTypeOutput>>(
                 scalarByKey,
                 typeByKey,
                 enumValuesByRange,
-                namespace,
+                definitions,
               ),
             );
           },
@@ -137,7 +142,7 @@ export function createTypeClient<const T extends Record<string, AnyTypeOutput>>(
               scalarByKey,
               typeByKey,
               enumValuesByRange,
-              namespace,
+              definitions,
             );
           },
           get(id: string) {
@@ -153,7 +158,7 @@ export function createTypeClient<const T extends Record<string, AnyTypeOutput>>(
                 scalarByKey,
                 typeByKey,
                 enumValuesByRange,
-                namespace,
+                definitions,
               ),
             );
           },
@@ -166,22 +171,22 @@ export function createTypeClient<const T extends Record<string, AnyTypeOutput>>(
               scalarByKey,
               typeByKey,
               enumValuesByRange,
-              namespace,
+              definitions,
             );
           },
           validateDelete(id: string) {
             return exposeValidationResult(
-              prepareDeleteEntity(store, id, entityType as any, typeByKey, namespace),
+              prepareDeleteEntity(store, id, entityType as any, typeByKey, definitions),
             );
           },
           delete(id: string) {
-            deleteEntity(store, id, entityType as any, typeByKey, namespace);
+            deleteEntity(store, id, entityType as any, typeByKey, definitions);
           },
           list() {
             return listEntityRefs(entityType as any).map((entityRef) => entityRef.get());
           },
           async query(query: unknown) {
-            const spec = query as TypeQuerySpec<any, AllDefs<T>>;
+            const spec = query as TypeQuerySpec<any, TDefs>;
             if (
               !spec ||
               typeof spec !== "object" ||
@@ -218,5 +223,5 @@ export function createTypeClient<const T extends Record<string, AnyTypeOutput>>(
         };
       },
     },
-  ) as NamespaceClient<T>;
+  ) as NamespaceClient<TNamespace, TDefs>;
 }

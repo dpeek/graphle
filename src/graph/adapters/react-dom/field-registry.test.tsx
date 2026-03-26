@@ -1,8 +1,9 @@
 import { describe, expect, it } from "bun:test";
 
+import { createTypeClient } from "@io/graph-client";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import { bootstrap, createStore, createTypeClient } from "../../index.js";
+import { bootstrap, createStore } from "../../index.js";
 import { core, defaultMoneyCurrencyKey } from "../../modules/index.js";
 import { kitchenSink } from "../../testing/kitchen-sink.js";
 import { PredicateFieldEditor, PredicateFieldView, defaultWebFieldResolver } from "./resolver.js";

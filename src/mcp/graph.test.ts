@@ -1,18 +1,22 @@
 import { describe, expect, it } from "bun:test";
 
-import { type AuthoritativeGraphWriteResult, type GraphWriteTransaction } from "@io/graph-kernel";
+import {
+  createStore,
+  type AnyTypeOutput,
+  type AuthoritativeGraphWriteResult,
+  type GraphStoreSnapshot,
+  type GraphWriteTransaction,
+} from "@io/graph-kernel";
 import { type SyncPayload } from "@io/graph-sync";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 
 import {
   createBootstrappedSnapshot,
-  createStore,
   createTypeClient,
-  type AnyTypeOutput,
-  type GraphStoreSnapshot,
+  type FetchImpl,
   type NamespaceClient,
-} from "../graph/index.js";
+} from "@io/graph-client";
 import { core } from "../graph/modules/index.js";
 import { ops } from "../graph/modules/ops.js";
 import { pkm } from "../graph/modules/pkm.js";
@@ -20,7 +24,6 @@ import {
   createAuthoritativeGraphWriteSession,
   createAuthoritativeTotalSyncPayload,
 } from "../graph/runtime/authority.js";
-import { type FetchImpl } from "../graph/runtime/index.js";
 import { kitchenSink } from "../graph/testing/kitchen-sink.js";
 import { createGraphMcpServer, createGraphMcpSession } from "./graph.js";
 
@@ -49,8 +52,9 @@ function createAuthority<const T extends GraphNamespace>(
   namespace: T,
   seed: (graph: NamespaceClient<typeof core & T>) => void,
 ) {
-  const store = createStore(createBootstrappedSnapshot(namespace));
-  const graph = createTypeClient(store, { ...core, ...namespace }) as NamespaceClient<
+  const definitions = { ...core, ...namespace } as const;
+  const store = createStore(createBootstrappedSnapshot(definitions));
+  const graph = createTypeClient(store, namespace, definitions) as unknown as NamespaceClient<
     typeof core & T
   >;
   seed(graph);
@@ -69,8 +73,9 @@ function createAuthorityFromSnapshot<const T extends GraphNamespace>(
   namespace: T,
   snapshot: GraphStoreSnapshot,
 ) {
+  const definitions = { ...core, ...namespace } as const;
   const store = createStore(snapshot);
-  const graph = createTypeClient(store, { ...core, ...namespace }) as NamespaceClient<
+  const graph = createTypeClient(store, namespace, definitions) as unknown as NamespaceClient<
     typeof core & T
   >;
   const writes = createAuthoritativeGraphWriteSession(

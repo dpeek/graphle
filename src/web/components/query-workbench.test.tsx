@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
-import { serializedQueryVersion } from "@io/core/graph";
+import { serializedQueryVersion } from "@io/graph-client";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import {

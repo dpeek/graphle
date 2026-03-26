@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
-import { serializedQueryVersion, type QueryResultPage } from "@io/core/graph";
+import { serializedQueryVersion, type QueryResultPage } from "@io/graph-client";
 
 import {
   QueryContainerValidationError,

@@ -1,11 +1,10 @@
 import {
   createStore,
-  createTypeClient,
   type AnyTypeOutput,
-  type NamespaceClient,
   type GraphStore,
   type GraphStoreSnapshot,
 } from "@io/core/graph";
+import { createTypeClient, type NamespaceClient } from "@io/graph-client";
 import { canonicalizeGraphWriteTransaction, type GraphWriteTransaction } from "@io/graph-kernel";
 
 function createRecordingStore(snapshot: GraphStoreSnapshot): {

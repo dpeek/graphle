@@ -1,3 +1,5 @@
+import type { SyncState, SyncedTypeClient, SyncedTypeSyncController } from "@io/graph-client";
+import type { AnyTypeOutput } from "@io/graph-kernel";
 import {
   sameSyncActivity,
   sameSyncDiagnostics,
@@ -15,26 +17,29 @@ import {
 } from "react";
 
 import { GraphMutationRuntimeProvider } from "../../runtime/react/persisted-mutation.js";
-import type { AnyTypeOutput } from "../../runtime/schema.js";
-import {
-  type SyncState,
-  type SyncedTypeClient,
-  type SyncedTypeSyncController,
-} from "../../runtime/synced-client.js";
 
 type GraphSchema = Record<string, AnyTypeOutput>;
-type AnyGraphRuntime = SyncedTypeClient<GraphSchema>;
+type AnyGraphRuntime = SyncedTypeClient<GraphSchema, GraphSchema>;
 
-export type GraphRuntime<T extends GraphSchema> = SyncedTypeClient<T>;
+export type GraphRuntime<
+  TNamespace extends GraphSchema,
+  TDefs extends GraphSchema = TNamespace,
+> = SyncedTypeClient<TNamespace, TDefs>;
 
-export interface GraphRuntimeProviderProps<T extends GraphSchema> {
+export interface GraphRuntimeProviderProps<
+  TNamespace extends GraphSchema,
+  TDefs extends GraphSchema = TNamespace,
+> {
   readonly children: ReactNode;
-  readonly runtime: GraphRuntime<T> | null;
+  readonly runtime: GraphRuntime<TNamespace, TDefs> | null;
 }
 
-export interface GraphQueryOptions<T extends GraphSchema> {
+export interface GraphQueryOptions<
+  TNamespace extends GraphSchema,
+  TDefs extends GraphSchema = TNamespace,
+> {
   readonly deps?: readonly unknown[];
-  readonly runtime?: GraphRuntime<T> | null;
+  readonly runtime?: GraphRuntime<TNamespace, TDefs> | null;
 }
 
 const GraphRuntimeContext = createContext<AnyGraphRuntime | null>(null);
@@ -70,10 +75,10 @@ function sameGraphSyncState(left: SyncState | undefined, right: SyncState): bool
   return true;
 }
 
-function useResolvedGraphRuntime<T extends GraphSchema>(
-  runtime?: GraphRuntime<T> | null,
-): GraphRuntime<T> {
-  const contextRuntime = useOptionalGraphRuntime<T>();
+function useResolvedGraphRuntime<TNamespace extends GraphSchema, TDefs extends GraphSchema>(
+  runtime?: GraphRuntime<TNamespace, TDefs> | null,
+): GraphRuntime<TNamespace, TDefs> {
+  const contextRuntime = useOptionalGraphRuntime<TNamespace, TDefs>();
   const resolvedRuntime = runtime ?? contextRuntime;
   if (!resolvedRuntime) {
     throw new Error("Graph runtime is not available outside the OpenTUI graph runtime provider.");
@@ -98,10 +103,10 @@ function useStableSyncState(sync: SyncedTypeSyncController): SyncState {
   return useSyncExternalStore(sync.subscribe, readSnapshot, readSnapshot);
 }
 
-export function GraphRuntimeProvider<T extends GraphSchema>({
+export function GraphRuntimeProvider<TNamespace extends GraphSchema, TDefs extends GraphSchema>({
   children,
   runtime,
-}: GraphRuntimeProviderProps<T>) {
+}: GraphRuntimeProviderProps<TNamespace, TDefs>) {
   const sharedRuntime = runtime as AnyGraphRuntime | null;
 
   return createElement(
@@ -111,12 +116,18 @@ export function GraphRuntimeProvider<T extends GraphSchema>({
   );
 }
 
-export function useOptionalGraphRuntime<T extends GraphSchema>(): GraphRuntime<T> | null {
-  return useContext(GraphRuntimeContext) as GraphRuntime<T> | null;
+export function useOptionalGraphRuntime<
+  TNamespace extends GraphSchema,
+  TDefs extends GraphSchema = TNamespace,
+>(): GraphRuntime<TNamespace, TDefs> | null {
+  return useContext(GraphRuntimeContext) as GraphRuntime<TNamespace, TDefs> | null;
 }
 
-export function useGraphRuntime<T extends GraphSchema>(): GraphRuntime<T> {
-  return useResolvedGraphRuntime<T>();
+export function useGraphRuntime<
+  TNamespace extends GraphSchema,
+  TDefs extends GraphSchema = TNamespace,
+>(): GraphRuntime<TNamespace, TDefs> {
+  return useResolvedGraphRuntime<TNamespace, TDefs>();
 }
 
 export function useGraphSyncState<T extends GraphSchema>(

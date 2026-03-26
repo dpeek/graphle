@@ -7,7 +7,7 @@ import {
   type QueryResultItem,
   type QueryResultPage,
   type SerializedQueryRequest,
-} from "@io/core/graph";
+} from "@io/graph-client";
 
 import {
   validateQueryContainerSpec,

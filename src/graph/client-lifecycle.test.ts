@@ -1,7 +1,8 @@
 import { describe, expect, it } from "bun:test";
 
-import { bootstrap, createEntityWithId, createStore, createTypeClient } from "@io/core/graph";
+import { bootstrap, createStore } from "@io/core/graph";
 import { core } from "@io/core/graph/modules";
+import { createEntityWithId, createTypeClient } from "@io/graph-client";
 
 import { createTestGraph, testDefs, testNamespace } from "./test-graph.js";
 
@@ -54,7 +55,7 @@ describe("predicate lifecycle hooks", () => {
     const store = createStore();
     bootstrap(store, core);
     bootstrap(store, testNamespace);
-    const graph = createTypeClient(store, testNamespace);
+    const graph = createTypeClient(store, testNamespace, testDefs);
     const coreGraph = createTypeClient(store, core);
     const explicitId = "bootstrap-compatible-id";
 

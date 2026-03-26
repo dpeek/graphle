@@ -1,3 +1,4 @@
+import { createEntityWithId, type CreateInputOfType } from "@io/graph-client";
 import {
   cloneStoreSnapshot,
   createStore,
@@ -10,7 +11,6 @@ import {
   resolvePredicateDefinitionIconId,
   resolveTypeDefinitionIconId,
 } from "../modules/core/icon/seed.js";
-import { createEntityWithId, type CreateInputOfType } from "./client.js";
 import { core } from "./core.js";
 import {
   edgeId,
@@ -149,6 +149,24 @@ function assertSeedIcons(
   }
 }
 
+function resolveBootstrapPredicateIconId(
+  store: GraphStore,
+  predicateDef: EdgeOutput,
+  rangeType: AnyTypeOutput | undefined,
+  typeIconPredicateId: string,
+): string {
+  if (predicateDef.icon || rangeType) {
+    return resolvePredicateDefinitionIconId(predicateDef, rangeType);
+  }
+
+  const existingRangeIcon = store.facts(predicateDef.range, typeIconPredicateId)[0]?.o;
+  if (typeof existingRangeIcon === "string" && existingRangeIcon.length > 0) {
+    return existingRangeIcon;
+  }
+
+  return resolvePredicateDefinitionIconId(predicateDef, undefined);
+}
+
 export function bootstrap(store: GraphStore, types: Record<string, AnyTypeOutput> = core): void {
   // Stable contract: bootstrap is additive and idempotent for a resolved
   // namespace. Reapplying it after restart must not duplicate schema facts or
@@ -229,6 +247,12 @@ export function bootstrap(store: GraphStore, types: Record<string, AnyTypeOutput
     for (const predicateDef of allPredicates) {
       const predicateId = edgeId(predicateDef);
       const cardinalityValueId = cardinalityValueByLiteral[predicateDef.cardinality];
+      const predicateIconId = resolveBootstrapPredicateIconId(
+        store,
+        predicateDef,
+        typeById.get(predicateDef.range),
+        typeIconPredicateId,
+      );
       if (!cardinalityValueId) {
         throw new Error(
           `Unknown cardinality "${predicateDef.cardinality}" for "${predicateDef.key}"`,
@@ -239,7 +263,7 @@ export function bootstrap(store: GraphStore, types: Record<string, AnyTypeOutput
         name: predicateDef.key,
         range: predicateDef.range,
         cardinality: cardinalityValueId,
-        icon: resolvePredicateDefinitionIconId(predicateDef, typeById.get(predicateDef.range)),
+        icon: predicateIconId,
       });
       assertCurrentFactOnce(store, bootstrapFacts, predicateId, keyPredicateId, predicateDef.key);
       assertCurrentFactOnce(store, bootstrapFacts, predicateId, namePredicateId, predicateDef.key);
@@ -262,7 +286,7 @@ export function bootstrap(store: GraphStore, types: Record<string, AnyTypeOutput
         bootstrapFacts,
         predicateId,
         predicateIconPredicateId,
-        resolvePredicateDefinitionIconId(predicateDef, typeById.get(predicateDef.range)),
+        predicateIconId,
       );
       assertCurrentFactOnce(
         store,

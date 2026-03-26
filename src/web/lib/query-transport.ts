@@ -1,10 +1,11 @@
-import { type QueryResultPage, type SerializedQueryRequest } from "@io/core/graph";
 import {
+  type QueryResultPage,
+  type SerializedQueryRequest,
   defaultHttpSerializedQueryPath,
   HttpSerializedQueryClientError,
   requestSerializedQuery,
   type HttpSerializedQueryClientOptions,
-} from "@io/core/graph/runtime";
+} from "@io/graph-client";
 
 export const webSerializedQueryPath = defaultHttpSerializedQueryPath;
 

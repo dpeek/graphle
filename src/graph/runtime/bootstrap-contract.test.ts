@@ -1,7 +1,8 @@
 import { describe, expect, it } from "bun:test";
 
+import { createTypeClient } from "@io/graph-client";
+
 import { bootstrap } from "./bootstrap";
-import { createTypeClient } from "./client";
 import { core } from "./core";
 import { createIdMap, applyIdMap } from "./identity";
 import { defineType, typeId } from "./schema";
@@ -18,6 +19,7 @@ const item = defineType({
 });
 
 const testGraph = applyIdMap(createIdMap({ item }).map, { item });
+const testDefs = { ...core, ...testGraph } as const;
 
 function canonicalizeSnapshot(snapshot: GraphStoreSnapshot) {
   return {
@@ -34,7 +36,7 @@ describe("bootstrap contract", () => {
     bootstrap(store, core);
     bootstrap(store, testGraph);
 
-    const graph = createTypeClient(store, testGraph);
+    const graph = createTypeClient(store, testGraph, testDefs);
     const coreGraph = createTypeClient(store, core);
     const runtimeId = graph.item.create({ name: "Runtime Item", title: "One" });
     const runtimeEntity = graph.item.get(runtimeId);
@@ -51,7 +53,7 @@ describe("bootstrap contract", () => {
     bootstrap(restartedStore, core);
     bootstrap(restartedStore, testGraph);
 
-    const restartedGraph = createTypeClient(restartedStore, testGraph);
+    const restartedGraph = createTypeClient(restartedStore, testGraph, testDefs);
     const restartedCoreGraph = createTypeClient(restartedStore, core);
     const restartedRuntimeEntity = restartedGraph.item.get(runtimeId);
     const restartedSchemaType = restartedCoreGraph.type.get(typeId(testGraph.item));

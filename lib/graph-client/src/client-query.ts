@@ -1,25 +1,24 @@
 import type { GraphStore } from "@io/graph-kernel";
-
-import {
-  isEdgeOutput,
-  isTree,
-  readPredicateValue,
-  type AllDefs,
-  type FieldQuerySelection,
-  type QueryFieldResult,
-  type TypeQueryResult,
-  type TypeQuerySelection,
-} from "./client-core";
-import { fieldTreeKey, isEntityType } from "./schema";
+import { fieldTreeKey, isEntityType } from "@io/graph-kernel";
 import type {
   AnyTypeOutput,
   EdgeOutput,
   FieldsOutput,
   ScalarTypeOutput,
   TypeOutput,
-} from "./schema";
+} from "@io/graph-kernel";
 
-export function createQueryProjector<const T extends Record<string, AnyTypeOutput>>(
+import {
+  isEdgeOutput,
+  isTree,
+  readPredicateValue,
+  type FieldQuerySelection,
+  type QueryFieldResult,
+  type TypeQueryResult,
+  type TypeQuerySelection,
+} from "./client-core";
+
+export function createQueryProjector<const TDefs extends Record<string, AnyTypeOutput>>(
   store: GraphStore,
   scalarByKey: Map<string, ScalarTypeOutput<any>>,
   typeByKey: Map<string, AnyTypeOutput>,
@@ -32,12 +31,12 @@ export function createQueryProjector<const T extends Record<string, AnyTypeOutpu
 
   const projectQueryFields = <
     U extends FieldsOutput,
-    Selection extends FieldQuerySelection<U, AllDefs<T>>,
+    Selection extends FieldQuerySelection<U, TDefs>,
   >(
     subjectId: string,
     fields: U,
     selection: Selection,
-  ): QueryFieldResult<U, Selection, AllDefs<T>> => {
+  ): QueryFieldResult<U, Selection, TDefs> => {
     const out: Record<string, unknown> = {};
 
     for (const [fieldName, selected] of Object.entries(selection)) {
@@ -62,10 +61,7 @@ export function createQueryProjector<const T extends Record<string, AnyTypeOutpu
           const nested = readPredicateValue(store, subjectId, edge, scalarByKey, typeByKey, {
             strictRequired: true,
           });
-          const nestedSelection = selected.select as TypeQuerySelection<
-            typeof rangeType,
-            AllDefs<T>
-          >;
+          const nestedSelection = selected.select as TypeQuerySelection<typeof rangeType, TDefs>;
 
           if (edge.cardinality === "many") {
             out[fieldName] = (nested as string[]).map((entityId) => {
@@ -102,28 +98,28 @@ export function createQueryProjector<const T extends Record<string, AnyTypeOutpu
       out[fieldName] = projectQueryFields(
         subjectId,
         fieldTree,
-        selected as FieldQuerySelection<typeof fieldTree, AllDefs<T>>,
+        selected as FieldQuerySelection<typeof fieldTree, TDefs>,
       );
     }
 
-    return out as QueryFieldResult<U, Selection, AllDefs<T>>;
+    return out as QueryFieldResult<U, Selection, TDefs>;
   };
 
   const projectSelectedEntity = <
     U extends TypeOutput,
-    Selection extends TypeQuerySelection<U, AllDefs<T>>,
+    Selection extends TypeQuerySelection<U, TDefs>,
   >(
     typeDef: U,
     id: string,
     selection: Selection,
-  ): TypeQueryResult<U, Selection, AllDefs<T>> => {
+  ): TypeQueryResult<U, Selection, TDefs> => {
     const out = projectQueryFields(id, typeDef.fields, selection);
     if (selection.id) {
       const withId: Record<string, unknown> = { ...out };
       withId.id = id;
-      return withId as TypeQueryResult<U, Selection, AllDefs<T>>;
+      return withId as TypeQueryResult<U, Selection, TDefs>;
     }
-    return out as TypeQueryResult<U, Selection, AllDefs<T>>;
+    return out as TypeQueryResult<U, Selection, TDefs>;
   };
 
   return {

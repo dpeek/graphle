@@ -1,10 +1,11 @@
 import { describe, expect, it, setDefaultTimeout } from "bun:test";
 
 import type { AuthorizationContext } from "@io/core/graph";
+import { core } from "@io/core/graph/modules";
 import { ops } from "@io/core/graph/modules/ops";
 import { workflowReviewSyncScopeRequest } from "@io/core/graph/modules/ops/workflow";
 import { pkm } from "@io/core/graph/modules/pkm";
-import { createHttpGraphClient, type FetchImpl } from "@io/core/graph/runtime";
+import { createHttpGraphClient, type FetchImpl } from "@io/graph-client";
 import type { GraphWriteTransaction } from "@io/graph-kernel";
 
 import {
@@ -20,6 +21,7 @@ import { createWorkflowReviewLiveSync } from "./workflow-review-live-sync.js";
 
 const baseUrl = "https://web.local/";
 const graphSchema = { ...pkm, ...ops } as const;
+const graphDefinitions = { ...core, ...graphSchema } as const;
 const principalId = "principal:test";
 const sessionId = "session:test";
 const authorization: AuthorizationContext = {
@@ -101,6 +103,7 @@ describe("workflow review live sync", () => {
     const fixture = await createTestWorkflowFixture(authority, authorization);
     const harness = createWorkflowLiveHarness(authority, router);
     const client = await createHttpGraphClient(graphSchema, {
+      definitions: graphDefinitions,
       fetch: harness.fetch,
       requestedScope: workflowReviewSyncScopeRequest,
       url: baseUrl,
@@ -183,6 +186,7 @@ describe("workflow review live sync", () => {
     const fixture = await createTestWorkflowFixture(authority, authorization);
     const harness = createWorkflowLiveHarness(authority, router);
     const client = await createHttpGraphClient(graphSchema, {
+      definitions: graphDefinitions,
       fetch: harness.fetch,
       requestedScope: workflowReviewSyncScopeRequest,
       url: baseUrl,
@@ -260,6 +264,7 @@ describe("workflow review live sync", () => {
     const fixture = await createTestWorkflowFixture(authority, authorization);
     const harness = createWorkflowLiveHarness(authority, router);
     const client = await createHttpGraphClient(graphSchema, {
+      definitions: graphDefinitions,
       fetch: harness.fetch,
       requestedScope: workflowReviewSyncScopeRequest,
       url: baseUrl,

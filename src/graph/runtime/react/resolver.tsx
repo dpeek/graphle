@@ -1,6 +1,7 @@
+import type { PredicateRef } from "@io/graph-client";
+import type { AnyTypeOutput, EdgeOutput } from "@io/graph-kernel";
 import type { ComponentType, ReactNode } from "react";
 
-import type { AnyTypeOutput, EdgeOutput, PredicateRef } from "../../index.js";
 import { getPredicateDisplayKind, getPredicateEditorKind } from "./predicate.js";
 
 export type PredicateFieldProps<

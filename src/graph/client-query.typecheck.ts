@@ -1,13 +1,14 @@
-import { bootstrap, createStore, createTypeClient } from "@io/core/graph";
+import { bootstrap, createStore } from "@io/core/graph";
 import { core } from "@io/core/graph/modules";
+import { createTypeClient } from "@io/graph-client";
 
-import { testNamespace } from "./test-graph.js";
+import { testDefs, testNamespace } from "./test-graph.js";
 
 const store = createStore();
 bootstrap(store, core);
 bootstrap(store, testNamespace);
 
-const graph = createTypeClient(store, testNamespace);
+const graph = createTypeClient(store, testNamespace, testDefs);
 const coreGraph = createTypeClient(store, core);
 
 void graph.record

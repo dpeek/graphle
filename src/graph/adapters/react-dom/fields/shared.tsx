@@ -2,7 +2,8 @@ import {
   GraphValidationError,
   type GraphMutationValidationResult,
   type PredicateRef,
-} from "../../../index.js";
+} from "@io/graph-client";
+
 import {
   formatPredicateValue,
   performValidatedMutation,

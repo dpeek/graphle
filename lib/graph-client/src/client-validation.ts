@@ -1,4 +1,14 @@
 import { createStore, type GraphStore } from "@io/graph-kernel";
+import { edgeId, isEntityType, isEnumType, typeId } from "@io/graph-kernel";
+import type {
+  AnyTypeOutput,
+  EdgeOutput,
+  ScalarTypeOutput,
+  TypeOutput,
+  ValidationEvent,
+  ValidationIssueInput,
+  ValidationPhase,
+} from "@io/graph-kernel";
 
 import {
   clearFieldValue,
@@ -33,23 +43,14 @@ import {
   type ClearFieldValue,
   type CreateInputOfType,
   type FlatPredicateEntry,
+  type GraphClientCoreSchema,
   type GraphDeleteValidationResult,
   type GraphMutationValidationResult,
   type GraphValidationIssue,
   type GraphValidationResult,
+  requireGraphClientCoreSchema,
 } from "./client-core";
 import { commitCreateEntity, commitUpdateEntity } from "./client-store";
-import { core } from "./core";
-import { edgeId, isEntityType, isEnumType, typeId } from "./schema";
-import type {
-  AnyTypeOutput,
-  EdgeOutput,
-  ScalarTypeOutput,
-  TypeOutput,
-  ValidationEvent,
-  ValidationIssueInput,
-  ValidationPhase,
-} from "./schema";
 
 function normalizeValidationIssueInputs(
   issues: ValidationIssueInput | ValidationIssueInput[] | void,
@@ -255,6 +256,7 @@ function validateEntityReferenceValue(
   value: unknown,
   store: GraphStore,
   typeByKey: Map<string, AnyTypeOutput>,
+  coreSchema: GraphClientCoreSchema,
 ): void {
   const rangeType = typeByKey.get(entry.predicate.range);
   if (!rangeType || !isEntityType(rangeType)) return;
@@ -271,11 +273,11 @@ function validateEntityReferenceValue(
     return;
   }
 
-  const nodeTypePredicateId = edgeId(core.node.fields.type as EdgeOutput);
+  const nodeTypePredicateId = edgeId(coreSchema.node.fields.type as EdgeOutput);
   const targetTypeIds = new Set(store.facts(value, nodeTypePredicateId).map((edge) => edge.o));
 
   if (targetTypeIds.size === 0) {
-    if (entry.predicate.key === (core.predicate.fields.range as EdgeOutput).key) return;
+    if (entry.predicate.key === (coreSchema.predicate.fields.range as EdgeOutput).key) return;
     appendRuntimeValidationIssue(
       issues,
       entry,
@@ -297,17 +299,18 @@ function validateEntityReferenceValue(
   }
 }
 
-function isManagedNodeTypeEntry(entry: FlatPredicateEntry): boolean {
-  return (
-    entry.path.length === 0 && entry.predicate.key === (core.node.fields.type as EdgeOutput).key
-  );
+function isManagedNodeTypeEntry(
+  entry: FlatPredicateEntry,
+  coreSchema: GraphClientCoreSchema,
+): boolean {
+  return entry.path.length === 0 && entry.predicate.key === coreSchema.node.fields.type.key;
 }
 
-function createNodeTypeValidationEntry(): FlatPredicateEntry {
+function createNodeTypeValidationEntry(coreSchema: GraphClientCoreSchema): FlatPredicateEntry {
   return {
     path: [],
     field: "type",
-    predicate: core.node.fields.type as EdgeOutput,
+    predicate: coreSchema.node.fields.type as EdgeOutput,
   };
 }
 
@@ -336,11 +339,12 @@ function validateNodeTypeState(
   nodeId: string,
   hasCurrentTypeFact: boolean,
   typeByKey: Map<string, AnyTypeOutput>,
+  coreSchema: GraphClientCoreSchema,
 ): readonly GraphValidationIssue[] {
   const issues: GraphValidationIssue[] = [];
-  const keyPredicateId = edgeId(core.predicate.fields.key as EdgeOutput);
-  const nodeTypePredicateId = edgeId(core.node.fields.type as EdgeOutput);
-  const typeEntry = createNodeTypeValidationEntry();
+  const keyPredicateId = edgeId(coreSchema.predicate.fields.key as EdgeOutput);
+  const nodeTypePredicateId = edgeId(coreSchema.node.fields.type as EdgeOutput);
+  const typeEntry = createNodeTypeValidationEntry(coreSchema);
 
   if (!hasCurrentTypeFact) {
     const hasStructuredFacts = store.facts(nodeId).some((edge) => edge.p !== keyPredicateId);
@@ -359,7 +363,15 @@ function validateNodeTypeState(
   for (const typeValue of uniqueEncodedPredicateValues(
     store.facts(nodeId, nodeTypePredicateId).map((edge) => ({ encoded: edge.o, decoded: edge.o })),
   )) {
-    validateEntityReferenceValue(issues, typeEntry, nodeId, typeValue.decoded, store, typeByKey);
+    validateEntityReferenceValue(
+      issues,
+      typeEntry,
+      nodeId,
+      typeValue.decoded,
+      store,
+      typeByKey,
+      coreSchema,
+    );
   }
 
   return issues;
@@ -370,9 +382,10 @@ function validateTypedHandleTarget<T extends TypeOutput>(
   nodeId: string,
   typeDef: T,
   typeByKey: Map<string, AnyTypeOutput>,
+  coreSchema: GraphClientCoreSchema,
 ): readonly GraphValidationIssue[] {
   const issues: GraphValidationIssue[] = [];
-  const typeEntry = createNodeTypeValidationEntry();
+  const typeEntry = createNodeTypeValidationEntry(coreSchema);
   const nodeFacts = store.facts(nodeId);
 
   if (nodeFacts.length === 0) {
@@ -386,7 +399,7 @@ function validateTypedHandleTarget<T extends TypeOutput>(
     return issues;
   }
 
-  const nodeTypePredicateId = edgeId(core.node.fields.type as EdgeOutput);
+  const nodeTypePredicateId = edgeId(coreSchema.node.fields.type as EdgeOutput);
   const currentTypeIds = new Set(
     nodeFacts.filter((edge) => edge.p === nodeTypePredicateId).map((edge) => edge.o),
   );
@@ -743,6 +756,7 @@ function prepareMutationInput<T extends TypeOutput>(
   scalarByKey: Map<string, ScalarTypeOutput<any>>,
   typeByKey: Map<string, AnyTypeOutput>,
   enumValuesByRange: Map<string, Set<string>>,
+  coreSchema: GraphClientCoreSchema,
 ): GraphValidationResult<Record<string, unknown>> {
   const entries = flattenPredicates(typeDef.fields);
   const input = cloneInput(inputValue);
@@ -764,7 +778,7 @@ function prepareMutationInput<T extends TypeOutput>(
     if (event === "update" && !hasExplicitValue) continue;
     const nextValue = getNestedValue(input, entry.path, entry.field);
 
-    if (event === "create" && !hasExplicitValue && isManagedNodeTypeEntry(entry)) {
+    if (event === "create" && !hasExplicitValue && isManagedNodeTypeEntry(entry, coreSchema)) {
       continue;
     }
 
@@ -773,7 +787,7 @@ function prepareMutationInput<T extends TypeOutput>(
         ? readPredicateValue(store, nodeId, entry.predicate, scalarByKey, typeByKey)
         : undefined;
 
-    if (isManagedNodeTypeEntry(entry)) {
+    if (isManagedNodeTypeEntry(entry, coreSchema)) {
       appendManagedFieldMutationIssue(issues, entry, nodeId, typeDef);
       deleteNestedValue(input, entry.path, entry.field);
       continue;
@@ -823,6 +837,7 @@ function collectionItemPassesValidation(
   scalarByKey: Map<string, ScalarTypeOutput<any>>,
   typeByKey: Map<string, AnyTypeOutput>,
   enumValuesByRange: Map<string, Set<string>>,
+  coreSchema: GraphClientCoreSchema,
 ): boolean {
   try {
     const encoded = encodeForRange(
@@ -853,7 +868,7 @@ function collectionItemPassesValidation(
       changedPredicateKeys,
       scalarByKey,
     );
-    validateEntityReferenceValue(issues, entry, nodeId, decoded, store, typeByKey);
+    validateEntityReferenceValue(issues, entry, nodeId, decoded, store, typeByKey, coreSchema);
 
     return issues.length === 0;
   } catch {
@@ -870,6 +885,7 @@ export function planManyRemoveMutation(
   scalarByKey: Map<string, ScalarTypeOutput<any>>,
   typeByKey: Map<string, AnyTypeOutput>,
   enumValuesByRange: Map<string, Set<string>>,
+  coreSchema: GraphClientCoreSchema,
 ): {
   nextValues: unknown[];
   validationValues: unknown[];
@@ -884,6 +900,7 @@ export function planManyRemoveMutation(
     scalarByKey,
     typeByKey,
     enumValuesByRange,
+    coreSchema,
   );
 
   if (!isValidTarget) {
@@ -920,6 +937,7 @@ export function validateCreateEntity<T extends TypeOutput>(
     nodeId?: string;
   } = {},
 ): GraphMutationValidationResult {
+  const coreSchema = requireGraphClientCoreSchema(namespace);
   const now = getStableValidationNow(store);
   const validationNodeId = options.nodeId ?? getStableCreateNodeId(store);
   const validationStore = cloneStoreForValidation(store);
@@ -933,6 +951,7 @@ export function validateCreateEntity<T extends TypeOutput>(
     scalarByKey,
     typeByKey,
     enumValuesByRange,
+    coreSchema,
   );
   if (!prepared.ok) return prepared;
 
@@ -941,6 +960,7 @@ export function validateCreateEntity<T extends TypeOutput>(
     validationNodeId,
     typeDef,
     prepared.value,
+    coreSchema.node.fields.type,
     scalarByKey,
     typeByKey,
     enumValuesByRange,
@@ -959,6 +979,7 @@ function validateEntityState<T extends TypeOutput>(
   scalarByKey: Map<string, ScalarTypeOutput<any>>,
   typeByKey: Map<string, AnyTypeOutput>,
   enumValuesByRange: Map<string, Set<string>>,
+  coreSchema: GraphClientCoreSchema,
 ): readonly GraphValidationIssue[] {
   const issues: GraphValidationIssue[] = [];
   const entries = flattenPredicates(typeDef.fields);
@@ -966,7 +987,7 @@ function validateEntityState<T extends TypeOutput>(
     phase === "authoritative" ? new Set(entries.map((entry) => entry.predicate.key)) : undefined;
 
   for (const entry of entries) {
-    if (isManagedNodeTypeEntry(entry)) continue;
+    if (isManagedNodeTypeEntry(entry, coreSchema)) continue;
     const entryValidationKeys =
       changedPredicateKeys ?? entryChangedPredicateKeys(entry.predicate.key);
     const facts = store.facts(id, edgeId(entry.predicate));
@@ -1021,7 +1042,7 @@ function validateEntityState<T extends TypeOutput>(
           entryValidationKeys,
           scalarByKey,
         );
-        validateEntityReferenceValue(issues, entry, id, decoded, store, typeByKey);
+        validateEntityReferenceValue(issues, entry, id, decoded, store, typeByKey, coreSchema);
       } catch (error) {
         hasDecodeError = true;
         appendInvalidValueIssue(
@@ -1103,11 +1124,12 @@ export function validateUpdateEntity<T extends TypeOutput>(
   enumValuesByRange: Map<string, Set<string>>,
   namespace: Record<string, AnyTypeOutput>,
 ): GraphMutationValidationResult {
+  const coreSchema = requireGraphClientCoreSchema(namespace);
   const requestedChangedPredicateKeys = collectChangedPredicateKeys(
     patch,
     flattenPredicates(typeDef.fields),
   );
-  const handleIssues = validateTypedHandleTarget(store, id, typeDef, typeByKey);
+  const handleIssues = validateTypedHandleTarget(store, id, typeDef, typeByKey, coreSchema);
   if (handleIssues.length > 0) {
     return invalidResult(
       "local",
@@ -1130,6 +1152,7 @@ export function validateUpdateEntity<T extends TypeOutput>(
     scalarByKey,
     typeByKey,
     enumValuesByRange,
+    coreSchema,
   );
   if (!prepared.ok) return prepared;
 
@@ -1156,7 +1179,8 @@ export function prepareDeleteEntity<
   typeByKey: Map<string, AnyTypeOutput>,
   namespace: Defs,
 ): GraphDeleteValidationResult {
-  const handleIssues = validateTypedHandleTarget(store, id, typeDef, typeByKey);
+  const coreSchema = requireGraphClientCoreSchema(namespace);
+  const handleIssues = validateTypedHandleTarget(store, id, typeDef, typeByKey, coreSchema);
   if (handleIssues.length > 0) {
     return invalidResult(
       "local",
@@ -1196,15 +1220,16 @@ export function validateGraphStore<const T extends Record<string, AnyTypeOutput>
     event?: ValidationEvent;
   } = {},
 ): GraphValidationResult<void> {
+  const coreSchema = requireGraphClientCoreSchema(namespace);
   const now = options.now ? cloneDate(options.now) : new Date();
   const phase = options.phase ?? "authoritative";
   const event = options.event ?? "reconcile";
   const scalarByKey = collectScalarCodecs(namespace);
   const typeByKey = collectTypeIndex(namespace);
   const enumValuesByRange = collectEnumValueIds(namespace, typeByKey);
-  const nodeTypePredicate = core.node.fields.type as EdgeOutput;
+  const nodeTypePredicate = coreSchema.node.fields.type as EdgeOutput;
   const nodeTypePredicateId = edgeId(nodeTypePredicate);
-  const combined = [...Object.values(core), ...Object.values(namespace)];
+  const combined = Object.values(namespace);
   const issues: GraphValidationIssue[] = [];
   const subjects = new Map<string, boolean>();
 
@@ -1214,7 +1239,7 @@ export function validateGraphStore<const T extends Record<string, AnyTypeOutput>
   }
 
   for (const [nodeId, hasCurrentTypeFact] of subjects) {
-    issues.push(...validateNodeTypeState(store, nodeId, hasCurrentTypeFact, typeByKey));
+    issues.push(...validateNodeTypeState(store, nodeId, hasCurrentTypeFact, typeByKey, coreSchema));
   }
 
   for (const typeDef of combined) {
@@ -1234,6 +1259,7 @@ export function validateGraphStore<const T extends Record<string, AnyTypeOutput>
           scalarByKey,
           typeByKey,
           enumValuesByRange,
+          coreSchema,
         ),
       );
     }

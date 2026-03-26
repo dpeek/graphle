@@ -1,9 +1,13 @@
-import type { AuthoritativeGraphWriteResult, GraphWriteTransaction } from "@io/graph-kernel";
+import type {
+  AuthoritativeGraphWriteResult,
+  GraphStoreSnapshot,
+  GraphWriteTransaction,
+} from "@io/graph-kernel";
+import { createGraphId } from "@io/graph-kernel";
+import type { AnyTypeOutput } from "@io/graph-kernel";
 import type { SyncPayload, SyncScopeRequest, SyncState } from "@io/graph-sync";
 
 import { applyHttpSyncRequest } from "./http-sync-request";
-import { createGraphId } from "./id";
-import type { AnyTypeOutput } from "./schema";
 import {
   validateSerializedQueryResponse,
   type QueryResultPage,
@@ -16,10 +20,14 @@ export type FetchImpl = (input: RequestInfo | URL, init?: RequestInit) => Promis
 export const defaultHttpGraphUrl = "http://io.localhost:1355/";
 export const defaultHttpSerializedQueryPath = "/api/query";
 
-export type HttpGraphClientOptions = {
+export type HttpGraphClientOptions<
+  TDefs extends Record<string, AnyTypeOutput> = Record<string, AnyTypeOutput>,
+> = {
   readonly bearerToken?: string;
+  readonly definitions?: TDefs;
   readonly url?: string;
   readonly syncPath?: string;
+  readonly schemaSnapshot?: GraphStoreSnapshot;
   readonly transactionPath?: string;
   readonly fetch?: FetchImpl;
   readonly createTxId?: () => string;
@@ -136,10 +144,13 @@ export function createHttpGraphTxIdFactory(prefix = "cli"): () => string {
   };
 }
 
-export async function createHttpGraphClient<const T extends Record<string, AnyTypeOutput>>(
-  namespace: T,
-  options: HttpGraphClientOptions = {},
-): Promise<SyncedTypeClient<T>> {
+export async function createHttpGraphClient<
+  const TNamespace extends Record<string, AnyTypeOutput>,
+  const TDefs extends Record<string, AnyTypeOutput> = TNamespace,
+>(
+  namespace: TNamespace,
+  options: HttpGraphClientOptions<TDefs> = {},
+): Promise<SyncedTypeClient<TNamespace, TDefs>> {
   const baseUrl = options.url ?? defaultHttpGraphUrl;
   const syncUrl = resolveEndpointUrl(options.syncPath ?? "/api/sync", baseUrl);
   const transactionUrl = resolveEndpointUrl(options.transactionPath ?? "/api/tx", baseUrl);
@@ -207,7 +218,9 @@ export async function createHttpGraphClient<const T extends Record<string, AnyTy
 
   const client = createSyncedTypeClient(namespace, {
     createTxId,
+    definitions: options.definitions,
     requestedScope: options.requestedScope,
+    schemaSnapshot: options.schemaSnapshot,
     pull: (state) => fetchSyncPayload(state),
     push: pushTransaction,
   });

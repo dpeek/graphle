@@ -1,16 +1,18 @@
-import { Fragment, useMemo, type ReactNode } from "react";
-
 import {
-  isEntityType,
   isFieldGroupRef,
-  type AnyTypeOutput,
-  type EdgeOutput,
   type EntityRef,
   type PredicateRangeTypeOf,
   type PredicateRef,
   type PredicateValueOf,
+} from "@io/graph-client";
+import {
+  isEntityType,
+  type AnyTypeOutput,
+  type EdgeOutput,
   type TypeOutput,
-} from "../../index.js";
+} from "@io/graph-kernel";
+import { Fragment, useMemo, type ReactNode } from "react";
+
 import { usePredicateValue } from "./predicate.js";
 
 type StringKeys<T> = Extract<keyof T, string>;

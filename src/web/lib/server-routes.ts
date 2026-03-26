@@ -1,11 +1,4 @@
-import {
-  GraphValidationError,
-  SerializedQueryValidationError,
-  validateSerializedQueryRequest,
-  type AuthorizationContext,
-  type SerializedQueryRequest,
-  type SerializedQueryResponse,
-} from "@io/core/graph";
+import { type AuthorizationContext } from "@io/core/graph";
 import {
   projectBranchScopeOrderDirectionValues,
   projectBranchScopeOrderFieldValues,
@@ -17,7 +10,14 @@ import {
   type ProjectBranchScopeQuery,
   type WorkflowBranchStateValue,
 } from "@io/core/graph/modules/ops/workflow";
-import { readHttpSyncRequest } from "@io/core/graph/runtime";
+import {
+  GraphValidationError,
+  SerializedQueryValidationError,
+  readHttpSyncRequest,
+  validateSerializedQueryRequest,
+  type SerializedQueryResponse,
+  type SerializedQueryRequest,
+} from "@io/graph-client";
 import { type GraphWriteTransaction } from "@io/graph-kernel";
 
 import type {

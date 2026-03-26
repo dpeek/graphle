@@ -1,9 +1,10 @@
 import { describe, expect, it } from "bun:test";
 
+import { createTypeClient } from "@io/graph-client";
+
 import {
   bootstrap,
   createStore,
-  createTypeClient,
   edgeId,
   fieldTreeId,
   fieldVisibility,
@@ -24,6 +25,8 @@ import {
   kitchenSinkSeverity,
   kitchenSinkStatus,
 } from "./kitchen-sink.js";
+
+const kitchenSinkDefs = { ...core, ...kitchenSink } as const;
 
 describe("kitchen sink schema namespace", () => {
   it("resolves ids across types, enum members, and nested field trees", () => {
@@ -134,7 +137,7 @@ describe("kitchen sink schema namespace", () => {
     const store = createStore();
     bootstrap(store, core);
     bootstrap(store, kitchenSink);
-    const graph = createTypeClient(store, kitchenSink);
+    const graph = createTypeClient(store, kitchenSink, kitchenSinkDefs);
 
     const personId = graph.person.create({
       name: "Ada Lovelace",

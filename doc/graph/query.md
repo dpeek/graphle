@@ -341,9 +341,9 @@ type SerializedQueryResponse =
 This is now the shared transport shape used by `POST /api/query`, generalized
 from the earlier workflow-specific `POST /api/workflow-read` proof.
 
-The checked-in runtime contract lives in
-`../../src/graph/runtime/serialized-query.ts` and is exported through
-`@io/core/graph`.
+The checked-in transport contract lives in
+`../../lib/graph-client/src/serialized-query.ts` and is exported through
+`@io/graph-client`.
 
 ### Why transport stays JSON
 

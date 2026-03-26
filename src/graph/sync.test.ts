@@ -1,14 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
-import {
-  GraphValidationError,
-  bootstrap,
-  createStore,
-  createTypeClient,
-  edgeId,
-  formatValidationPath,
-  typeId,
-} from "@io/core/graph";
+import { bootstrap, createStore, edgeId, typeId } from "@io/core/graph";
 import {
   createAuthoritativeGraphWriteResultValidator,
   createAuthoritativeGraphWriteSession,
@@ -18,7 +10,13 @@ import {
   validateAuthoritativeTotalSyncPayload,
 } from "@io/core/graph/authority";
 import { core } from "@io/core/graph/modules";
-import { GraphSyncWriteError, createSyncedTypeClient } from "@io/core/graph/runtime";
+import {
+  createSyncedTypeClient as createResolvedSyncedTypeClient,
+  createTypeClient as createResolvedTypeClient,
+  formatValidationPath,
+  GraphSyncWriteError,
+  GraphValidationError,
+} from "@io/graph-client";
 import { type GraphWriteTransaction } from "@io/graph-kernel";
 import {
   createIncrementalSyncFallback,
@@ -33,7 +31,27 @@ import {
   validateIncrementalSyncResult,
 } from "@io/graph-sync";
 
-import { createTestGraph, createTestStore, testNamespace } from "./test-graph.js";
+import { createTestGraph, createTestStore, testDefs, testNamespace } from "./test-graph.js";
+
+function createTypeClient(
+  store: ReturnType<typeof createStore>,
+  _namespace: typeof testNamespace = testNamespace,
+) {
+  return createResolvedTypeClient(store, testNamespace, testDefs);
+}
+
+function createSyncedTypeClient(
+  _namespace: typeof testNamespace,
+  options: Omit<
+    Parameters<typeof createResolvedSyncedTypeClient<typeof testNamespace, typeof testDefs>>[1],
+    "definitions"
+  >,
+) {
+  return createResolvedSyncedTypeClient(testNamespace, {
+    definitions: testDefs,
+    ...options,
+  });
+}
 
 function createServerGraph() {
   return createTestGraph();

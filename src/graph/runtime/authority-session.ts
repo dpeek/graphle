@@ -1,4 +1,9 @@
 import {
+  GraphValidationError,
+  type GraphValidationIssue,
+  type GraphValidationResult,
+} from "@io/graph-client";
+import {
   cloneAuthoritativeGraphRetainedHistoryPolicy,
   cloneAuthoritativeGraphWriteResult,
   type AuthoritativeGraphChangesAfterResult,
@@ -42,11 +47,6 @@ import {
   createTransactionValidationIssue,
   invalidTransactionResult,
 } from "./authority-validation-helpers";
-import {
-  GraphValidationError,
-  type GraphValidationIssue,
-  type GraphValidationResult,
-} from "./client";
 import type { AnyTypeOutput } from "./schema";
 import { createStore, type GraphStore, type GraphStoreSnapshot } from "./store";
 

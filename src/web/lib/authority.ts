@@ -8,21 +8,16 @@ import {
   authorizeRead,
   authorizeWrite,
   bootstrap,
-  collectScalarCodecs,
-  collectTypeIndex,
   createModuleReadScope,
   createPersistedAuthoritativeGraph,
   createStore,
-  createTypeClient,
   edgeId,
-  GraphValidationError,
   type GraphCommandPolicy,
   type GraphFieldAuthority,
   isEntityType,
   isSecretBackedField,
   type PrincipalKind,
   type Cardinality,
-  type NamespaceClient,
   type PersistedAuthoritativeGraph,
   type PersistedAuthoritativeGraphStorageCommitInput,
   type PersistedAuthoritativeGraphStoragePersistInput,
@@ -31,18 +26,8 @@ import {
   type PolicyError,
   type InvalidationEvent,
   type PredicatePolicyDescriptor,
-  type QueryLiteral,
-  type QueryResultItem,
-  type QueryResultPage,
   type WebPrincipalSummary,
-  readPredicateValue as decodePredicateValue,
   resolveFieldPolicyDescriptor,
-  type SerializedQueryRequest,
-  type SerializedQueryResponse,
-  SerializedQueryValidationError,
-  normalizeSerializedQueryRequest,
-  type NormalizedQueryFilter,
-  type NormalizedQueryRequest,
   type GraphStore,
   type GraphStoreSnapshot,
   validateShareGrant,
@@ -80,6 +65,23 @@ import {
   type WorkflowMutationResult,
 } from "@io/core/graph/modules/ops/workflow";
 import { pkm } from "@io/core/graph/modules/pkm";
+import {
+  collectScalarCodecs,
+  collectTypeIndex,
+  createTypeClient,
+  GraphValidationError,
+  type NormalizedQueryFilter,
+  type NormalizedQueryRequest,
+  type NamespaceClient,
+  type QueryLiteral,
+  type QueryResultItem,
+  type QueryResultPage,
+  readPredicateValue as decodePredicateValue,
+  type SerializedQueryResponse,
+  type SerializedQueryRequest,
+  SerializedQueryValidationError,
+  normalizeSerializedQueryRequest,
+} from "@io/graph-client";
 import {
   type AuthoritativeGraphRetainedHistoryPolicy,
   type AuthoritativeWriteScope,
@@ -4039,6 +4041,8 @@ export async function createWebAppAuthority(
       case "scope":
         return executeScopeSerializedQuery(normalizedRequest.query, options);
     }
+
+    throw new UnsupportedSerializedQueryPlanError("Serialized query kind is not supported.");
   }
 
   async function executeSerializedQuery(

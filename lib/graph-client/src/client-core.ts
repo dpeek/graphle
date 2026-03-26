@@ -1,5 +1,4 @@
-import { core } from "./core";
-import { createGraphId } from "./id";
+import { createGraphId } from "@io/graph-kernel";
 import {
   edgeId,
   fieldTreeId,
@@ -9,18 +8,19 @@ import {
   isFieldsOutput,
   isScalarType,
   typeId,
-} from "./schema";
+} from "@io/graph-kernel";
 import type {
   AnyTypeOutput,
   Cardinality,
   EdgeOutput,
+  EntityTypeOutput,
   FieldsOutput,
   ScalarTypeOutput,
   TypeOutput,
   ValidationEvent,
   ValidationPhase,
-} from "./schema";
-import type { PredicateSlotListener, GraphStore } from "./store";
+} from "@io/graph-kernel";
+import type { PredicateSlotListener, GraphStore } from "@io/graph-kernel";
 
 export type TypeByKey<Defs extends Record<string, AnyTypeOutput>, K extends string> = Extract<
   Defs[keyof Defs],
@@ -79,8 +79,119 @@ type TreeCreate<T, Defs extends Record<string, AnyTypeOutput>> = T extends EdgeO
       }
     : never;
 
-export type CoreDefs = typeof core;
-export type AllDefs<NS extends Record<string, AnyTypeOutput>> = NS & CoreDefs;
+export type AllDefs<
+  NS extends Record<string, AnyTypeOutput>,
+  Defs extends Record<string, AnyTypeOutput> = NS,
+> = Defs;
+
+export type GraphClientCoreSchema = {
+  readonly cardinality: {
+    readonly values: {
+      readonly many: { readonly id: string };
+      readonly one: { readonly id: string };
+      readonly oneOptional: { readonly id: string };
+    };
+  };
+  readonly icon: EntityTypeOutput & {
+    readonly fields: {
+      readonly key: EdgeOutput;
+      readonly svg: EdgeOutput;
+    };
+  };
+  readonly enum: EntityTypeOutput & {
+    readonly fields: {
+      readonly member: EdgeOutput;
+    };
+  };
+  readonly node: EntityTypeOutput & {
+    readonly fields: {
+      readonly description: EdgeOutput;
+      readonly name: EdgeOutput;
+      readonly type: EdgeOutput;
+    };
+  };
+  readonly predicate: EntityTypeOutput & {
+    readonly fields: {
+      readonly cardinality: EdgeOutput;
+      readonly icon: EdgeOutput;
+      readonly key: EdgeOutput;
+      readonly range: EdgeOutput;
+    };
+  };
+  readonly type: EntityTypeOutput & {
+    readonly fields: {
+      readonly icon: EdgeOutput;
+    };
+  };
+};
+
+function isEdgeOutputProperty(value: unknown): value is EdgeOutput {
+  return isEdgeOutput(value);
+}
+
+function assertGraphClientCoreSchema(value: unknown, fieldName: string): void {
+  if (!value) {
+    throw new Error(
+      `Graph client definitions must include the core "${fieldName}" schema contract.`,
+    );
+  }
+}
+
+/**
+ * Reads the built-in core schema contracts required by graph client helpers.
+ *
+ * Client bootstrap and validation work against explicit definition objects
+ * instead of importing `core` implicitly. Callers should pass definitions that
+ * already include the built-in core schema when their namespace depends on it.
+ */
+export function requireGraphClientCoreSchema(
+  definitions: Record<string, AnyTypeOutput>,
+): GraphClientCoreSchema {
+  const record = definitions as Partial<Record<keyof GraphClientCoreSchema, unknown>>;
+  assertGraphClientCoreSchema(record.node, "node");
+  assertGraphClientCoreSchema(record.predicate, "predicate");
+  assertGraphClientCoreSchema(record.type, "type");
+  assertGraphClientCoreSchema(record.icon, "icon");
+  assertGraphClientCoreSchema(record.enum, "enum");
+  assertGraphClientCoreSchema(record.cardinality, "cardinality");
+
+  const icon = record.icon as Partial<EntityTypeOutput>;
+  const node = record.node as Partial<EntityTypeOutput>;
+  const predicate = record.predicate as Partial<EntityTypeOutput>;
+  const typeDef = record.type as Partial<EntityTypeOutput>;
+  const enumDef = record.enum as Partial<EntityTypeOutput>;
+  const cardinality = record.cardinality as Partial<GraphClientCoreSchema["cardinality"]>;
+
+  if (
+    !isEdgeOutputProperty(icon.fields?.key) ||
+    !isEdgeOutputProperty(icon.fields?.svg) ||
+    !isEdgeOutputProperty(node.fields?.type) ||
+    !isEdgeOutputProperty(node.fields?.name) ||
+    !isEdgeOutputProperty(node.fields?.description) ||
+    !isEdgeOutputProperty(predicate.fields?.key) ||
+    !isEdgeOutputProperty(predicate.fields?.range) ||
+    !isEdgeOutputProperty(predicate.fields?.cardinality) ||
+    !isEdgeOutputProperty(predicate.fields?.icon) ||
+    !isEdgeOutputProperty(typeDef.fields?.icon) ||
+    !isEdgeOutputProperty(enumDef.fields?.member) ||
+    typeof cardinality.values?.one?.id !== "string" ||
+    typeof cardinality.values?.oneOptional?.id !== "string" ||
+    typeof cardinality.values?.many?.id !== "string"
+  ) {
+    throw new Error(
+      "Graph client definitions must include the built-in core node, predicate, type, enum, and cardinality contracts.",
+    );
+  }
+
+  return {
+    cardinality: cardinality as GraphClientCoreSchema["cardinality"],
+    enum: enumDef as GraphClientCoreSchema["enum"],
+    icon: icon as GraphClientCoreSchema["icon"],
+    node: node as GraphClientCoreSchema["node"],
+    predicate: predicate as GraphClientCoreSchema["predicate"],
+    type: typeDef as GraphClientCoreSchema["type"],
+  };
+}
 type FieldGroupInfo<T extends FieldsTree> = {
   subjectId: string;
   fieldTree: T;
@@ -95,7 +206,7 @@ type FieldGroupLike = {
 
 export type FieldGroupRef<
   T extends FieldsTree,
-  Defs extends Record<string, AnyTypeOutput> = CoreDefs,
+  Defs extends Record<string, AnyTypeOutput> = Record<string, AnyTypeOutput>,
 > = {
   [fieldGroupMeta]: FieldGroupInfo<T>;
 } & {
@@ -109,7 +220,7 @@ export function isFieldGroupRef(value: unknown): value is FieldGroupLike {
 
 export function fieldGroupFieldTree<
   T extends FieldsTree,
-  Defs extends Record<string, AnyTypeOutput> = CoreDefs,
+  Defs extends Record<string, AnyTypeOutput> = Record<string, AnyTypeOutput>,
 >(group: FieldGroupRef<T, Defs>): T {
   return group[fieldGroupMeta].fieldTree;
 }
@@ -184,35 +295,35 @@ export function formatValidationPath(path: readonly string[]): string {
 
 export type EntityOfType<
   T extends TypeOutput,
-  Defs extends Record<string, AnyTypeOutput> = CoreDefs,
+  Defs extends Record<string, AnyTypeOutput> = Record<string, AnyTypeOutput>,
 > = { id: string } & TreeEntity<T["fields"], Defs>;
 export type CreateInputOfType<
   T extends TypeOutput,
-  Defs extends Record<string, AnyTypeOutput> = CoreDefs,
+  Defs extends Record<string, AnyTypeOutput> = Record<string, AnyTypeOutput>,
 > = TreeCreate<T["fields"], Defs>;
 export type PredicateValueOf<
   T extends EdgeOutput,
-  Defs extends Record<string, AnyTypeOutput> = CoreDefs,
+  Defs extends Record<string, AnyTypeOutput> = Record<string, AnyTypeOutput>,
 > = Cardinalized<T["range"], T["cardinality"], Defs>;
 export type PredicateRangeTypeOf<
   T extends EdgeOutput,
-  Defs extends Record<string, AnyTypeOutput> = CoreDefs,
+  Defs extends Record<string, AnyTypeOutput> = Record<string, AnyTypeOutput>,
 > = TypeByKey<Defs, T["range"]> | undefined;
 export type PredicateRangeEntityTypeOf<
   T extends EdgeOutput,
-  Defs extends Record<string, AnyTypeOutput> = CoreDefs,
+  Defs extends Record<string, AnyTypeOutput> = Record<string, AnyTypeOutput>,
 > = Extract<NonNullable<PredicateRangeTypeOf<T, Defs>>, TypeOutput>;
 export type PredicateItemOf<
   T extends EdgeOutput,
-  Defs extends Record<string, AnyTypeOutput> = CoreDefs,
+  Defs extends Record<string, AnyTypeOutput> = Record<string, AnyTypeOutput>,
 > = PredicateValueOf<T, Defs> extends (infer Item)[] ? Item : never;
 export type PredicateSetValueOf<
   T extends EdgeOutput,
-  Defs extends Record<string, AnyTypeOutput> = CoreDefs,
+  Defs extends Record<string, AnyTypeOutput> = Record<string, AnyTypeOutput>,
 > = Exclude<PredicateValueOf<T, Defs>, undefined>;
 export type PredicateRangeEntityRefOf<
   T extends EdgeOutput,
-  Defs extends Record<string, AnyTypeOutput> = CoreDefs,
+  Defs extends Record<string, AnyTypeOutput> = Record<string, AnyTypeOutput>,
 > = [PredicateRangeEntityTypeOf<T, Defs>] extends [never]
   ? never
   : EntityRef<PredicateRangeEntityTypeOf<T, Defs>, Defs>;
@@ -229,7 +340,7 @@ export type PredicateCollectionSemantics = {
 
 export type PredicateRef<
   T extends EdgeOutput,
-  Defs extends Record<string, AnyTypeOutput> = CoreDefs,
+  Defs extends Record<string, AnyTypeOutput> = Record<string, AnyTypeOutput>,
 > = {
   subjectId: string;
   predicateId: string;
@@ -266,7 +377,7 @@ export type PredicateRef<
 
 export type EntityRef<
   T extends TypeOutput,
-  Defs extends Record<string, AnyTypeOutput> = CoreDefs,
+  Defs extends Record<string, AnyTypeOutput> = Record<string, AnyTypeOutput>,
 > = {
   id: string;
   type: T;
@@ -349,7 +460,7 @@ type QueryEdgeResult<
 
 export type TypeQuerySelection<
   T extends TypeOutput,
-  Defs extends Record<string, AnyTypeOutput> = CoreDefs,
+  Defs extends Record<string, AnyTypeOutput> = Record<string, AnyTypeOutput>,
 > = {
   id?: true;
 } & FieldQuerySelection<T["fields"], Defs>;
@@ -366,7 +477,7 @@ export type TypeQueryWhere =
 
 export type TypeQuerySpec<
   T extends TypeOutput,
-  Defs extends Record<string, AnyTypeOutput> = CoreDefs,
+  Defs extends Record<string, AnyTypeOutput> = Record<string, AnyTypeOutput>,
   Selection extends TypeQuerySelection<T, Defs> = TypeQuerySelection<T, Defs>,
 > = {
   select: Selection;
@@ -376,7 +487,7 @@ export type TypeQuerySpec<
 export type TypeQueryResult<
   T extends TypeOutput,
   Selection,
-  Defs extends Record<string, AnyTypeOutput> = CoreDefs,
+  Defs extends Record<string, AnyTypeOutput> = Record<string, AnyTypeOutput>,
 > =
   Selection extends TypeQuerySelection<T, Defs>
     ? QueryFieldResult<T["fields"], Selection, Defs> &
@@ -386,7 +497,7 @@ export type TypeQueryResult<
 export type TypeQueryResponse<
   T extends TypeOutput,
   Query,
-  Defs extends Record<string, AnyTypeOutput> = CoreDefs,
+  Defs extends Record<string, AnyTypeOutput> = Record<string, AnyTypeOutput>,
 > =
   Query extends TypeQuerySpec<T, Defs, infer Selection>
     ? Query["where"] extends { id: string }
@@ -436,10 +547,13 @@ type TypeHandle<T extends TypeOutput, Defs extends Record<string, AnyTypeOutput>
   node(id: string): EntityRef<T, Defs>;
 };
 
-export type NamespaceClient<T extends Record<string, AnyTypeOutput>> = {
+export type NamespaceClient<
+  T extends Record<string, AnyTypeOutput>,
+  Defs extends Record<string, AnyTypeOutput> = T,
+> = {
   [K in keyof T as T[K] extends { kind: "entity" } ? K : never]: TypeHandle<
     Extract<T[K], { kind: "entity" }>,
-    AllDefs<T>
+    Defs
   >;
 };
 
@@ -956,7 +1070,7 @@ export function collectScalarCodecs(
   namespace: Record<string, AnyTypeOutput>,
 ): Map<string, ScalarTypeOutput<any>> {
   const out = new Map<string, ScalarTypeOutput<any>>();
-  const combined = [...Object.values(core), ...Object.values(namespace)];
+  const combined = Object.values(namespace);
   for (const typeDef of combined) {
     if (!isScalarType(typeDef)) continue;
     out.set(typeDef.values.key, typeDef);
@@ -969,7 +1083,7 @@ export function collectTypeIndex(
   namespace: Record<string, AnyTypeOutput>,
 ): Map<string, AnyTypeOutput> {
   const out = new Map<string, AnyTypeOutput>();
-  const combined = [...Object.values(core), ...Object.values(namespace)];
+  const combined = Object.values(namespace);
   for (const typeDef of combined) {
     out.set(typeDef.values.key, typeDef);
     out.set(typeId(typeDef), typeDef);
@@ -982,7 +1096,7 @@ export function collectEnumValueIds(
   typeByKey: Map<string, AnyTypeOutput>,
 ): Map<string, Set<string>> {
   const out = new Map<string, Set<string>>();
-  const combined = [...Object.values(core), ...Object.values(namespace)];
+  const combined = Object.values(namespace);
   for (const typeDef of combined) {
     if (!isEnumType(typeDef)) continue;
     const allowed = new Set<string>();

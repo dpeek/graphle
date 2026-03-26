@@ -1,18 +1,17 @@
 import { describe, expect, it } from "bun:test";
 
 import {
-  edgeId,
   fieldGroupFieldTree,
   fieldGroupId,
   fieldGroupKey,
   fieldGroupPath,
   fieldGroupSubjectId,
-  fieldTreeId,
   isFieldGroupRef,
   type EntityRef,
   type FieldGroupRef,
   type PredicateRef,
-} from "@io/core/graph";
+} from "@io/graph-client";
+import { edgeId, fieldTreeId } from "@io/graph-kernel";
 
 import { createTestGraph, testDefs, testNamespace } from "./test-graph.js";
 

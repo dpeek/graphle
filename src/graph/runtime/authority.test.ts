@@ -3,6 +3,7 @@ import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
+import { createBootstrappedSnapshot, createTypeClient } from "@io/graph-client";
 import {
   createGraphWriteTransactionFromSnapshots,
   type AuthoritativeGraphWriteResult,
@@ -24,8 +25,6 @@ import {
   validateAuthoritativeTotalSyncPayload,
 } from "./authority";
 import { authorizeRead } from "./authorization";
-import { createBootstrappedSnapshot } from "./bootstrap";
-import { createTypeClient } from "./client";
 import type { AuthorizationContext } from "./contracts";
 import { core } from "./core";
 import { createIdMap, applyIdMap } from "./identity";
@@ -70,6 +69,8 @@ const testGraph = applyIdMap(createIdMap({ item }).map, { item });
 const visibilityGraph = applyIdMap(createIdMap({ visibilityProbe }).map, {
   visibilityProbe,
 });
+const testDefs = { ...core, ...testGraph } as const;
+const visibilityDefs = { ...core, ...visibilityGraph } as const;
 const visibilityProbeMemberNotePredicateId = edgeId(visibilityProbe.fields.memberNote);
 const visibilityProbeMemberNotePolicy = fieldPolicyDescriptor(visibilityProbe.fields.memberNote);
 if (!visibilityProbeMemberNotePolicy) {
@@ -99,6 +100,7 @@ const hiddenCursorNamespace = applyIdMap(createIdMap({ hiddenCursorProbe }).map,
   hiddenCursorProbe,
 });
 const hiddenCursorGraph = { ...core, ...hiddenCursorNamespace } as const;
+const kitchenSinkDefs = { ...core, ...kitchenSink } as const;
 
 function createAuthorizationContext(
   overrides: Partial<AuthorizationContext> = {},
@@ -177,15 +179,15 @@ function createItemNameWriteTransaction(
 }
 
 function createTestGraphStore() {
-  return createStore(createBootstrappedSnapshot(testGraph));
+  return createStore(createBootstrappedSnapshot(testDefs));
 }
 
 function createKitchenSinkStore() {
-  return createStore(createBootstrappedSnapshot(kitchenSink));
+  return createStore(createBootstrappedSnapshot(kitchenSinkDefs));
 }
 
 function createVisibilityStore() {
-  return createStore(createBootstrappedSnapshot(visibilityGraph));
+  return createStore(createBootstrappedSnapshot(visibilityDefs));
 }
 
 function createHiddenCursorStore() {
@@ -324,7 +326,7 @@ describe("persisted authoritative graph", () => {
   it("loads a legacy snapshot file, rewrites the persisted format, and preserves snapshot data", async () => {
     const snapshotPath = await createTempSnapshotPath();
     const store = createTestGraphStore();
-    const graph = createTypeClient(store, testGraph);
+    const graph = createTypeClient(store, testGraph, testDefs);
 
     graph.item.create({ name: "Persisted Only Item" });
     await writeFile(snapshotPath, JSON.stringify(store.snapshot(), null, 2) + "\n", "utf8");
@@ -349,7 +351,7 @@ describe("persisted authoritative graph", () => {
   it("normalizes legacy persisted write history entries to client-tx before rewrite", async () => {
     const snapshotPath = await createTempSnapshotPath();
     const store = createTestGraphStore();
-    const graph = createTypeClient(store, testGraph);
+    const graph = createTypeClient(store, testGraph, testDefs);
     const itemId = graph.item.create({ name: "Legacy Scoped Item" });
     const writes = createAuthoritativeGraphWriteSession(store, testGraph, {
       cursorPrefix: "persisted:legacy-scope:",
@@ -858,7 +860,7 @@ describe("persisted authoritative graph", () => {
   it("falls back to a reset when persisted write history cannot be replayed", async () => {
     const snapshotPath = await createTempSnapshotPath();
     const store = createTestGraphStore();
-    const graph = createTypeClient(store, testGraph);
+    const graph = createTypeClient(store, testGraph, testDefs);
 
     const itemId = graph.item.create({ name: "Broken History Item" });
     const brokenResult: AuthoritativeGraphWriteResult = {
@@ -914,7 +916,7 @@ describe("persisted authoritative graph", () => {
 
   it("filters authority-only predicates from total sync snapshots", () => {
     const store = createKitchenSinkStore();
-    const graph = createTypeClient(store, kitchenSink);
+    const graph = createTypeClient(store, kitchenSink, kitchenSinkDefs);
 
     const secretId = graph.secret.create({
       name: "Primary API secret",
@@ -951,7 +953,7 @@ describe("persisted authoritative graph", () => {
 
   it("omits hidden-only incremental writes while still advancing the cursor", () => {
     const store = createKitchenSinkStore();
-    const graph = createTypeClient(store, kitchenSink);
+    const graph = createTypeClient(store, kitchenSink, kitchenSinkDefs);
 
     const secretId = graph.secret.create({
       name: "Primary API secret",
@@ -986,7 +988,7 @@ describe("persisted authoritative graph", () => {
 
   it("keeps visible incremental writes even when hidden writes are skipped", () => {
     const store = createKitchenSinkStore();
-    const graph = createTypeClient(store, kitchenSink);
+    const graph = createTypeClient(store, kitchenSink, kitchenSinkDefs);
 
     const secretId = graph.secret.create({
       name: "Primary API secret",
@@ -1075,7 +1077,7 @@ describe("persisted authoritative graph", () => {
     ).toBe(false);
 
     const mutationStore = createStore(authority.store.snapshot());
-    const mutationGraph = createTypeClient(mutationStore, visibilityGraph);
+    const mutationGraph = createTypeClient(mutationStore, visibilityGraph, visibilityDefs);
     const before = mutationStore.snapshot();
     const probeId = mutationGraph.visibilityProbe.create({
       memberNote: "Incremental note",

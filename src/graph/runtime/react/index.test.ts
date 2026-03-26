@@ -1,14 +1,8 @@
 import { describe, expect, it } from "bun:test";
 
-import {
-  GraphValidationError,
-  bootstrap,
-  createIdMap,
-  createStore,
-  createTypeClient,
-  applyIdMap,
-  defineType,
-} from "../../index.js";
+import { createTypeClient, GraphValidationError } from "@io/graph-client";
+
+import { bootstrap, createIdMap, createStore, applyIdMap, defineType } from "../../index.js";
 import { core } from "../../modules/index.js";
 import {
   createWebFieldResolver,
@@ -26,12 +20,13 @@ const item = defineType({
 });
 
 const itemNamespace = applyIdMap(createIdMap({ item }).map, { item });
+const itemDefinitions = { ...core, ...itemNamespace } as const;
 
 function createNameRef() {
   const store = createStore();
   bootstrap(store, core);
   bootstrap(store, itemNamespace);
-  const graph = createTypeClient(store, itemNamespace);
+  const graph = createTypeClient(store, itemNamespace, itemDefinitions);
   const itemId = graph.item.create({ name: "Probe item" });
   return { itemId, nameRef: graph.item.ref(itemId).fields.name };
 }

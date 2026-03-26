@@ -1,4 +1,4 @@
-import { GraphValidationError, type GraphMutationValidationResult } from "../../index.js";
+import { GraphValidationError, type GraphMutationValidationResult } from "@io/graph-client";
 
 export type MutationValidation = GraphMutationValidationResult | false;
 

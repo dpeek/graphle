@@ -1,9 +1,10 @@
 import { describe, expect, it } from "bun:test";
 
+import { createTypeClient } from "@io/graph-client";
+
 import { graphIconSeeds } from "../modules/core/icon/seed.js";
 import { pkm } from "../modules/pkm.js";
 import { bootstrap } from "./bootstrap";
-import { createTypeClient } from "./client";
 import { core } from "./core";
 import { edgeId, typeId } from "./schema";
 import { createStore } from "./store";

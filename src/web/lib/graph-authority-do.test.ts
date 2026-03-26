@@ -6,7 +6,6 @@ import {
   createIdMap,
   createPersistedAuthoritativeGraph,
   createStore,
-  createTypeClient,
   applyIdMap,
   defineSecretField,
   defineType,
@@ -14,7 +13,6 @@ import {
   type AuthSubjectRef,
   type AnyTypeOutput,
   type AuthorizationContext,
-  type NamespaceClient,
   type PersistedAuthoritativeGraphStorage,
   type GraphStoreSnapshot,
 } from "@io/core/graph";
@@ -26,6 +24,7 @@ import {
   workflowReviewSyncScopeRequest,
 } from "@io/core/graph/modules/ops/workflow";
 import { pkm } from "@io/core/graph/modules/pkm";
+import { createTypeClient, type NamespaceClient } from "@io/graph-client";
 import {
   type AuthoritativeGraphRetainedHistoryPolicy,
   type GraphWriteTransaction,

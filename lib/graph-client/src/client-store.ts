@@ -1,4 +1,6 @@
 import type { GraphStore } from "@io/graph-kernel";
+import { edgeId, typeId } from "@io/graph-kernel";
+import type { AnyTypeOutput, EdgeOutput, ScalarTypeOutput, TypeOutput } from "@io/graph-kernel";
 
 import {
   clearFieldValue,
@@ -11,9 +13,6 @@ import {
   setNestedValue,
   type EntityOfType,
 } from "./client-core";
-import { core } from "./core";
-import { edgeId, typeId } from "./schema";
-import type { AnyTypeOutput, EdgeOutput, ScalarTypeOutput, TypeOutput } from "./schema";
 
 export function assertOne(
   store: GraphStore,
@@ -50,13 +49,13 @@ export function commitCreateEntity<T extends TypeOutput>(
   id: string,
   typeDef: T,
   input: Record<string, unknown>,
+  nodeTypePredicate: EdgeOutput,
   scalarByKey: Map<string, ScalarTypeOutput<any>>,
   typeByKey: Map<string, AnyTypeOutput>,
   enumValuesByRange: Map<string, Set<string>>,
 ): string {
   return store.batch(() => {
     const entries = flattenPredicates(typeDef.fields);
-    const nodeTypePredicate = core.node.fields.type as EdgeOutput;
     store.assert(id, edgeId(nodeTypePredicate), typeId(typeDef));
 
     for (const entry of entries) {

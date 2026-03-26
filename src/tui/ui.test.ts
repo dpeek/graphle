@@ -1,6 +1,11 @@
-import { expect, test } from "bun:test";
+import {
+  expect,
+  test } from "bun:test";
 
-import { bootstrap, createStore, createTypeClient } from "@io/core/graph";
+import { bootstrap,
+  createStore,
+} from "@io/core/graph";
+import { createTypeClient } from "@io/graph-client";
 import { createTestRenderer } from "@opentui/core/testing";
 import { act } from "react";
 

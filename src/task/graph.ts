@@ -1,9 +1,11 @@
+import { createHttpGraphClient } from "@io/graph-client";
+import { core } from "@io/core/graph/modules";
 import { pkm } from "@io/core/graph/modules/pkm";
 
-import { createHttpGraphClient } from "../graph/runtime/index.js";
-
 export async function run() {
-  const client = await createHttpGraphClient(pkm);
+  const client = await createHttpGraphClient(pkm, {
+    definitions: { ...core, ...pkm },
+  });
   const documents = await client.graph.document.query({
     select: {
       description: true,

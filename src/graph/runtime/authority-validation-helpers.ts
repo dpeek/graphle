@@ -1,3 +1,4 @@
+import type { GraphValidationIssue, GraphValidationResult } from "@io/graph-client";
 import {
   cloneAuthoritativeGraphWriteResult,
   cloneGraphWriteTransaction,
@@ -10,8 +11,6 @@ import {
   type IncrementalSyncResult,
   type TotalSyncPayload,
 } from "@io/graph-sync";
-
-import type { GraphValidationIssue, GraphValidationResult } from "./client";
 
 const totalSyncPayloadValidationKey = "$sync:payload";
 const incrementalSyncValidationKey = "$sync:incremental";

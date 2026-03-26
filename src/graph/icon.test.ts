@@ -1,15 +1,9 @@
 import { describe, expect, it } from "bun:test";
 
-import {
-  bootstrap,
-  createStore,
-  createTypeClient,
-  GraphValidationError,
-  sanitizeSvgMarkup,
-  typeId,
-} from "@io/core/graph";
+import { bootstrap, createStore, sanitizeSvgMarkup, typeId } from "@io/core/graph";
 import { core, graphIconSeeds } from "@io/core/graph/modules";
 import { pkm } from "@io/core/graph/modules/pkm";
+import { createTypeClient, GraphValidationError } from "@io/graph-client";
 
 function createGraph() {
   const store = createStore();

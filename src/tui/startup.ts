@@ -1,6 +1,6 @@
+import { defaultHttpGraphUrl } from "@io/graph-client";
 import type { Workflow } from "../agent/types.js";
 import { workflowReviewSyncScopeRequest } from "../graph/modules/ops/workflow/projection.js";
-import { defaultHttpGraphUrl } from "../graph/runtime/http-client.js";
 
 export interface WorkflowTuiStartupCliOverrides {
   branchId?: string;

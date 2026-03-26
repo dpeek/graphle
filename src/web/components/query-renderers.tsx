@@ -1,6 +1,6 @@
 "use client";
 
-import type { QueryResultItem, QueryResultPage, ReadQuery } from "@io/core/graph";
+import type { QueryResultItem, QueryResultPage, ReadQuery } from "@io/graph-client";
 import { Badge } from "@io/web/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@io/web/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@io/web/table";

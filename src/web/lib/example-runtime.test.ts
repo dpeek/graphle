@@ -1,7 +1,8 @@
 import { describe, expect, it, setDefaultTimeout } from "bun:test";
 
-import { GraphValidationError, edgeId } from "@io/core/graph";
+import { edgeId } from "@io/core/graph";
 import { pkm } from "@io/core/graph/modules/pkm";
+import { GraphValidationError } from "@io/graph-client";
 import { type GraphWriteTransaction } from "@io/graph-kernel";
 
 import { createWorkflowProjectionIndex } from "../../graph/modules/ops/workflow/query.js";

@@ -1,9 +1,9 @@
-import { type NamespaceClient } from "@io/core/graph";
 import { core } from "@io/core/graph/modules";
 import { ops } from "@io/core/graph/modules/ops";
 import { pkm } from "@io/core/graph/modules/pkm";
+import { type NamespaceClient } from "@io/graph-client";
 
-const exampleGraph = { ...pkm, ...ops } as const;
+const exampleGraph = { ...core, ...pkm, ...ops } as const;
 
 function resolvedEnumValue(value: { key: string; id?: string }): string {
   return value.id ?? value.key;
@@ -35,9 +35,7 @@ export type ExampleGraphIds = {
   readonly workflowRepository: string;
 };
 
-export function seedExampleGraph(
-  graph: NamespaceClient<typeof exampleGraph & Pick<typeof core, "tag">>,
-): ExampleGraphIds {
+export function seedExampleGraph(graph: NamespaceClient<typeof exampleGraph>): ExampleGraphIds {
   const graphTag = resolveEntityId(
     graph.tag.list().find((tag) => tag.key === "graph"),
     () =>

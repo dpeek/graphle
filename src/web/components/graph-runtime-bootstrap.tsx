@@ -1,15 +1,16 @@
 "use client";
 
+import { core } from "@io/core/graph/modules";
 import { ops } from "@io/core/graph/modules/ops";
 import { pkm } from "@io/core/graph/modules/pkm";
+import { GraphMutationRuntimeProvider } from "@io/core/graph/runtime/react";
 import {
   applyHttpSyncRequest,
   createHttpGraphClient,
   createHttpGraphTxIdFactory,
   defaultHttpGraphUrl,
   type SyncedTypeClient,
-} from "@io/core/graph/runtime";
-import { GraphMutationRuntimeProvider } from "@io/core/graph/runtime/react";
+} from "@io/graph-client";
 import { graphSyncScope, type SyncScopeRequest } from "@io/graph-sync";
 import { Button } from "@io/web/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@io/web/card";
@@ -19,7 +20,7 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from "
 const syncUrl = "/api/sync";
 const transactionUrl = "/api/tx";
 
-const graphSchema = { ...pkm, ...ops } as const;
+const graphSchema = { ...core, ...pkm, ...ops } as const;
 
 export type GraphRuntime = SyncedTypeClient<typeof graphSchema>;
 

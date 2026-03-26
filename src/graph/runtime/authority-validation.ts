@@ -1,4 +1,10 @@
 import {
+  GraphValidationError,
+  validateGraphStore,
+  type GraphValidationIssue,
+  type GraphValidationResult,
+} from "@io/graph-client";
+import {
   cloneAuthoritativeGraphRetainedHistoryPolicy,
   cloneAuthoritativeGraphWriteResult,
   cloneGraphWriteTransaction,
@@ -56,12 +62,7 @@ import {
   prefixIncrementalSyncTransactionIssues,
   withValidationValue,
 } from "./authority-validation-helpers";
-import {
-  GraphValidationError,
-  validateGraphStore,
-  type GraphValidationIssue,
-  type GraphValidationResult,
-} from "./client";
+import { core } from "./core";
 import type { AnyTypeOutput } from "./schema";
 import { createStore, type GraphStore, type GraphStoreSnapshot } from "./store";
 
@@ -95,6 +96,12 @@ function normalizeTransactionValidationResult(result: {
       createTransactionValidationIssue(issue.path, issue.code, issue.message),
     ),
   );
+}
+
+function resolveAuthorityDefinitions<const T extends Record<string, AnyTypeOutput>>(
+  namespace: T,
+): typeof core & T {
+  return { ...core, ...namespace } as typeof core & T;
 }
 
 function materializeSyncScope(scope: unknown): SyncScope {
@@ -1186,13 +1193,14 @@ export function validateAuthoritativeTotalSyncPayload<
     preserveSnapshot?: GraphStoreSnapshot;
   } = {},
 ): GraphValidationResult<TotalSyncPayload> {
+  const definitions = resolveAuthorityDefinitions(namespace);
   const prepared = prepareTotalSyncPayload(payload, options);
   if (!prepared.ok) return prepared.result;
 
   const materialized = prepared.value;
   const validationStore = createStore(materialized.snapshot);
   return exposeTotalSyncValidationResult(
-    withValidationValue(validateGraphStore(validationStore, namespace), materialized),
+    withValidationValue(validateGraphStore(validationStore, definitions), materialized),
   );
 }
 
@@ -1206,6 +1214,7 @@ export function validateAuthoritativeGraphWriteTransaction<
     writeScope?: AuthoritativeWriteScope;
   } = {},
 ): GraphValidationResult<GraphWriteTransaction> {
+  const definitions = resolveAuthorityDefinitions(namespace);
   const prepared = prepareGraphWriteTransaction(transaction);
   if (!prepared.ok) {
     return exposeGraphWriteValidationResult(normalizeTransactionValidationResult(prepared.result));
@@ -1220,7 +1229,7 @@ export function validateAuthoritativeGraphWriteTransaction<
   const writePolicyIssues = validateAuthoritativeFieldWritePolicies(
     prepared.value,
     materialized.value,
-    namespace,
+    definitions,
     options.writeScope ?? "client-tx",
   );
   if (writePolicyIssues.length > 0) {
@@ -1231,7 +1240,7 @@ export function validateAuthoritativeGraphWriteTransaction<
 
   const validationStore = createStore(materialized.value);
   return exposeGraphWriteValidationResult(
-    withValidationValue(validateGraphStore(validationStore, namespace), prepared.value),
+    withValidationValue(validateGraphStore(validationStore, definitions), prepared.value),
   );
 }
 
@@ -1242,6 +1251,7 @@ export function validateAuthoritativeGraphWriteResult<
   store: GraphStore,
   namespace: T,
 ): GraphValidationResult<AuthoritativeGraphWriteResult> {
+  const definitions = resolveAuthorityDefinitions(namespace);
   const prepared = prepareAuthoritativeGraphWriteResult(result);
   if (!prepared.ok) return prepared.result;
 
@@ -1259,7 +1269,7 @@ export function validateAuthoritativeGraphWriteResult<
 
   const validationStore = createStore(materialized.value);
   return exposeGraphWriteResultValidationResult(
-    withValidationValue(validateGraphStore(validationStore, namespace), prepared.value),
+    withValidationValue(validateGraphStore(validationStore, definitions), prepared.value),
   );
 }
 

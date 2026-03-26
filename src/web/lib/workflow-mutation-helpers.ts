@@ -1,9 +1,4 @@
-import {
-  edgeId,
-  type NamespaceClient,
-  type GraphStore,
-  type GraphStoreSnapshot,
-} from "@io/core/graph";
+import { edgeId, type GraphStore, type GraphStoreSnapshot } from "@io/core/graph";
 import { core } from "@io/core/graph/modules";
 import { ops } from "@io/core/graph/modules/ops";
 import {
@@ -19,6 +14,7 @@ import {
   type WorkflowMutationSummary,
 } from "@io/core/graph/modules/ops/workflow";
 import { pkm } from "@io/core/graph/modules/pkm";
+import { type NamespaceClient } from "@io/graph-client";
 import { type GraphWriteTransaction } from "@io/graph-kernel";
 
 import { planRecordedMutation } from "./mutation-planning.js";

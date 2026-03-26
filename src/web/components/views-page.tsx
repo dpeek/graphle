@@ -1,14 +1,6 @@
 "use client";
 
-import {
-  bootstrap,
-  createIdMap,
-  createStore,
-  createTypeClient,
-  applyIdMap,
-  serializedQueryVersion,
-  type PredicateRef,
-} from "@io/core/graph";
+import { bootstrap, createIdMap, createStore, applyIdMap } from "@io/core/graph";
 import {
   PredicateFieldEditor,
   PredicateFieldView,
@@ -22,6 +14,7 @@ import {
   getPredicateEditorKind,
   usePredicateField,
 } from "@io/core/graph/runtime/react";
+import { createTypeClient, serializedQueryVersion, type PredicateRef } from "@io/graph-client";
 import { Badge } from "@io/web/badge";
 import { Button } from "@io/web/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@io/web/card";

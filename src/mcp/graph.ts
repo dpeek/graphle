@@ -2,16 +2,11 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import * as z from "zod/v4";
 
-import { GraphValidationError, isEntityType, type AnyTypeOutput } from "../graph/index.js";
+import { GraphSyncWriteError, GraphValidationError, createHttpGraphClient, defaultHttpGraphUrl, type FetchImpl, type SyncedTypeClient } from "@io/graph-client";
+import { isEntityType, type AnyTypeOutput } from "@io/graph-kernel";
+import { core } from "../graph/modules/index.js";
 import { ops } from "../graph/modules/ops.js";
 import { pkm } from "../graph/modules/pkm.js";
-import {
-  GraphSyncWriteError,
-  createHttpGraphClient,
-  defaultHttpGraphUrl,
-  type FetchImpl,
-  type SyncedTypeClient,
-} from "../graph/runtime/index.js";
 import {
   GraphMcpToolError,
   buildSelectionFromPaths,
@@ -141,6 +136,7 @@ export type GraphMcpSession = {
 };
 
 const graphNamespace = { ...pkm, ...ops } as const;
+const graphDefinitions = { ...core, ...graphNamespace } as const;
 
 function getGraphMcpSessionMetadata(namespace: GraphMcpNamespace): GraphMcpSessionMetadata {
   const cached = graphMcpSessionMetadataCache.get(namespace);
@@ -445,6 +441,7 @@ export async function createGraphMcpSession(
   const createClient = async () =>
     (await createHttpGraphClient(namespace, {
       bearerToken: options.bearerToken,
+      definitions: namespace === graphNamespace ? graphDefinitions : { ...core, ...namespace },
       fetch: options.fetch,
       url: baseUrl,
     })) as SyncedTypeClient<GraphMcpNamespace>;

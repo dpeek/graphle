@@ -1,8 +1,10 @@
 import type { GraphStore } from "@io/graph-kernel";
+import type { AnyTypeOutput, ScalarTypeOutput, TypeOutput } from "@io/graph-kernel";
 
 import {
   assertValidResult,
   getStableCreateNodeId,
+  requireGraphClientCoreSchema,
   type CreateInputOfType,
   type EntityOfType,
 } from "./client-core";
@@ -12,7 +14,6 @@ import {
   validateCreateEntity,
   validateUpdateEntity,
 } from "./client-validation";
-import type { AnyTypeOutput, ScalarTypeOutput, TypeOutput } from "./schema";
 
 export function createEntityAtId<T extends TypeOutput>(
   store: GraphStore,
@@ -24,6 +25,7 @@ export function createEntityAtId<T extends TypeOutput>(
   enumValuesByRange: Map<string, Set<string>>,
   namespace: Record<string, AnyTypeOutput>,
 ): string {
+  const coreSchema = requireGraphClientCoreSchema(namespace);
   const validation = validateCreateEntity(
     store,
     typeDef,
@@ -40,6 +42,7 @@ export function createEntityAtId<T extends TypeOutput>(
     id,
     typeDef,
     validation.value,
+    coreSchema.node.fields.type,
     scalarByKey,
     typeByKey,
     enumValuesByRange,

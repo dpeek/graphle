@@ -1,16 +1,14 @@
-import {
-  createIdMap,
-  createBootstrappedSnapshot,
-  applyIdMap,
-  defineType,
-  createStore,
-  createTypeClient,
-} from "@io/core/graph";
+import { createIdMap, applyIdMap, defineType, createStore } from "@io/core/graph";
 import { createAuthoritativeGraphWriteSession } from "@io/core/graph/authority";
 import { core } from "@io/core/graph/modules";
 import { ops } from "@io/core/graph/modules/ops";
 import { pkm } from "@io/core/graph/modules/pkm";
-import { createSyncedTypeClient, type SyncedTypeClient } from "@io/core/graph/runtime";
+import {
+  createBootstrappedSnapshot,
+  createSyncedTypeClient,
+  createTypeClient,
+  type SyncedTypeClient,
+} from "@io/graph-client";
 import {
   type AuthoritativeGraphRetainedHistoryPolicy,
   type AuthoritativeGraphWriteResult,

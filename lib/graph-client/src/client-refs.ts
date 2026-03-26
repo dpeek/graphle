@@ -1,4 +1,12 @@
 import type { GraphStore } from "@io/graph-kernel";
+import { edgeId, isEntityType } from "@io/graph-kernel";
+import type {
+  AnyTypeOutput,
+  EdgeOutput,
+  FieldsOutput,
+  ScalarTypeOutput,
+  TypeOutput,
+} from "@io/graph-kernel";
 
 import { deleteEntity, updateEntity } from "./client-actions";
 import {
@@ -11,8 +19,10 @@ import {
   isEdgeOutput,
   isTree,
   readPredicateValue,
+  requireGraphClientCoreSchema,
   sameLogicalValue,
   setNestedValue,
+  type GraphClientCoreSchema,
   type CreateInputOfType,
   type EntityLookup,
   type EntityOfType,
@@ -33,14 +43,6 @@ import {
   prepareDeleteEntity,
   validateUpdateEntity,
 } from "./client-validation";
-import { edgeId, isEntityType } from "./schema";
-import type {
-  AnyTypeOutput,
-  EdgeOutput,
-  FieldsOutput,
-  ScalarTypeOutput,
-  TypeOutput,
-} from "./schema";
 
 function createPredicateRef<T extends EdgeOutput, Defs extends Record<string, AnyTypeOutput>>(
   store: GraphStore,
@@ -53,6 +55,7 @@ function createPredicateRef<T extends EdgeOutput, Defs extends Record<string, An
   scalarByKey: Map<string, ScalarTypeOutput<any>>,
   typeByKey: Map<string, AnyTypeOutput>,
   enumValuesByRange: Map<string, Set<string>>,
+  coreSchema: GraphClientCoreSchema,
   entityLookup: EntityLookup<Defs>,
 ): PredicateRef<T, Defs> {
   const base = {
@@ -132,6 +135,7 @@ function createPredicateRef<T extends EdgeOutput, Defs extends Record<string, An
           scalarByKey,
           typeByKey,
           enumValuesByRange,
+          coreSchema,
         );
         return exposeMutationValidationResult(validateMutation(planned.validationValues));
       },
@@ -146,6 +150,7 @@ function createPredicateRef<T extends EdgeOutput, Defs extends Record<string, An
           scalarByKey,
           typeByKey,
           enumValuesByRange,
+          coreSchema,
         );
         if (!sameLogicalValue(planned.validationValues, planned.nextValues)) {
           assertValidResult(validateMutation(planned.validationValues));
@@ -211,6 +216,7 @@ function buildFieldRefs<T extends FieldsOutput, Defs extends Record<string, AnyT
   scalarByKey: Map<string, ScalarTypeOutput<any>>,
   typeByKey: Map<string, AnyTypeOutput>,
   enumValuesByRange: Map<string, Set<string>>,
+  coreSchema: GraphClientCoreSchema,
   entityLookup: EntityLookup<Defs>,
 ): FieldGroupRef<T, Defs> {
   const out: Record<string, unknown> = {};
@@ -236,6 +242,7 @@ function buildFieldRefs<T extends FieldsOutput, Defs extends Record<string, AnyT
         scalarByKey,
         typeByKey,
         enumValuesByRange,
+        coreSchema,
         entityLookup,
       );
       continue;
@@ -251,6 +258,7 @@ function buildFieldRefs<T extends FieldsOutput, Defs extends Record<string, AnyT
         scalarByKey,
         typeByKey,
         enumValuesByRange,
+        coreSchema,
         entityLookup,
       );
     }
@@ -269,6 +277,7 @@ export function createEntityRef<T extends TypeOutput, Defs extends Record<string
   enumValuesByRange: Map<string, Set<string>>,
   entityLookup: EntityLookup<Defs>,
 ): EntityRef<T, Defs> {
+  const coreSchema = requireGraphClientCoreSchema(namespace);
   const applyMutation = (
     path: string[],
     fieldName: string,
@@ -310,6 +319,7 @@ export function createEntityRef<T extends TypeOutput, Defs extends Record<string
       scalarByKey,
       typeByKey,
       enumValuesByRange,
+      coreSchema,
       entityLookup,
     ) as RefTree<T["fields"], Defs>,
     get() {

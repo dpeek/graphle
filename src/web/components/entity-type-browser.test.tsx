@@ -1,9 +1,10 @@
 import { describe, expect, it } from "bun:test";
 
-import { bootstrap, createStore, createTypeClient, typeId } from "@io/core/graph";
+import { bootstrap, createStore, typeId } from "@io/core/graph";
 import { core } from "@io/core/graph/modules";
 import { ops } from "@io/core/graph/modules/ops";
 import { pkm } from "@io/core/graph/modules/pkm";
+import { createTypeClient } from "@io/graph-client";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { EntityTypeBrowserSurface } from "./entity-type-browser.js";

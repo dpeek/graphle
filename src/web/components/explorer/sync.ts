@@ -1,4 +1,4 @@
-import { GraphValidationError } from "@io/core/graph";
+import { GraphValidationError } from "@io/graph-client";
 import { createContext, useEffect, useState } from "react";
 
 import type { ExplorerSync, ExplorerSyncSnapshot } from "./model.js";

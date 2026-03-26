@@ -1,4 +1,5 @@
-import { GraphValidationError, typeId } from "@io/core/graph";
+import { typeId } from "@io/core/graph";
+import { GraphValidationError } from "@io/graph-client";
 import { Button } from "@io/web/button";
 import { DialogClose, DialogFooter, DialogHeader, DialogTitle } from "@io/web/dialog";
 import { XIcon } from "lucide-react";

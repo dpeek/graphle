@@ -1,16 +1,13 @@
+import { edgeId, type AnyTypeOutput, type Cardinality, typeId } from "@io/core/graph";
+import { core } from "@io/core/graph/modules";
+import { ops } from "@io/core/graph/modules/ops";
+import { pkm } from "@io/core/graph/modules/pkm";
 import {
-  edgeId,
-  type AnyTypeOutput,
-  type Cardinality,
   type EntityRef,
   type GraphMutationValidationResult,
   type NamespaceClient,
   type PredicateRef,
-  typeId,
-} from "@io/core/graph";
-import { core } from "@io/core/graph/modules";
-import { ops } from "@io/core/graph/modules/ops";
-import { pkm } from "@io/core/graph/modules/pkm";
+} from "@io/graph-client";
 
 import type { WriteSecretFieldInput, WriteSecretFieldResult } from "../../lib/secret-fields.js";
 import type { GraphRuntime } from "../graph-runtime-bootstrap.js";

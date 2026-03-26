@@ -1,10 +1,9 @@
+import { type PredicateRef } from "@io/graph-client";
+import { type AnyTypeOutput, type EdgeOutput } from "@io/graph-kernel";
 import type { ComponentType, ReactNode } from "react";
 
 import {
   isEnumType,
-  type AnyTypeOutput,
-  type EdgeOutput,
-  type PredicateRef,
   type ResolvedAnyTypeOutput,
   type TypeFilterOperator,
   typeId,

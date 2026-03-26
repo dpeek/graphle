@@ -2,7 +2,11 @@
 
 ## Purpose
 
-This document is the entry point for agents working on schema authoring, stable ids, bootstrap, or store behavior.
+This document is the entry point for agents working on schema authoring, stable
+ids, additive bootstrap, store behavior, or persisted authority helpers.
+Client-owned APIs such as `createTypeClient(...)`,
+`createSyncedTypeClient(...)`, `createHttpGraphClient(...)`, and
+`createBootstrappedSnapshot(...)` now live in `@io/graph-client`.
 
 ## Current Runtime Surface
 
@@ -67,12 +71,15 @@ The current implementation keeps ids stable per key and treats rename as an expl
   logical schema facts during sync and preserve-snapshot merges
 - runtime-created entities keep their ordinary lifecycle timestamps; bootstrap-owned timestamps are
   limited to schema entities and seed entities that bootstrap materializes itself
-- `createBootstrappedSnapshot(types?)` caches fully bootstrapped schema snapshots by namespace
-  object identity so fixture-heavy flows can clone schema state instead of rebuilding it
 - `core:type.icon` and `core:predicate.icon` track definition-level icons, with inferred defaults
   for enum types (`tag.svg`) and entity-reference predicates (`edge.svg`) before falling back to
   `unknown.svg`
 - schema itself is represented as graph data, not only TypeScript structure
+
+`../../lib/graph-client/src/bootstrap-snapshot.ts` now owns the client-safe
+`createBootstrappedSnapshot(...)` helper. It materializes a fully bootstrapped
+snapshot for local and synced clients without widening the shared runtime back
+into a client barrel.
 
 ### Authoritative persistence
 

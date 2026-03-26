@@ -1,13 +1,13 @@
 import {
   normalizeSerializedQueryRequest,
-  type QueryIdentityExecutionContext,
   SerializedQueryValidationError,
   validateSerializedQueryRequest,
+  type QueryIdentityExecutionContext,
   type QueryLiteral,
   type QueryResultPage,
   type ReadQuery,
   type SerializedQueryRequest,
-} from "@io/core/graph";
+} from "@io/graph-client";
 
 export const queryContainerPaginationModeValues = ["paged", "infinite"] as const;
 

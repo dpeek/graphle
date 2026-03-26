@@ -3,13 +3,13 @@ import { describe, expect, it } from "bun:test";
 
 import {
   createStore,
-  createTypeClient,
   type AuthorizationContext,
   type GraphStoreSnapshot,
   type WebPrincipalSummary,
 } from "@io/core/graph";
 import { core } from "@io/core/graph/modules";
 import { ops } from "@io/core/graph/modules/ops";
+import { createTypeClient } from "@io/graph-client";
 import { type GraphWriteTransaction } from "@io/graph-kernel";
 
 import { createAnonymousAuthorizationContext, issueBearerShareToken } from "../lib/auth-bridge.js";

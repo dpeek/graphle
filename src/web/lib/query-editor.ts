@@ -1,15 +1,15 @@
 import {
   normalizeSerializedQueryRequest,
   queryFilterOperatorValues,
-  queryParameterTypeValues,
   queryOrderDirectionValues,
+  queryParameterTypeValues,
   serializedQueryVersion,
   SerializedQueryValidationError,
   validateSerializedQueryRequest,
+  type NormalizedQueryRequest,
   type QueryFilter,
   type QueryFilterOperator,
   type QueryLiteral,
-  type NormalizedQueryRequest,
   type QueryOrderClause,
   type QueryOrderDirection,
   type QueryParameterDefinition,
@@ -18,7 +18,7 @@ import {
   type ReadQuery,
   type SerializedQueryNormalizationOptions,
   type SerializedQueryRequest,
-} from "@io/core/graph";
+} from "@io/graph-client";
 
 export const queryEditorFieldControlValues = [
   "enum",

@@ -1,10 +1,8 @@
 import { describe, expect, it } from "bun:test";
 
 import {
-  GraphValidationError,
   bootstrap,
   createStore,
-  createTypeClient,
   applyIdMap,
   defineScalar,
   defineType,
@@ -12,7 +10,7 @@ import {
 } from "@io/core/graph";
 import { createAuthoritativeGraphWriteSession } from "@io/core/graph/authority";
 import { core, stringTypeModule } from "@io/core/graph/modules";
-import { createSyncedTypeClient } from "@io/core/graph/runtime";
+import { createSyncedTypeClient, createTypeClient, GraphValidationError } from "@io/graph-client";
 import { createTotalSyncPayload } from "@io/graph-sync";
 
 import { testNamespace } from "./test-graph.js";
@@ -94,6 +92,7 @@ function createValidationLifecycleFixture() {
     },
     { strict: false },
   );
+  const definitions = { ...core, ...testNamespace, ...namespace } as const;
 
   function createGraph() {
     const store = createStore();
@@ -103,12 +102,13 @@ function createValidationLifecycleFixture() {
 
     return {
       store,
-      graph: createTypeClient(store, namespace),
+      graph: createTypeClient(store, namespace, definitions),
     };
   }
 
   return {
     createGraph,
+    definitions,
     fieldCalls,
     namespace,
     scalarCalls,
@@ -154,6 +154,7 @@ function createDeleteValidationLifecycleFixture() {
     },
     { strict: false },
   );
+  const definitions = { ...core, ...namespace } as const;
 
   function createGraph() {
     const store = createStore();
@@ -162,12 +163,13 @@ function createDeleteValidationLifecycleFixture() {
 
     return {
       store,
-      graph: createTypeClient(store, namespace),
+      graph: createTypeClient(store, namespace, definitions),
     };
   }
 
   return {
     createGraph,
+    definitions,
     namespace,
     relationshipCalls,
   };
@@ -340,6 +342,7 @@ describe("validation lifecycle contract", () => {
     server.store.assert(serverId, edgeId(fixture.namespace.reviewItem.fields.score), "Infinity");
 
     const client = createSyncedTypeClient(fixture.namespace, {
+      definitions: fixture.definitions,
       pull: () => createTotalSyncPayload(server.store, { cursor: "server:1" }),
     });
 
@@ -666,6 +669,7 @@ describe("validation lifecycle contract", () => {
     }
 
     const client = createSyncedTypeClient(fixture.namespace, {
+      definitions: fixture.definitions,
       pull: () => createTotalSyncPayload(server.store, { cursor: "server:1" }),
     });
 

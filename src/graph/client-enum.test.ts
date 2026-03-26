@@ -1,22 +1,19 @@
 import { describe, expect, it } from "bun:test";
 
-import {
-  GraphValidationError,
-  bootstrap,
-  createStore,
-  createTypeClient,
-  formatValidationPath,
-} from "@io/core/graph";
+import { bootstrap, createStore } from "@io/core/graph";
 import { core } from "@io/core/graph/modules";
+import { createTypeClient, GraphValidationError, formatValidationPath } from "@io/graph-client";
 
 import { kitchenSink } from "./testing/kitchen-sink.js";
+
+const kitchenSinkDefs = { ...core, ...kitchenSink } as const;
 
 describe("enum range client behavior", () => {
   it("accepts valid enum value ids", () => {
     const store = createStore();
     bootstrap(store, core);
     bootstrap(store, kitchenSink);
-    const graph = createTypeClient(store, kitchenSink);
+    const graph = createTypeClient(store, kitchenSink, kitchenSinkDefs);
 
     const id = graph.record.create({
       name: "Acme",
@@ -33,7 +30,7 @@ describe("enum range client behavior", () => {
     const store = createStore();
     bootstrap(store, core);
     bootstrap(store, kitchenSink);
-    const graph = createTypeClient(store, kitchenSink);
+    const graph = createTypeClient(store, kitchenSink, kitchenSinkDefs);
 
     let error: unknown;
     try {
@@ -71,7 +68,7 @@ describe("enum range client behavior", () => {
     const store = createStore();
     bootstrap(store, core);
     bootstrap(store, kitchenSink);
-    const graph = createTypeClient(store, kitchenSink);
+    const graph = createTypeClient(store, kitchenSink, kitchenSinkDefs);
     const id = graph.record.create({
       name: "Contract",
       headline: "KS-10",

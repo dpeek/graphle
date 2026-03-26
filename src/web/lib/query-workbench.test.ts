@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
-import { serializedQueryVersion, type SerializedQueryRequest } from "@io/core/graph";
+import { serializedQueryVersion, type SerializedQueryRequest } from "@io/graph-client";
 
 import { createQueryEditorDemoCatalog } from "../components/query-editor.js";
 import {

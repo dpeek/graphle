@@ -2,15 +2,15 @@
 
 import { expect, test } from "bun:test";
 
+import { createSyncedTypeClient, createTypeClient } from "@io/graph-client";
 import { createTotalSyncPayload } from "@io/graph-sync";
 import { createTestRenderer } from "@opentui/core/testing";
 import { createRoot, flushSync } from "@opentui/react";
 import { act } from "react";
 
-import { bootstrap, createStore, createTypeClient } from "../../index.js";
+import { bootstrap, createStore } from "../../index.js";
 import { core, ops, pkm } from "../../modules/index.js";
 import { useOptionalMutationRuntime } from "../../runtime/react/index.js";
-import { createSyncedTypeClient } from "../../runtime/synced-client.js";
 import {
   GraphRuntimeProvider,
   useGraphQuery,

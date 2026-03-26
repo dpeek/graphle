@@ -1,12 +1,16 @@
 import {
   cloneGraphWriteTransaction,
   createGraphWriteTransactionFromSnapshots,
+  createStore,
   type AuthoritativeGraphWriteResult,
   type GraphStore,
+  type GraphStoreSnapshot,
   type GraphWriteTransaction,
 } from "@io/graph-kernel";
+import type { AnyTypeOutput } from "@io/graph-kernel";
 import {
   cloneState as clonePackageSyncState,
+  applyGraphWriteTransaction,
   createTotalSyncSession,
   sameSyncActivity,
   sameSyncDiagnostics,
@@ -22,13 +26,8 @@ import {
   type SyncState as PackageSyncState,
   type SyncStatus as PackageSyncStatus,
 } from "@io/graph-sync";
-import { applyGraphWriteTransaction } from "@io/graph-sync";
 
-import {
-  createAuthoritativeGraphWriteResultValidator,
-  createAuthoritativeTotalSyncValidator,
-} from "./authority-validation";
-import { createBootstrappedSnapshot } from "./bootstrap";
+import { createBootstrappedSnapshot } from "./bootstrap-snapshot";
 import {
   GraphValidationError,
   createTypeClient,
@@ -37,9 +36,10 @@ import {
   type GraphValidationResult,
   type NamespaceClient,
 } from "./client";
-import { core } from "./core";
-import type { AnyTypeOutput } from "./schema";
-import { createStore, type GraphStoreSnapshot } from "./store";
+import {
+  createClientGraphWriteResultValidator,
+  createClientTotalSyncValidator,
+} from "./sync-validation";
 
 export type SyncStatus = PackageSyncStatus | "pushing";
 
@@ -63,9 +63,12 @@ export interface SyncedTypeSyncController {
   subscribe(listener: SyncStateListener): () => void;
 }
 
-export type SyncedTypeClient<T extends Record<string, AnyTypeOutput>> = {
+export type SyncedTypeClient<
+  TNamespace extends Record<string, AnyTypeOutput>,
+  TDefs extends Record<string, AnyTypeOutput> = TNamespace,
+> = {
   store: GraphStore;
-  graph: NamespaceClient<typeof core & T>;
+  graph: NamespaceClient<TNamespace, TDefs>;
   sync: SyncedTypeSyncController;
 };
 
@@ -129,29 +132,32 @@ function normalizeSessionError(error: unknown): unknown {
   return error;
 }
 
-export function createSyncedTypeClient<const T extends Record<string, AnyTypeOutput>>(
-  namespace: T,
+export function createSyncedTypeClient<
+  const TNamespace extends Record<string, AnyTypeOutput>,
+  const TDefs extends Record<string, AnyTypeOutput> = TNamespace,
+>(
+  namespace: TNamespace,
   options: {
     pull: SyncSource;
     push?: GraphWriteSink;
     createTxId?: () => string;
+    definitions?: TDefs;
     requestedScope?: SyncScopeRequest;
+    schemaSnapshot?: GraphStoreSnapshot;
   },
-): SyncedTypeClient<T> {
-  const schemaSnapshot = createBootstrappedSnapshot(namespace);
+): SyncedTypeClient<TNamespace, TDefs> {
+  const definitions = (options.definitions ?? (namespace as unknown as TDefs)) as TDefs;
+  const schemaSnapshot = options.schemaSnapshot ?? createBootstrappedSnapshot(definitions);
   const store = createStore(schemaSnapshot);
   const authoritativeStore = createStore(schemaSnapshot);
-  const rawGraph = createTypeClient(store, { ...core, ...namespace }) as NamespaceClient<
-    typeof core & T
-  >;
+  const rawGraph = createTypeClient(store, namespace, definitions);
   const session = createTotalSyncSession(authoritativeStore, {
     requestedScope: options.requestedScope,
     preserveSnapshot: schemaSnapshot,
-    validateTotalPayload: createAuthoritativeTotalSyncValidator(namespace),
-    validateWriteResult: createAuthoritativeGraphWriteResultValidator(
-      authoritativeStore,
-      namespace,
-    ),
+    validateTotalPayload: createClientTotalSyncValidator(definitions, {
+      preserveSnapshot: schemaSnapshot,
+    }),
+    validateWriteResult: createClientGraphWriteResultValidator(authoritativeStore, definitions),
   });
   let txSequence = 0;
   let pendingTransactions: GraphWriteTransaction[] = [];
@@ -233,7 +239,7 @@ export function createSyncedTypeClient<const T extends Record<string, AnyTypeOut
     for (const transaction of pendingTransactions) {
       applyGraphWriteTransaction(replayStore, transaction);
     }
-    const validation = validateGraphStore(replayStore, namespace);
+    const validation = validateGraphStore(replayStore, definitions);
     if (!validation.ok) throw new GraphValidationError(validation);
     return replayStore.snapshot();
   }
@@ -400,7 +406,7 @@ export function createSyncedTypeClient<const T extends Record<string, AnyTypeOut
       if (!isObjectRecord(value)) return value;
       return wrapTypeHandle(value);
     },
-  }) as NamespaceClient<typeof core & T>;
+  }) as NamespaceClient<TNamespace, TDefs>;
 
   session.subscribe(() => {
     publishState();

@@ -42,6 +42,7 @@
   },
   "dependencies": {
     "@base-ui/react": "^1.3.0",
+    "@io/graph-client": "workspace:*",
     "@io/graph-kernel": "workspace:*",
     "@io/graph-sync": "workspace:*",
     "@io/web": "workspace:*",

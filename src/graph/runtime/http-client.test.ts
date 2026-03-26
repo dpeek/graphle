@@ -1,6 +1,19 @@
 import { describe, expect, it } from "bun:test";
 
 import {
+  createHttpGraphClient,
+  createSyncedTypeClient,
+  defaultHttpGraphUrl,
+  defaultHttpSerializedQueryPath,
+  GraphValidationError,
+  HttpSerializedQueryClientError,
+  requestSerializedQuery,
+  serializedQueryVersion,
+  type FetchImpl,
+  type QueryResultPage,
+} from "@io/graph-client";
+import { createTypeClient } from "@io/graph-client";
+import {
   createGraphWriteTransactionFromSnapshots,
   type AuthoritativeGraphRetainedHistoryPolicy,
   type AuthoritativeGraphWriteResult,
@@ -20,21 +33,10 @@ import {
   createAuthoritativeGraphWriteSession,
 } from "./authority";
 import { bootstrap } from "./bootstrap";
-import { GraphValidationError, createTypeClient } from "./client";
 import { core } from "./core";
-import {
-  createHttpGraphClient,
-  defaultHttpGraphUrl,
-  defaultHttpSerializedQueryPath,
-  HttpSerializedQueryClientError,
-  requestSerializedQuery,
-  type FetchImpl,
-} from "./http-client";
 import { createIdMap, applyIdMap } from "./identity";
 import { defineType, edgeId, typeId } from "./schema";
-import { serializedQueryVersion, type QueryResultPage } from "./serialized-query";
 import { createStore, type GraphStoreSnapshot } from "./store";
-import { createSyncedTypeClient } from "./synced-client";
 
 const item = defineType({
   values: { key: "test:item", name: "Item" },
@@ -44,6 +46,7 @@ const item = defineType({
 });
 
 const testGraph = applyIdMap(createIdMap({ item }).map, { item });
+const testDefs = { ...core, ...testGraph } as const;
 
 const hiddenCursorProbe = defineType({
   values: { key: "test:hiddenCursorProbe", name: "Hidden Cursor Probe" },
@@ -73,7 +76,7 @@ function createAuthority() {
   const store = createStore();
   bootstrap(store, core);
   bootstrap(store, testGraph);
-  const graph = createTypeClient(store, testGraph);
+  const graph = createTypeClient(store, testGraph, testDefs);
   graph.item.create({ name: "Seeded item" });
   const writes = createAuthoritativeGraphWriteSession(store, testGraph, {
     cursorPrefix: "server:",
@@ -170,6 +173,7 @@ describe("createHttpGraphClient", () => {
     const fetch = createMockFetch(authority);
 
     const client = await createHttpGraphClient(testGraph, {
+      definitions: testDefs,
       fetch,
       createTxId: () => "cli:1",
     });
@@ -186,6 +190,7 @@ describe("createHttpGraphClient", () => {
     ]);
 
     const peer = await createHttpGraphClient(testGraph, {
+      definitions: testDefs,
       fetch,
       createTxId: () => "cli:2",
     });
@@ -227,6 +232,7 @@ describe("createHttpGraphClient", () => {
     const client = await createHttpGraphClient(testGraph, {
       bearerToken: "share-token",
       createTxId: () => "cli:auth:1",
+      definitions: testDefs,
       fetch,
     });
 
@@ -267,6 +273,7 @@ describe("createHttpGraphClient", () => {
     };
 
     const client = await createHttpGraphClient(testGraph, {
+      definitions: testDefs,
       fetch,
       createTxId: () => "cli:credentials:1",
     });
@@ -328,6 +335,7 @@ describe("createHttpGraphClient", () => {
     };
 
     const client = await createHttpGraphClient(testGraph, {
+      definitions: testDefs,
       fetch,
       requestedScope,
     });
@@ -405,6 +413,7 @@ describe("createHttpGraphClient", () => {
     };
 
     const scopedClient = await createHttpGraphClient(testGraph, {
+      definitions: testDefs,
       fetch,
       requestedScope,
     });
@@ -421,6 +430,7 @@ describe("createHttpGraphClient", () => {
     });
 
     const recovered = await createHttpGraphClient(testGraph, {
+      definitions: testDefs,
       fetch,
     });
 
@@ -667,6 +677,7 @@ describe("createHttpGraphClient", () => {
       };
 
       const client = await createHttpGraphClient(testGraph, {
+        definitions: testDefs,
         fetch,
       });
 
@@ -692,6 +703,7 @@ describe("createHttpGraphClient", () => {
       });
 
       const recovered = await createHttpGraphClient(testGraph, {
+        definitions: testDefs,
         fetch,
       });
 
@@ -731,6 +743,7 @@ describe("createHttpGraphClient", () => {
 
     const client = createSyncedTypeClient(pkm, {
       createTxId: () => "cli:1",
+      definitions: { ...core, ...pkm },
       pull: async () => payload,
     });
 

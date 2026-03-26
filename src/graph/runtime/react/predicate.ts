@@ -1,18 +1,17 @@
+import {
+  type EntityRef,
+  type PredicateRangeTypeOf,
+  type PredicateRef,
+  type PredicateValueOf,
+} from "@io/graph-client";
+import { isEntityType, isEnumType, type AnyTypeOutput, type EdgeOutput } from "@io/graph-kernel";
 import { useMemo, useRef, useSyncExternalStore } from "react";
 
 import {
   entityReferenceComboboxEditorKind,
   entityReferenceListDisplayKind,
-  isEntityType,
-  isEnumType,
-  type AnyTypeOutput,
-  type EdgeOutput,
   type EditorInputMode,
-  type EntityRef,
   type ExistingEntityReferencePolicy,
-  type PredicateRangeTypeOf,
-  type PredicateRef,
-  type PredicateValueOf,
 } from "../../index.js";
 
 export type PredicateFieldMeta<T extends EdgeOutput> = T extends { meta: infer Meta }
