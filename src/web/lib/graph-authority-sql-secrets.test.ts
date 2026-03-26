@@ -1,7 +1,7 @@
 import { Database } from "bun:sqlite";
 import { describe, expect, it } from "bun:test";
 
-import type { StoreSnapshot } from "@io/core/graph";
+import type { GraphStoreSnapshot } from "@io/core/graph";
 import { edgeId } from "@io/core/graph";
 import { core } from "@io/core/graph/modules";
 import { ops } from "@io/core/graph/modules/ops";
@@ -111,7 +111,7 @@ describe("graph-authority-sql-secrets", () => {
       "2026-03-26T00:00:00.000Z",
     );
 
-    const snapshot: StoreSnapshot = {
+    const snapshot: GraphStoreSnapshot = {
       edges: [
         {
           id: "edge:secret-live:type",

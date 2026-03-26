@@ -1,3 +1,5 @@
+import type { GraphStore } from "@io/graph-kernel";
+
 import {
   clearFieldValue,
   encodeForRange,
@@ -12,10 +14,9 @@ import {
 import { core } from "./core";
 import { edgeId, typeId } from "./schema";
 import type { AnyTypeOutput, EdgeOutput, ScalarTypeOutput, TypeOutput } from "./schema";
-import type { Store } from "./store";
 
 export function assertOne(
-  store: Store,
+  store: GraphStore,
   id: string,
   predicate: EdgeOutput,
   value: unknown,
@@ -28,7 +29,7 @@ export function assertOne(
 }
 
 export function assertMany(
-  store: Store,
+  store: GraphStore,
   id: string,
   predicate: EdgeOutput,
   values: unknown[],
@@ -40,12 +41,12 @@ export function assertMany(
     assertOne(store, id, predicate, value, scalarByKey, typeByKey, enumValuesByRange);
 }
 
-export function retractPredicateFacts(store: Store, id: string, predicate: EdgeOutput): void {
+export function retractPredicateFacts(store: GraphStore, id: string, predicate: EdgeOutput): void {
   for (const edge of store.facts(id, edgeId(predicate))) store.retract(edge.id);
 }
 
 export function commitCreateEntity<T extends TypeOutput>(
-  store: Store,
+  store: GraphStore,
   id: string,
   typeDef: T,
   input: Record<string, unknown>,
@@ -84,7 +85,7 @@ export function commitCreateEntity<T extends TypeOutput>(
 }
 
 export function projectEntity<T extends TypeOutput>(
-  store: Store,
+  store: GraphStore,
   id: string,
   typeDef: T,
   scalarByKey: Map<string, ScalarTypeOutput<any>>,
@@ -99,7 +100,7 @@ export function projectEntity<T extends TypeOutput>(
 }
 
 export function commitUpdateEntity<T extends TypeOutput>(
-  store: Store,
+  store: GraphStore,
   id: string,
   typeDef: T,
   input: Record<string, unknown>,

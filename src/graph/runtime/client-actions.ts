@@ -1,3 +1,5 @@
+import type { GraphStore } from "@io/graph-kernel";
+
 import {
   assertValidResult,
   getStableCreateNodeId,
@@ -11,10 +13,9 @@ import {
   validateUpdateEntity,
 } from "./client-validation";
 import type { AnyTypeOutput, ScalarTypeOutput, TypeOutput } from "./schema";
-import type { Store } from "./store";
 
 export function createEntityAtId<T extends TypeOutput>(
-  store: Store,
+  store: GraphStore,
   id: string,
   typeDef: T,
   data: CreateInputOfType<T, Record<string, AnyTypeOutput>>,
@@ -46,7 +47,7 @@ export function createEntityAtId<T extends TypeOutput>(
 }
 
 export function createEntity<T extends TypeOutput>(
-  store: Store,
+  store: GraphStore,
   typeDef: T,
   data: CreateInputOfType<T, Record<string, AnyTypeOutput>>,
   scalarByKey: Map<string, ScalarTypeOutput<any>>,
@@ -67,7 +68,7 @@ export function createEntity<T extends TypeOutput>(
 }
 
 export function updateEntity<T extends TypeOutput>(
-  store: Store,
+  store: GraphStore,
   id: string,
   typeDef: T,
   patch: Record<string, unknown>,
@@ -99,7 +100,7 @@ export function updateEntity<T extends TypeOutput>(
 }
 
 export function deleteEntity<T extends TypeOutput, Defs extends Record<string, AnyTypeOutput>>(
-  store: Store,
+  store: GraphStore,
   id: string,
   typeDef: T,
   typeByKey: Map<string, AnyTypeOutput>,

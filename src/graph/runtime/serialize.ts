@@ -1,13 +1,14 @@
+import type { GraphId, GraphStore } from "@io/graph-kernel";
+
 import { core } from "./core";
 import { edgeId, typeId } from "./schema";
 import type { EdgeOutput } from "./schema";
-import type { Id, Store } from "./store";
 
 /**
  * Returns the serialization key for a predicate node:
  * key value → name value → raw id (as fallback)
  */
-export function getKey(store: Store, predicateId: Id): string {
+export function getKey(store: GraphStore, predicateId: GraphId): string {
   const keyPredicate = core.predicate.fields.key as EdgeOutput;
   const namePredicate = core.node.fields.name as EdgeOutput;
   const k = store.get(predicateId, edgeId(keyPredicate));
@@ -24,7 +25,7 @@ export function getKey(store: Store, predicateId: Id): string {
  * - Value: decoded through scalar range codecs, or the LABEL of a referenced entity
  * - Multiple values for the same predicate are collected into an array
  */
-export function toObject(store: Store, id: Id): Record<string, unknown> {
+export function toObject(store: GraphStore, id: GraphId): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   const rangePredicate = core.predicate.fields.range as EdgeOutput;
 
@@ -48,7 +49,7 @@ export function toObject(store: Store, id: Id): Record<string, unknown> {
  * Materializes all T_PREDICATE nodes in the store into a single keyed object,
  * indexed by each node's KEY (or LABEL). This is the full schema as plain JSON.
  */
-export function materializeSchema(store: Store): Record<string, Record<string, unknown>> {
+export function materializeSchema(store: GraphStore): Record<string, Record<string, unknown>> {
   const out: Record<string, Record<string, unknown>> = {};
   const typePredicate = core.node.fields.type as EdgeOutput;
 
@@ -60,13 +61,13 @@ export function materializeSchema(store: Store): Record<string, Record<string, u
   return out;
 }
 
-function resolveLabel(store: Store, id: Id): string {
+function resolveLabel(store: GraphStore, id: GraphId): string {
   const namePredicate = core.node.fields.name as EdgeOutput;
   const labelId = store.get(id, edgeId(namePredicate));
   return labelId ?? id;
 }
 
-function decodeByRange(store: Store, raw: Id, range: Id | undefined): unknown {
+function decodeByRange(store: GraphStore, raw: GraphId, range: GraphId | undefined): unknown {
   if (!range) return maybeResolveEntity(store, raw);
 
   // Decode through core scalar codecs when the predicate range is a known core scalar.
@@ -84,7 +85,7 @@ function decodeByRange(store: Store, raw: Id, range: Id | undefined): unknown {
   return maybeResolveEntity(store, raw);
 }
 
-function maybeResolveEntity(store: Store, id: Id): string {
+function maybeResolveEntity(store: GraphStore, id: GraphId): string {
   const existsAsNode =
     store.facts(id).length > 0 || store.facts(undefined, undefined, id).length > 0;
   if (!existsAsNode) return id;

@@ -7,6 +7,7 @@
  * authority storage live in higher layers.
  */
 export { createGraphId, type GraphId } from "./id.js";
+export { fieldsMeta } from "./field-tree-meta.js";
 
 export {
   cloneStoreSnapshot,

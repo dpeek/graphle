@@ -16,9 +16,9 @@ import { createBootstrappedSnapshot } from "./bootstrap";
 import { createTypeClient } from "./client";
 import type { AuthorizationContext } from "./contracts";
 import { core } from "./core";
-import { createIdMap, defineNamespace } from "./identity";
+import { createIdMap, applyIdMap } from "./identity";
 import { defineType, edgeId, fieldPolicyDescriptor } from "./schema";
-import { createStore, type StoreSnapshot } from "./store";
+import { createStore, type GraphStoreSnapshot } from "./store";
 import {
   createAuthoritativeGraphWriteSession,
   createGraphWriteTransactionFromSnapshots,
@@ -63,8 +63,8 @@ const visibilityProbe = defineType({
   },
 });
 
-const testGraph = defineNamespace(createIdMap({ item }).map, { item });
-const visibilityGraph = defineNamespace(createIdMap({ visibilityProbe }).map, {
+const testGraph = applyIdMap(createIdMap({ item }).map, { item });
+const visibilityGraph = applyIdMap(createIdMap({ visibilityProbe }).map, {
   visibilityProbe,
 });
 const visibilityProbeMemberNotePredicateId = edgeId(visibilityProbe.fields.memberNote);
@@ -92,7 +92,7 @@ const hiddenCursorProbe = defineType({
   },
 });
 
-const hiddenCursorNamespace = defineNamespace(createIdMap({ hiddenCursorProbe }).map, {
+const hiddenCursorNamespace = applyIdMap(createIdMap({ hiddenCursorProbe }).map, {
   hiddenCursorProbe,
 });
 const hiddenCursorGraph = { ...core, ...hiddenCursorNamespace } as const;
@@ -163,7 +163,7 @@ function createItemNameWriteTransaction(
       {
         op: "assert" as const,
         edge: {
-          id: store.newNode(),
+          id: store.newId(),
           s: itemId,
           p: edgeId(testGraph.item.fields.name),
           o: name,
@@ -283,7 +283,7 @@ function createVisibilityReadAuthorizer(authorization: AuthorizationContext) {
 }
 
 function createHiddenCursorAdvanceTransaction(
-  snapshot: StoreSnapshot,
+  snapshot: GraphStoreSnapshot,
   probeId: string,
   hiddenState: string,
   txId: string,

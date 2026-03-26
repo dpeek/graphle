@@ -4,7 +4,7 @@ import {
   isEntityType,
   isFieldGroupRef,
   type AnyTypeOutput,
-  type Store,
+  type GraphStore,
   typeId,
 } from "@io/core/graph";
 import {
@@ -68,7 +68,7 @@ export function flattenDefinitionFields(
   return out;
 }
 
-export function buildTypeCatalog(store: Store): TypeCatalogEntry[] {
+export function buildTypeCatalog(store: GraphStore): TypeCatalogEntry[] {
   const kindOrder: Record<AnyTypeOutput["kind"], number> = {
     entity: 0,
     enum: 1,
@@ -109,7 +109,10 @@ export function buildTypeCatalog(store: Store): TypeCatalogEntry[] {
     });
 }
 
-export function buildEntityCatalog(client: ExplorerClient, store: Store): EntityCatalogEntry[] {
+export function buildEntityCatalog(
+  client: ExplorerClient,
+  store: GraphStore,
+): EntityCatalogEntry[] {
   const handles = client as unknown as Record<
     string,
     {

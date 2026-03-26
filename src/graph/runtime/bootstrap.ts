@@ -1,4 +1,11 @@
 import {
+  cloneStoreSnapshot,
+  createStore,
+  type GraphStore,
+  type GraphStoreSnapshot,
+} from "@io/graph-kernel";
+
+import {
   graphIconSeedList,
   resolvePredicateDefinitionIconId,
   resolveTypeDefinitionIconId,
@@ -15,13 +22,12 @@ import {
   typeId,
 } from "./schema.js";
 import type { AnyTypeOutput, EdgeOutput, FieldsOutput, TypeOutput } from "./schema.js";
-import { cloneStoreSnapshot, createStore, type Store, type StoreSnapshot } from "./store.js";
 
 type SchemaTree = FieldsOutput;
 // Canonical bootstrap timestamps keep independently seeded schema entities
 // convergent across repeated bootstrap and restart flows.
 const bootstrapTimestamp = new Date("2000-01-01T00:00:00.000Z");
-const bootstrappedSnapshotCache = new WeakMap<Record<string, AnyTypeOutput>, StoreSnapshot>();
+const bootstrappedSnapshotCache = new WeakMap<Record<string, AnyTypeOutput>, GraphStoreSnapshot>();
 
 type BootstrapFacts = {
   readonly currentFactKeys: Set<string>;
@@ -76,7 +82,7 @@ function bootstrapFactKey(subjectId: string, predicateId: string, objectId: stri
 }
 
 function rememberBootstrapNodeFacts(
-  store: Store,
+  store: GraphStore,
   bootstrapFacts: BootstrapFacts,
   nodeId: string,
 ): void {
@@ -87,7 +93,7 @@ function rememberBootstrapNodeFacts(
 }
 
 function assertCurrentFactOnce(
-  store: Store,
+  store: GraphStore,
   bootstrapFacts: BootstrapFacts,
   subjectId: string,
   predicateId: string,
@@ -101,7 +107,7 @@ function assertCurrentFactOnce(
 }
 
 function ensureBootstrapEntity<T extends TypeOutput>(
-  store: Store,
+  store: GraphStore,
   bootstrapFacts: BootstrapFacts,
   namespace: Record<string, AnyTypeOutput>,
   typeDef: T,
@@ -122,7 +128,7 @@ function ensureBootstrapEntity<T extends TypeOutput>(
 }
 
 function assertSeedIcons(
-  store: Store,
+  store: GraphStore,
   namespace: Record<string, AnyTypeOutput>,
   bootstrapFacts: BootstrapFacts,
 ): void {
@@ -143,7 +149,7 @@ function assertSeedIcons(
   }
 }
 
-export function bootstrap(store: Store, types: Record<string, AnyTypeOutput> = core): void {
+export function bootstrap(store: GraphStore, types: Record<string, AnyTypeOutput> = core): void {
   // Stable contract: bootstrap is additive and idempotent for a resolved
   // namespace. Reapplying it after restart must not duplicate schema facts or
   // rewrite already-materialized schema state.
@@ -296,7 +302,7 @@ export function bootstrap(store: Store, types: Record<string, AnyTypeOutput> = c
 
 export function createBootstrappedSnapshot(
   types: Record<string, AnyTypeOutput> = core,
-): StoreSnapshot {
+): GraphStoreSnapshot {
   const cached = bootstrappedSnapshotCache.get(types);
   if (cached) return cloneStoreSnapshot(cached);
 

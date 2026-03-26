@@ -5,7 +5,7 @@ import type {
   RetainedProjectionRowRecord,
 } from "../../../runtime/projection.js";
 import { findRetainedProjectionRecord } from "../../../runtime/projection.js";
-import { defineNamespace } from "../../../runtime/schema.js";
+import { applyIdMap } from "../../../runtime/schema.js";
 import { core } from "../../core.js";
 import opsIds from "../../ops.json";
 import { pkm } from "../../pkm.js";
@@ -195,7 +195,7 @@ export interface CommitQueueScopeResult {
   readonly rows: readonly CommitQueueScopeCommitRow[];
 }
 
-const workflowProjectionWorkflowSchema = defineNamespace(opsIds, {
+const workflowProjectionWorkflowSchema = applyIdMap(opsIds, {
   workflowProject,
   workflowRepository,
   workflowBranchState,

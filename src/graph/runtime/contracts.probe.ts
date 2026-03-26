@@ -1,4 +1,4 @@
-import { createIdMap, defineNamespace, defineReferenceField, defineType } from "../index.js";
+import { createIdMap, applyIdMap, defineReferenceField, defineType } from "../index.js";
 import type {
   AuthSubjectRef,
   AuthenticatedSession,
@@ -67,10 +67,9 @@ export const probeContractItem = defineType({
   },
 });
 
-export const probeContractGraph = defineNamespace(
-  createIdMap({ contractItem: probeContractItem }).map,
-  { contractItem: probeContractItem },
-);
+export const probeContractGraph = applyIdMap(createIdMap({ contractItem: probeContractItem }).map, {
+  contractItem: probeContractItem,
+});
 
 export const probeAuthSubject = {
   issuer: "better-auth",

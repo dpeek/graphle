@@ -1,6 +1,6 @@
 import { createTypeClient, type NamespaceClient } from "./client";
 import type { AnyTypeOutput } from "./schema";
-import type { Store, StoreSnapshot } from "./store";
+import type { GraphStore, GraphStoreSnapshot } from "./store";
 import {
   createAuthoritativeGraphWriteSession,
   createTotalSyncPayload,
@@ -30,7 +30,7 @@ export type PersistedAuthoritativeGraphStateVersion =
  */
 export type PersistedAuthoritativeGraphState = {
   readonly version: PersistedAuthoritativeGraphStateVersion;
-  readonly snapshot: StoreSnapshot;
+  readonly snapshot: GraphStoreSnapshot;
   readonly writeHistory: AuthoritativeGraphWriteHistory;
 };
 
@@ -68,7 +68,7 @@ export type PersistedAuthoritativeGraphStartupDiagnostics = {
 };
 
 export type PersistedAuthoritativeGraphStorageLoadResult = {
-  readonly snapshot: StoreSnapshot;
+  readonly snapshot: GraphStoreSnapshot;
   readonly writeHistory?: AuthoritativeGraphWriteHistory;
   readonly recovery: PersistedAuthoritativeGraphStorageRecovery;
   readonly startupDiagnostics: PersistedAuthoritativeGraphStartupDiagnostics;
@@ -81,7 +81,7 @@ export type PersistedAuthoritativeGraphStorageLoadResult = {
  * statements, and transport concerns stay outside this input shape.
  */
 export type PersistedAuthoritativeGraphStorageCommitInput = {
-  readonly snapshot: StoreSnapshot;
+  readonly snapshot: GraphStoreSnapshot;
   readonly transaction: GraphWriteTransaction;
   readonly result: AuthoritativeGraphWriteResult;
   readonly writeHistory: AuthoritativeGraphWriteHistory;
@@ -91,7 +91,7 @@ export type PersistedAuthoritativeGraphStorageCommitInput = {
  * Full durable snapshot rewrite for the current authority baseline.
  */
 export type PersistedAuthoritativeGraphStoragePersistInput = {
-  readonly snapshot: StoreSnapshot;
+  readonly snapshot: GraphStoreSnapshot;
   readonly writeHistory: AuthoritativeGraphWriteHistory;
 };
 
@@ -130,7 +130,7 @@ export type PersistedAuthoritativeGraphOptions<T extends Record<string, AnyTypeO
 };
 
 export type PersistedAuthoritativeGraph<T extends Record<string, AnyTypeOutput>> = {
-  readonly store: Store;
+  readonly store: GraphStore;
   readonly graph: NamespaceClient<T>;
   readonly startupDiagnostics: PersistedAuthoritativeGraphStartupDiagnostics;
   createSyncPayload(options?: {
@@ -168,7 +168,7 @@ function createPersistedAuthoritativeGraphCursorPrefix(): string {
 export async function createPersistedAuthoritativeGraph<
   const T extends Record<string, AnyTypeOutput>,
 >(
-  store: Store,
+  store: GraphStore,
   namespace: T,
   options: PersistedAuthoritativeGraphOptions<T>,
 ): Promise<PersistedAuthoritativeGraph<T>> {

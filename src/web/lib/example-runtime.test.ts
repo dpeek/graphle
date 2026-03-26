@@ -25,7 +25,7 @@ function createDocumentNameWriteTransaction(
   const assertOp = {
     op: "assert" as const,
     edge: {
-      id: options.edgeId ?? store.newNode(),
+      id: options.edgeId ?? store.newId(),
       s: documentId,
       p: edgeId(pkm.document.fields.name),
       o: name,

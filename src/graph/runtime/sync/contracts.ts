@@ -1,7 +1,7 @@
 import type { NamespaceClient } from "../client";
 import { core } from "../core";
 import type { AnyTypeOutput, GraphFieldWritePolicy } from "../schema";
-import type { Store, StoreSnapshot } from "../store";
+import type { GraphStore, GraphStoreSnapshot } from "../store";
 
 /**
  * Opaque cursor issued by an authoritative graph session.
@@ -159,7 +159,7 @@ export type ReplicationReadAuthorizer = (target: ReplicatedPredicateTarget) => b
 export type TotalSyncPayload = {
   readonly mode: "total";
   readonly scope: SyncScope;
-  readonly snapshot: StoreSnapshot;
+  readonly snapshot: GraphStoreSnapshot;
   readonly cursor: AuthoritativeGraphCursor;
   readonly completeness: SyncCompleteness;
   readonly freshness: SyncFreshness;
@@ -235,7 +235,7 @@ export function isIncrementalSyncFallback(
 
 export type GraphWriteAssertOperation = {
   readonly op: "assert";
-  readonly edge: StoreSnapshot["edges"][number];
+  readonly edge: GraphStoreSnapshot["edges"][number];
 };
 
 export type GraphWriteRetractOperation = {
@@ -508,7 +508,7 @@ export type TotalSyncSource = SyncSource;
 export type TotalSyncPayloadValidator = (payload: TotalSyncPayload) => void;
 export type AuthoritativeGraphWriteResultValidator = (
   result: AuthoritativeGraphWriteResult,
-  store?: Store,
+  store?: GraphStore,
 ) => void;
 
 export interface TotalSyncController {
@@ -525,7 +525,7 @@ export interface SyncedTypeSyncController extends TotalSyncController {
 }
 
 export type SyncedTypeClient<T extends Record<string, AnyTypeOutput>> = {
-  store: Store;
+  store: GraphStore;
   graph: NamespaceClient<typeof core & T>;
   sync: SyncedTypeSyncController;
 };
@@ -549,11 +549,11 @@ export interface AuthoritativeGraphWriteSession {
     transaction: GraphWriteTransaction,
     options?: {
       writeScope?: AuthoritativeWriteScope;
-      sourceSnapshot?: StoreSnapshot;
+      sourceSnapshot?: GraphStoreSnapshot;
     },
   ): {
     result: AuthoritativeGraphWriteResult;
-    snapshot: StoreSnapshot;
+    snapshot: GraphStoreSnapshot;
   };
   getCursor(): string | undefined;
   getBaseCursor(): string;

@@ -5,7 +5,7 @@ import {
   createIdMap,
   createAuthoritativeGraphWriteSession,
   createBootstrappedSnapshot,
-  defineNamespace,
+  applyIdMap,
   defineType,
   createSyncedTypeClient,
   createStore,
@@ -42,7 +42,7 @@ const hiddenCursorProbe = defineType({
   },
 });
 
-const hiddenCursorProbeNamespace = defineNamespace(createIdMap({ hiddenCursorProbe }).map, {
+const hiddenCursorProbeNamespace = applyIdMap(createIdMap({ hiddenCursorProbe }).map, {
   hiddenCursorProbe,
 });
 

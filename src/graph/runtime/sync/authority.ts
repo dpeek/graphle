@@ -1,6 +1,6 @@
 import { GraphValidationError, type GraphValidationResult } from "../client";
 import type { AnyTypeOutput } from "../schema";
-import type { Store, StoreSnapshot } from "../store";
+import type { GraphStore, GraphStoreSnapshot } from "../store";
 import {
   cloneAuthoritativeGraphRetainedHistoryPolicy,
   cloneAuthoritativeGraphWriteResult,
@@ -87,7 +87,7 @@ type AuthoritativeGraphWriteRecord =
     };
 
 export function createAuthoritativeGraphWriteSession<const T extends Record<string, AnyTypeOutput>>(
-  store: Store,
+  store: GraphStore,
   namespace: T,
   options: {
     cursorPrefix?: string;
@@ -279,11 +279,11 @@ export function createAuthoritativeGraphWriteSession<const T extends Record<stri
     transaction: GraphWriteTransaction,
     options: {
       writeScope?: AuthoritativeWriteScope;
-      sourceSnapshot?: StoreSnapshot;
+      sourceSnapshot?: GraphStoreSnapshot;
     } = {},
   ): {
     result: AuthoritativeGraphWriteResult;
-    snapshot: StoreSnapshot;
+    snapshot: GraphStoreSnapshot;
   } {
     const prepared = prepareGraphWriteTransaction(transaction);
     if (!prepared.ok) throw new GraphValidationError(prepared.result);

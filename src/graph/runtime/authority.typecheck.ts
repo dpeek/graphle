@@ -8,7 +8,7 @@ import type {
   PersistedAuthoritativeGraphStorageLoadResult,
 } from "./authority.js";
 import { core } from "./core.js";
-import { createIdMap, defineNamespace } from "./identity.js";
+import { createIdMap, applyIdMap } from "./identity.js";
 import { defineType } from "./schema.js";
 
 const item = defineType({
@@ -18,7 +18,7 @@ const item = defineType({
   },
 });
 
-const probeGraph = defineNamespace(createIdMap({ item }).map, { item });
+const probeGraph = applyIdMap(createIdMap({ item }).map, { item });
 
 const createCursorPrefix: PersistedAuthoritativeGraphCursorPrefixFactory = () => "authority:";
 

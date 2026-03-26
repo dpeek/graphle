@@ -1,3 +1,5 @@
+import type { GraphStore } from "@io/graph-kernel";
+
 import { createEntity, createEntityAtId, deleteEntity, updateEntity } from "./client-actions";
 import {
   collectEnumValueIds,
@@ -22,7 +24,6 @@ import {
 import { core } from "./core";
 import { edgeId, typeId } from "./schema";
 import type { AnyTypeOutput, EdgeOutput, TypeOutput } from "./schema";
-import type { Store } from "./store";
 
 export * from "./client-core";
 export { validateGraphStore } from "./client-validation";
@@ -31,7 +32,7 @@ export function createEntityWithId<
   const T extends TypeOutput,
   const Defs extends Record<string, AnyTypeOutput>,
 >(
-  store: Store,
+  store: GraphStore,
   namespace: Defs,
   typeDef: T,
   id: string,
@@ -58,7 +59,7 @@ export function createEntityWithId<
 }
 
 export function createTypeClient<const T extends Record<string, AnyTypeOutput>>(
-  store: Store,
+  store: GraphStore,
   namespace: T,
 ): NamespaceClient<T> {
   const nodeTypePredicate = core.node.fields.type as EdgeOutput;

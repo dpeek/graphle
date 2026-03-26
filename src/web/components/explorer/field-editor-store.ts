@@ -1,10 +1,10 @@
-import type { Store } from "@io/core/graph";
+import type { GraphStore } from "@io/core/graph";
 import { useRef, useSyncExternalStore } from "react";
 
 import { getFirstObject } from "./helpers.js";
 
 export function useStoreSlotValue(
-  store: Store,
+  store: GraphStore,
   subjectId: string,
   predicateId: string,
 ): string | undefined {

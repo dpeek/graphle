@@ -1,7 +1,7 @@
 import {
   type AuthoritativeGraphWriteResult,
   type GraphWriteTransaction,
-  type Store,
+  type GraphStore,
 } from "@io/core/graph";
 import {
   type WorkflowMutationAction,
@@ -27,7 +27,7 @@ import {
 } from "./workflow-mutation-helpers.js";
 
 type WorkflowMutationAuthority = {
-  readonly store: Store;
+  readonly store: GraphStore;
   applyTransaction(
     transaction: GraphWriteTransaction,
     options: WebAppAuthorityTransactionOptions,
@@ -58,7 +58,7 @@ export async function runWorkflowMutationCommand(
 
 function mutateWorkflow(
   graph: ProductGraphClient,
-  store: Store,
+  store: GraphStore,
   input: WorkflowMutationAction,
 ): WorkflowMutationResult {
   const aggregateResult = dispatchWorkflowAggregateMutation(graph, store, input);

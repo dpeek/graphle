@@ -185,7 +185,7 @@ describe("typed query client", () => {
 
   it("rejects when a selected required predicate is missing from local data", async () => {
     const { store, graph } = setupGraph();
-    const brokenRecordId = store.newNode();
+    const brokenRecordId = store.newId();
 
     store.assert(
       brokenRecordId,
@@ -208,7 +208,7 @@ describe("typed query client", () => {
   it("rejects nested entity selections when a referenced entity is missing", async () => {
     const { store, graph } = setupGraph();
     const missingPersonId = "missing-person";
-    const danglingRecordId = store.newNode();
+    const danglingRecordId = store.newId();
     store.assert(
       danglingRecordId,
       edgeId(core.node.fields.type as EdgeOutput),

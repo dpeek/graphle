@@ -12,7 +12,7 @@ import {
   type GraphFieldWritePolicy,
   type ResolvedEdgeOutput,
 } from "../schema";
-import { createStore, type Store, type StoreSnapshot } from "../store";
+import { createStore, type GraphStore, type GraphStoreSnapshot } from "../store";
 import {
   cloneAuthoritativeGraphWriteResult,
   type AuthoritativeGraphWriteResult,
@@ -75,7 +75,7 @@ export function createFieldAuthorityPolicyIndex(
 }
 
 function findSubjectTypeId(
-  store: Store,
+  store: GraphStore,
   nodeId: string,
   nodeTypePredicateId: string,
 ): string | undefined {
@@ -84,7 +84,7 @@ function findSubjectTypeId(
 
 function findFieldAuthorityPolicy(
   policiesByTypeId: FieldAuthorityPolicyIndex,
-  store: Store,
+  store: GraphStore,
   nodeId: string,
   predicateId: string,
 ): FieldAuthorityPolicy | undefined {
@@ -94,14 +94,14 @@ function findFieldAuthorityPolicy(
 }
 
 export function createEdgeIndex(
-  snapshot: StoreSnapshot,
-): Map<string, StoreSnapshot["edges"][number]> {
+  snapshot: GraphStoreSnapshot,
+): Map<string, GraphStoreSnapshot["edges"][number]> {
   return new Map(snapshot.edges.map((edge) => [edge.id, edge]));
 }
 
 function resolveTransactionOperationTarget(
   operation: GraphWriteOperation,
-  edgeById: Map<string, StoreSnapshot["edges"][number]>,
+  edgeById: Map<string, GraphStoreSnapshot["edges"][number]>,
 ): { subjectId: string; predicateId: string } | undefined {
   if (operation.op === "assert") {
     return {
@@ -119,12 +119,12 @@ function resolveTransactionOperationTarget(
 }
 
 export function filterReplicatedSnapshot(
-  store: Store,
+  store: GraphStore,
   namespace: Record<string, AnyTypeOutput>,
   options: {
     authorizeRead?: ReplicationReadAuthorizer;
   } = {},
-): StoreSnapshot {
+): GraphStoreSnapshot {
   const policiesByTypeId = createFieldAuthorityPolicyIndex(namespace);
   const snapshot = store.snapshot();
   const edges = snapshot.edges
@@ -152,9 +152,9 @@ export function filterReplicatedSnapshot(
 
 export function filterReplicatedWriteResult(
   result: AuthoritativeGraphWriteResult,
-  store: Store,
+  store: GraphStore,
   policiesByTypeId: FieldAuthorityPolicyIndex,
-  edgeById: Map<string, StoreSnapshot["edges"][number]>,
+  edgeById: Map<string, GraphStoreSnapshot["edges"][number]>,
   options: {
     authorizeRead?: ReplicationReadAuthorizer;
   } = {},
@@ -210,7 +210,7 @@ function writeScopeAllows(
 
 export function validateAuthoritativeFieldWritePolicies(
   transaction: GraphWriteTransaction,
-  snapshot: StoreSnapshot,
+  snapshot: GraphStoreSnapshot,
   namespace: Record<string, AnyTypeOutput>,
   writeScope: AuthoritativeWriteScope,
 ) {

@@ -3,9 +3,9 @@ import { describe, expect, it } from "bun:test";
 import { bootstrap } from "./bootstrap";
 import { createTypeClient } from "./client";
 import { core } from "./core";
-import { createIdMap, defineNamespace } from "./identity";
+import { createIdMap, applyIdMap } from "./identity";
 import { defineType, typeId } from "./schema";
-import { createStore, type StoreSnapshot } from "./store";
+import { createStore, type GraphStoreSnapshot } from "./store";
 
 const bootstrapTimestampIso = "2000-01-01T00:00:00.000Z";
 
@@ -17,9 +17,9 @@ const item = defineType({
   },
 });
 
-const testGraph = defineNamespace(createIdMap({ item }).map, { item });
+const testGraph = applyIdMap(createIdMap({ item }).map, { item });
 
-function canonicalizeSnapshot(snapshot: StoreSnapshot) {
+function canonicalizeSnapshot(snapshot: GraphStoreSnapshot) {
   return {
     edges: snapshot.edges
       .map((edge) => `${edge.id}\0${edge.s}\0${edge.p}\0${edge.o}`)

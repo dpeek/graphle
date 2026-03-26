@@ -1,4 +1,4 @@
-import { edgeId, type Store } from "@io/core/graph";
+import { edgeId, type GraphStore } from "@io/core/graph";
 import { ops } from "@io/core/graph/modules/ops";
 import {
   workflowBranchStateValues,
@@ -72,7 +72,7 @@ function createWorkflowProject(
 
 function updateWorkflowProject(
   graph: ProductGraphClient,
-  store: Store,
+  store: GraphStore,
   input: ProjectUpdateMutation,
 ): WorkflowMutationResult {
   const project = requireProject(graph, store, requireString(input.projectId, "Project id"));
@@ -99,7 +99,7 @@ function updateWorkflowProject(
 
 function createWorkflowRepository(
   graph: ProductGraphClient,
-  store: Store,
+  store: GraphStore,
   input: RepositoryCreateMutation,
 ): WorkflowMutationResult {
   const project = requireProject(graph, store, requireString(input.projectId, "Project id"));
@@ -123,7 +123,7 @@ function createWorkflowRepository(
 
 function updateWorkflowRepository(
   graph: ProductGraphClient,
-  store: Store,
+  store: GraphStore,
   input: RepositoryUpdateMutation,
 ): WorkflowMutationResult {
   const repository = requireRepository(
@@ -162,7 +162,7 @@ function updateWorkflowRepository(
 
 function createWorkflowBranch(
   graph: ProductGraphClient,
-  store: Store,
+  store: GraphStore,
   input: BranchCreateMutation,
 ): WorkflowMutationResult {
   const project = requireProject(graph, store, requireString(input.projectId, "Project id"));
@@ -208,7 +208,7 @@ function createWorkflowBranch(
 
 function updateWorkflowBranch(
   graph: ProductGraphClient,
-  store: Store,
+  store: GraphStore,
   input: BranchUpdateMutation,
 ): WorkflowMutationResult {
   const branch = requireBranch(graph, store, requireString(input.branchId, "Branch id"));
@@ -260,7 +260,7 @@ function updateWorkflowBranch(
 
 function setWorkflowBranchState(
   graph: ProductGraphClient,
-  store: Store,
+  store: GraphStore,
   input: BranchStateMutation,
 ): WorkflowMutationResult {
   const branch = requireBranch(graph, store, requireString(input.branchId, "Branch id"));
@@ -282,7 +282,7 @@ function setWorkflowBranchState(
 
 function resolveBranchRepositoryTarget(
   graph: ProductGraphClient,
-  store: Store,
+  store: GraphStore,
   branch: ReturnType<typeof requireBranch>,
   repositoryId: string,
   input: BranchRepositoryTargetMutation,
@@ -338,7 +338,7 @@ function resolveBranchRepositoryTarget(
 
 function updateManagedBranchRepositoryTarget(
   graph: ProductGraphClient,
-  store: Store,
+  store: GraphStore,
   branch: ReturnType<typeof requireBranch>,
   repositoryBranch: ReturnType<typeof requireRepositoryBranch>,
   input: BranchRepositoryTargetMutation,
@@ -428,7 +428,7 @@ function createManagedBranchRepositoryTarget(
 
 function attachWorkflowBranchRepositoryTarget(
   graph: ProductGraphClient,
-  store: Store,
+  store: GraphStore,
   input: BranchRepositoryTargetMutation,
 ): WorkflowMutationResult {
   const branch = requireBranch(graph, store, requireString(input.branchId, "Branch id"));
@@ -460,7 +460,7 @@ function attachWorkflowBranchRepositoryTarget(
 
 export function dispatchWorkflowAggregateMutation(
   graph: ProductGraphClient,
-  store: Store,
+  store: GraphStore,
   input: WorkflowMutationAction,
 ): WorkflowMutationResult | undefined {
   switch (input.action) {

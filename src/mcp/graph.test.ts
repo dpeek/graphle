@@ -12,9 +12,9 @@ import {
   type AnyTypeOutput,
   type AuthoritativeGraphWriteResult,
   type FetchImpl,
+  type GraphStoreSnapshot,
   type GraphWriteTransaction,
   type NamespaceClient,
-  type StoreSnapshot,
   type SyncPayload,
 } from "../graph/index.js";
 import { core } from "../graph/modules/index.js";
@@ -36,8 +36,8 @@ type MockAuthority = {
   };
 };
 
-let productAuthoritySnapshot: StoreSnapshot | null = null;
-let kitchenSinkAuthoritySnapshot: StoreSnapshot | null = null;
+let productAuthoritySnapshot: GraphStoreSnapshot | null = null;
+let kitchenSinkAuthoritySnapshot: GraphStoreSnapshot | null = null;
 
 function resolvedEnumValue(value: { key: string; id?: string }): string {
   return value.id ?? value.key;
@@ -65,7 +65,7 @@ function createAuthority<const T extends GraphNamespace>(
 
 function createAuthorityFromSnapshot<const T extends GraphNamespace>(
   namespace: T,
-  snapshot: StoreSnapshot,
+  snapshot: GraphStoreSnapshot,
 ) {
   const store = createStore(snapshot);
   const graph = createTypeClient(store, { ...core, ...namespace }) as NamespaceClient<

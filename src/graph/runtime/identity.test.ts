@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
 import { core } from "./core";
-import { createIdMap, defineNamespace } from "./identity";
+import { createIdMap, applyIdMap } from "./identity";
 import { defineEnum, defineScalar, defineType } from "./schema";
 
 function createItemType(options: { includeSlug?: boolean } = {}) {
@@ -74,9 +74,7 @@ describe("stable identity contracts", () => {
 
     delete map.keys["test:item:title"];
 
-    expect(() => defineNamespace(map, { item })).toThrow(
-      "Missing stable ids for keys: test:item:title",
-    );
+    expect(() => applyIdMap(map, { item })).toThrow("Missing stable ids for keys: test:item:title");
   });
 
   it("rejects duplicate stable ids before bootstrap can resolve an ambiguous namespace", () => {
@@ -84,7 +82,7 @@ describe("stable identity contracts", () => {
     const beta = createProbeScalar("test:beta");
 
     expect(() =>
-      defineNamespace(
+      applyIdMap(
         {
           "test:alpha": "dup-id",
           "test:beta": "dup-id",

@@ -5,7 +5,7 @@ import {
   bootstrap,
   createStore,
   createTypeClient,
-  defineNamespace,
+  applyIdMap,
   defineReferenceField,
   defineType,
   edgeId,
@@ -55,7 +55,7 @@ function setupGraphWithProtectedNickname() {
       }),
     },
   });
-  const namespace = defineNamespace({}, { employee }, { strict: false });
+  const namespace = applyIdMap({}, { employee }, { strict: false });
   const store = createStore();
   bootstrap(store, core);
   bootstrap(store, namespace);
@@ -114,7 +114,7 @@ describe("graph validation", () => {
         }),
       },
     });
-    const namespace = defineNamespace({}, { reviewItem }, { strict: false });
+    const namespace = applyIdMap({}, { reviewItem }, { strict: false });
     const store = createStore();
     bootstrap(store, core);
     bootstrap(store, namespace);
@@ -226,7 +226,7 @@ describe("graph validation", () => {
         }),
       },
     });
-    const namespace = defineNamespace({}, { employee }, { strict: false });
+    const namespace = applyIdMap({}, { employee }, { strict: false });
     const store = createStore();
     bootstrap(store, core);
     bootstrap(store, namespace);

@@ -1,4 +1,4 @@
-import { edgeId, type Store } from "@io/core/graph";
+import { edgeId, type GraphStore } from "@io/core/graph";
 import { ops } from "@io/core/graph/modules/ops";
 import {
   repositoryCommitLeaseStateValues,
@@ -110,7 +110,7 @@ export function requireBranchRepositoryTarget(graph: ProductGraphClient, branchI
 
 function reconcileBranchAfterCommitChange(
   graph: ProductGraphClient,
-  store: Store,
+  store: GraphStore,
   branchId: string,
   commitId: string,
 ): void {
@@ -126,7 +126,7 @@ function reconcileBranchAfterCommitChange(
 
 export function createWorkflowCommit(
   graph: ProductGraphClient,
-  store: Store,
+  store: GraphStore,
   input: CommitCreateMutation,
 ): WorkflowMutationResult {
   const branch = requireBranch(graph, store, requireString(input.branchId, "Branch id"));
@@ -186,7 +186,7 @@ export function createWorkflowCommit(
 
 export function updateWorkflowCommit(
   graph: ProductGraphClient,
-  store: Store,
+  store: GraphStore,
   input: CommitUpdateMutation,
 ): WorkflowMutationResult {
   const commit = requireCommit(graph, store, requireString(input.commitId, "Commit id"));
@@ -247,7 +247,7 @@ export function updateWorkflowCommit(
 
 export function setWorkflowCommitState(
   graph: ProductGraphClient,
-  store: Store,
+  store: GraphStore,
   input: CommitStateMutation,
 ): WorkflowMutationResult {
   const commit = requireCommit(graph, store, requireString(input.commitId, "Commit id"));
@@ -330,7 +330,7 @@ export function setWorkflowCommitState(
 
 export function createWorkflowRepositoryCommit(
   graph: ProductGraphClient,
-  store: Store,
+  store: GraphStore,
   input: RepositoryCommitCreateMutation,
 ): WorkflowMutationResult {
   const repository = requireRepository(
@@ -445,7 +445,7 @@ export function createWorkflowRepositoryCommit(
 
 export function attachWorkflowCommitResult(
   graph: ProductGraphClient,
-  store: Store,
+  store: GraphStore,
   input: CommitResultMutation,
 ): WorkflowMutationResult {
   const repositoryCommit = requireRepositoryCommit(

@@ -5,7 +5,7 @@ import {
   type GraphValidationResult,
 } from "../client";
 import type { AnyTypeOutput } from "../schema";
-import { createStore, type Store, type StoreSnapshot } from "../store";
+import { createStore, type GraphStore, type GraphStoreSnapshot } from "../store";
 import {
   cloneAuthoritativeGraphRetainedHistoryPolicy,
   cloneAuthoritativeGraphWriteResult,
@@ -258,7 +258,7 @@ function allowsIncrementalSyncFallbackReason(
 
 function materializeTotalSyncPayload(
   payload: TotalSyncPayload,
-  preserveSnapshot?: StoreSnapshot,
+  preserveSnapshot?: GraphStoreSnapshot,
 ): TotalSyncPayload {
   if (
     !preserveSnapshot ||
@@ -302,7 +302,7 @@ function materializeTotalSyncPayload(
 export function prepareTotalSyncPayload(
   payload: TotalSyncPayload,
   options: {
-    preserveSnapshot?: StoreSnapshot;
+    preserveSnapshot?: GraphStoreSnapshot;
   } = {},
 ):
   | {
@@ -1042,7 +1042,7 @@ function validateIncrementalSyncCursorSequence(
 }
 
 export function prepareIncrementalSyncResultForApply(
-  store: Store,
+  store: GraphStore,
   result: IncrementalSyncResult,
   currentCursor: string | undefined,
   options: {
@@ -1053,7 +1053,7 @@ export function prepareIncrementalSyncResultForApply(
   | {
       ok: true;
       value: IncrementalSyncPayload;
-      snapshot?: StoreSnapshot;
+      snapshot?: GraphStoreSnapshot;
     }
   | {
       ok: false;
@@ -1179,7 +1179,7 @@ export function validateAuthoritativeTotalSyncPayload<
   payload: TotalSyncPayload,
   namespace: T,
   options: {
-    preserveSnapshot?: StoreSnapshot;
+    preserveSnapshot?: GraphStoreSnapshot;
   } = {},
 ): GraphValidationResult<TotalSyncPayload> {
   const prepared = prepareTotalSyncPayload(payload, options);
@@ -1196,7 +1196,7 @@ export function validateAuthoritativeGraphWriteTransaction<
   const T extends Record<string, AnyTypeOutput>,
 >(
   transaction: GraphWriteTransaction,
-  store: Store,
+  store: GraphStore,
   namespace: T,
   options: {
     writeScope?: AuthoritativeWriteScope;
@@ -1229,7 +1229,7 @@ export function validateAuthoritativeGraphWriteResult<
   const T extends Record<string, AnyTypeOutput>,
 >(
   result: AuthoritativeGraphWriteResult,
-  store: Store,
+  store: GraphStore,
   namespace: T,
 ): GraphValidationResult<AuthoritativeGraphWriteResult> {
   const prepared = prepareAuthoritativeGraphWriteResult(result);
@@ -1258,7 +1258,7 @@ export function createAuthoritativeTotalSyncValidator<
 >(
   namespace: T,
   options: {
-    preserveSnapshot?: StoreSnapshot;
+    preserveSnapshot?: GraphStoreSnapshot;
   } = {},
 ): TotalSyncPayloadValidator {
   return (payload) => {
@@ -1269,7 +1269,7 @@ export function createAuthoritativeTotalSyncValidator<
 
 export function createAuthoritativeGraphWriteResultValidator<
   const T extends Record<string, AnyTypeOutput>,
->(store: Store, namespace: T): AuthoritativeGraphWriteResultValidator {
+>(store: GraphStore, namespace: T): AuthoritativeGraphWriteResultValidator {
   return (result, validationStore = store) => {
     const validation = validateAuthoritativeGraphWriteResult(result, validationStore, namespace);
     if (!validation.ok) throw new GraphValidationError(validation);

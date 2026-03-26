@@ -1,4 +1,4 @@
-import { defineNamespace } from "../runtime/schema.js";
+import { applyIdMap } from "../runtime/schema.js";
 import coreIdMap from "./core.json";
 import { booleanTypeModule } from "./core/boolean/index.js";
 import { cardinality } from "./core/cardinality/index.js";
@@ -80,7 +80,7 @@ const range = rangeTypeModule.type;
 
 const rate = rateTypeModule.type;
 
-export const core = defineNamespace(coreIdMap, {
+export const core = applyIdMap(coreIdMap, {
   string,
   number,
   date,

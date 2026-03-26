@@ -1,3 +1,5 @@
+import type { GraphStore } from "@io/graph-kernel";
+
 import { deleteEntity, updateEntity } from "./client-actions";
 import {
   assertValidResult,
@@ -39,10 +41,9 @@ import type {
   ScalarTypeOutput,
   TypeOutput,
 } from "./schema";
-import type { Store } from "./store";
 
 function createPredicateRef<T extends EdgeOutput, Defs extends Record<string, AnyTypeOutput>>(
-  store: Store,
+  store: GraphStore,
   subjectId: string,
   field: T,
   applyMutation: (value: unknown | typeof clearFieldValue) => void,
@@ -193,7 +194,7 @@ function createPredicateRef<T extends EdgeOutput, Defs extends Record<string, An
 }
 
 function buildFieldRefs<T extends FieldsOutput, Defs extends Record<string, AnyTypeOutput>>(
-  store: Store,
+  store: GraphStore,
   subjectId: string,
   fields: T,
   path: string[],
@@ -259,7 +260,7 @@ function buildFieldRefs<T extends FieldsOutput, Defs extends Record<string, AnyT
 }
 
 export function createEntityRef<T extends TypeOutput, Defs extends Record<string, AnyTypeOutput>>(
-  store: Store,
+  store: GraphStore,
   id: string,
   typeDef: T,
   namespace: Defs,

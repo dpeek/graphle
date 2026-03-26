@@ -5,7 +5,7 @@ import {
   createStore,
   createSyncedTypeClient,
   createTypeClient,
-  defineNamespace,
+  applyIdMap,
   defineSecretField,
   defineType,
   edgeId,
@@ -15,7 +15,7 @@ import {
   type GraphWriteTransaction,
   type InvalidationEvent,
   type SerializedQueryRequest,
-  type StoreSnapshot,
+  type GraphStoreSnapshot,
 } from "@io/core/graph";
 import { core } from "@io/core/graph/modules";
 import { ops } from "@io/core/graph/modules/ops";
@@ -81,7 +81,7 @@ const secretNote = defineType({
     }),
   },
 });
-const secretNoteNamespace = defineNamespace(createIdMap({ secretNote }).map, {
+const secretNoteNamespace = applyIdMap(createIdMap({ secretNote }).map, {
   secretNote,
 });
 const secretNoteGraph = { ...productGraph, ...secretNoteNamespace } as const;
@@ -127,7 +127,7 @@ const capabilityNote = defineType({
     },
   },
 });
-const capabilityNoteNamespace = defineNamespace(createIdMap({ capabilityNote }).map, {
+const capabilityNoteNamespace = applyIdMap(createIdMap({ capabilityNote }).map, {
   capabilityNote,
 });
 const capabilityGraph = { ...productGraph, ...capabilityNoteNamespace } as const;
@@ -173,7 +173,7 @@ const shareProbe = defineType({
     },
   },
 });
-const shareProbeNamespace = defineNamespace(createIdMap({ shareProbe }).map, {
+const shareProbeNamespace = applyIdMap(createIdMap({ shareProbe }).map, {
   shareProbe,
 });
 const shareProofGraph = { ...productGraph, ...shareProbeNamespace } as const;
@@ -185,7 +185,7 @@ const editableNote = defineType({
     ...core.node.fields,
   },
 });
-const editableNoteNamespace = defineNamespace(createIdMap({ editableNote }).map, {
+const editableNoteNamespace = applyIdMap(createIdMap({ editableNote }).map, {
   editableNote,
 });
 const editableNoteGraph = { ...productGraph, ...editableNoteNamespace } as const;
@@ -296,8 +296,8 @@ function updateScopedCursor(cursor: string, updates: Record<string, string>): st
 }
 
 function buildGraphWriteTransaction(
-  before: StoreSnapshot,
-  after: StoreSnapshot,
+  before: GraphStoreSnapshot,
+  after: GraphStoreSnapshot,
   id: string,
 ): GraphWriteTransaction {
   const previousEdgeIds = new Set(before.edges.map((edge) => edge.id));
@@ -320,7 +320,7 @@ function buildGraphWriteTransaction(
 }
 
 function createMutationStoreForGraph<TGraph extends Record<string, AnyTypeOutput>>(
-  snapshot: StoreSnapshot,
+  snapshot: GraphStoreSnapshot,
   graph: TGraph,
 ) {
   const mutationStore = createStore(snapshot);
@@ -330,7 +330,7 @@ function createMutationStoreForGraph<TGraph extends Record<string, AnyTypeOutput
   };
 }
 
-function createProductMutationStore(snapshot: StoreSnapshot) {
+function createProductMutationStore(snapshot: GraphStoreSnapshot) {
   return createMutationStoreForGraph(snapshot, productGraph);
 }
 
@@ -555,7 +555,7 @@ async function applyServerCommandTransaction(
 }
 
 function buildRetractSecretReferenceTransaction(
-  snapshot: StoreSnapshot,
+  snapshot: GraphStoreSnapshot,
   entityId: string,
   txId: string,
 ): GraphWriteTransaction {

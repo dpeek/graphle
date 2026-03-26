@@ -107,7 +107,7 @@ function createCompanyNameWriteTransaction(
   const assertOp = {
     op: "assert" as const,
     edge: {
-      id: options.edgeId ?? store.newNode(),
+      id: options.edgeId ?? store.newId(),
       s: companyId,
       p: edgeId(testNamespace.company.fields.name),
       o: name,
@@ -3276,7 +3276,7 @@ describe("authoritative graph writes", () => {
     const authority = createAuthoritativeGraphWriteSession(server.store, testNamespace, {
       cursorPrefix: "server:",
     });
-    const assertedEdgeId = server.store.newNode();
+    const assertedEdgeId = server.store.newId();
     const first = createCompanyNameWriteTransaction(
       server.store,
       companyId,

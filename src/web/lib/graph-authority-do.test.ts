@@ -7,7 +7,7 @@ import {
   createPersistedAuthoritativeGraph,
   createStore,
   createTypeClient,
-  defineNamespace,
+  applyIdMap,
   defineSecretField,
   defineType,
   edgeId,
@@ -18,7 +18,7 @@ import {
   type GraphWriteTransaction,
   type NamespaceClient,
   type PersistedAuthoritativeGraphStorage,
-  type StoreSnapshot,
+  type GraphStoreSnapshot,
 } from "@io/core/graph";
 import { core } from "@io/core/graph/modules";
 import { ops } from "@io/core/graph/modules/ops";
@@ -80,7 +80,7 @@ const hiddenCursorProbe = defineType({
     },
   },
 });
-const hiddenCursorProbeNamespace = defineNamespace(createIdMap({ hiddenCursorProbe }).map, {
+const hiddenCursorProbeNamespace = applyIdMap(createIdMap({ hiddenCursorProbe }).map, {
   hiddenCursorProbe,
 });
 const hiddenCursorGraph = { ...core, ...hiddenCursorProbeNamespace } as const;
@@ -107,7 +107,7 @@ const visibilityProbe = defineType({
     },
   },
 });
-const visibilityProbeNamespace = defineNamespace(createIdMap({ visibilityProbe }).map, {
+const visibilityProbeNamespace = applyIdMap(createIdMap({ visibilityProbe }).map, {
   visibilityProbe,
 });
 const visibilityProofGraph = { ...productGraph, ...visibilityProbeNamespace } as const;
@@ -127,7 +127,7 @@ const secretNote = defineType({
     }),
   },
 });
-const secretNoteNamespace = defineNamespace(createIdMap({ secretNote }).map, {
+const secretNoteNamespace = applyIdMap(createIdMap({ secretNote }).map, {
   secretNote,
 });
 const secretNoteGraph = { ...productGraph, ...secretNoteNamespace } as const;
@@ -173,7 +173,7 @@ const capabilityNote = defineType({
     },
   },
 });
-const capabilityNoteNamespace = defineNamespace(createIdMap({ capabilityNote }).map, {
+const capabilityNoteNamespace = applyIdMap(createIdMap({ capabilityNote }).map, {
   capabilityNote,
 });
 const capabilityProofGraph = { ...productGraph, ...capabilityNoteNamespace } as const;
@@ -217,7 +217,7 @@ const shareableNote = defineType({
     },
   },
 });
-const shareableNoteNamespace = defineNamespace(createIdMap({ shareableNote }).map, {
+const shareableNoteNamespace = applyIdMap(createIdMap({ shareableNote }).map, {
   shareableNote,
 });
 const shareableProofGraph = { ...productGraph, ...shareableNoteNamespace } as const;
@@ -302,7 +302,7 @@ type SyncPayload = {
           readonly maxTransactions: number;
         };
   };
-  readonly snapshot?: StoreSnapshot;
+  readonly snapshot?: GraphStoreSnapshot;
   readonly transactions?: readonly {
     readonly cursor: string;
     readonly replayed: boolean;
@@ -610,8 +610,8 @@ function queryAll<T extends Record<string, unknown>>(
 }
 
 function buildGraphWriteTransaction(
-  before: StoreSnapshot,
-  after: StoreSnapshot,
+  before: GraphStoreSnapshot,
+  after: GraphStoreSnapshot,
   id: string,
 ): GraphWriteTransaction {
   const previousEdgeIds = new Set(before.edges.map((edge) => edge.id));
@@ -634,7 +634,7 @@ function buildGraphWriteTransaction(
 }
 
 function buildTransactionFromSnapshot<TResult>(
-  snapshot: StoreSnapshot,
+  snapshot: GraphStoreSnapshot,
   id: string,
   mutate: (graph: NamespaceClient<typeof productGraph>) => TResult,
 ): {
@@ -645,7 +645,7 @@ function buildTransactionFromSnapshot<TResult>(
 }
 
 function buildRetractSecretReferenceTransaction(
-  snapshot: StoreSnapshot,
+  snapshot: GraphStoreSnapshot,
   entityId: string,
   txId: string,
 ): GraphWriteTransaction {
@@ -660,7 +660,7 @@ function buildRetractSecretReferenceTransaction(
 }
 
 function buildTransactionFromGraphSnapshot<TGraph extends Record<string, AnyTypeOutput>, TResult>(
-  snapshot: StoreSnapshot,
+  snapshot: GraphStoreSnapshot,
   graph: TGraph,
   id: string,
   mutate: (graph: NamespaceClient<TGraph>) => TResult,
@@ -727,7 +727,7 @@ function createHiddenCursorAdvanceAuthorityFactory(ref: { entityId: string | nul
 }
 
 function buildHiddenCursorAdvanceTransaction(
-  snapshot: StoreSnapshot,
+  snapshot: GraphStoreSnapshot,
   entityId: string,
   txId: string,
   hiddenState = `hidden:${txId}`,
@@ -950,13 +950,13 @@ async function postWorkflowLive(
 
 async function getDurableAuthority(durableObject: WebGraphAuthorityDurableObject): Promise<{
   persist(): Promise<void>;
-  readSnapshot(options: { authorization: AuthorizationContext }): StoreSnapshot;
+  readSnapshot(options: { authorization: AuthorizationContext }): GraphStoreSnapshot;
 }>;
 async function getDurableAuthority<T>(durableObject: WebGraphAuthorityDurableObject): Promise<T>;
 async function getDurableAuthority<
   T = {
     persist(): Promise<void>;
-    readSnapshot(options: { authorization: AuthorizationContext }): StoreSnapshot;
+    readSnapshot(options: { authorization: AuthorizationContext }): GraphStoreSnapshot;
   },
 >(durableObject: WebGraphAuthorityDurableObject): Promise<T> {
   return (
@@ -3609,7 +3609,7 @@ describe("web graph authority durable object", () => {
         writeScope: "authority-only" | "client-tx" | "server-command";
       }>;
       store: {
-        snapshot(): StoreSnapshot;
+        snapshot(): GraphStoreSnapshot;
       };
     }>(durableObject);
 
@@ -3687,7 +3687,7 @@ describe("web graph authority durable object", () => {
         writeScope: "authority-only" | "client-tx" | "server-command";
       }>;
       store: {
-        snapshot(): StoreSnapshot;
+        snapshot(): GraphStoreSnapshot;
       };
     }>(durableObject);
 
@@ -3882,7 +3882,7 @@ describe("web graph authority durable object", () => {
         writeScope: "authority-only" | "client-tx" | "server-command";
       }>;
       store: {
-        snapshot(): StoreSnapshot;
+        snapshot(): GraphStoreSnapshot;
       };
     }>(durableObject);
 
@@ -3964,7 +3964,7 @@ describe("web graph authority durable object", () => {
       }>;
       persist(): Promise<void>;
       store: {
-        snapshot(): StoreSnapshot;
+        snapshot(): GraphStoreSnapshot;
       };
     }>(durableObject);
 

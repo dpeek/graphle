@@ -1,4 +1,4 @@
-import type { Store } from "@io/core/graph";
+import type { GraphStore } from "@io/core/graph";
 import { ops } from "@io/core/graph/modules/ops";
 import { pkm } from "@io/core/graph/modules/pkm";
 
@@ -21,7 +21,7 @@ const inferredProjectLimitMessage =
 const attachedRepositoryLimitMessage =
   "Branch 6 v1 supports exactly one attached workflow repository per graph.";
 
-export function requireProject(graph: ProductGraphClient, store: Store, projectId: string) {
+export function requireProject(graph: ProductGraphClient, store: GraphStore, projectId: string) {
   if (!hasEntityOfType(store, projectId, workflowProjectTypeId)) {
     throw new WorkflowMutationError(
       404,
@@ -32,7 +32,11 @@ export function requireProject(graph: ProductGraphClient, store: Store, projectI
   return graph.workflowProject.get(projectId);
 }
 
-export function requireRepository(graph: ProductGraphClient, store: Store, repositoryId: string) {
+export function requireRepository(
+  graph: ProductGraphClient,
+  store: GraphStore,
+  repositoryId: string,
+) {
   if (!hasEntityOfType(store, repositoryId, workflowRepositoryTypeId)) {
     throw new WorkflowMutationError(
       409,
@@ -43,7 +47,7 @@ export function requireRepository(graph: ProductGraphClient, store: Store, repos
   return graph.workflowRepository.get(repositoryId);
 }
 
-export function requireBranch(graph: ProductGraphClient, store: Store, branchId: string) {
+export function requireBranch(graph: ProductGraphClient, store: GraphStore, branchId: string) {
   if (!hasEntityOfType(store, branchId, workflowBranchTypeId)) {
     throw new WorkflowMutationError(
       404,
@@ -54,7 +58,7 @@ export function requireBranch(graph: ProductGraphClient, store: Store, branchId:
   return graph.workflowBranch.get(branchId);
 }
 
-export function requireCommit(graph: ProductGraphClient, store: Store, commitId: string) {
+export function requireCommit(graph: ProductGraphClient, store: GraphStore, commitId: string) {
   if (!hasEntityOfType(store, commitId, workflowCommitTypeId)) {
     throw new WorkflowMutationError(
       404,
@@ -67,7 +71,7 @@ export function requireCommit(graph: ProductGraphClient, store: Store, commitId:
 
 export function requireRepositoryBranch(
   graph: ProductGraphClient,
-  store: Store,
+  store: GraphStore,
   repositoryBranchId: string,
 ) {
   if (!hasEntityOfType(store, repositoryBranchId, repositoryBranchTypeId)) {
@@ -82,7 +86,7 @@ export function requireRepositoryBranch(
 
 export function requireRepositoryCommit(
   graph: ProductGraphClient,
-  store: Store,
+  store: GraphStore,
   repositoryCommitId: string,
 ) {
   if (!hasEntityOfType(store, repositoryCommitId, repositoryCommitTypeId)) {
@@ -95,7 +99,7 @@ export function requireRepositoryCommit(
   return graph.repositoryCommit.get(repositoryCommitId);
 }
 
-export function requireDocument(graph: ProductGraphClient, store: Store, documentId: string) {
+export function requireDocument(graph: ProductGraphClient, store: GraphStore, documentId: string) {
   if (!hasEntityOfType(store, documentId, documentTypeId)) {
     throw new WorkflowMutationError(
       404,

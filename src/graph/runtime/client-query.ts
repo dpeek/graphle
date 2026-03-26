@@ -1,3 +1,5 @@
+import type { GraphStore } from "@io/graph-kernel";
+
 import {
   isEdgeOutput,
   isTree,
@@ -16,10 +18,9 @@ import type {
   ScalarTypeOutput,
   TypeOutput,
 } from "./schema";
-import type { Store } from "./store";
 
 export function createQueryProjector<const T extends Record<string, AnyTypeOutput>>(
-  store: Store,
+  store: GraphStore,
   scalarByKey: Map<string, ScalarTypeOutput<any>>,
   typeByKey: Map<string, AnyTypeOutput>,
   hasEntity: <U extends TypeOutput>(typeDef: U, id: string) => boolean,

@@ -3,8 +3,13 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
-import { createIdMap, extractSchemaKeys, findDuplicateIds, type IdMap } from "@io/core/graph";
-import type { AnyTypeOutput } from "@io/core/graph";
+import {
+  createIdMap,
+  extractSchemaKeys,
+  findDuplicateIds,
+  type AnyTypeOutput,
+  type GraphIdMap,
+} from "@io/core/graph";
 
 type TypeNamespace = Record<string, AnyTypeOutput>;
 
@@ -79,13 +84,13 @@ async function importSchema(schemaPath: string): Promise<TypeNamespace> {
   return detectNamespace(moduleExports, schemaPath);
 }
 
-async function readMap(mapPath: string): Promise<IdMap | undefined> {
+async function readMap(mapPath: string): Promise<GraphIdMap | undefined> {
   if (!existsSync(mapPath)) return undefined;
   const json = await readFile(mapPath, "utf8");
-  return JSON.parse(json) as IdMap;
+  return JSON.parse(json) as GraphIdMap;
 }
 
-async function writeMap(mapPath: string, map: IdMap): Promise<void> {
+async function writeMap(mapPath: string, map: GraphIdMap): Promise<void> {
   await mkdir(dirname(mapPath), { recursive: true });
   await writeFile(mapPath, JSON.stringify(map, null, 2) + "\n", "utf8");
 }

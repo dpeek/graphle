@@ -1,4 +1,4 @@
-import type { StoreSnapshot } from "@io/core/graph";
+import type { GraphStoreSnapshot } from "@io/core/graph";
 
 import type {
   WebAppAuthoritySecretInventoryRecord,
@@ -132,7 +132,7 @@ export function pruneSecretValueRows(
 
 export function pruneOrphanedSecretValues(
   sql: DurableObjectSqlStorageLike,
-  snapshot: StoreSnapshot,
+  snapshot: GraphStoreSnapshot,
 ): void {
   pruneSecretValueRows(sql, collectLiveSecretIds(snapshot));
 }

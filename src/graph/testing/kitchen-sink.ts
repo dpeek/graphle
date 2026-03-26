@@ -1,5 +1,5 @@
 import { createIdMap } from "../runtime/identity.js";
-import { defineNamespace } from "../runtime/schema.js";
+import { applyIdMap } from "../runtime/schema.js";
 import { kitchenSinkEnumSchema } from "./kitchen-sink/enums.js";
 import { kitchenSinkScalarSchema } from "./kitchen-sink/scalars.js";
 import { kitchenSinkTypeSchema } from "./kitchen-sink/types.js";
@@ -14,4 +14,4 @@ export const kitchenSinkSchema = {
 
 export const kitchenSinkIdMap = createIdMap(kitchenSinkSchema).map;
 
-export const kitchenSink = defineNamespace(kitchenSinkIdMap, kitchenSinkSchema);
+export const kitchenSink = applyIdMap(kitchenSinkIdMap, kitchenSinkSchema);

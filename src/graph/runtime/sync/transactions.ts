@@ -1,5 +1,5 @@
 import type { GraphValidationResult } from "../client";
-import type { Store, StoreSnapshot } from "../store";
+import type { GraphStore, GraphStoreSnapshot } from "../store";
 import {
   type GraphWriteAssertOperation,
   type GraphWriteOperation,
@@ -60,13 +60,13 @@ export function sameGraphWriteTransaction(
   return true;
 }
 
-export function logicalFactKey(edge: StoreSnapshot["edges"][number]): string {
+export function logicalFactKey(edge: GraphStoreSnapshot["edges"][number]): string {
   return `${edge.s}\0${edge.p}\0${edge.o}`;
 }
 
 export function createGraphWriteOperationsFromSnapshots(
-  before: StoreSnapshot,
-  after: StoreSnapshot,
+  before: GraphStoreSnapshot,
+  after: GraphStoreSnapshot,
 ): readonly GraphWriteOperation[] {
   const beforeEdgeIds = new Set(before.edges.map((edge) => edge.id));
   const beforeRetractedIds = new Set(before.retracted);
@@ -95,8 +95,8 @@ export function createGraphWriteOperationsFromSnapshots(
 }
 
 export function createGraphWriteTransactionFromSnapshots(
-  before: StoreSnapshot,
-  after: StoreSnapshot,
+  before: GraphStoreSnapshot,
+  after: GraphStoreSnapshot,
   txId: string,
 ): GraphWriteTransaction {
   return canonicalizeGraphWriteTransaction({
@@ -110,7 +110,7 @@ function validateGraphWriteTransactionShape(
 ): readonly ReturnType<typeof createTransactionValidationIssue>[] {
   const issues = [];
   const candidate = transaction as Partial<GraphWriteTransaction> & Record<string, unknown>;
-  const assertIds = new Map<string, StoreSnapshot["edges"][number]>();
+  const assertIds = new Map<string, GraphStoreSnapshot["edges"][number]>();
   const retractIds = new Set<string>();
 
   if (typeof candidate.id !== "string") {
@@ -263,7 +263,7 @@ export function canonicalizeGraphWriteTransaction(
   transaction: GraphWriteTransaction,
 ): GraphWriteTransaction {
   const retractIds = new Set<string>();
-  const assertById = new Map<string, StoreSnapshot["edges"][number]>();
+  const assertById = new Map<string, GraphStoreSnapshot["edges"][number]>();
 
   for (const operation of transaction.ops) {
     if (operation.op === "retract") {
@@ -332,16 +332,16 @@ export function prepareGraphWriteTransaction(transaction: GraphWriteTransaction)
 }
 
 export function materializeGraphWriteTransactionSnapshot(
-  store: Store,
+  store: GraphStore,
   transaction: GraphWriteTransaction,
   options: {
     allowExistingAssertEdgeIds?: boolean;
-    sourceSnapshot?: StoreSnapshot;
+    sourceSnapshot?: GraphStoreSnapshot;
   } = {},
 ):
   | {
       ok: true;
-      value: StoreSnapshot;
+      value: GraphStoreSnapshot;
     }
   | {
       ok: false;
@@ -412,7 +412,10 @@ export function materializeGraphWriteTransactionSnapshot(
   };
 }
 
-export function applyGraphWriteTransaction(store: Store, transaction: GraphWriteTransaction): void {
+export function applyGraphWriteTransaction(
+  store: GraphStore,
+  transaction: GraphWriteTransaction,
+): void {
   store.batch(() => {
     for (const operation of transaction.ops) {
       if (operation.op === "retract") {

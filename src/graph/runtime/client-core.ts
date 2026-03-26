@@ -20,7 +20,7 @@ import type {
   ValidationEvent,
   ValidationPhase,
 } from "./schema";
-import type { PredicateSlotListener, Store } from "./store";
+import type { PredicateSlotListener, GraphStore } from "./store";
 
 export type TypeByKey<Defs extends Record<string, AnyTypeOutput>, K extends string> = Extract<
   Defs[keyof Defs],
@@ -443,8 +443,11 @@ export type NamespaceClient<T extends Record<string, AnyTypeOutput>> = {
   >;
 };
 
-const validationNowByStore = new WeakMap<Store, { version: number; now: Date }>();
-const validationCreateNodeIdByStore = new WeakMap<Store, { version: number; nodeId: string }>();
+const validationNowByStore = new WeakMap<GraphStore, { version: number; now: Date }>();
+const validationCreateNodeIdByStore = new WeakMap<
+  GraphStore,
+  { version: number; nodeId: string }
+>();
 
 export function isEdgeOutput(value: unknown): value is EdgeOutput {
   const candidate = value as Partial<EdgeOutput>;
@@ -464,7 +467,7 @@ export function cloneDate(value: Date): Date {
   return new Date(value.getTime());
 }
 
-export function getStableValidationNow(store: Store): Date {
+export function getStableValidationNow(store: GraphStore): Date {
   const version = store.version();
   const cached = validationNowByStore.get(store);
   if (cached?.version === version) return cloneDate(cached.now);
@@ -474,7 +477,7 @@ export function getStableValidationNow(store: Store): Date {
   return cloneDate(now);
 }
 
-function collectUsedIds(store: Store): Set<string> {
+function collectUsedIds(store: GraphStore): Set<string> {
   const snapshot = store.snapshot();
   const usedIds = new Set<string>(snapshot.retracted);
 
@@ -488,14 +491,14 @@ function collectUsedIds(store: Store): Set<string> {
   return usedIds;
 }
 
-function createUnusedNodeId(store: Store): string {
+function createUnusedNodeId(store: GraphStore): string {
   const usedIds = collectUsedIds(store);
   let nodeId = createGraphId();
   while (usedIds.has(nodeId)) nodeId = createGraphId();
   return nodeId;
 }
 
-export function getStableCreateNodeId(store: Store): string {
+export function getStableCreateNodeId(store: GraphStore): string {
   const version = store.version();
   const cached = validationCreateNodeIdByStore.get(store);
   if (cached?.version === version) return cached.nodeId;
@@ -748,7 +751,7 @@ export function decodeForRange(
 }
 
 function readEncodedPredicateValues(
-  store: Store,
+  store: GraphStore,
   id: string,
   predicate: EdgeOutput,
   scalarByKey: Map<string, ScalarTypeOutput<any>>,
@@ -776,7 +779,7 @@ export function uniqueEncodedPredicateValues(
 }
 
 export function readLogicalManyValues(
-  store: Store,
+  store: GraphStore,
   id: string,
   predicate: EdgeOutput,
   scalarByKey: Map<string, ScalarTypeOutput<any>>,
@@ -870,7 +873,7 @@ export function removeManyValue(
 }
 
 export function readPredicateValue(
-  store: Store,
+  store: GraphStore,
   id: string,
   predicate: EdgeOutput,
   scalarByKey: Map<string, ScalarTypeOutput<any>>,

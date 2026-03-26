@@ -5,12 +5,12 @@ import {
   type AnyTypeOutput,
   type GraphWriteTransaction,
   type NamespaceClient,
-  type Store,
-  type StoreSnapshot,
+  type GraphStore,
+  type GraphStoreSnapshot,
 } from "@io/core/graph";
 
-function createRecordingStore(snapshot: StoreSnapshot): {
-  readonly store: Store;
+function createRecordingStore(snapshot: GraphStoreSnapshot): {
+  readonly store: GraphStore;
   buildTransaction(txId: string): GraphWriteTransaction;
 } {
   const store = createStore(snapshot);
@@ -18,14 +18,14 @@ function createRecordingStore(snapshot: StoreSnapshot): {
   let edgeIds = new Set(snapshot.edges.map((edge) => edge.id));
   let retractedEdgeIds = new Set(snapshot.retracted);
 
-  function syncSnapshotState(nextSnapshot: StoreSnapshot): void {
+  function syncSnapshotState(nextSnapshot: GraphStoreSnapshot): void {
     edgeIds = new Set(nextSnapshot.edges.map((edge) => edge.id));
     retractedEdgeIds = new Set(nextSnapshot.retracted);
   }
 
-  const recordingStore: Store = {
-    newNode() {
-      return store.newNode();
+  const recordingStore: GraphStore = {
+    newId() {
+      return store.newId();
     },
     assert(subjectId, predicateId, objectId) {
       const edge = store.assert(subjectId, predicateId, objectId);
@@ -102,10 +102,10 @@ function createRecordingStore(snapshot: StoreSnapshot): {
 }
 
 export function planRecordedMutation<const TGraph extends Record<string, AnyTypeOutput>, TResult>(
-  snapshot: StoreSnapshot,
+  snapshot: GraphStoreSnapshot,
   graph: TGraph,
   txId: string,
-  mutate: (graph: NamespaceClient<TGraph>, store: Store) => TResult,
+  mutate: (graph: NamespaceClient<TGraph>, store: GraphStore) => TResult,
 ): {
   readonly changed: boolean;
   readonly result: TResult;

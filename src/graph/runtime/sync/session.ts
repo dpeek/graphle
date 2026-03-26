@@ -7,7 +7,7 @@ import {
 } from "../client";
 import { core } from "../core";
 import type { AnyTypeOutput } from "../schema";
-import { createStore, type Store, type StoreSnapshot } from "../store";
+import { createStore, type GraphStore, type GraphStoreSnapshot } from "../store";
 import {
   GraphSyncWriteError,
   appendSyncActivity,
@@ -63,12 +63,12 @@ import {
 import { invalidGraphWriteResult, prefixGraphWriteResultIssues } from "./validation-helpers";
 
 export function createTotalSyncSession(
-  store: Store,
+  store: GraphStore,
   options: {
     requestedScope?: SyncScopeRequest;
     validate?: TotalSyncPayloadValidator;
     validateWriteResult?: AuthoritativeGraphWriteResultValidator;
-    preserveSnapshot?: StoreSnapshot;
+    preserveSnapshot?: GraphStoreSnapshot;
   } = {},
 ): TotalSyncSession {
   let state: SyncState = {
@@ -318,7 +318,7 @@ export function createTotalSyncSession(
 }
 
 export function createTotalSyncPayload<const T extends Record<string, AnyTypeOutput>>(
-  store: Store,
+  store: GraphStore,
   options: {
     authorizeRead?: ReplicationReadAuthorizer;
     completeness?: SyncCompleteness;
@@ -345,13 +345,13 @@ export function createTotalSyncPayload<const T extends Record<string, AnyTypeOut
 }
 
 export function createTotalSyncController(
-  store: Store,
+  store: GraphStore,
   options: {
     pull: SyncSource;
     requestedScope?: SyncScopeRequest;
     validate?: TotalSyncPayloadValidator;
     validateWriteResult?: AuthoritativeGraphWriteResultValidator;
-    preserveSnapshot?: StoreSnapshot;
+    preserveSnapshot?: GraphStoreSnapshot;
   },
 ): TotalSyncController {
   const session = createTotalSyncSession(store, {
@@ -400,7 +400,7 @@ export function createSyncedTypeClient<const T extends Record<string, AnyTypeOut
   let txSequence = 0;
   let pendingTransactions: GraphWriteTransaction[] = [];
   let captureDepth = 0;
-  let captureSnapshot: StoreSnapshot | undefined;
+  let captureSnapshot: GraphStoreSnapshot | undefined;
   let statusOverride: SyncStatus | undefined;
   let freshnessOverride: SyncFreshness | undefined;
   let errorOverride: unknown | undefined;
@@ -472,7 +472,7 @@ export function createSyncedTypeClient<const T extends Record<string, AnyTypeOut
     errorOverride = undefined;
   }
 
-  function materializeLocalSnapshot(): StoreSnapshot {
+  function materializeLocalSnapshot(): GraphStoreSnapshot {
     const replayStore = createStore(authoritativeStore.snapshot());
     for (const transaction of pendingTransactions) {
       applyGraphWriteTransaction(replayStore, transaction);
@@ -491,7 +491,7 @@ export function createSyncedTypeClient<const T extends Record<string, AnyTypeOut
     if (isRoot) captureSnapshot = store.snapshot();
     captureDepth += 1;
     let succeeded = false;
-    let before: StoreSnapshot | undefined;
+    let before: GraphStoreSnapshot | undefined;
     let result!: TResult;
 
     try {

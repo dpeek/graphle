@@ -342,6 +342,16 @@ export function createStore(initialSnapshot?: GraphStoreSnapshot): GraphStore {
   }
 
   function replace(nextSnapshot: GraphStoreSnapshot): void {
+    const observedSlots = [...predicateSlotListeners.keys()].map((key) => {
+      const [s, p] = key.split("\0") as [GraphId, GraphId];
+      return {
+        key,
+        s,
+        p,
+        before: snapshotPredicateSlot(s, p),
+      };
+    });
+
     edges.clear();
     retracted.clear();
     usedIds.clear();
@@ -366,6 +376,15 @@ export function createStore(initialSnapshot?: GraphStoreSnapshot): GraphStore {
     for (const edgeId of nextSnapshot.retracted) {
       usedIds.add(edgeId);
       retracted.add(edgeId);
+    }
+
+    pendingPredicateSlots.clear();
+    for (const slot of observedSlots) {
+      pendingPredicateSlots.set(slot.key, {
+        s: slot.s,
+        p: slot.p,
+        before: slot.before,
+      });
     }
 
     version += 1;

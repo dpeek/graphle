@@ -12,10 +12,10 @@ import {
   requestSerializedQuery,
   type FetchImpl,
 } from "./http-client";
-import { createIdMap, defineNamespace } from "./identity";
+import { createIdMap, applyIdMap } from "./identity";
 import { defineType, edgeId, typeId } from "./schema";
 import { serializedQueryVersion, type QueryResultPage } from "./serialized-query";
-import { createStore, type StoreSnapshot } from "./store";
+import { createStore, type GraphStoreSnapshot } from "./store";
 import {
   type AuthoritativeGraphRetainedHistoryPolicy,
   createAuthoritativeGraphWriteSession,
@@ -37,7 +37,7 @@ const item = defineType({
   },
 });
 
-const testGraph = defineNamespace(createIdMap({ item }).map, { item });
+const testGraph = applyIdMap(createIdMap({ item }).map, { item });
 
 const hiddenCursorProbe = defineType({
   values: { key: "test:hiddenCursorProbe", name: "Hidden Cursor Probe" },
@@ -58,7 +58,7 @@ const hiddenCursorProbe = defineType({
   },
 });
 
-const hiddenCursorNamespace = defineNamespace(createIdMap({ hiddenCursorProbe }).map, {
+const hiddenCursorNamespace = applyIdMap(createIdMap({ hiddenCursorProbe }).map, {
   hiddenCursorProbe,
 });
 const hiddenGraph = { ...core, ...hiddenCursorNamespace } as const;
@@ -143,7 +143,7 @@ function createHiddenCursorAuthority(
 }
 
 function createHiddenCursorAdvanceTransaction(
-  snapshot: StoreSnapshot,
+  snapshot: GraphStoreSnapshot,
   probeId: string,
   hiddenState: string,
   txId: string,

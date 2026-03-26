@@ -5,7 +5,7 @@ import {
   createIdMap,
   createStore,
   createTypeClient,
-  defineNamespace,
+  applyIdMap,
   type PredicateRef,
 } from "@io/core/graph";
 import {
@@ -57,7 +57,7 @@ const linkPreview = defineType({
   },
 });
 
-const viewsPageNamespace = defineNamespace(createIdMap({ linkPreview }).map, {
+const viewsPageNamespace = applyIdMap(createIdMap({ linkPreview }).map, {
   linkPreview,
 });
 

@@ -8,7 +8,7 @@ import {
   createSyncedTypeClient,
   createTotalSyncPayload,
   createTypeClient,
-  defineNamespace,
+  applyIdMap,
   defineScalar,
   defineType,
   edgeId,
@@ -86,7 +86,7 @@ function createValidationLifecycleFixture() {
     },
   });
 
-  const namespace = defineNamespace(
+  const namespace = applyIdMap(
     {},
     {
       score,
@@ -146,7 +146,7 @@ function createDeleteValidationLifecycleFixture() {
     },
   });
 
-  const namespace = defineNamespace(
+  const namespace = applyIdMap(
     {},
     {
       company,
@@ -444,7 +444,7 @@ describe("validation lifecycle contract", () => {
         {
           op: "assert" as const,
           edge: {
-            id: authorityGraph.store.newNode(),
+            id: authorityGraph.store.newId(),
             s: authorityId,
             p: edgeId(fixture.namespace.reviewItem.fields.title),
             o: "   ",
@@ -453,7 +453,7 @@ describe("validation lifecycle contract", () => {
         {
           op: "assert" as const,
           edge: {
-            id: authorityGraph.store.newNode(),
+            id: authorityGraph.store.newId(),
             s: authorityId,
             p: edgeId(fixture.namespace.reviewItem.fields.score),
             o: "Infinity",

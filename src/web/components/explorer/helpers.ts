@@ -4,7 +4,7 @@ import {
   GraphValidationError,
   isEntityType,
   type AnyTypeOutput,
-  type Store,
+  type GraphStore,
   typeId,
 } from "@io/core/graph";
 import { core, graphIconSeeds, resolvePredicateDefinitionIconId } from "@io/core/graph/modules";
@@ -86,14 +86,14 @@ export const postSecretFieldMutation: SubmitSecretFieldMutation = async (input) 
 };
 
 export function getFirstObject(
-  store: Store,
+  store: GraphStore,
   subjectId: string,
   predicateId: string,
 ): string | undefined {
   return store.facts(subjectId, predicateId)[0]?.o;
 }
 
-export function getNodeName(store: Store, id: string): string {
+export function getNodeName(store: GraphStore, id: string): string {
   return getFirstObject(store, id, edgeId(core.node.fields.name)) ?? id;
 }
 

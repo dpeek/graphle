@@ -6,7 +6,7 @@ import {
   createTypeClient,
   type AuthorizationContext,
   type GraphWriteTransaction,
-  type StoreSnapshot,
+  type GraphStoreSnapshot,
   type WebPrincipalSummary,
 } from "@io/core/graph";
 import { core } from "@io/core/graph/modules";
@@ -146,7 +146,7 @@ function createSqliteDurableObjectState(): {
   };
 }
 
-function createMutationStore(snapshot: StoreSnapshot) {
+function createMutationStore(snapshot: GraphStoreSnapshot) {
   const mutationStore = createStore(snapshot);
   return {
     mutationGraph: createTypeClient(mutationStore, core),
@@ -155,8 +155,8 @@ function createMutationStore(snapshot: StoreSnapshot) {
 }
 
 function buildGraphWriteTransaction(
-  before: StoreSnapshot,
-  after: StoreSnapshot,
+  before: GraphStoreSnapshot,
+  after: GraphStoreSnapshot,
   id: string,
 ): GraphWriteTransaction {
   const previousEdgeIds = new Set(before.edges.map((edge) => edge.id));

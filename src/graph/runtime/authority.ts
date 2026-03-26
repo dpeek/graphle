@@ -14,7 +14,7 @@ import {
   type PersistedAuthoritativeGraphStorageLoadResult,
 } from "./persisted-authority";
 import type { AnyTypeOutput } from "./schema";
-import type { Store, StoreSnapshot } from "./store";
+import type { GraphStore, GraphStoreSnapshot } from "./store";
 import {
   graphSyncScope,
   isAuthoritativeGraphRetainedHistoryPolicy,
@@ -33,10 +33,10 @@ function isObjectRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function validatePersistedSnapshot(
-  snapshot: StoreSnapshot,
+  snapshot: GraphStoreSnapshot,
   source: string,
   namespace: Record<string, AnyTypeOutput>,
-): StoreSnapshot {
+): GraphStoreSnapshot {
   const validation = validateAuthoritativeTotalSyncPayload(
     {
       mode: "total",
@@ -153,7 +153,7 @@ export function createJsonPersistedAuthoritativeGraphStorage<
         "snapshot" in parsed
       ) {
         const snapshot = validatePersistedSnapshot(
-          parsed.snapshot as StoreSnapshot,
+          parsed.snapshot as GraphStoreSnapshot,
           path,
           namespace,
         );
@@ -177,7 +177,7 @@ export function createJsonPersistedAuthoritativeGraphStorage<
       }
 
       return {
-        snapshot: validatePersistedSnapshot(parsed as StoreSnapshot, path, namespace),
+        snapshot: validatePersistedSnapshot(parsed as GraphStoreSnapshot, path, namespace),
         recovery: "reset-baseline",
         startupDiagnostics: {
           recovery: "reset-baseline",
@@ -225,7 +225,7 @@ export function createJsonPersistedAuthoritativeGraphStorage<
 export async function createJsonPersistedAuthoritativeGraph<
   const T extends Record<string, AnyTypeOutput>,
 >(
-  store: Store,
+  store: GraphStore,
   namespace: T,
   options: JsonPersistedAuthoritativeGraphOptions<T>,
 ): Promise<PersistedAuthoritativeGraph<T>> {

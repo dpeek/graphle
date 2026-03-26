@@ -9,7 +9,7 @@ import {
   type EntityRef,
   type GraphMutationValidationResult,
   type PredicateRef,
-  type Store,
+  type GraphStore,
 } from "@io/core/graph";
 import type { MutableRefObject } from "react";
 
@@ -27,7 +27,7 @@ type DraftControllerOptions = {
   entry: EntityCatalogEntry;
   entityEntryByIdRef: MutableRefObject<ReadonlyMap<string, EntityCatalogEntry>>;
   initialInput: Record<string, unknown>;
-  store: Store;
+  store: GraphStore;
   typeById: ReadonlyMap<string, AnyTypeOutput>;
 };
 

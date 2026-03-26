@@ -1,3 +1,12 @@
+import { fieldsMeta } from "@io/graph-kernel";
+
+/**
+ * Schema authoring remains local for now.
+ *
+ * The package copy is structurally close, but the local runtime still depends
+ * on its exact field-tree symbol flow and `ResolvedNamespace<T>` behavior.
+ */
+
 export type Cardinality = "one" | "one?" | "many";
 export type GraphFieldVisibility = "replicated" | "authority-only";
 export type GraphFieldWritePolicy = "client-tx" | "server-command" | "authority-only";
@@ -175,7 +184,7 @@ export interface FieldsInput {
   [key: string]: EdgeInput<RangeRef> | EdgeOutput | FieldsInput;
 }
 
-export const fieldsMeta: unique symbol = Symbol("fieldsMeta");
+export { fieldsMeta } from "@io/graph-kernel";
 
 export type FieldsOutput<T extends FieldsInput = any> = {
   [fieldsMeta]: { key: string };
@@ -530,4 +539,4 @@ export function defineEnum<
   return { kind: "enum", values, options: options as MaterializedEnumOptions<Key, Options> };
 }
 
-export { defineNamespace } from "./identity";
+export { applyIdMap } from "./identity";

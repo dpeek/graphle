@@ -2,8 +2,8 @@ import {
   edgeId,
   type GraphWriteTransaction,
   type NamespaceClient,
-  type Store,
-  type StoreSnapshot,
+  type GraphStore,
+  type GraphStoreSnapshot,
 } from "@io/core/graph";
 import { core } from "@io/core/graph/modules";
 import { ops } from "@io/core/graph/modules/ops";
@@ -144,11 +144,11 @@ export function parseOptionalDate(
   return parsed;
 }
 
-export function hasEntityOfType(store: Store, entityId: string, typeId: string): boolean {
+export function hasEntityOfType(store: GraphStore, entityId: string, typeId: string): boolean {
   return store.facts(entityId, edgeId(core.node.fields.type), typeId).length > 0;
 }
 
-export function clearSingleValue(store: Store, subjectId: string, predicateId: string): void {
+export function clearSingleValue(store: GraphStore, subjectId: string, predicateId: string): void {
   store.batch(() => {
     for (const edge of store.facts(subjectId, predicateId)) {
       store.retract(edge.id);
@@ -157,7 +157,7 @@ export function clearSingleValue(store: Store, subjectId: string, predicateId: s
 }
 
 export function setSingleValue(
-  store: Store,
+  store: GraphStore,
   subjectId: string,
   predicateId: string,
   objectId: string,
@@ -174,9 +174,9 @@ export function setSingleValue(
 }
 
 export function planWorkflowMutation<TResult>(
-  snapshot: StoreSnapshot,
+  snapshot: GraphStoreSnapshot,
   txId: string,
-  mutate: (graph: ProductGraphClient, store: Store) => TResult,
+  mutate: (graph: ProductGraphClient, store: GraphStore) => TResult,
 ): {
   readonly changed: boolean;
   readonly result: TResult;

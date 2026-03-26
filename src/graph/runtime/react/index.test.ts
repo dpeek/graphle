@@ -6,7 +6,7 @@ import {
   createIdMap,
   createStore,
   createTypeClient,
-  defineNamespace,
+  applyIdMap,
   defineType,
 } from "../../index.js";
 import { core } from "../../modules/index.js";
@@ -25,7 +25,7 @@ const item = defineType({
   },
 });
 
-const itemNamespace = defineNamespace(createIdMap({ item }).map, { item });
+const itemNamespace = applyIdMap(createIdMap({ item }).map, { item });
 
 function createNameRef() {
   const store = createStore();

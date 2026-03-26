@@ -1,3 +1,5 @@
+import { createStore, type GraphStore } from "@io/graph-kernel";
+
 import {
   clearFieldValue,
   cloneDate,
@@ -48,7 +50,6 @@ import type {
   ValidationIssueInput,
   ValidationPhase,
 } from "./schema";
-import { createStore, type Store } from "./store";
 
 function normalizeValidationIssueInputs(
   issues: ValidationIssueInput | ValidationIssueInput[] | void,
@@ -252,7 +253,7 @@ function validateEntityReferenceValue(
   entry: FlatPredicateEntry,
   nodeId: string,
   value: unknown,
-  store: Store,
+  store: GraphStore,
   typeByKey: Map<string, AnyTypeOutput>,
 ): void {
   const rangeType = typeByKey.get(entry.predicate.range);
@@ -331,7 +332,7 @@ function appendManagedFieldMutationIssue<T extends TypeOutput>(
 }
 
 function validateNodeTypeState(
-  store: Store,
+  store: GraphStore,
   nodeId: string,
   hasCurrentTypeFact: boolean,
   typeByKey: Map<string, AnyTypeOutput>,
@@ -365,7 +366,7 @@ function validateNodeTypeState(
 }
 
 function validateTypedHandleTarget<T extends TypeOutput>(
-  store: Store,
+  store: GraphStore,
   nodeId: string,
   typeDef: T,
   typeByKey: Map<string, AnyTypeOutput>,
@@ -424,7 +425,7 @@ function validateTypedHandleTarget<T extends TypeOutput>(
 }
 
 function normalizeMutationValue(
-  store: Store,
+  store: GraphStore,
   nodeId: string,
   entry: FlatPredicateEntry,
   nextValue: unknown,
@@ -610,7 +611,7 @@ function normalizeMutationValue(
 function collectLogicalChangedPredicateKeys(
   input: Record<string, unknown>,
   entries: FlatPredicateEntry[],
-  store: Store,
+  store: GraphStore,
   id: string,
   scalarByKey: Map<string, ScalarTypeOutput<any>>,
   typeByKey: Map<string, AnyTypeOutput>,
@@ -665,7 +666,7 @@ function applyLifecycleHooks(
   event: "create" | "update",
   input: Record<string, unknown>,
   entries: FlatPredicateEntry[],
-  store: Store,
+  store: GraphStore,
   nodeId: string,
   now: Date,
   scalarByKey: Map<string, ScalarTypeOutput<any>>,
@@ -709,7 +710,7 @@ function applyLifecycleHooks(
 }
 
 function validateSimulatedLocalMutation(
-  validationStore: Store,
+  validationStore: GraphStore,
   namespace: Record<string, AnyTypeOutput>,
   now: Date,
   prepared: GraphMutationValidationResult,
@@ -733,7 +734,7 @@ function validateSimulatedLocalMutation(
 }
 
 function prepareMutationInput<T extends TypeOutput>(
-  store: Store,
+  store: GraphStore,
   typeDef: T,
   inputValue: Record<string, unknown>,
   event: Extract<ValidationEvent, "create" | "update">,
@@ -809,12 +810,12 @@ function prepareMutationInput<T extends TypeOutput>(
     : validResult("local", event, input, changedPredicateKeys);
 }
 
-function cloneStoreForValidation(store: Store): Store {
+function cloneStoreForValidation(store: GraphStore): GraphStore {
   return createStore(store.snapshot());
 }
 
 function collectionItemPassesValidation(
-  store: Store,
+  store: GraphStore,
   nodeId: string,
   predicate: EdgeOutput,
   value: unknown,
@@ -861,7 +862,7 @@ function collectionItemPassesValidation(
 }
 
 export function planManyRemoveMutation(
-  store: Store,
+  store: GraphStore,
   subjectId: string,
   predicate: EdgeOutput,
   currentValues: unknown[],
@@ -908,7 +909,7 @@ export function planManyRemoveMutation(
 }
 
 export function validateCreateEntity<T extends TypeOutput>(
-  store: Store,
+  store: GraphStore,
   typeDef: T,
   data: CreateInputOfType<T, Record<string, AnyTypeOutput>>,
   scalarByKey: Map<string, ScalarTypeOutput<any>>,
@@ -949,7 +950,7 @@ export function validateCreateEntity<T extends TypeOutput>(
 }
 
 function validateEntityState<T extends TypeOutput>(
-  store: Store,
+  store: GraphStore,
   id: string,
   typeDef: T,
   now: Date,
@@ -1093,7 +1094,7 @@ function validateEntityState<T extends TypeOutput>(
 }
 
 export function validateUpdateEntity<T extends TypeOutput>(
-  store: Store,
+  store: GraphStore,
   id: string,
   typeDef: T,
   patch: Record<string, unknown>,
@@ -1149,7 +1150,7 @@ export function prepareDeleteEntity<
   T extends TypeOutput,
   Defs extends Record<string, AnyTypeOutput>,
 >(
-  store: Store,
+  store: GraphStore,
   id: string,
   typeDef: T,
   typeByKey: Map<string, AnyTypeOutput>,
@@ -1187,7 +1188,7 @@ export function prepareDeleteEntity<
 }
 
 export function validateGraphStore<const T extends Record<string, AnyTypeOutput>>(
-  store: Store,
+  store: GraphStore,
   namespace: T,
   options: {
     now?: Date;

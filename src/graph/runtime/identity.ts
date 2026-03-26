@@ -1,4 +1,5 @@
-import { createGraphId } from "./id";
+import { createGraphId } from "@io/graph-kernel";
+
 import {
   fieldsMeta,
   type EnumTypeOutput,
@@ -12,7 +13,12 @@ import {
   type FieldsOutput,
 } from "./schema";
 
-export type IdMap = {
+/**
+ * The runtime still owns namespace resolution because the local schema layer
+ * carries field-tree metadata and generic refinements that are not yet fully
+ * type-identical with `@io/graph-kernel`.
+ */
+export type GraphIdMap = {
   version: number;
   keys: Record<string, string>;
 };
@@ -63,8 +69,8 @@ function isEdgeOutput(value: unknown): value is EdgeOutput {
   return typeof candidate.key === "string" && typeof candidate.range === "string";
 }
 
-function normalizeMap(input: IdMap | Record<string, string>): Record<string, string> {
-  const candidate = input as Partial<IdMap>;
+function normalizeMap(input: GraphIdMap | Record<string, string>): Record<string, string> {
+  const candidate = input as Partial<GraphIdMap>;
   if (candidate.keys && typeof candidate.keys === "object") return candidate.keys;
   return input as Record<string, string>;
 }
@@ -152,9 +158,9 @@ export function extractSchemaKeys(namespace: IdNamespace): string[] {
  */
 export function createIdMap(
   namespace: IdNamespace,
-  existing?: IdMap,
+  existing?: GraphIdMap,
   options: { pruneOrphans?: boolean } = {},
-): { map: IdMap; added: string[]; removed: string[] } {
+): { map: GraphIdMap; added: string[]; removed: string[] } {
   if (existing) validateNormalizedMap(existing.keys);
   const schemaKeys = extractSchemaKeys(namespace);
   const nextKeys: Record<string, string> = { ...existing?.keys };
@@ -190,7 +196,7 @@ export function createIdMap(
   };
 }
 
-export function findDuplicateIds(map: IdMap): Array<{ id: string; keys: string[] }> {
+export function findDuplicateIds(map: GraphIdMap): Array<{ id: string; keys: string[] }> {
   const byId = new Map<string, string[]>();
   for (const [key, id] of Object.entries(map.keys)) {
     const bucket = byId.get(id);
@@ -206,8 +212,8 @@ export function findDuplicateIds(map: IdMap): Array<{ id: string; keys: string[]
   return duplicates.sort((a, b) => a.id.localeCompare(b.id));
 }
 
-export function defineNamespace<const T extends IdNamespace>(
-  input: IdMap | Record<string, string>,
+export function applyIdMap<const T extends IdNamespace>(
+  input: GraphIdMap | Record<string, string>,
   namespace: T,
   options: MapKeysOptions = {},
 ): ResolvedNamespace<T> {

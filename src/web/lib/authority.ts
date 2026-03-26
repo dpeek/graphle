@@ -53,8 +53,8 @@ import {
   type NormalizedQueryRequest,
   type ReplicationReadAuthorizer,
   type SyncDiagnostics,
-  type Store,
-  type StoreSnapshot,
+  type GraphStore,
+  type GraphStoreSnapshot,
   type AuthoritativeGraphWriteResult,
   validateShareGrant,
   matchesModuleReadScopeRequest,
@@ -159,7 +159,7 @@ type AuthorizationCapabilityResolver = {
   }) => readonly string[];
 };
 type CompiledGraphArtifacts = {
-  readonly bootstrappedSnapshot: StoreSnapshot;
+  readonly bootstrappedSnapshot: GraphStoreSnapshot;
   readonly compiledFieldIndex: ReadonlyMap<string, CompiledFieldDefinition>;
   readonly scalarByKey: ReturnType<typeof collectScalarCodecs>;
   readonly typeByKey: ReturnType<typeof collectTypeIndex>;
@@ -377,7 +377,7 @@ export type WebAppAuthority = Omit<
     input: SessionPrincipalLookupInput,
     options?: WebAppAuthoritySessionPrincipalLookupOptions,
   ): Promise<SessionPrincipalProjection>;
-  readSnapshot(options: WebAppAuthorityReadOptions): StoreSnapshot;
+  readSnapshot(options: WebAppAuthorityReadOptions): GraphStoreSnapshot;
   readPredicateValue(
     subjectId: string,
     predicateId: string,
@@ -653,7 +653,7 @@ function headCursor(
 }
 
 function buildRetainedWorkflowProjectionState(
-  snapshot: StoreSnapshot,
+  snapshot: GraphStoreSnapshot,
   sourceCursor: string,
 ): RetainedWorkflowProjectionState {
   const projectionStore = createStore(snapshot);
@@ -715,7 +715,7 @@ function assertCurrentPolicyVersion(
 }
 
 function assertCurrentCapabilityVersion(
-  store: Store,
+  store: GraphStore,
   authorization: AuthorizationContext,
 ): PolicyError | undefined {
   if (!authorization.principalId) {
@@ -739,7 +739,7 @@ function assertCurrentCapabilityVersion(
 }
 
 function assertCurrentAuthorizationVersion(
-  store: Store,
+  store: GraphStore,
   authorization: AuthorizationContext,
   authorityPolicyVersion: number,
 ): PolicyError | undefined {
@@ -1193,19 +1193,19 @@ function requireWorkflowLiveRegistrationPrincipal(authorization: AuthorizationCo
 
 function resolveScopedSubjectId(
   operation: GraphWriteTransaction["ops"][number],
-  edgeById: Map<string, StoreSnapshot["edges"][number]>,
+  edgeById: Map<string, GraphStoreSnapshot["edges"][number]>,
 ): string | undefined {
   if (operation.op === "assert") return operation.edge.s;
   return edgeById.get(operation.edgeId)?.s;
 }
 
-function subjectTypeId(store: Store, subjectId: string): string | undefined {
+function subjectTypeId(store: GraphStore, subjectId: string): string | undefined {
   return store.get(subjectId, typePredicateId) ?? store.find(subjectId, typePredicateId)[0]?.o;
 }
 
 function addTouchedSubjectTypeId(
   typeIds: Set<string>,
-  store: Store,
+  store: GraphStore,
   subjectId: string | undefined,
 ): void {
   if (!subjectId) {
@@ -1219,8 +1219,8 @@ function addTouchedSubjectTypeId(
 }
 
 function collectTouchedTypeIdsForTransaction(
-  snapshot: StoreSnapshot,
-  store: Store,
+  snapshot: GraphStoreSnapshot,
+  store: GraphStore,
   transaction: GraphWriteTransaction,
 ): readonly string[] {
   const edgeById = new Map(snapshot.edges.map((edge) => [edge.id, edge]));
@@ -1237,7 +1237,7 @@ function collectTouchedTypeIdsForTransaction(
 }
 
 function scopeIncludesSubject(
-  store: Store,
+  store: GraphStore,
   typeIds: ReadonlySet<string>,
   subjectId: string,
 ): boolean {
@@ -1246,10 +1246,10 @@ function scopeIncludesSubject(
 }
 
 function filterModuleScopedSnapshot(
-  snapshot: StoreSnapshot,
-  store: Store,
+  snapshot: GraphStoreSnapshot,
+  store: GraphStore,
   plannedScope: PlannedWebAppAuthorityScope,
-): StoreSnapshot {
+): GraphStoreSnapshot {
   const edges = snapshot.edges
     .filter((edge) => scopeIncludesSubject(store, plannedScope.typeIds, edge.s))
     .map((edge) => ({ ...edge }));
@@ -1263,8 +1263,8 @@ function filterModuleScopedSnapshot(
 
 function filterModuleScopedWriteResult(
   result: AuthoritativeGraphWriteResult,
-  store: Store,
-  edgeById: Map<string, StoreSnapshot["edges"][number]>,
+  store: GraphStore,
+  edgeById: Map<string, GraphStoreSnapshot["edges"][number]>,
   plannedScope: PlannedWebAppAuthorityScope,
 ): AuthoritativeGraphWriteResult | undefined {
   const ops = result.transaction.ops.filter((operation) => {
@@ -1334,15 +1334,19 @@ export class WebAppAuthorityBearerShareLookupError extends Error {
     this.reason = reason;
   }
 }
-function getFirstObject(store: Store, subjectId: string, predicateId: string): string | undefined {
+function getFirstObject(
+  store: GraphStore,
+  subjectId: string,
+  predicateId: string,
+): string | undefined {
   return store.facts(subjectId, predicateId)[0]?.o;
 }
 
-function getEntityLabel(store: Store, id: string): string {
+function getEntityLabel(store: GraphStore, id: string): string {
   return getFirstObject(store, id, namePredicateId) ?? id;
 }
 
-export function collectLiveSecretIds(snapshot: StoreSnapshot): readonly string[] {
+export function collectLiveSecretIds(snapshot: GraphStoreSnapshot): readonly string[] {
   const retractedEdgeIds = new Set(snapshot.retracted);
   const secretHandleIds = new Set<string>();
 
@@ -1386,7 +1390,7 @@ function toSecretInventory(
 }
 
 function resolveSecretStartupDrift(
-  snapshot: StoreSnapshot,
+  snapshot: GraphStoreSnapshot,
   graph: WebAppAuthorityGraph,
   secretInventory: Record<string, WebAppAuthoritySecretInventoryRecord>,
 ): WebAppAuthoritySecretStartupDrift {
@@ -1437,7 +1441,7 @@ function resolveSecretStartupDrift(
   };
 }
 
-function hasEntityOfType(store: Store, entityId: string, typeId: string): boolean {
+function hasEntityOfType(store: GraphStore, entityId: string, typeId: string): boolean {
   return store.facts(entityId, typePredicateId, typeId).length > 0;
 }
 
@@ -1445,7 +1449,11 @@ function uniqueStrings(values: Iterable<string | undefined>): string[] {
   return [...new Set([...values].filter((value): value is string => typeof value === "string"))];
 }
 
-function readNonNegativeIntegerField(store: Store, subjectId: string, predicateId: string): number {
+function readNonNegativeIntegerField(
+  store: GraphStore,
+  subjectId: string,
+  predicateId: string,
+): number {
   const raw = getFirstObject(store, subjectId, predicateId);
   if (raw === undefined) {
     return 0;
@@ -1455,12 +1463,12 @@ function readNonNegativeIntegerField(store: Store, subjectId: string, predicateI
   return Number.isInteger(value) && value >= 0 ? value : 0;
 }
 
-function readPrincipalCapabilityVersion(store: Store, principalId: string): number {
+function readPrincipalCapabilityVersion(store: GraphStore, principalId: string): number {
   return readNonNegativeIntegerField(store, principalId, principalCapabilityVersionPredicateId);
 }
 
 function readCapabilityGrantTargetPrincipalId(
-  store: Store,
+  store: GraphStore,
   capabilityGrantId: string,
 ): string | undefined {
   return getFirstObject(store, capabilityGrantId, capabilityGrantTargetKindPredicateId) ===
@@ -1470,14 +1478,14 @@ function readCapabilityGrantTargetPrincipalId(
 }
 
 function readCapabilityGrantTargetKindId(
-  store: Store,
+  store: GraphStore,
   capabilityGrantId: string,
 ): string | undefined {
   return getFirstObject(store, capabilityGrantId, capabilityGrantTargetKindPredicateId);
 }
 
 function readResolvedAuthorizationCapabilityGrant(
-  store: Store,
+  store: GraphStore,
   capabilityGrantId: string,
 ): ResolvedAuthorizationCapabilityGrant | null {
   if (!hasEntityOfType(store, capabilityGrantId, capabilityGrantTypeId)) {
@@ -1529,7 +1537,7 @@ function readResolvedAuthorizationCapabilityGrant(
 }
 
 function readActivePrincipalCapabilityGrantIds(
-  store: Store,
+  store: GraphStore,
   principalId: string,
 ): readonly string[] {
   return uniqueStrings(
@@ -1551,7 +1559,7 @@ function isBearerShareAuthorizationContext(authorization: AuthorizationContext):
 }
 
 function readAuthorizationCapabilityGrants(
-  store: Store,
+  store: GraphStore,
   authorization: AuthorizationContext,
 ): readonly ResolvedAuthorizationCapabilityGrant[] {
   if (authorization.capabilityGrantIds.length === 0) {
@@ -1599,7 +1607,7 @@ function grantHasExpired(grant: ResolvedAuthorizationCapabilityGrant): boolean {
 }
 
 function readActiveCapabilityGrantShareGrantIds(
-  store: Store,
+  store: GraphStore,
   capabilityGrantId: string,
 ): readonly string[] {
   return uniqueStrings(
@@ -1618,7 +1626,7 @@ function readActiveCapabilityGrantShareGrantIds(
 }
 
 function readValidatedActiveShareGrants(
-  store: Store,
+  store: GraphStore,
   grant: ResolvedAuthorizationCapabilityGrant,
 ): ReadonlyArray<{
   readonly id: string;
@@ -1697,7 +1705,7 @@ function readValidatedActiveShareGrants(
 }
 
 function readCapabilityGrantShareGrantIds(
-  store: Store,
+  store: GraphStore,
   capabilityGrantId: string,
 ): readonly string[] {
   return uniqueStrings(
@@ -1714,7 +1722,7 @@ function readCapabilityGrantShareGrantIds(
 }
 
 function readBearerShareProjection(
-  store: Store,
+  store: GraphStore,
   input: BearerShareLookupInput,
 ): BearerShareProjection {
   const matchingGrantIds = uniqueStrings(
@@ -1822,7 +1830,7 @@ function grantMatchesPredicateTarget(
 }
 
 function grantMatchesSharedPredicateTarget(
-  store: Store,
+  store: GraphStore,
   grant: ResolvedAuthorizationCapabilityGrant,
   target: AuthorizationDecisionTarget,
 ): boolean {
@@ -1885,7 +1893,7 @@ function appendCapabilityKeys(
 }
 
 function createAuthorizationCapabilityResolver(
-  store: Store,
+  store: GraphStore,
   authorization: AuthorizationContext,
 ): AuthorizationCapabilityResolver {
   const grants = readAuthorizationCapabilityGrants(store, authorization);
@@ -1939,7 +1947,7 @@ function createAuthorizationCapabilityResolver(
 }
 
 function matchesAuthSubjectProjection(
-  store: Store,
+  store: GraphStore,
   projectionId: string,
   subject: AuthSubjectRef,
 ): boolean {
@@ -1955,7 +1963,7 @@ function matchesAuthSubjectProjection(
   );
 }
 
-function listActiveAuthSubjectProjectionIds(store: Store, subject: AuthSubjectRef): string[] {
+function listActiveAuthSubjectProjectionIds(store: GraphStore, subject: AuthSubjectRef): string[] {
   return uniqueStrings(
     store
       .facts(undefined, authSubjectProjectionIssuerPredicateId, subject.issuer)
@@ -1970,7 +1978,7 @@ function listActiveAuthSubjectProjectionIds(store: Store, subject: AuthSubjectRe
   );
 }
 
-function listActiveAuthUserProjectionIds(store: Store, authUserId: string): string[] {
+function listActiveAuthUserProjectionIds(store: GraphStore, authUserId: string): string[] {
   return uniqueStrings(
     store
       .facts(undefined, authSubjectProjectionAuthUserIdPredicateId, authUserId)
@@ -1984,7 +1992,7 @@ function listActiveAuthUserProjectionIds(store: Store, authUserId: string): stri
   );
 }
 
-function readPrincipalRoleKeys(store: Store, principalId: string): readonly string[] {
+function readPrincipalRoleKeys(store: GraphStore, principalId: string): readonly string[] {
   return uniqueStrings(
     store
       .facts(undefined, principalRoleBindingPrincipalPredicateId, principalId)
@@ -2019,7 +2027,7 @@ function principalHasGraphMemberAccess(
   );
 }
 
-function readPrincipalSharedReadAccess(store: Store, principalId: string): boolean {
+function readPrincipalSharedReadAccess(store: GraphStore, principalId: string): boolean {
   return readActivePrincipalCapabilityGrantIds(store, principalId).some((capabilityGrantId) => {
     const grant = readResolvedAuthorizationCapabilityGrant(store, capabilityGrantId);
     return grant !== null && readValidatedActiveShareGrants(store, grant).length > 0;
@@ -2027,7 +2035,7 @@ function readPrincipalSharedReadAccess(store: Store, principalId: string): boole
 }
 
 function readWebPrincipalSummary(
-  store: Store,
+  store: GraphStore,
   principalId: string,
   graphId: string,
   policyVersion: number,
@@ -2064,7 +2072,7 @@ function readWebPrincipalSummary(
 }
 
 function readSessionPrincipalProjection(
-  store: Store,
+  store: GraphStore,
   principalId: string,
   graphId: string,
   policyVersion: number = webAppPolicyVersion,
@@ -2083,7 +2091,7 @@ function readSessionPrincipalProjection(
 }
 
 function readProjectionSessionPrincipalProjection(
-  store: Store,
+  store: GraphStore,
   projectionId: string,
   graphId: string,
   policyVersion: number = webAppPolicyVersion,
@@ -2098,7 +2106,11 @@ function readProjectionSessionPrincipalProjection(
     : null;
 }
 
-function readAuthUserPrincipalIds(store: Store, graphId: string, authUserId: string): string[] {
+function readAuthUserPrincipalIds(
+  store: GraphStore,
+  graphId: string,
+  authUserId: string,
+): string[] {
   return uniqueStrings(
     listActiveAuthUserProjectionIds(store, authUserId)
       .map((projectionId) =>
@@ -2111,13 +2123,13 @@ function readAuthUserPrincipalIds(store: Store, graphId: string, authUserId: str
   );
 }
 
-function principalNeedsHomeGraphRepair(store: Store, principalId: string): boolean {
+function principalNeedsHomeGraphRepair(store: GraphStore, principalId: string): boolean {
   return !store
     .facts(principalId, principalHomeGraphIdPredicateId)
     .some((edge) => typeof edge.o === "string" && edge.o.trim().length > 0);
 }
 
-function listPrincipalIdsMissingHomeGraphId(store: Store): string[] {
+function listPrincipalIdsMissingHomeGraphId(store: GraphStore): string[] {
   return uniqueStrings(
     store
       .facts(undefined, typePredicateId, principalTypeId)
@@ -2168,7 +2180,7 @@ function buildPrincipalName(subject: AuthSubjectRef): string {
   return `Principal ${subject.authUserId}`;
 }
 
-function listAdmissionPolicyIds(store: Store, graphId: string): string[] {
+function listAdmissionPolicyIds(store: GraphStore, graphId: string): string[] {
   return uniqueStrings(
     store
       .facts(undefined, admissionPolicyGraphIdPredicateId, graphId)
@@ -2177,7 +2189,7 @@ function listAdmissionPolicyIds(store: Store, graphId: string): string[] {
   );
 }
 
-function readAdmissionPolicy(store: Store, graphId: string): AdmissionPolicy | null {
+function readAdmissionPolicy(store: GraphStore, graphId: string): AdmissionPolicy | null {
   const policyIds = listAdmissionPolicyIds(store, graphId);
   if (policyIds.length === 0) {
     return null;
@@ -2284,7 +2296,7 @@ function normalizeRoleKeys(
   return normalized;
 }
 
-function listAdmissionApprovalIds(store: Store, graphId: string, email: string): string[] {
+function listAdmissionApprovalIds(store: GraphStore, graphId: string, email: string): string[] {
   return uniqueStrings(
     store
       .facts(undefined, admissionApprovalGraphIdPredicateId, graphId)
@@ -2298,7 +2310,7 @@ function listAdmissionApprovalIds(store: Store, graphId: string, email: string):
 }
 
 function readActiveAdmissionApproval(
-  store: Store,
+  store: GraphStore,
   graphId: string,
   email: string | undefined,
 ): AdmissionApprovalProjection | null {
@@ -2344,7 +2356,7 @@ function readActiveAdmissionApproval(
   };
 }
 
-function countActiveAuthorityPrincipals(store: Store, graphId: string): number {
+function countActiveAuthorityPrincipals(store: GraphStore, graphId: string): number {
   return uniqueStrings(
     store
       .facts(undefined, principalRoleBindingRoleKeyPredicateId, authorityRoleKey)
@@ -2366,7 +2378,7 @@ function countActiveAuthorityPrincipals(store: Store, graphId: string): number {
   ).length;
 }
 
-function countAdmittedHumanPrincipals(store: Store, graphId: string): number {
+function countAdmittedHumanPrincipals(store: GraphStore, graphId: string): number {
   return uniqueStrings(
     store
       .facts(undefined, typePredicateId, principalTypeId)
@@ -2390,7 +2402,7 @@ function readEmailDomain(email: string | undefined): string | null {
 }
 
 function resolveAdmissionRoleKeys(
-  store: Store,
+  store: GraphStore,
   input: SessionPrincipalLookupInput,
 ): readonly string[] {
   const approval = readActiveAdmissionApproval(store, input.graphId, input.email);
@@ -2429,7 +2441,7 @@ function resolveAdmissionRoleKeys(
 }
 
 function resolveInitialRoleBindingRoleKeys(
-  store: Store,
+  store: GraphStore,
   input: SessionPrincipalLookupInput,
   principalId: string,
 ): readonly string[] {
@@ -2472,7 +2484,7 @@ function resolveInitialRoleBindingRoleKeys(
 
 function ensurePrincipalRoleBindings(
   mutationGraph: NamespaceClient<WebAppGraph>,
-  mutationStore: Store,
+  mutationStore: GraphStore,
   principalId: string,
   roleKeys: readonly string[],
 ): void {
@@ -2557,7 +2569,7 @@ function createConflictingBearerShareLookupError(
 }
 
 function setSingleReferenceField(
-  store: Store,
+  store: GraphStore,
   subjectId: string,
   predicateId: string,
   objectId: string,
@@ -2574,7 +2586,7 @@ function setSingleReferenceField(
 }
 
 function resolveRoleBindingPrincipalIds(
-  store: Store,
+  store: GraphStore,
   principalRoleBindingId: string,
 ): readonly string[] {
   return uniqueStrings([
@@ -2583,13 +2595,13 @@ function resolveRoleBindingPrincipalIds(
 }
 
 function resolveCapabilityGrantPrincipalIds(
-  store: Store,
+  store: GraphStore,
   capabilityGrantId: string,
 ): readonly string[] {
   return uniqueStrings([readCapabilityGrantTargetPrincipalId(store, capabilityGrantId)]);
 }
 
-function resolveShareGrantPrincipalIds(store: Store, shareGrantId: string): readonly string[] {
+function resolveShareGrantPrincipalIds(store: GraphStore, shareGrantId: string): readonly string[] {
   const capabilityGrantId = getFirstObject(
     store,
     shareGrantId,
@@ -2602,15 +2614,18 @@ function resolveShareGrantPrincipalIds(store: Store, shareGrantId: string): read
   return resolveCapabilityGrantPrincipalIds(store, capabilityGrantId);
 }
 
-function readShareGrantCapabilityGrantId(store: Store, shareGrantId: string): string | undefined {
+function readShareGrantCapabilityGrantId(
+  store: GraphStore,
+  shareGrantId: string,
+): string | undefined {
   return getFirstObject(store, shareGrantId, shareGrantCapabilityGrantPredicateId);
 }
 
 function resolveCapabilityVersionAffectedPrincipalIds(
-  beforeStore: Store,
-  afterStore: Store,
+  beforeStore: GraphStore,
+  afterStore: GraphStore,
   transaction: GraphWriteTransaction,
-  snapshot: StoreSnapshot,
+  snapshot: GraphStoreSnapshot,
 ): readonly string[] {
   const touchedPredicatesBySubject = new Map<string, Set<string>>();
   const edgeById = createTransactionEdgeIndex(snapshot);
@@ -2663,7 +2678,7 @@ function resolveCapabilityVersionAffectedPrincipalIds(
 }
 
 function planCapabilityVersionInvalidationTransaction(
-  snapshot: StoreSnapshot,
+  snapshot: GraphStoreSnapshot,
   transaction: GraphWriteTransaction,
 ): GraphWriteTransaction {
   if (transaction.ops.length === 0) {
@@ -2727,9 +2742,9 @@ function planCapabilityVersionInvalidationTransaction(
 }
 
 function planAuthorityMutation<TResult>(
-  snapshot: StoreSnapshot,
+  snapshot: GraphStoreSnapshot,
   txId: string,
-  mutate: (graph: NamespaceClient<WebAppGraph>, store: Store) => TResult,
+  mutate: (graph: NamespaceClient<WebAppGraph>, store: GraphStore) => TResult,
 ): {
   readonly changed: boolean;
   readonly result: TResult;
@@ -2739,14 +2754,14 @@ function planAuthorityMutation<TResult>(
 }
 
 function createTransactionEdgeIndex(
-  snapshot: StoreSnapshot,
-): ReadonlyMap<string, StoreSnapshot["edges"][number]> {
+  snapshot: GraphStoreSnapshot,
+): ReadonlyMap<string, GraphStoreSnapshot["edges"][number]> {
   return new Map(snapshot.edges.map((edge) => [edge.id, edge]));
 }
 
 function resolveOperationTarget(
   operation: GraphWriteTransaction["ops"][number],
-  edgeById: ReadonlyMap<string, StoreSnapshot["edges"][number]>,
+  edgeById: ReadonlyMap<string, GraphStoreSnapshot["edges"][number]>,
 ):
   | {
       readonly subjectId: string;
@@ -2770,7 +2785,7 @@ function resolveOperationTarget(
 
 function resolveTransactionTarget(
   transaction: GraphWriteTransaction,
-  snapshot: StoreSnapshot,
+  snapshot: GraphStoreSnapshot,
 ): ReadonlyArray<{
   readonly path: readonly string[];
   readonly subjectId: string;
@@ -2797,8 +2812,8 @@ function resolveTransactionTarget(
 }
 
 function changesRequireVisibilityReset(
-  store: Store,
-  snapshot: StoreSnapshot,
+  store: GraphStore,
+  snapshot: GraphStoreSnapshot,
   changes: ReturnType<PersistedWebAppAuthority["getChangesAfter"]>,
   authorization: AuthorizationContext,
 ): boolean {
@@ -2881,7 +2896,7 @@ function authorizationHasAuthorityAccess(authorization: AuthorizationContext): b
   );
 }
 
-function subjectIsHiddenIdentityEntity(store: Store, subjectId: string): boolean {
+function subjectIsHiddenIdentityEntity(store: GraphStore, subjectId: string): boolean {
   return store
     .facts(subjectId, typePredicateId)
     .some((edge) => nonAuthorityHiddenIdentityTypeIds.has(edge.o));
@@ -2910,7 +2925,7 @@ function evaluateAuthorityOnlyIdentityRead(
 }
 
 function evaluateReadAuthorization(
-  store: Store,
+  store: GraphStore,
   authorization: AuthorizationContext,
   compiledFieldIndex: ReadonlyMap<string, CompiledFieldDefinition>,
   capabilityResolver: AuthorizationCapabilityResolver,
@@ -2934,7 +2949,7 @@ function evaluateReadAuthorization(
 }
 
 function createReadableReplicationAuthorizer(
-  store: Store,
+  store: GraphStore,
   authorization: AuthorizationContext,
   compiledFieldIndex: ReadonlyMap<string, CompiledFieldDefinition>,
   authorityPolicyVersion: number = webAppPolicyVersion,
@@ -2961,11 +2976,11 @@ function createReadableReplicationAuthorizer(
 }
 
 function filterReadableSnapshot(
-  store: Store,
-  snapshot: StoreSnapshot,
+  store: GraphStore,
+  snapshot: GraphStoreSnapshot,
   authorization: AuthorizationContext,
   compiledFieldIndex: ReadonlyMap<string, CompiledFieldDefinition>,
-): StoreSnapshot {
+): GraphStoreSnapshot {
   const authorizeReadablePredicate = createReadableReplicationAuthorizer(
     store,
     authorization,
@@ -2988,7 +3003,7 @@ function filterReadableSnapshot(
   };
 }
 
-function listWorkflowProjectionSubjectIds(store: Store): string[] {
+function listWorkflowProjectionSubjectIds(store: GraphStore): string[] {
   const subjectIds = new Set<string>();
   for (const edge of store.snapshot().edges) {
     if (edge.p === typePredicateId && workflowProjectionReadEntityTypeIds.has(edge.o)) {
@@ -3000,7 +3015,7 @@ function listWorkflowProjectionSubjectIds(store: Store): string[] {
 }
 
 function assertWorkflowProjectionReadable(
-  store: Store,
+  store: GraphStore,
   authorization: AuthorizationContext,
   compiledFieldIndex: ReadonlyMap<string, CompiledFieldDefinition>,
   authorityPolicyVersion: number = webAppPolicyVersion,
@@ -3034,7 +3049,7 @@ function assertWorkflowProjectionReadable(
 
 function assertTransactionAuthorized(
   transaction: GraphWriteTransaction,
-  snapshot: StoreSnapshot,
+  snapshot: GraphStoreSnapshot,
   authorization: AuthorizationContext,
   authorityPolicyVersion: number,
   writeScope: AuthoritativeWriteScope,
@@ -3155,7 +3170,7 @@ function createAdmissionApprovalCommandPolicy(): GraphCommandPolicy {
 
 function assertCommandAuthorized(input: {
   readonly authorization: AuthorizationContext;
-  readonly store: Store;
+  readonly store: GraphStore;
   readonly authorityPolicyVersion?: number;
   readonly commandKey: string;
   readonly commandPolicy: GraphCommandPolicy;
@@ -3437,7 +3452,7 @@ export async function createWebAppAuthority(
     await replaceRetainedWorkflowProjection(recoveredWorkflowProjection);
   }
 
-  function readSnapshot(options: WebAppAuthorityReadOptions): StoreSnapshot {
+  function readSnapshot(options: WebAppAuthorityReadOptions): GraphStoreSnapshot {
     return filterReadableSnapshot(
       authority.store,
       authority.store.snapshot(),
@@ -3489,11 +3504,11 @@ export async function createWebAppAuthority(
     );
   }
 
-  function createReadableQueryStore(options: WebAppAuthorityReadOptions): Store {
+  function createReadableQueryStore(options: WebAppAuthorityReadOptions): GraphStore {
     return createStore(readSnapshot(options));
   }
 
-  function buildEntityQueryItem(store: Store, subjectId: string): QueryResultItem {
+  function buildEntityQueryItem(store: GraphStore, subjectId: string): QueryResultItem {
     const predicateIds = [...new Set(store.facts(subjectId).map((edge) => edge.p))].sort();
     const payload: Record<string, unknown> = {};
 

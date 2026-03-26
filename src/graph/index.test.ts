@@ -68,7 +68,7 @@ const requiredRootExports = [
   "authorizeRead",
   "authorizeWrite",
   "createIdMap",
-  "defineNamespace",
+  "applyIdMap",
   "defineReferenceField",
   "defineSecretField",
   "defineType",
@@ -102,7 +102,7 @@ const requiredAuthorityExports = [
 
 const requiredDefExports = [
   "defineEnum",
-  "defineNamespace",
+  "applyIdMap",
   "defineReferenceField",
   "defineScalar",
   "defineSecretField",
