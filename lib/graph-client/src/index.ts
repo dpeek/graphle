@@ -56,9 +56,9 @@ export {
   type GraphClientSyncState,
   type GraphClientSyncStateListener,
   type GraphClientSyncStatus,
+  type GraphClientSyncController,
   type GraphWriteSink,
   type SyncedGraphClient,
-  type GraphSyncController,
 } from "./sync.js";
 export {
   createHttpGraphClient,

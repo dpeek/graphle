@@ -50,24 +50,27 @@ same rights or the same data.
 
 ## Published Boundary Today
 
-Branch 1 publishes the shared write boundary for authoritative operations. It
-does not currently publish a graph-owned command envelope, registry, or
+`@io/graph-authority` now publishes the shared write boundary for authoritative
+operations. It does not publish a graph-owned command envelope, registry, or
 dispatcher.
 
 Stable shared surface:
 
+- authoritative write sessions and persisted-authority APIs
+- authority validation helpers and total-sync payload creation
 - authorization snapshots plus `authorizeRead(...)`, `authorizeWrite(...)`,
   and `authorizeCommand(...)`
-- field-authority metadata and write-scope values
-- graph write transactions and authoritative write results
-- sync payloads and persisted-authority APIs
-- secret-handle versus plaintext split
+- graph-owned policy, share, and admission contracts
+- field-authority metadata and write-scope values consumed from
+  `@io/graph-kernel` and `@io/graph-sync`
 
 Consumer-owned for now:
 
 - generic command envelopes and result payloads
 - dispatch registries and command naming
 - HTTP or RPC routes such as `POST /api/commands`
+- Better Auth request/session projection and host bridges
+- Durable Object and SQLite storage adapters in `src/web/lib/*`
 - per-type method lowering APIs above the shared write boundary
 
 ## Predicate-Level Visibility
@@ -91,12 +94,13 @@ That means the client should only ever query over the graph slice it is allowed
 to hold. Hidden predicates are not "false" on the client. They are simply not
 part of the client's authoritative view.
 
-The shared runtime evaluator now lives in `../../src/graph/runtime/authorization.ts`.
-It exposes `authorizeRead(...)`, `authorizeWrite(...)`, and
-`authorizeCommand(...)` as fail-closed helpers that take an
-`AuthorizationContext`, predicate policy, command policy, and touched-predicate
-metadata and return a stable allow-or-deny result with Branch 2 policy error
-codes.
+The shared runtime evaluator now lives in
+`../../lib/graph-authority/src/authorization.ts` and is published from
+`@io/graph-authority`. It exposes `authorizeRead(...)`,
+`authorizeWrite(...)`, and `authorizeCommand(...)` as fail-closed helpers that
+take an `AuthorizationContext`, predicate policy, command policy, and
+touched-predicate metadata and return a stable allow-or-deny result with
+Branch 2 policy error codes.
 
 ## Type-Local Business Methods
 

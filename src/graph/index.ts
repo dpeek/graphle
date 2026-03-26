@@ -1,5 +1,3 @@
-export * from "./runtime/persisted-authority.js";
-export * from "./runtime/authorization.js";
 export * from "./runtime/bootstrap.js";
 export * from "./runtime/contracts.js";
 export * from "./runtime/id.js";

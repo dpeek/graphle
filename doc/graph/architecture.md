@@ -26,10 +26,10 @@ This document is the high-level entry point for agents reasoning about the engin
 - `../../src/graph/runtime/schema.ts`: schema definitions, field trees, type helpers
 - `../../src/graph/runtime/identity.ts`: stable key-to-id resolution and id-map helpers
 - `../../src/graph/runtime/bootstrap.ts`: schema bootstrap into store facts
-- `../../src/graph/runtime/client.ts`: typed CRUD, refs, query, and validation lifecycle
-- `../../src/graph/runtime/authority.ts`: persisted authority orchestration, storage contracts, and JSON hydration/commit/persist helpers
-- `../../src/graph/runtime/authority-session.ts`: authoritative write sessions, retained history, and incremental delivery
-- `../../src/graph/runtime/synced-client.ts`: runtime synced client state, write flushing, and reconcile behavior
+- `../../lib/graph-client/src/`: typed CRUD, refs, local validation, synced-client state, write flushing, reconcile behavior, and HTTP/query client helpers
+- `../../lib/graph-authority/src/json-storage.ts`: shipped JSON persistence adapter for durable authorities
+- `../../lib/graph-authority/src/persisted-authority.ts`: persisted authority orchestration and storage contracts
+- `../../lib/graph-authority/src/session.ts`: authoritative write sessions, retained history, and incremental delivery
 - `../../lib/graph-sync/src/`: shared sync contracts, payload validation, cursor helpers, and total sync sessions
 - `../../src/graph/runtime/type-module.ts`: typed scalar/enum module contracts
 
@@ -42,7 +42,7 @@ This document is the high-level entry point for agents reasoning about the engin
 - The first query surface is typed and local-store-backed.
 - Incremental sync is already represented as ordered authoritative transactions after a cursor.
 - JSON persistence can recover snapshot state and retained write history across restart.
-- The graph package owns the persisted-authority contract, including versioned state shape, legacy rewrite, and save rollback semantics.
+- `@io/graph-authority` owns the persisted-authority contract, including versioned state shape, legacy rewrite, and save rollback semantics.
 
 ## Current Schema Ownership
 
@@ -83,7 +83,7 @@ authority surfaces, but they do not own new durable namespace buckets.
 
 ## Ownership Boundary
 
-- `graph` owns the authoritative persistence primitives: the storage contract, JSON adapter, versioned persisted state, retained write history, cursor recovery, and rollback-on-durable-write-failure behavior.
+- `@io/graph-authority` owns the authoritative persistence primitives: the storage contract, JSON adapter, versioned persisted state, retained write history, cursor recovery, and rollback-on-durable-write-failure behavior.
 - Consumer packages own composition around those primitives: bootstrap ordering, seed policy, file-path/config resolution, and process lifecycle.
 - Transport remains consumer-owned. `graph` defines the sync payloads and replay rules, while packages like `app` choose how to expose them over HTTP or other transports.
 

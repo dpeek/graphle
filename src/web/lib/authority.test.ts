@@ -9,7 +9,6 @@ import {
   edgeId,
   type AnyTypeOutput,
   type AuthSubjectRef,
-  type AuthorizationContext,
   type InvalidationEvent,
   type GraphStoreSnapshot,
 } from "@io/core/graph";
@@ -24,6 +23,7 @@ import {
   workflowReviewSyncScopeRequest,
 } from "@io/core/graph/modules/ops/workflow";
 import { pkm } from "@io/core/graph/modules/pkm";
+import { type AuthorizationContext } from "@io/graph-authority";
 import {
   createSyncedGraphClient,
   createGraphClient,
@@ -800,7 +800,7 @@ describe("web authority", () => {
     expect(created.created).toBe(true);
     expect(created.rotated).toBe(false);
     expect(created.secretVersion).toBe(1);
-    expect(JSON.stringify(authority.createSyncPayload({ authorization }))).not.toContain(
+    expect(JSON.stringify(authority.createTotalSyncPayload({ authorization }))).not.toContain(
       "sk-live-first",
     );
     expect(storage.read()?.secrets?.[createdSecretId]?.value).toBe("sk-live-first");
@@ -842,7 +842,7 @@ describe("web authority", () => {
         secretHandleVersionPredicateId,
       ),
     ).toBe(2);
-    expect(JSON.stringify(restarted.createSyncPayload({ authorization }))).not.toContain(
+    expect(JSON.stringify(restarted.createTotalSyncPayload({ authorization }))).not.toContain(
       "sk-live-second",
     );
 
@@ -897,7 +897,7 @@ describe("web authority", () => {
       readStringPredicateValue(authority, authorization, envVarId, envVarSecretPredicateId),
     ).toBeUndefined();
     expect(storage.read()?.secrets?.[created.secretId]).toBeUndefined();
-    expect(JSON.stringify(authority.createSyncPayload({ authorization }))).not.toContain(
+    expect(JSON.stringify(authority.createTotalSyncPayload({ authorization }))).not.toContain(
       "sk-live-first",
     );
 
@@ -907,7 +907,7 @@ describe("web authority", () => {
       readStringPredicateValue(restarted, authorization, envVarId, envVarSecretPredicateId),
     ).toBeUndefined();
     expect(storage.read()?.secrets?.[created.secretId]).toBeUndefined();
-    expect(JSON.stringify(restarted.createSyncPayload({ authorization }))).not.toContain(
+    expect(JSON.stringify(restarted.createTotalSyncPayload({ authorization }))).not.toContain(
       "sk-live-first",
     );
   });
@@ -950,7 +950,7 @@ describe("web authority", () => {
 
     expect(createStore(authority.readSnapshot({ authorization })).facts(envVarId)).toHaveLength(0);
     expect(storage.read()?.secrets?.[created.secretId]).toBeUndefined();
-    expect(JSON.stringify(authority.createSyncPayload({ authorization }))).not.toContain(
+    expect(JSON.stringify(authority.createTotalSyncPayload({ authorization }))).not.toContain(
       "sk-live-first",
     );
 
@@ -958,7 +958,7 @@ describe("web authority", () => {
 
     expect(createStore(restarted.readSnapshot({ authorization })).facts(envVarId)).toHaveLength(0);
     expect(storage.read()?.secrets?.[created.secretId]).toBeUndefined();
-    expect(JSON.stringify(restarted.createSyncPayload({ authorization }))).not.toContain(
+    expect(JSON.stringify(restarted.createTotalSyncPayload({ authorization }))).not.toContain(
       "sk-live-first",
     );
   });
@@ -1378,7 +1378,7 @@ describe("web authority", () => {
       readStringPredicateValue(authority, authorization, envVarId, envVarSecretPredicateId),
     ).toBe(result.secretId);
     expect(storage.read()?.writeHistory.results.at(-1)?.writeScope).toBe("server-command");
-    expect(JSON.stringify(authority.createSyncPayload({ authorization }))).not.toContain(
+    expect(JSON.stringify(authority.createTotalSyncPayload({ authorization }))).not.toContain(
       "sk-live-command",
     );
   });
@@ -1428,7 +1428,7 @@ describe("web authority", () => {
       readStringPredicateValue(authority, authorization, secretNoteId, secretNoteSecretPredicateId),
     ).toBe(result.secretId);
     expect(storage.read()?.writeHistory.results.at(-1)?.writeScope).toBe("server-command");
-    expect(JSON.stringify(authority.createSyncPayload({ authorization }))).not.toContain(
+    expect(JSON.stringify(authority.createTotalSyncPayload({ authorization }))).not.toContain(
       "shared-note-secret",
     );
   });
@@ -1504,7 +1504,7 @@ describe("web authority", () => {
       readStringPredicateValue(authority, authorization, envVarId, envVarSecretPredicateId),
     ).toBe(payload.secretId);
     expect(storage.read()?.writeHistory.results.at(-1)?.writeScope).toBe("server-command");
-    expect(JSON.stringify(authority.createSyncPayload({ authorization }))).not.toContain(
+    expect(JSON.stringify(authority.createTotalSyncPayload({ authorization }))).not.toContain(
       "sk-live-command-route",
     );
   });
@@ -1585,7 +1585,7 @@ describe("web authority", () => {
       capabilityVersion: projection.capabilityVersion,
     });
 
-    const total = authority.createSyncPayload({
+    const total = authority.createTotalSyncPayload({
       authorization: signedInAuthorization,
     });
     const runtime = createSyncedGraphClient(browserGraph, {
@@ -1596,7 +1596,7 @@ describe("web authority", () => {
             ? authority.getIncrementalSyncResult(state.cursor, {
                 authorization: signedInAuthorization,
               })
-            : authority.createSyncPayload({
+            : authority.createTotalSyncPayload({
                 authorization: signedInAuthorization,
               }),
         );
@@ -1745,7 +1745,7 @@ describe("web authority", () => {
     const initialAuthority = await createTestWebAppAuthority(storage.storage, {
       policyVersion: initialPolicyVersion,
     });
-    const scopedTotal = initialAuthority.createSyncPayload({
+    const scopedTotal = initialAuthority.createTotalSyncPayload({
       authorization: initialAuthorization,
       scope: workflowModuleScope,
     });
@@ -1762,7 +1762,7 @@ describe("web authority", () => {
     });
 
     expect(() =>
-      updatedAuthority.createSyncPayload({
+      updatedAuthority.createTotalSyncPayload({
         authorization: initialAuthorization,
       }),
     ).toThrow(
@@ -2932,7 +2932,7 @@ describe("web authority", () => {
       "tx:create-env-var:workflow-scope",
     );
 
-    const total = authority.createSyncPayload({
+    const total = authority.createTotalSyncPayload({
       authorization,
       scope: workflowModuleScope,
     });
@@ -2992,7 +2992,7 @@ describe("web authority", () => {
   it("returns explicit scope and policy fallbacks for stale scoped cursors", async () => {
     const authorization = createAuthorityAuthorizationContext();
     const { authority } = await createTestWebAppAuthorityWithWorkflowFixture(authorization);
-    const total = authority.createSyncPayload({
+    const total = authority.createTotalSyncPayload({
       authorization,
       scope: workflowModuleScope,
     });
@@ -3029,7 +3029,7 @@ describe("web authority", () => {
   it("plans workflow review live registrations from the current scoped cursor", async () => {
     const authorization = createAuthorityAuthorizationContext();
     const { authority } = await createTestWebAppAuthorityWithWorkflowFixture(authorization);
-    const total = authority.createSyncPayload({
+    const total = authority.createTotalSyncPayload({
       authorization,
       scope: workflowModuleScope,
     });
@@ -3162,7 +3162,7 @@ describe("web authority", () => {
   it("fails workflow review live registrations when scoped cursor assumptions drift", async () => {
     const authorization = createAuthorityAuthorizationContext();
     const { authority } = await createTestWebAppAuthorityWithWorkflowFixture(authorization);
-    const total = authority.createSyncPayload({
+    const total = authority.createTotalSyncPayload({
       authorization,
       scope: workflowModuleScope,
     });
@@ -3862,7 +3862,7 @@ describe("web authority", () => {
     );
 
     expect(() =>
-      authority.createSyncPayload({
+      authority.createTotalSyncPayload({
         authorization: signedInAuthorization,
       }),
     ).toThrow(
@@ -3877,7 +3877,7 @@ describe("web authority", () => {
 
     expect(refreshedProjection.capabilityVersion).toBe(1);
     expect(
-      authority.createSyncPayload({
+      authority.createTotalSyncPayload({
         authorization: createTestAuthorizationContext({
           graphId: lookupInput.graphId,
           principalId: refreshedProjection.principalId,
@@ -3969,7 +3969,7 @@ describe("web authority", () => {
         writeScope: "authority-only",
       },
     );
-    const deniedTotal = authority.createSyncPayload({
+    const deniedTotal = authority.createTotalSyncPayload({
       authorization: seededAuthorization,
     });
 
@@ -4019,7 +4019,7 @@ describe("web authority", () => {
       lookupInput,
       refreshedProjection,
     );
-    const grantedTotal = authority.createSyncPayload({
+    const grantedTotal = authority.createTotalSyncPayload({
       authorization: refreshedAuthorization,
     });
 
@@ -4080,7 +4080,7 @@ describe("web authority", () => {
       delegateLookupInput,
       initialDelegateProjection,
     );
-    const deniedTotal = authority.createSyncPayload({
+    const deniedTotal = authority.createTotalSyncPayload({
       authorization: initialDelegateAuthorization,
     });
 
@@ -4148,7 +4148,7 @@ describe("web authority", () => {
       delegateLookupInput,
       refreshedDelegateProjection,
     );
-    const grantedTotal = authority.createSyncPayload({
+    const grantedTotal = authority.createTotalSyncPayload({
       authorization: refreshedDelegateAuthorization,
     });
     const grantedIncremental = authority.getIncrementalSyncResult(deniedTotal.cursor, {
@@ -4214,7 +4214,7 @@ describe("web authority", () => {
       },
     );
 
-    const revokedTotal = authority.createSyncPayload({
+    const revokedTotal = authority.createTotalSyncPayload({
       authorization: refreshedDelegateAuthorization,
     });
     const revokedIncremental = authority.getIncrementalSyncResult(grantedTotal.cursor, {
@@ -4322,7 +4322,7 @@ describe("web authority", () => {
     const bearerAuthorization = createBearerAuthorizationContext(
       bearerProjection.capabilityGrantIds,
     );
-    const grantedTotal = authority.createSyncPayload({
+    const grantedTotal = authority.createTotalSyncPayload({
       authorization: bearerAuthorization,
     });
 
@@ -4856,7 +4856,7 @@ describe("web authority", () => {
     const syncAuthorizations: AuthorizationContext[] = [];
     const transactionAuthorizations: AuthorizationContext[] = [];
     const authority = {
-      createSyncPayload(options: WebAppAuthoritySyncOptions) {
+      createTotalSyncPayload(options: WebAppAuthoritySyncOptions) {
         syncAuthorizations.push(options.authorization);
         return {
           mode: "total" as const,
@@ -4911,7 +4911,7 @@ describe("web authority", () => {
     const authorization = createTestAuthorizationContext();
     const scopes: WebAppAuthoritySyncOptions["scope"][] = [];
     const authority = {
-      createSyncPayload(options: WebAppAuthoritySyncOptions) {
+      createTotalSyncPayload(options: WebAppAuthoritySyncOptions) {
         scopes.push(options.scope);
         return {
           mode: "total" as const,
@@ -4943,7 +4943,7 @@ describe("web authority", () => {
     const authorization = createTestAuthorizationContext();
     const scopes: WebAppAuthoritySyncOptions["scope"][] = [];
     const authority = {
-      createSyncPayload(options: WebAppAuthoritySyncOptions) {
+      createTotalSyncPayload(options: WebAppAuthoritySyncOptions) {
         scopes.push(options.scope);
         return {
           mode: "total" as const,
@@ -4972,7 +4972,7 @@ describe("web authority", () => {
   it("rejects incomplete module sync scope requests before dispatch", async () => {
     const authorization = createTestAuthorizationContext();
     const authority = {
-      createSyncPayload() {
+      createTotalSyncPayload() {
         throw new Error("Route should reject the request before dispatch.");
       },
     } as unknown as WebAppAuthority;

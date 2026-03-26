@@ -1,4 +1,3 @@
-import { type AuthorizationContext } from "@io/core/graph";
 import {
   projectBranchScopeOrderDirectionValues,
   projectBranchScopeOrderFieldValues,
@@ -10,6 +9,7 @@ import {
   type ProjectBranchScopeQuery,
   type WorkflowBranchStateValue,
 } from "@io/core/graph/modules/ops/workflow";
+import { type AuthorizationContext } from "@io/graph-authority";
 import {
   GraphValidationError,
   SerializedQueryValidationError,
@@ -206,7 +206,7 @@ export function handleSyncRequest(
     const { after, scope } = readRequestSyncRequest(request);
     const payload = after
       ? authority.getIncrementalSyncResult(after, { authorization, scope })
-      : authority.createSyncPayload({ authorization, scope });
+      : authority.createTotalSyncPayload({ authorization, scope });
 
     return Response.json(payload, {
       headers: {

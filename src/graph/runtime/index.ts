@@ -1,5 +1,3 @@
-export * from "./persisted-authority";
-export * from "./authorization";
 export * from "./bootstrap";
 export * from "./contracts";
 export * from "./id";

@@ -3,8 +3,9 @@
 ## Purpose
 
 This document is the entry point for agents working on schema authoring, stable
-ids, additive bootstrap, store behavior, or persisted authority helpers.
-Client-owned APIs such as `createGraphClient(...)`,
+ids, additive bootstrap, store behavior, or root-safe runtime contracts.
+Authority-owned APIs now live in `@io/graph-authority`, and client-owned APIs
+such as `createGraphClient(...)`,
 `createSyncedGraphClient(...)`, `createHttpGraphClient(...)`, and
 `createBootstrappedSnapshot(...)` now live in `@io/graph-client`.
 
@@ -83,16 +84,17 @@ into a client barrel.
 
 ### Authoritative persistence
 
-`../../src/graph/runtime/authority.ts` owns the persisted authoritative runtime surface:
+`../../lib/graph-authority/src/json-storage.ts` owns the shipped JSON adapter
+for the persisted authoritative runtime:
 
-- `../../src/graph/runtime/persisted-authority.ts` is the stable shared contract for
+- `../../lib/graph-authority/src/persisted-authority.ts` is the stable shared contract for
   `PersistedAuthoritativeGraphState`, the storage load/commit/persist inputs, and
   `PersistedAuthoritativeGraphStorage`
 - `PersistedAuthoritativeGraphStorage` defines the hydration, incremental commit, and explicit snapshot-persist contract for durable state
 - persisted-authority `load()` results now carry `startupDiagnostics` with stable
   `repairReasons` and `resetReasons`, and the returned persisted authority exposes
   the same startup outcome to callers after bootstrap
-- `createJsonPersistedAuthoritativeGraphStorage(path, namespace)` provides the shipped file-backed JSON adapter for non-DO runtimes
+- `createJsonPersistedAuthoritativeGraphStorage(path, definitions)` provides the shipped file-backed JSON adapter for non-DO runtimes
 - `createJsonPersistedAuthoritativeGraph(store, namespace, { path, seed?, createCursorPrefix? })` composes that file-backed adapter with the persisted authority runtime
 - `createPersistedAuthoritativeGraph(store, namespace, { storage, seed?, createCursorPrefix? })` composes seeding, reload, incremental commit, explicit snapshot persistence, and authoritative write replay
 - `../../src/web/lib/graph-authority-do.ts` is the current SQLite-backed Durable Object consumer of that storage contract; it bootstraps SQL tables in the constructor, hydrates rows during authority init, and commits graph plus secret side-storage writes inside one Durable Object storage transaction
@@ -120,10 +122,18 @@ into a client barrel.
   or broken cursor, authorities fall back to total-sync recovery instead of
   serving stale incremental state
 
+`../../lib/graph-authority/src/session.ts` owns the in-memory authoritative
+runtime surface:
+
+- `createAuthoritativeGraphWriteSession(store, namespace, options)` validates writes, retains accepted history, and produces incremental replay from retained cursors
+- `createAuthoritativeTotalSyncPayload(store, namespace, options)` filters authority-only facts first, then applies any caller-provided replication read authorizer over the remaining replicated slice
+
 ### Runtime helpers
 
-- `../../src/graph/runtime/contracts.ts` publishes the shared Branch 2
-  authorization contract surface, including the first-cut
+- `../../src/graph/runtime/contracts.ts` publishes the root-safe auth shell,
+  module-permission, object-view, workflow, and browser bootstrap contracts
+- `../../lib/graph-authority/src/contracts.ts` publishes the authority-owned
+  Branch 2 authorization contract surface, including the
   `entity-predicate-slice` share selector, durable `ShareGrant` shape, and the
   validation helpers that reject malformed or non-shareable share slices before
   runtime enforcement consumes them
@@ -141,7 +151,7 @@ into a client barrel.
 - Field trees preserve authoring shape, but runtime linking uses resolved ids.
 - Reference fields should be authored through `defineReferenceField(...)` or helpers layered on top of it.
 - Store indexes remain an internal implementation detail; the public surface is still pattern lookups.
-- The package owns the persisted-authority contract and JSON adapter, but consumers still choose storage paths, bootstrap order, seed data, and process lifecycle, including the web package's SQLite Durable Object adapter.
+- `@io/graph-authority` owns the persisted-authority contract and JSON adapter, but consumers still choose storage paths, bootstrap order, seed data, and process lifecycle, including the web package's SQLite Durable Object adapter.
 - Transport and generic command dispatch are still outside the runtime core;
   persisted authority helpers only produce and consume graph sync/session
   primitives.

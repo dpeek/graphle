@@ -1,9 +1,10 @@
 import { describe, expect, it } from "bun:test";
 
-import { createStore, type AuthorizationContext } from "@io/core/graph";
+import { createStore } from "@io/core/graph";
 import { core } from "@io/core/graph/modules";
 import { ops } from "@io/core/graph/modules/ops";
 import { pkm } from "@io/core/graph/modules/pkm";
+import { type AuthorizationContext } from "@io/graph-authority";
 import { createGraphClient } from "@io/graph-client";
 
 import { createAnonymousAuthorizationContext } from "./auth-bridge.js";

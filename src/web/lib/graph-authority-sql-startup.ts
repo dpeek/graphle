@@ -3,7 +3,7 @@ import {
   type PersistedAuthoritativeGraphStartupRepairReason,
   type PersistedAuthoritativeGraphStartupResetReason,
   type PersistedAuthoritativeGraphStorageLoadResult,
-} from "@io/core/graph";
+} from "@io/graph-authority";
 import {
   type AuthoritativeGraphRetainedHistoryPolicy,
   type GraphWriteScope,

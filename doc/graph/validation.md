@@ -16,15 +16,15 @@ Relevant source:
 
 - `../../src/graph/runtime/schema.ts`
 - `../../src/graph/runtime/type-module.ts`
-- `../../src/graph/runtime/client-core.ts`
-- `../../src/graph/runtime/client-validation.ts`
-- `../../src/graph/runtime/client.ts`
-- `../../src/graph/runtime/authority-validation.ts`
+- `../../lib/graph-client/src/client-core.ts`
+- `../../lib/graph-client/src/client-validation.ts`
+- `../../lib/graph-client/src/client.ts`
+- `../../lib/graph-authority/src/validation.ts`
 - `../../lib/graph-sync/src/validation.ts`
 
 ## Current Local Lifecycle
 
-Local typed mutations in `../../src/graph/runtime/client.ts` already follow one shared path:
+Local typed mutations in `../../lib/graph-client/src/client.ts` already follow one shared path:
 
 1. normalize and clone caller input
 2. run `onCreate` or `onUpdate` lifecycle hooks

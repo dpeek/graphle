@@ -1,8 +1,8 @@
 import { createIdMap, applyIdMap, defineType, createStore } from "@io/core/graph";
-import { createAuthoritativeGraphWriteSession } from "@io/core/graph/authority";
 import { core } from "@io/core/graph/modules";
 import { ops } from "@io/core/graph/modules/ops";
 import { pkm } from "@io/core/graph/modules/pkm";
+import { createAuthoritativeGraphWriteSession } from "@io/graph-authority";
 import {
   createBootstrappedSnapshot,
   createSyncedGraphClient,
@@ -113,7 +113,7 @@ export function createExampleRuntime(
   let localTxSequence = 0;
   let syncPayloadCount = 0;
 
-  function createSyncPayload(): TotalSyncPayload {
+  function createAuthorityTotalSyncPayload(): TotalSyncPayload {
     syncPayloadCount += 1;
     return createTotalSyncPayload(authority.store, {
       cursor: writes.getCursor() ?? writes.getBaseCursor(),
@@ -176,13 +176,13 @@ export function createExampleRuntime(
     const queuedTxIds: string[] = [];
     client = createSyncedGraphClient(exampleGraph, {
       pull: (state) =>
-        state.cursor ? getIncrementalSyncResult(state.cursor) : createSyncPayload(),
+        state.cursor ? getIncrementalSyncResult(state.cursor) : createAuthorityTotalSyncPayload(),
       createTxId() {
         return queuedTxIds.shift() ?? `example:local:${++localTxSequence}`;
       },
       push: applyTransaction,
     });
-    client.sync.apply(createSyncPayload());
+    client.sync.apply(createAuthorityTotalSyncPayload());
     pendingTxIds.set(client, queuedTxIds);
     clients.add(client);
     return client;
@@ -233,7 +233,7 @@ export function createExampleRuntime(
       ...authority,
       applyTransaction,
       applyHiddenOnlyCursorAdvance,
-      createSyncPayload,
+      createTotalSyncPayload: createAuthorityTotalSyncPayload,
       getIncrementalSyncResult,
       resetAuthorityStream,
       getBaseCursor() {

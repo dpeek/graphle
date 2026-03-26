@@ -1,0 +1,93 @@
+/**
+ * Public entrypoint for the graph authority package.
+ *
+ * This surface owns authoritative write orchestration, retained-history and
+ * durable authority runtime, authority-side replication filtering, validation,
+ * and graph-owned authorization/policy contracts. Store/schema primitives,
+ * sync-core contracts, clients, and web adapters stay outside this package.
+ */
+export {
+  createJsonPersistedAuthoritativeGraph,
+  createJsonPersistedAuthoritativeGraphStorage,
+} from "./json-storage.js";
+export {
+  createPersistedAuthoritativeGraph,
+  persistedAuthoritativeGraphStateVersion,
+  type JsonPersistedAuthoritativeGraphOptions,
+  type PersistedAuthoritativeGraph,
+  type PersistedAuthoritativeGraphCursorPrefixFactory,
+  type PersistedAuthoritativeGraphOptions,
+  type PersistedAuthoritativeGraphSeed,
+  type PersistedAuthoritativeGraphStartupDiagnostics,
+  type PersistedAuthoritativeGraphStartupRepairReason,
+  type PersistedAuthoritativeGraphStartupResetReason,
+  type PersistedAuthoritativeGraphState,
+  type PersistedAuthoritativeGraphStateVersion,
+  type PersistedAuthoritativeGraphStorage,
+  type PersistedAuthoritativeGraphStorageCommitInput,
+  type PersistedAuthoritativeGraphStorageLoadResult,
+  type PersistedAuthoritativeGraphStoragePersistInput,
+  type PersistedAuthoritativeGraphStorageRecovery,
+} from "./persisted-authority.js";
+export {
+  createAuthoritativeGraphWriteSession,
+  createAuthoritativeTotalSyncPayload,
+  type AuthoritativeGraphWriteSession,
+} from "./session.js";
+export {
+  type ReplicatedPredicateTarget,
+  type ReplicationReadAuthorizer,
+} from "./session-contracts.js";
+export {
+  createAuthoritativeGraphWriteResultValidator,
+  createAuthoritativeTotalSyncValidator,
+  validateAuthoritativeGraphWriteResult,
+  validateAuthoritativeGraphWriteTransaction,
+  validateAuthoritativeTotalSyncPayload,
+} from "./validation.js";
+export { authorizeCommand, authorizeRead, authorizeWrite } from "./authorization.js";
+export {
+  createShareGrantConstraints,
+  defineAdmissionPolicy,
+  defineShareGrant,
+  defineShareSurface,
+  shareSurfaceContractVersion,
+  shareSurfaceKinds,
+  validateShareGrant,
+  validateShareSurface,
+  type AdmissionBootstrapMode,
+  type AdmissionPolicy,
+  type AdmissionProvisioning,
+  type AdmissionSignupPolicy,
+  type AuthorizationCommandTouchedPredicate,
+  type AuthorizationContext,
+  type AuthorizationDecision,
+  type AuthorizationPredicateTarget,
+  type AuthorizationSubject,
+  type AuthorizeCommandInput,
+  type AuthorizeReadInput,
+  type AuthorizeWriteInput,
+  type AuthorizeWriteIntent,
+  type CapabilityGrant,
+  type CapabilityGrantConstraints,
+  type CapabilityGrantResource,
+  type CapabilityGrantStatus,
+  type CapabilityGrantTarget,
+  type CapabilityVersion,
+  type GraphCommandPolicy,
+  type GraphCommandTouchedPredicate,
+  type PolicyError,
+  type PolicyErrorCode,
+  type PolicyVersion,
+  type PrincipalKind,
+  type PrincipalRoleBinding,
+  type PrincipalRoleBindingStatus,
+  type ShareGrant,
+  type ShareGrantCapabilityProjection,
+  type ShareGrantStatus,
+  type ShareSurface,
+  type ShareSurfaceKind,
+  type ShareSurfacePolicy,
+  type ShareSurfacePolicyLookup,
+  type ShareValidationResult,
+} from "./contracts.js";

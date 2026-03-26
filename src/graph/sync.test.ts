@@ -1,15 +1,15 @@
 import { describe, expect, it } from "bun:test";
 
 import { bootstrap, createStore, edgeId, typeId } from "@io/core/graph";
-import {
-  createAuthoritativeGraphWriteResultValidator,
-  createAuthoritativeGraphWriteSession,
-  createAuthoritativeTotalSyncValidator,
-  validateAuthoritativeGraphWriteResult,
-  validateAuthoritativeGraphWriteTransaction,
-  validateAuthoritativeTotalSyncPayload,
-} from "@io/core/graph/authority";
 import { core } from "@io/core/graph/modules";
+import {
+  createAuthoritativeGraphWriteResultValidator as createResolvedAuthoritativeGraphWriteResultValidator,
+  createAuthoritativeGraphWriteSession as createResolvedAuthoritativeGraphWriteSession,
+  createAuthoritativeTotalSyncValidator as createResolvedAuthoritativeTotalSyncValidator,
+  validateAuthoritativeGraphWriteResult as validateResolvedAuthoritativeGraphWriteResult,
+  validateAuthoritativeGraphWriteTransaction as validateResolvedAuthoritativeGraphWriteTransaction,
+  validateAuthoritativeTotalSyncPayload as validateResolvedAuthoritativeTotalSyncPayload,
+} from "@io/graph-authority";
 import {
   createSyncedGraphClient as createResolvedSyncedGraphClient,
   createGraphClient as createResolvedGraphClient,
@@ -50,6 +50,92 @@ function createSyncedGraphClient(
   return createResolvedSyncedGraphClient(testNamespace, {
     definitions: testDefs,
     ...options,
+  });
+}
+
+function createAuthoritativeGraphWriteSession(
+  store: ReturnType<typeof createStore>,
+  _namespace: typeof testNamespace = testNamespace,
+  options: Omit<
+    Parameters<
+      typeof createResolvedAuthoritativeGraphWriteSession<typeof testNamespace, typeof testDefs>
+    >[2],
+    "definitions"
+  > = {},
+) {
+  return createResolvedAuthoritativeGraphWriteSession(store, testNamespace, {
+    definitions: testDefs,
+    ...options,
+  });
+}
+
+function validateAuthoritativeTotalSyncPayload(
+  payload: Parameters<typeof validateResolvedAuthoritativeTotalSyncPayload>[0],
+  _namespace: typeof testNamespace = testNamespace,
+  options: Omit<
+    Parameters<
+      typeof validateResolvedAuthoritativeTotalSyncPayload<typeof testNamespace, typeof testDefs>
+    >[2],
+    "definitions"
+  > = {},
+) {
+  return validateResolvedAuthoritativeTotalSyncPayload(payload, testNamespace, {
+    definitions: testDefs,
+    ...options,
+  });
+}
+
+function createAuthoritativeTotalSyncValidator(
+  _namespace: typeof testNamespace = testNamespace,
+  options: Omit<
+    Parameters<
+      typeof createResolvedAuthoritativeTotalSyncValidator<typeof testNamespace, typeof testDefs>
+    >[1],
+    "definitions"
+  > = {},
+) {
+  return createResolvedAuthoritativeTotalSyncValidator(testNamespace, {
+    definitions: testDefs,
+    ...options,
+  });
+}
+
+function createAuthoritativeGraphWriteResultValidator(
+  store: ReturnType<typeof createStore>,
+  _namespace: typeof testNamespace = testNamespace,
+) {
+  return createResolvedAuthoritativeGraphWriteResultValidator(store, testNamespace, {
+    definitions: testDefs,
+  });
+}
+
+function validateAuthoritativeGraphWriteTransaction(
+  transaction: Parameters<typeof validateResolvedAuthoritativeGraphWriteTransaction>[0],
+  store: ReturnType<typeof createStore>,
+  _namespace: typeof testNamespace = testNamespace,
+  options: Omit<
+    Parameters<
+      typeof validateResolvedAuthoritativeGraphWriteTransaction<
+        typeof testNamespace,
+        typeof testDefs
+      >
+    >[3],
+    "definitions"
+  > = {},
+) {
+  return validateResolvedAuthoritativeGraphWriteTransaction(transaction, store, testNamespace, {
+    definitions: testDefs,
+    ...options,
+  });
+}
+
+function validateAuthoritativeGraphWriteResult(
+  result: Parameters<typeof validateResolvedAuthoritativeGraphWriteResult>[0],
+  store: ReturnType<typeof createStore>,
+  _namespace: typeof testNamespace = testNamespace,
+) {
+  return validateResolvedAuthoritativeGraphWriteResult(result, store, testNamespace, {
+    definitions: testDefs,
   });
 }
 

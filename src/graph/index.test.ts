@@ -4,7 +4,6 @@ import { edgeId } from "./index.js";
 import {
   probeAuthSubject,
   probeAuthenticatedSession,
-  probeAuthorizationContext,
   probeApprovedModulePermissionRecord,
   probeContractItem,
   probeDeniedModulePermissionRecord,
@@ -27,7 +26,6 @@ const canonicalGraphSubpaths = [
   "./graph",
   "./graph/runtime",
   "./graph/runtime/react",
-  "./graph/authority",
   "./graph/def",
   "./graph/modules",
   "./graph/modules/core",
@@ -60,13 +58,11 @@ const retiredGraphSubpaths = [
   "./graph/schema/app",
   "./graph/schema/app/topic",
   "./graph/schema/*",
+  "./graph/authority",
   "./graph/taxonomy/*",
 ] as const;
 
 const requiredRootExports = [
-  "authorizeCommand",
-  "authorizeRead",
-  "authorizeWrite",
   "createIdMap",
   "applyIdMap",
   "defineReferenceField",
@@ -82,21 +78,7 @@ const requiredRootExports = [
   "sanitizeSvgMarkup",
 ] as const;
 
-const requiredRuntimeExports = [
-  "authorizeCommand",
-  "authorizeRead",
-  "authorizeWrite",
-  "createPersistedAuthoritativeGraph",
-  "createStore",
-  "defineSecretField",
-] as const;
-
-const requiredAuthorityExports = [
-  "createJsonPersistedAuthoritativeGraph",
-  "createJsonPersistedAuthoritativeGraphStorage",
-  "createPersistedAuthoritativeGraph",
-  "persistedAuthoritativeGraphStateVersion",
-] as const;
+const requiredRuntimeExports = ["createStore", "defineSecretField"] as const;
 
 const requiredDefExports = [
   "defineEnum",
@@ -229,17 +211,15 @@ describe("@io/core/graph package entry surfaces", () => {
     }
   });
 
-  it("keeps the root, runtime, authority, and schema-authoring surfaces focused", async () => {
-    const [rootExports, runtimeExports, authorityExports, defExports] = await Promise.all([
+  it("keeps the root, runtime, and schema-authoring surfaces focused", async () => {
+    const [rootExports, runtimeExports, defExports] = await Promise.all([
       import("@io/core/graph"),
       import("@io/core/graph/runtime"),
-      import("@io/core/graph/authority"),
       import("@io/core/graph/def"),
     ]);
 
     expectNamedExports(rootExports, requiredRootExports);
     expectNamedExports(runtimeExports, requiredRuntimeExports);
-    expectNamedExports(authorityExports, requiredAuthorityExports);
     expectNamedExports(defExports, requiredDefExports);
 
     for (const name of forbiddenRootModuleExports) {
@@ -252,14 +232,24 @@ describe("@io/core/graph package entry surfaces", () => {
     expect(Object.keys(rootExports)).not.toContain("FilterOperandEditor");
     expect(Object.keys(rootExports)).not.toContain("PredicateFieldView");
     expect(Object.keys(rootExports)).not.toContain("createJsonPersistedAuthoritativeGraph");
+    expect(Object.keys(rootExports)).not.toContain("createPersistedAuthoritativeGraph");
     expect(Object.keys(rootExports)).not.toContain("createGraphClient");
     expect(Object.keys(rootExports)).not.toContain("createSyncedGraphClient");
     expect(Object.keys(rootExports)).not.toContain("validateGraphStore");
+    expect(Object.keys(rootExports)).not.toContain("authorizeRead");
+    expect(Object.keys(rootExports)).not.toContain("authorizeWrite");
+    expect(Object.keys(rootExports)).not.toContain("authorizeCommand");
     expect(Object.keys(runtimeExports)).not.toContain("sanitizeSvgMarkup");
     expect(Object.keys(runtimeExports)).not.toContain("createGraphClient");
     expect(Object.keys(runtimeExports)).not.toContain("createSyncedGraphClient");
     expect(Object.keys(runtimeExports)).not.toContain("validateGraphStore");
+    expect(Object.keys(runtimeExports)).not.toContain("createPersistedAuthoritativeGraph");
+    expect(Object.keys(runtimeExports)).not.toContain("authorizeRead");
+    expect(Object.keys(runtimeExports)).not.toContain("authorizeWrite");
+    expect(Object.keys(runtimeExports)).not.toContain("authorizeCommand");
     expect(Object.keys(defExports)).not.toContain("createStore");
+    const retiredAuthoritySubpath = "@io/core/graph/authority";
+    await expect(import(retiredAuthoritySubpath)).rejects.toThrow();
 
     expect(probeContractItem.kind).toBe("entity");
     expect(probeContractObjectView).toMatchObject({
@@ -307,16 +297,6 @@ describe("@io/core/graph package entry surfaces", () => {
       sessionId: "session-probe-1",
       subject: probeAuthSubject,
     });
-    expect(probeAuthorizationContext).toMatchObject({
-      graphId: "graph:probe",
-      principalId: "principal:probe",
-      principalKind: "human",
-      sessionId: probeAuthenticatedSession.sessionId,
-      roleKeys: ["graph:member"],
-      capabilityGrantIds: ["grant:probe:1"],
-      capabilityVersion: 2,
-      policyVersion: 7,
-    });
     expect(probeSaveContractItemCommand).toMatchObject({
       subject: probeContractItem.values.key,
       execution: "optimisticVerify",
@@ -360,7 +340,7 @@ describe("@io/core/graph package entry surfaces", () => {
       },
       target: {
         kind: "principal",
-        principalId: probeAuthorizationContext.principalId,
+        principalId: "principal:probe",
       },
       status: "active",
     });

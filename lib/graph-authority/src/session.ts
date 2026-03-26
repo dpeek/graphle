@@ -6,10 +6,14 @@ import {
 import {
   cloneAuthoritativeGraphRetainedHistoryPolicy,
   cloneAuthoritativeGraphWriteResult,
+  createGraphStore,
+  type AnyTypeOutput,
   type AuthoritativeGraphChangesAfterResult,
   type AuthoritativeGraphRetainedHistoryPolicy,
   type AuthoritativeGraphWriteHistory,
   type AuthoritativeGraphWriteResult,
+  type GraphStore,
+  type GraphStoreSnapshot,
   type GraphWriteScope,
   type GraphWriteTransaction,
   sameGraphWriteTransaction,
@@ -33,22 +37,27 @@ import {
 import { materializeGraphWriteTransactionSnapshot } from "@io/graph-sync";
 
 import {
+  readAuthoritativeNodeTypePredicateId,
+  resolveAuthoritativeDefinitions,
+} from "./definitions.js";
+import {
   createEdgeIndex,
   createFieldAuthorityPolicyIndex,
   filterReplicatedSnapshot,
   filterReplicatedWriteResult,
-} from "./authority-replication";
-import type { AuthoritativeGraphWriteSession, ReplicationReadAuthorizer } from "./authority-types";
-import {
-  prepareAuthoritativeGraphWriteResult,
-  validateAuthoritativeGraphWriteTransaction,
-} from "./authority-validation";
+} from "./replication.js";
+import type {
+  AuthoritativeGraphWriteSession,
+  ReplicationReadAuthorizer,
+} from "./session-contracts.js";
 import {
   createTransactionValidationIssue,
   invalidTransactionResult,
-} from "./authority-validation-helpers";
-import type { AnyTypeOutput } from "./schema";
-import { createStore, type GraphStore, type GraphStoreSnapshot } from "./store";
+} from "./validation-helpers.js";
+import {
+  prepareAuthoritativeGraphWriteResult,
+  validateAuthoritativeGraphWriteTransaction,
+} from "./validation.js";
 
 function buildAuthoritativeGraphWriteReplayResult(
   result: AuthoritativeGraphWriteResult,
@@ -112,22 +121,40 @@ function normalizePreparedTransactionResult(result: {
   );
 }
 
-export function createAuthoritativeGraphWriteSession<const T extends Record<string, AnyTypeOutput>>(
+/**
+ * Creates an in-memory authoritative write session over one graph store.
+ *
+ * Transaction ids are authority idempotency keys. Reapplying the same
+ * canonical transaction returns the previously accepted write result with
+ * `replayed: true`, while reusing the id for different contents fails
+ * validation.
+ *
+ * Retained history may be unbounded or pruned by transaction count. Once a
+ * cursor falls behind the retained base cursor, incremental callers must
+ * recover with total sync.
+ */
+export function createAuthoritativeGraphWriteSession<
+  const TNamespace extends Record<string, AnyTypeOutput>,
+  const TDefinitions extends Record<string, AnyTypeOutput> = TNamespace,
+>(
   store: GraphStore,
-  namespace: T,
+  namespace: TNamespace,
   options: {
     cursorPrefix?: string;
+    definitions?: TDefinitions;
     initialSequence?: number;
     history?: readonly AuthoritativeGraphWriteResult[];
     retainedHistoryPolicy?: AuthoritativeGraphRetainedHistoryPolicy;
   } = {},
 ): AuthoritativeGraphWriteSession {
+  const definitions = resolveAuthoritativeDefinitions(namespace, options.definitions);
+  const nodeTypePredicateId = readAuthoritativeNodeTypePredicateId(definitions);
   const cursorPrefix = options.cursorPrefix ?? "tx:";
   let baseSequence = options.initialSequence ?? 0;
   const retainedHistoryPolicy = normalizeAuthoritativeGraphRetainedHistoryPolicy(
     options.retainedHistoryPolicy ?? unboundedAuthoritativeGraphRetainedHistoryPolicy,
   );
-  const policiesByTypeId = createFieldAuthorityPolicyIndex(namespace);
+  const policiesByTypeId = createFieldAuthorityPolicyIndex(definitions);
   if (!Number.isInteger(baseSequence) || baseSequence < 0) {
     throw new Error(
       "Authoritative graph write sessions require a non-negative integer initial sequence.",
@@ -223,9 +250,16 @@ export function createAuthoritativeGraphWriteSession<const T extends Record<stri
     if (changes.kind === "changes") {
       const edgeById = createEdgeIndex(store.snapshot());
       const transactions = changes.changes.flatMap((result) => {
-        const filtered = filterReplicatedWriteResult(result, store, policiesByTypeId, edgeById, {
-          authorizeRead: options.authorizeRead,
-        });
+        const filtered = filterReplicatedWriteResult(
+          result,
+          store,
+          policiesByTypeId,
+          nodeTypePredicateId,
+          edgeById,
+          {
+            authorizeRead: options.authorizeRead,
+          },
+        );
         return filtered ? [filtered] : [];
       });
       return createIncrementalSyncPayload(transactions, {
@@ -311,7 +345,9 @@ export function createAuthoritativeGraphWriteSession<const T extends Record<stri
     result: AuthoritativeGraphWriteResult;
     snapshot: GraphStoreSnapshot;
   } {
-    const validationStore = options.sourceSnapshot ? createStore(options.sourceSnapshot) : store;
+    const validationStore = options.sourceSnapshot
+      ? createGraphStore(options.sourceSnapshot)
+      : store;
     const preparedTransaction = prepareGraphWriteTransaction(transaction);
     if (!preparedTransaction.ok) {
       throw new GraphValidationError(
@@ -348,6 +384,7 @@ export function createAuthoritativeGraphWriteSession<const T extends Record<stri
       validationStore,
       namespace,
       {
+        definitions,
         writeScope: options.writeScope,
       },
     );
@@ -393,22 +430,34 @@ export function createAuthoritativeGraphWriteSession<const T extends Record<stri
   };
 }
 
-export function createAuthoritativeTotalSyncPayload<const T extends Record<string, AnyTypeOutput>>(
+/**
+ * Creates a full authority-owned sync payload from the current store state.
+ *
+ * Replication output first removes authority-only predicates based on schema
+ * visibility, then applies the optional read authorizer to the remaining
+ * replicated slice.
+ */
+export function createAuthoritativeTotalSyncPayload<
+  const TNamespace extends Record<string, AnyTypeOutput>,
+  const TDefinitions extends Record<string, AnyTypeOutput> = TNamespace,
+>(
   store: GraphStore,
-  namespace: T,
+  namespace: TNamespace,
   options: {
     authorizeRead?: ReplicationReadAuthorizer;
     completeness?: SyncCompleteness;
     cursor?: string;
+    definitions?: TDefinitions;
     diagnostics?: SyncDiagnostics;
     freshness?: SyncFreshness;
     scope?: SyncScope;
   } = {},
 ): TotalSyncPayload {
+  const definitions = resolveAuthoritativeDefinitions(namespace, options.definitions);
   return {
     mode: "total",
     scope: cloneSyncScope(options.scope ?? graphSyncScope),
-    snapshot: filterReplicatedSnapshot(store, namespace, {
+    snapshot: filterReplicatedSnapshot(store, definitions, {
       authorizeRead: options.authorizeRead,
     }),
     cursor: options.cursor ?? "full",
@@ -422,4 +471,7 @@ function formatAuthoritativeGraphCursor(prefix: string, sequence: number): strin
   return `${prefix}${sequence}`;
 }
 
-export type { AuthoritativeGraphWriteSession, ReplicationReadAuthorizer } from "./authority-types";
+export type {
+  AuthoritativeGraphWriteSession,
+  ReplicationReadAuthorizer,
+} from "./session-contracts.js";

@@ -255,7 +255,7 @@ describe("example runtime sync integration", () => {
     expect(activities.filter((activity) => activity.kind === "incremental")).toHaveLength(1);
     expect(resetActivity.cursor).not.toBe(resetActivity.after);
 
-    const recovered = peer.sync.apply(runtime.authority.createSyncPayload());
+    const recovered = peer.sync.apply(runtime.authority.createTotalSyncPayload());
 
     expect(recovered).toMatchObject({
       mode: "total",
@@ -342,7 +342,7 @@ describe("example runtime sync integration", () => {
     expect(activities.filter((activity) => activity.kind === "incremental")).toHaveLength(1);
     expect(gapActivity.cursor).not.toBe(gapActivity.after);
 
-    const recovered = peer.sync.apply(runtime.authority.createSyncPayload());
+    const recovered = peer.sync.apply(runtime.authority.createTotalSyncPayload());
 
     expect(recovered).toMatchObject({
       mode: "total",
@@ -455,7 +455,7 @@ describe("example runtime sync integration", () => {
       ]),
     );
 
-    const recovered = runtime.sync.apply(runtime.authority.createSyncPayload());
+    const recovered = runtime.sync.apply(runtime.authority.createTotalSyncPayload());
 
     expect(recovered).toMatchObject({
       mode: "total",

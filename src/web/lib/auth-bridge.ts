@@ -1,10 +1,9 @@
 import {
   type AuthSubjectRef,
   type AuthenticatedSession,
-  type AuthorizationContext,
-  type PrincipalKind,
   type WebPrincipalSummary,
 } from "@io/core/graph";
+import { type AuthorizationContext, type PrincipalKind } from "@io/graph-authority";
 
 type MaybePromise<T> = T | Promise<T>;
 

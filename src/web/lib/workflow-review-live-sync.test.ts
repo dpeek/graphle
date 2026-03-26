@@ -1,10 +1,10 @@
 import { describe, expect, it, setDefaultTimeout } from "bun:test";
 
-import type { AuthorizationContext } from "@io/core/graph";
 import { core } from "@io/core/graph/modules";
 import { ops } from "@io/core/graph/modules/ops";
 import { workflowReviewSyncScopeRequest } from "@io/core/graph/modules/ops/workflow";
 import { pkm } from "@io/core/graph/modules/pkm";
+import type { AuthorizationContext } from "@io/graph-authority";
 import { createHttpGraphClient, type FetchImpl } from "@io/graph-client";
 import type { GraphWriteTransaction } from "@io/graph-kernel";
 

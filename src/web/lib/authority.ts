@@ -1,39 +1,22 @@
 import {
-  defineAdmissionPolicy,
   type AuthSubjectRef,
-  type AdmissionPolicy,
-  type AuthorizationContext,
   type AnyTypeOutput,
-  authorizeCommand,
-  authorizeRead,
-  authorizeWrite,
   bootstrap,
   createModuleReadScope,
-  createPersistedAuthoritativeGraph,
   createStore,
   edgeId,
-  type GraphCommandPolicy,
   type GraphFieldAuthority,
   isEntityType,
   isSecretBackedField,
-  type PrincipalKind,
   type Cardinality,
-  type PersistedAuthoritativeGraph,
-  type PersistedAuthoritativeGraphStorageCommitInput,
-  type PersistedAuthoritativeGraphStoragePersistInput,
-  type PersistedAuthoritativeGraphStorage,
-  type PersistedAuthoritativeGraphStorageLoadResult,
-  type PolicyError,
   type InvalidationEvent,
   type PredicatePolicyDescriptor,
   type WebPrincipalSummary,
   resolveFieldPolicyDescriptor,
   type GraphStore,
   type GraphStoreSnapshot,
-  validateShareGrant,
   matchesModuleReadScopeRequest,
 } from "@io/core/graph";
-import { type ReplicationReadAuthorizer } from "@io/core/graph/authority";
 import { core } from "@io/core/graph/modules";
 import { ops } from "@io/core/graph/modules/ops";
 import {
@@ -65,6 +48,25 @@ import {
   type WorkflowMutationResult,
 } from "@io/core/graph/modules/ops/workflow";
 import { pkm } from "@io/core/graph/modules/pkm";
+import {
+  defineAdmissionPolicy,
+  type AdmissionPolicy,
+  type AuthorizationContext,
+  authorizeCommand,
+  authorizeRead,
+  authorizeWrite,
+  createPersistedAuthoritativeGraph,
+  type GraphCommandPolicy,
+  type PersistedAuthoritativeGraph,
+  type PersistedAuthoritativeGraphStorageCommitInput,
+  type PersistedAuthoritativeGraphStoragePersistInput,
+  type PersistedAuthoritativeGraphStorage,
+  type PersistedAuthoritativeGraphStorageLoadResult,
+  type PolicyError,
+  type PrincipalKind,
+  type ReplicationReadAuthorizer,
+  validateShareGrant,
+} from "@io/graph-authority";
 import {
   collectScalarCodecs,
   collectTypeIndex,
@@ -336,7 +338,7 @@ export interface WebAppAuthorityStorage {
 }
 
 type WebAppAuthoritySyncFreshness = NonNullable<
-  Parameters<PersistedWebAppAuthority["createSyncPayload"]>[0]
+  Parameters<PersistedWebAppAuthority["createTotalSyncPayload"]>[0]
 >["freshness"];
 type WebAppAuthorityWriteScope = NonNullable<
   Parameters<PersistedWebAppAuthority["applyTransaction"]>[1]
@@ -371,7 +373,7 @@ export type WebAppAuthorityCommandOptions = {
 
 export type WebAppAuthority = Omit<
   PersistedWebAppAuthority,
-  "applyTransaction" | "createSyncPayload" | "getIncrementalSyncResult" | "graph" | "store"
+  "applyTransaction" | "createTotalSyncPayload" | "getIncrementalSyncResult" | "graph" | "store"
 > & {
   activateSessionPrincipalRoleBindings(
     input: SessionPrincipalLookupInput,
@@ -404,9 +406,9 @@ export type WebAppAuthority = Omit<
     cursor: string,
     options: WebAppAuthorityReadOptions,
   ): WorkflowReviewLiveRegistrationTarget;
-  createSyncPayload(
+  createTotalSyncPayload(
     options: WebAppAuthoritySyncOptions,
-  ): ReturnType<PersistedWebAppAuthority["createSyncPayload"]>;
+  ): ReturnType<PersistedWebAppAuthority["createTotalSyncPayload"]>;
   applyTransaction(
     transaction: GraphWriteTransaction,
     options: WebAppAuthorityTransactionOptions,
@@ -3453,14 +3455,14 @@ export async function createWebAppAuthority(
   async function rebuildRetainedWorkflowProjection(): Promise<void> {
     const workflowProjection = buildRetainedWorkflowProjectionState(
       authority.store.snapshot(),
-      authority.createSyncPayload().cursor,
+      authority.createTotalSyncPayload().cursor,
     );
     await replaceRetainedWorkflowProjection(workflowProjection);
   }
 
   const recoveredWorkflowProjection = buildRetainedWorkflowProjectionState(
     authority.store.snapshot(),
-    authority.createSyncPayload().cursor,
+    authority.createTotalSyncPayload().cursor,
   );
   if (
     classifyRetainedWorkflowProjectionRecovery(
@@ -4001,7 +4003,7 @@ export async function createWebAppAuthority(
       );
     }
 
-    const payload = createSyncPayload({
+    const payload = createTotalSyncPayload({
       authorization: options.authorization,
       scope: {
         kind: "module",
@@ -4102,7 +4104,7 @@ export async function createWebAppAuthority(
 
     const workflowProjection = buildRetainedWorkflowProjectionState(
       authority.store.snapshot(),
-      authority.createSyncPayload().cursor,
+      authority.createTotalSyncPayload().cursor,
     );
     retainedWorkflowProjectionRef.current = clonePersistedValue(workflowProjection);
     void replaceRetainedWorkflowProjection(workflowProjection).catch(() => {});
@@ -4194,7 +4196,7 @@ export async function createWebAppAuthority(
     });
   }
 
-  function createSyncPayload(options: WebAppAuthoritySyncOptions) {
+  function createTotalSyncPayload(options: WebAppAuthoritySyncOptions) {
     const authorizeRead = createReadableReplicationAuthorizer(
       authority.store,
       options.authorization,
@@ -4202,7 +4204,7 @@ export async function createWebAppAuthority(
       authorityPolicyVersion,
     );
     const plannedScope = planSyncScope(options.scope, authorityPolicyVersion);
-    const payload = authority.createSyncPayload({
+    const payload = authority.createTotalSyncPayload({
       authorizeRead,
       freshness: options.freshness,
     });
@@ -4275,7 +4277,7 @@ export async function createWebAppAuthority(
     );
     const plannedScope = planSyncScope(options.scope, authorityPolicyVersion);
     if (after && plannedScope) {
-      const currentPayload = authority.createSyncPayload({
+      const currentPayload = authority.createTotalSyncPayload({
         authorizeRead,
         freshness: options.freshness,
       });
@@ -4909,7 +4911,7 @@ export async function createWebAppAuthority(
     executeCommand,
     executeSerializedQuery,
     applyTransaction,
-    createSyncPayload,
+    createTotalSyncPayload,
     getIncrementalSyncResult,
     getPolicyVersion,
     lookupBearerShare,

@@ -1,10 +1,10 @@
+import type { RetainedWorkflowProjectionState } from "@io/core/graph/modules/ops/workflow";
 import {
   persistedAuthoritativeGraphStateVersion,
   type PersistedAuthoritativeGraphState,
   type PersistedAuthoritativeGraphStorageLoadResult,
   type PersistedAuthoritativeGraphStoragePersistInput,
-} from "@io/core/graph";
-import type { RetainedWorkflowProjectionState } from "@io/core/graph/modules/ops/workflow";
+} from "@io/graph-authority";
 
 import type {
   WebAppAuthoritySecretInventoryRecord,

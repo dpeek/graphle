@@ -54,7 +54,7 @@ transport helpers.
 - client refs and result types: `GraphClient`, `EntityRef`, `PredicateRef`,
   `FieldGroupRef`, `GraphValidationResult`, `GraphValidationError`
 - validation and bootstrap: `validateGraphStore`, `createBootstrappedSnapshot`
-- synced client helpers: `createSyncedGraphClient`, `GraphSyncController`,
+- synced client helpers: `createSyncedGraphClient`, `GraphClientSyncController`,
   `GraphClientSyncState`, `GraphClientSyncStatus`, `GraphSyncWriteError`
 - HTTP helpers: `createHttpGraphClient`, `createHttpGraphTxIdFactory`,
   `applyHttpSyncRequest`, `readHttpSyncRequest`

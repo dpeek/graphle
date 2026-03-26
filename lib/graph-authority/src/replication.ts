@@ -1,28 +1,28 @@
 import {
   cloneAuthoritativeGraphWriteResult,
-  type AuthoritativeGraphWriteResult,
-  type GraphWriteScope,
-  type GraphWriteOperation,
-  type GraphWriteTransaction,
-} from "@io/graph-kernel";
-
-import type { ReplicationReadAuthorizer } from "./authority-types";
-import { createTransactionValidationIssue } from "./authority-validation-helpers";
-import { core } from "./core";
-import {
+  createGraphStore,
   edgeId,
   fieldVisibility,
   fieldWritePolicy,
   isEntityType,
   isFieldsOutput,
-  typeId,
+  type AuthoritativeGraphWriteResult,
   type AnyTypeOutput,
   type FieldsOutput,
   type GraphFieldVisibility,
   type GraphFieldWritePolicy,
+  type GraphStore,
+  type GraphStoreSnapshot,
+  type GraphWriteScope,
+  type GraphWriteOperation,
+  type GraphWriteTransaction,
   type ResolvedEdgeOutput,
-} from "./schema";
-import { createStore, type GraphStore, type GraphStoreSnapshot } from "./store";
+  typeId,
+} from "@io/graph-kernel";
+
+import { readAuthoritativeNodeTypePredicateId } from "./definitions.js";
+import type { ReplicationReadAuthorizer } from "./session-contracts.js";
+import { createTransactionValidationIssue } from "./validation-helpers.js";
 
 type FieldAuthorityPolicy = {
   readonly key: string;
@@ -86,10 +86,11 @@ function findSubjectTypeId(
 function findFieldAuthorityPolicy(
   policiesByTypeId: FieldAuthorityPolicyIndex,
   store: GraphStore,
+  nodeTypePredicateId: string,
   nodeId: string,
   predicateId: string,
 ): FieldAuthorityPolicy | undefined {
-  const subjectTypeId = findSubjectTypeId(store, nodeId, edgeId(core.node.fields.type));
+  const subjectTypeId = findSubjectTypeId(store, nodeId, nodeTypePredicateId);
   if (!subjectTypeId) return undefined;
   return policiesByTypeId.get(subjectTypeId)?.get(predicateId);
 }
@@ -121,16 +122,23 @@ function resolveTransactionOperationTarget(
 
 export function filterReplicatedSnapshot(
   store: GraphStore,
-  namespace: Record<string, AnyTypeOutput>,
+  definitions: Record<string, AnyTypeOutput>,
   options: {
     authorizeRead?: ReplicationReadAuthorizer;
   } = {},
 ): GraphStoreSnapshot {
-  const policiesByTypeId = createFieldAuthorityPolicyIndex(namespace);
+  const nodeTypePredicateId = readAuthoritativeNodeTypePredicateId(definitions);
+  const policiesByTypeId = createFieldAuthorityPolicyIndex(definitions);
   const snapshot = store.snapshot();
   const edges = snapshot.edges
     .filter((edge) => {
-      const policy = findFieldAuthorityPolicy(policiesByTypeId, store, edge.s, edge.p);
+      const policy = findFieldAuthorityPolicy(
+        policiesByTypeId,
+        store,
+        nodeTypePredicateId,
+        edge.s,
+        edge.p,
+      );
       if ((policy?.visibility ?? "replicated") !== "replicated") {
         return false;
       }
@@ -155,6 +163,7 @@ export function filterReplicatedWriteResult(
   result: AuthoritativeGraphWriteResult,
   store: GraphStore,
   policiesByTypeId: FieldAuthorityPolicyIndex,
+  nodeTypePredicateId: string,
   edgeById: Map<string, GraphStoreSnapshot["edges"][number]>,
   options: {
     authorizeRead?: ReplicationReadAuthorizer;
@@ -171,6 +180,7 @@ export function filterReplicatedWriteResult(
     const policy = findFieldAuthorityPolicy(
       policiesByTypeId,
       store,
+      nodeTypePredicateId,
       target.subjectId,
       target.predicateId,
     );
@@ -209,11 +219,12 @@ function writeScopeAllows(writeScope: GraphWriteScope, required: GraphFieldWrite
 export function validateAuthoritativeFieldWritePolicies(
   transaction: GraphWriteTransaction,
   snapshot: GraphStoreSnapshot,
-  namespace: Record<string, AnyTypeOutput>,
+  definitions: Record<string, AnyTypeOutput>,
   writeScope: GraphWriteScope,
 ) {
-  const policiesByTypeId = createFieldAuthorityPolicyIndex(namespace);
-  const validationStore = createStore(snapshot);
+  const nodeTypePredicateId = readAuthoritativeNodeTypePredicateId(definitions);
+  const policiesByTypeId = createFieldAuthorityPolicyIndex(definitions);
+  const validationStore = createGraphStore(snapshot);
   const edgeById = createEdgeIndex(snapshot);
   const issues = [];
 
@@ -224,6 +235,7 @@ export function validateAuthoritativeFieldWritePolicies(
     const policy = findFieldAuthorityPolicy(
       policiesByTypeId,
       validationStore,
+      nodeTypePredicateId,
       target.subjectId,
       target.predicateId,
     );

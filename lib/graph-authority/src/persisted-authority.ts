@@ -1,5 +1,8 @@
 import { createGraphClient, type GraphClient } from "@io/graph-client";
 import {
+  type AnyTypeOutput,
+  type GraphStore,
+  type GraphStoreSnapshot,
   sameAuthoritativeGraphRetainedHistoryPolicy,
   type AuthoritativeGraphChangesAfterResult,
   type AuthoritativeGraphRetainedHistoryPolicy,
@@ -10,14 +13,12 @@ import {
 } from "@io/graph-kernel";
 import { type IncrementalSyncResult, type SyncFreshness } from "@io/graph-sync";
 
+import { resolveAuthoritativeDefinitions } from "./definitions.js";
+import type { ReplicationReadAuthorizer } from "./session-contracts.js";
 import {
   createAuthoritativeGraphWriteSession,
   createAuthoritativeTotalSyncPayload,
-} from "./authority-session";
-import type { ReplicationReadAuthorizer } from "./authority-types";
-import { core } from "./core";
-import type { AnyTypeOutput } from "./schema";
-import type { GraphStore, GraphStoreSnapshot } from "./store";
+} from "./session.js";
 
 export const persistedAuthoritativeGraphStateVersion = 1 as const;
 
@@ -98,11 +99,16 @@ export type PersistedAuthoritativeGraphStoragePersistInput = {
   readonly writeHistory: AuthoritativeGraphWriteHistory;
 };
 
-type AuthorityDefinitions<T extends Record<string, AnyTypeOutput>> = typeof core & T;
-
-export type PersistedAuthoritativeGraphSeed<T extends Record<string, AnyTypeOutput>> = (
-  graph: GraphClient<T, AuthorityDefinitions<T>>,
-) => void | Promise<void>;
+/**
+ * Bootstrap-only seeding callback run when no durable authority state exists.
+ *
+ * The callback receives a typed graph client over the authority store, and any
+ * accepted writes become part of the first persisted baseline.
+ */
+export type PersistedAuthoritativeGraphSeed<
+  TNamespace extends Record<string, AnyTypeOutput>,
+  TDefinitions extends Record<string, AnyTypeOutput> = TNamespace,
+> = (graph: GraphClient<TNamespace, TDefinitions>) => void | Promise<void>;
 
 export type PersistedAuthoritativeGraphCursorPrefixFactory = () => string;
 
@@ -120,28 +126,61 @@ export interface PersistedAuthoritativeGraphStorage {
   persist(input: PersistedAuthoritativeGraphStoragePersistInput): Promise<void>;
 }
 
-export type JsonPersistedAuthoritativeGraphOptions<T extends Record<string, AnyTypeOutput>> = {
+export type JsonPersistedAuthoritativeGraphOptions<
+  TNamespace extends Record<string, AnyTypeOutput>,
+  TDefinitions extends Record<string, AnyTypeOutput> = TNamespace,
+> = {
+  readonly definitions?: TDefinitions;
   readonly path: string;
-  readonly seed?: PersistedAuthoritativeGraphSeed<T>;
+  readonly seed?: PersistedAuthoritativeGraphSeed<TNamespace, TDefinitions>;
   readonly createCursorPrefix?: PersistedAuthoritativeGraphCursorPrefixFactory;
   readonly retainedHistoryPolicy?: AuthoritativeGraphRetainedHistoryPolicy;
 };
 
-export type PersistedAuthoritativeGraphOptions<T extends Record<string, AnyTypeOutput>> = {
+export type PersistedAuthoritativeGraphOptions<
+  TNamespace extends Record<string, AnyTypeOutput>,
+  TDefinitions extends Record<string, AnyTypeOutput> = TNamespace,
+> = {
+  readonly definitions?: TDefinitions;
   readonly storage: PersistedAuthoritativeGraphStorage;
-  readonly seed?: PersistedAuthoritativeGraphSeed<T>;
+  readonly seed?: PersistedAuthoritativeGraphSeed<TNamespace, TDefinitions>;
   readonly createCursorPrefix?: PersistedAuthoritativeGraphCursorPrefixFactory;
   readonly retainedHistoryPolicy?: AuthoritativeGraphRetainedHistoryPolicy;
 };
 
-export type PersistedAuthoritativeGraph<T extends Record<string, AnyTypeOutput>> = {
+/**
+ * Shared durable authority runtime backed by retained history plus one current
+ * store snapshot.
+ *
+ * Startup diagnostics distinguish between `"repair"` and `"reset-baseline"`
+ * recovery:
+ *
+ * - `"repair"` means the hydrated snapshot is still justified by retained
+ *   history, but adapter metadata or normalized history must be rewritten
+ * - `"reset-baseline"` means retained history can no longer justify the
+ *   hydrated snapshot, so the runtime publishes a fresh baseline cursor before
+ *   serving incremental callers
+ *
+ * Any durable commit or explicit persist failure rolls the in-memory authority
+ * back so it does not diverge from storage.
+ */
+export type PersistedAuthoritativeGraph<
+  TNamespace extends Record<string, AnyTypeOutput>,
+  TDefinitions extends Record<string, AnyTypeOutput> = TNamespace,
+> = {
   readonly store: GraphStore;
-  readonly graph: GraphClient<T, AuthorityDefinitions<T>>;
+  readonly graph: GraphClient<TNamespace, TDefinitions>;
   readonly startupDiagnostics: PersistedAuthoritativeGraphStartupDiagnostics;
-  createSyncPayload(options?: {
+  /**
+   * Creates a full sync payload from the current authority baseline.
+   */
+  createTotalSyncPayload(options?: {
     authorizeRead?: ReplicationReadAuthorizer;
     freshness?: SyncFreshness;
   }): ReturnType<typeof createAuthoritativeTotalSyncPayload>;
+  /**
+   * Validates, applies, and durably commits one authoritative write.
+   */
   applyTransaction(
     transaction: GraphWriteTransaction,
     options?: {
@@ -149,6 +188,10 @@ export type PersistedAuthoritativeGraph<T extends Record<string, AnyTypeOutput>>
     },
   ): Promise<AuthoritativeGraphWriteResult>;
   getChangesAfter(cursor?: string): AuthoritativeGraphChangesAfterResult;
+  /**
+   * Returns incremental sync output, or a reset fallback when the caller's
+   * cursor no longer fits within retained history.
+   */
   getIncrementalSyncResult(
     after?: string,
     options?: {
@@ -157,6 +200,10 @@ export type PersistedAuthoritativeGraph<T extends Record<string, AnyTypeOutput>>
     },
   ): IncrementalSyncResult;
   getRetainedHistoryPolicy(): AuthoritativeGraphRetainedHistoryPolicy;
+  /**
+   * Rewrites storage to the current snapshot and starts a fresh retained
+   * history window with a new cursor prefix.
+   */
   persist(): Promise<void>;
 };
 
@@ -170,20 +217,31 @@ function createPersistedAuthoritativeGraphCursorPrefix(): string {
   return `tx:${persistedAuthoritativeGraphCursorEpoch}:`;
 }
 
+/**
+ * Creates the shared durable authority runtime on top of an adapter-provided
+ * storage boundary.
+ *
+ * On startup, storage `load()` results are replayed back into a fresh write
+ * session. Any replay mismatch upgrades recovery to `"reset-baseline"` so the
+ * runtime republishes a new total-sync baseline instead of serving a broken
+ * incremental cursor window.
+ */
 export async function createPersistedAuthoritativeGraph<
-  const T extends Record<string, AnyTypeOutput>,
+  const TNamespace extends Record<string, AnyTypeOutput>,
+  const TDefinitions extends Record<string, AnyTypeOutput> = TNamespace,
 >(
   store: GraphStore,
-  namespace: T,
-  options: PersistedAuthoritativeGraphOptions<T>,
-): Promise<PersistedAuthoritativeGraph<T>> {
-  const definitions = { ...core, ...namespace } as typeof core & T;
+  namespace: TNamespace,
+  options: PersistedAuthoritativeGraphOptions<TNamespace, TDefinitions>,
+): Promise<PersistedAuthoritativeGraph<TNamespace, TDefinitions>> {
+  const definitions = resolveAuthoritativeDefinitions(namespace, options.definitions);
   const graph = createGraphClient(store, namespace, definitions);
   const createCursorPrefix =
     options.createCursorPrefix ?? createPersistedAuthoritativeGraphCursorPrefix;
   const createFreshWriteSession = () =>
     createAuthoritativeGraphWriteSession(store, namespace, {
       cursorPrefix: createCursorPrefix(),
+      definitions,
       retainedHistoryPolicy: options.retainedHistoryPolicy,
     });
   let writes = createFreshWriteSession();
@@ -191,6 +249,7 @@ export async function createPersistedAuthoritativeGraph<
   const createWriteSession = (writeHistory: AuthoritativeGraphWriteHistory) =>
     createAuthoritativeGraphWriteSession(store, namespace, {
       cursorPrefix: writeHistory.cursorPrefix,
+      definitions,
       initialSequence: writeHistory.baseSequence,
       history: writeHistory.results,
       retainedHistoryPolicy: configuredRetainedHistoryPolicy,
@@ -294,10 +353,11 @@ export async function createPersistedAuthoritativeGraph<
     store,
     graph,
     startupDiagnostics,
-    createSyncPayload(syncOptions = {}) {
+    createTotalSyncPayload(syncOptions = {}) {
       return createAuthoritativeTotalSyncPayload(store, namespace, {
         authorizeRead: syncOptions.authorizeRead,
         cursor: writes.getCursor() ?? writes.getBaseCursor(),
+        definitions,
         diagnostics: {
           retainedHistoryPolicy: writes.getRetainedHistoryPolicy(),
           retainedBaseCursor: writes.getBaseCursor(),

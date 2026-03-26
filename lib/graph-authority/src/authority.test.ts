@@ -5,31 +5,33 @@ import { dirname, join } from "node:path";
 
 import { createBootstrappedSnapshot, createGraphClient } from "@io/graph-client";
 import {
+  applyGraphIdMap as applyIdMap,
+  createGraphIdMap as createIdMap,
+  createGraphStore as createStore,
   createGraphWriteTransactionFromSnapshots,
+  defineType,
+  edgeId,
+  fieldPolicyDescriptor,
+  type GraphStoreSnapshot,
   type AuthoritativeGraphWriteResult,
   type GraphWriteTransaction,
 } from "@io/graph-kernel";
 import { validateIncrementalSyncResult } from "@io/graph-sync";
 
-import { kitchenSink } from "../testing/kitchen-sink.js";
+import { core } from "../../../src/graph/modules/core.js";
+import { kitchenSink } from "../../../src/graph/testing/kitchen-sink.js";
 import {
+  authorizeRead,
   createJsonPersistedAuthoritativeGraph,
+  createAuthoritativeGraphWriteSession,
+  createAuthoritativeTotalSyncPayload,
   createPersistedAuthoritativeGraph,
+  type AuthorizationContext,
   type PersistedAuthoritativeGraphState,
   type PersistedAuthoritativeGraphStorage,
   type PersistedAuthoritativeGraphStorageLoadResult,
-} from "./authority";
-import {
-  createAuthoritativeTotalSyncPayload,
-  createAuthoritativeGraphWriteSession,
   validateAuthoritativeTotalSyncPayload,
-} from "./authority";
-import { authorizeRead } from "./authorization";
-import type { AuthorizationContext } from "./contracts";
-import { core } from "./core";
-import { createIdMap, applyIdMap } from "./identity";
-import { defineType, edgeId, fieldPolicyDescriptor } from "./schema";
-import { createStore, type GraphStoreSnapshot } from "./store";
+} from "./index.js";
 
 const tempDirs: string[] = [];
 let testCursorEpoch = 0;
@@ -203,6 +205,7 @@ async function createJsonAuthority(
   const store = createTestGraphStore();
 
   return createJsonPersistedAuthoritativeGraph(store, testGraph, {
+    definitions: testDefs,
     path: snapshotPath,
     seed(graph) {
       if (!options.seedName) return;
@@ -311,7 +314,7 @@ describe("persisted authoritative graph", () => {
     const authority = await createJsonAuthority(snapshotPath, { seedName: "Seeded Item" });
     const persistedState = await readPersistedAuthorityState(snapshotPath);
     const persistedFiles = await readdir(dirname(snapshotPath));
-    const payload = authority.createSyncPayload();
+    const payload = authority.createTotalSyncPayload();
 
     expect(authority.graph.item.list().map((entity) => entity.name)).toEqual(["Seeded Item"]);
     expect(persistedState.version).toBe(1);
@@ -345,7 +348,9 @@ describe("persisted authoritative graph", () => {
     });
     expect(persistedState.version).toBe(1);
     expect(persistedState.writeHistory.results).toEqual([]);
-    expect(restarted.createSyncPayload().cursor).toBe(authority.createSyncPayload().cursor);
+    expect(restarted.createTotalSyncPayload().cursor).toBe(
+      authority.createTotalSyncPayload().cursor,
+    );
   });
 
   it("normalizes legacy persisted write history entries to client-tx before rewrite", async () => {
@@ -355,6 +360,7 @@ describe("persisted authoritative graph", () => {
     const itemId = graph.item.create({ name: "Legacy Scoped Item" });
     const writes = createAuthoritativeGraphWriteSession(store, testGraph, {
       cursorPrefix: "persisted:legacy-scope:",
+      definitions: testDefs,
     });
     const scopedResult = writes.apply(
       createItemNameWriteTransaction(store, itemId, "Legacy Scoped Item Updated", "tx:legacy:1"),
@@ -422,13 +428,13 @@ describe("persisted authoritative graph", () => {
     const itemId = authority.graph.item.list()[0]?.id;
     if (!itemId) throw new Error("Expected seeded item.");
 
-    const initialCursor = authority.createSyncPayload().cursor;
+    const initialCursor = authority.createTotalSyncPayload().cursor;
     const first = await authority.applyTransaction(
       createItemNameWriteTransaction(authority.store, itemId, "Durable Item One", "tx:1"),
     );
     const persistedState = await readPersistedAuthorityState(snapshotPath);
     const restarted = await createJsonAuthority(snapshotPath);
-    const restartedCursor = restarted.createSyncPayload().cursor;
+    const restartedCursor = restarted.createTotalSyncPayload().cursor;
     const second = await restarted.applyTransaction(
       createItemNameWriteTransaction(restarted.store, itemId, "Durable Item Two", "tx:2"),
     );
@@ -486,6 +492,7 @@ describe("persisted authoritative graph", () => {
       const store = createTestGraphStore();
 
       return createPersistedAuthoritativeGraph(store, testGraph, {
+        definitions: testDefs,
         storage: retainedStorage.storage,
         seed(graph) {
           graph.item.create({ name: "Retained Item" });
@@ -502,7 +509,7 @@ describe("persisted authoritative graph", () => {
     const itemId = authority.graph.item.list()[0]?.id;
     if (!itemId) throw new Error("Expected retained item.");
 
-    const initialCursor = authority.createSyncPayload().cursor;
+    const initialCursor = authority.createTotalSyncPayload().cursor;
     const first = await authority.applyTransaction(
       createItemNameWriteTransaction(authority.store, itemId, "Retained Item One", "tx:retain:1"),
     );
@@ -612,7 +619,7 @@ describe("persisted authoritative graph", () => {
     const probeId = authority.graph.hiddenCursorProbe.list()[0]?.id;
     if (!probeId) throw new Error("Expected the hidden cursor probe to be seeded.");
 
-    const initialCursor = authority.createSyncPayload().cursor;
+    const initialCursor = authority.createTotalSyncPayload().cursor;
     const hidden = await authority.applyTransaction(
       createHiddenCursorAdvanceTransaction(
         authority.store.snapshot(),
@@ -643,7 +650,7 @@ describe("persisted authoritative graph", () => {
         },
       },
     });
-    expect(restarted.createSyncPayload().cursor).toBe(hidden.cursor);
+    expect(restarted.createTotalSyncPayload().cursor).toBe(hidden.cursor);
     expect(restarted.getIncrementalSyncResult(initialCursor)).toEqual({
       mode: "incremental",
       scope: { kind: "graph" },
@@ -682,7 +689,7 @@ describe("persisted authoritative graph", () => {
     const probeId = authority.graph.hiddenCursorProbe.list()[0]?.id;
     if (!probeId) throw new Error("Expected the hidden cursor probe to be seeded.");
 
-    const initialCursor = authority.createSyncPayload().cursor;
+    const initialCursor = authority.createTotalSyncPayload().cursor;
     const first = await authority.applyTransaction(
       createHiddenCursorAdvanceTransaction(
         authority.store.snapshot(),
@@ -799,6 +806,7 @@ describe("persisted authoritative graph", () => {
 
     const store = createTestGraphStore();
     const authority = await createPersistedAuthoritativeGraph(store, testGraph, {
+      definitions: testDefs,
       storage: {
         async load() {
           return current
@@ -894,7 +902,7 @@ describe("persisted authoritative graph", () => {
 
     const authority = await createJsonAuthority(snapshotPath);
     const rewrittenState = await readPersistedAuthorityState(snapshotPath);
-    const payload = authority.createSyncPayload();
+    const payload = authority.createTotalSyncPayload();
 
     expect(authority.startupDiagnostics).toEqual({
       recovery: "reset-baseline",
@@ -930,9 +938,10 @@ describe("persisted authoritative graph", () => {
     });
     const payload = createAuthoritativeTotalSyncPayload(store, kitchenSink, {
       cursor: "server:1",
+      definitions: kitchenSinkDefs,
     });
 
-    expect(validateAuthoritativeTotalSyncPayload(payload, kitchenSink).ok).toBe(true);
+    expect(validateAuthoritativeTotalSyncPayload(payload, kitchenSinkDefs).ok).toBe(true);
     expect(
       payload.snapshot.edges.some(
         (edge) => edge.s === secretId && edge.p === edgeId(kitchenSink.secret.fields.fingerprint),
@@ -968,6 +977,7 @@ describe("persisted authoritative graph", () => {
     );
     const session = createAuthoritativeGraphWriteSession(store, kitchenSink, {
       cursorPrefix: "server:hidden:",
+      definitions: kitchenSinkDefs,
       history: [
         {
           txId: "tx:hidden",
@@ -1015,6 +1025,7 @@ describe("persisted authoritative graph", () => {
     );
     const session = createAuthoritativeGraphWriteSession(store, kitchenSink, {
       cursorPrefix: "server:mixed:",
+      definitions: kitchenSinkDefs,
       history: [
         {
           txId: "tx:hidden",
@@ -1053,6 +1064,7 @@ describe("persisted authoritative graph", () => {
     const storage = createMemoryStorage();
     const store = createVisibilityStore();
     const authority = await createPersistedAuthoritativeGraph(store, visibilityGraph, {
+      definitions: visibilityDefs,
       storage: storage.storage,
       createCursorPrefix: createTestCursorPrefix,
       seed(graph) {
@@ -1062,10 +1074,10 @@ describe("persisted authoritative graph", () => {
         });
       },
     });
-    const memberTotal = authority.createSyncPayload({
+    const memberTotal = authority.createTotalSyncPayload({
       authorizeRead: createVisibilityReadAuthorizer(graphMemberAuthorization),
     });
-    const outsiderTotal = authority.createSyncPayload({
+    const outsiderTotal = authority.createTotalSyncPayload({
       authorizeRead: createVisibilityReadAuthorizer(outsiderAuthorization),
     });
 
@@ -1133,6 +1145,7 @@ describe("persisted authoritative graph", () => {
     const storage = createMemoryStorage();
     const store = createTestGraphStore();
     const authority = await createPersistedAuthoritativeGraph(store, testGraph, {
+      definitions: testDefs,
       storage: storage.storage,
       seed(graph) {
         graph.item.create({ name: "Rollback Item" });
@@ -1143,7 +1156,7 @@ describe("persisted authoritative graph", () => {
     if (!itemId) throw new Error("Expected seeded item.");
 
     const previousPersistedState = storage.getCurrent();
-    const previousCursor = authority.createSyncPayload().cursor;
+    const previousCursor = authority.createTotalSyncPayload().cursor;
     storage.failOnNextWrite();
 
     await expect(
@@ -1153,7 +1166,7 @@ describe("persisted authoritative graph", () => {
     ).rejects.toThrow("persist failed");
 
     expect(storage.getCurrent()).toEqual(previousPersistedState);
-    expect(authority.createSyncPayload().cursor).toBe(previousCursor);
+    expect(authority.createTotalSyncPayload().cursor).toBe(previousCursor);
     expect(authority.graph.item.get(itemId).name).toBe("Rollback Item");
     expect(authority.getChangesAfter(previousCursor)).toEqual({
       kind: "changes",
@@ -1166,6 +1179,7 @@ describe("persisted authoritative graph", () => {
     const storage = createMemoryStorage();
     const store = createTestGraphStore();
     const authority = await createPersistedAuthoritativeGraph(store, testGraph, {
+      definitions: testDefs,
       storage: storage.storage,
       seed(graph) {
         graph.item.create({ name: "Reset Item" });
@@ -1177,13 +1191,13 @@ describe("persisted authoritative graph", () => {
 
     authority.graph.item.update(itemId, { name: "Reset Item Updated" });
     const previousPersistedState = storage.getCurrent();
-    const previousCursor = authority.createSyncPayload().cursor;
+    const previousCursor = authority.createTotalSyncPayload().cursor;
     storage.failOnNextWrite();
 
     await expect(authority.persist()).rejects.toThrow("persist failed");
 
     expect(storage.getCurrent()).toEqual(previousPersistedState);
-    expect(authority.createSyncPayload().cursor).toBe(previousCursor);
+    expect(authority.createTotalSyncPayload().cursor).toBe(previousCursor);
     expect(authority.graph.item.get(itemId).name).toBe("Reset Item Updated");
     expect(authority.getChangesAfter(previousCursor)).toEqual({
       kind: "changes",

@@ -4,7 +4,6 @@ import { describe, expect, it, setDefaultTimeout } from "bun:test";
 import {
   bootstrap,
   createIdMap,
-  createPersistedAuthoritativeGraph,
   createStore,
   applyIdMap,
   defineSecretField,
@@ -12,8 +11,6 @@ import {
   edgeId,
   type AuthSubjectRef,
   type AnyTypeOutput,
-  type AuthorizationContext,
-  type PersistedAuthoritativeGraphStorage,
   type GraphStoreSnapshot,
 } from "@io/core/graph";
 import { core } from "@io/core/graph/modules";
@@ -24,6 +21,11 @@ import {
   workflowReviewSyncScopeRequest,
 } from "@io/core/graph/modules/ops/workflow";
 import { pkm } from "@io/core/graph/modules/pkm";
+import {
+  createPersistedAuthoritativeGraph,
+  type AuthorizationContext,
+  type PersistedAuthoritativeGraphStorage,
+} from "@io/graph-authority";
 import { createGraphClient, type GraphClient } from "@io/graph-client";
 import {
   type AuthoritativeGraphRetainedHistoryPolicy,
@@ -1003,9 +1005,9 @@ describe("web graph authority durable object", () => {
 
           return {
             ...authority,
-            createSyncPayload(syncOptions) {
+            createTotalSyncPayload(syncOptions) {
               captured.push(syncOptions.authorization);
-              return authority.createSyncPayload(syncOptions);
+              return authority.createTotalSyncPayload(syncOptions);
             },
           } satisfies WebAppAuthority;
         },

@@ -1,15 +1,15 @@
+import type { PrincipalRoleBinding } from "@io/graph-authority";
+
 import { createIdMap, applyIdMap, defineReferenceField, defineType } from "../index.js";
 import type {
   AuthSubjectRef,
   AuthenticatedSession,
-  AuthorizationContext,
   GraphCommandSpec,
   ModulePermissionApprovalRecord,
   ModulePermissionCapabilityGrant,
   ModulePermissionGrantResource,
   ModulePermissionRequest,
   ObjectViewSpec,
-  PrincipalRoleBinding,
   PredicatePolicyDescriptor,
   WorkflowSpec,
 } from "../index.js";
@@ -82,17 +82,6 @@ export const probeAuthenticatedSession = {
   sessionId: "session-probe-1",
   subject: probeAuthSubject,
 } satisfies AuthenticatedSession;
-
-export const probeAuthorizationContext = {
-  graphId: "graph:probe",
-  principalId: "principal:probe",
-  principalKind: "human",
-  sessionId: probeAuthenticatedSession.sessionId,
-  roleKeys: ["graph:member"],
-  capabilityGrantIds: ["grant:probe:1"],
-  capabilityVersion: 2,
-  policyVersion: 7,
-} satisfies AuthorizationContext;
 
 const resolvedProbeContractSummaryPolicy = fieldPolicyDescriptor(probeContractItem.fields.summary);
 const resolvedProbeContractNamePolicy = fieldPolicyDescriptor(probeContractItem.fields.name);
@@ -221,7 +210,7 @@ export const probeModulePermissionGrant = {
   resource: probeModulePermissionGrantResource,
   target: {
     kind: "principal",
-    principalId: probeAuthorizationContext.principalId,
+    principalId: "principal:probe",
   },
   grantedByPrincipalId: "principal:operator",
   status: "active",

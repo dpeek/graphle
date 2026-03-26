@@ -21,8 +21,9 @@ Repo sources used for this guide:
 - `src/web/lib/server-routes.ts`
 - `src/web/lib/graph-authority-do.ts`
 - `src/web/lib/authority.ts`
+- `lib/graph-authority/src/contracts.ts`
+- `lib/graph-authority/src/authorization.ts`
 - `src/graph/runtime/contracts.ts`
-- `src/graph/runtime/authorization.ts`
 - `src/graph/modules/core/identity/index.ts`
 - `package.json`
 - `wrangler.jsonc`
@@ -54,12 +55,15 @@ Throughout this guide:
 
 Repo:
 
-- `src/graph/runtime/contracts.ts` already defines the stable auth boundary the
-  rest of the repo is supposed to use:
-  - `AuthSubjectRef`
-  - `AuthenticatedSession`
+- `lib/graph-authority/src/contracts.ts` already defines the authority-owned
+  auth and policy boundary the rest of the repo is supposed to use:
   - `AuthorizationContext`
   - `AdmissionPolicy`
+  - `PrincipalKind`
+- `src/graph/runtime/contracts.ts` already defines the remaining root-safe auth
+  shell boundary:
+  - `AuthSubjectRef`
+  - `AuthenticatedSession`
   - `WebPrincipalSession`
   - `WebPrincipalSummary`
   - `WebPrincipalBootstrapPayload`
@@ -147,7 +151,7 @@ Repo:
   exclude graph-owned identity entities entirely so required authority-only
   fields never reach browser replication as partial invalid entities.
 - graph-backed admission policy now has one stable Branch 2 contract:
-  `AdmissionPolicy` in `src/graph/runtime/contracts.ts` and the authority-owned
+  `AdmissionPolicy` in `lib/graph-authority/src/contracts.ts` and the authority-owned
   `core:admissionPolicy` entity plus enum vocabulary in
   `src/graph/modules/core/identity/index.ts`.
 - graph-backed initial-access approvals now also have one explicit contract:
@@ -255,7 +259,7 @@ It should not own:
 
 Repo:
 
-- `src/web/lib/authority.ts` and `src/graph/runtime/authorization.ts` already
+- `src/web/lib/authority.ts` and `lib/graph-authority/src/authorization.ts` already
   enforce final policy from `AuthorizationContext`.
 
 In this repo the authority runtime should own:
@@ -657,7 +661,7 @@ Recommended authority-side lookup:
 2. list active `core:principalRoleBinding` rows for that principal
 3. project `roleKey` values into `AuthorizationContext.roleKeys`
 
-Current repo role semantics already used by `src/graph/runtime/authorization.ts`:
+Current repo role semantics already used by `lib/graph-authority/src/authorization.ts`:
 
 - `graph:authority`
 - `graph:member`

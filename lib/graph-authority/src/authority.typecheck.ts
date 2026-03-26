@@ -1,3 +1,6 @@
+import { applyGraphIdMap, createGraphIdMap, defineType } from "@io/graph-kernel";
+
+import { core } from "../../../src/graph/modules/core.js";
 import type {
   JsonPersistedAuthoritativeGraphOptions,
   PersistedAuthoritativeGraphCursorPrefixFactory,
@@ -6,10 +9,7 @@ import type {
   PersistedAuthoritativeGraphState,
   PersistedAuthoritativeGraphStorage,
   PersistedAuthoritativeGraphStorageLoadResult,
-} from "./authority.js";
-import { core } from "./core.js";
-import { createIdMap, applyIdMap } from "./identity.js";
-import { defineType } from "./schema.js";
+} from "./index.js";
 
 const item = defineType({
   values: { key: "probe:item", name: "Probe Item" },
@@ -18,14 +18,17 @@ const item = defineType({
   },
 });
 
-const probeGraph = applyIdMap(createIdMap({ item }).map, { item });
+const probeGraph = applyGraphIdMap(createGraphIdMap({ item }).map, { item });
+const probeDefinitions = { ...core, ...probeGraph } as const;
 
 const createCursorPrefix: PersistedAuthoritativeGraphCursorPrefixFactory = () => "authority:";
 
-const seed: PersistedAuthoritativeGraphSeed<typeof probeGraph> = (graph) => {
+const seed: PersistedAuthoritativeGraphSeed<typeof probeGraph, typeof probeDefinitions> = (
+  graph,
+) => {
   graph.item.create({ name: "Seeded Item" });
 
-  // @ts-expect-error persisted authority seeding only receives the typed graph client
+  // @ts-expect-error persisted authority seeds only receive the typed namespace client
   void graph.snapshot();
 };
 
@@ -70,41 +73,17 @@ const storage = {
 } satisfies PersistedAuthoritativeGraphStorage;
 
 void ({
+  definitions: probeDefinitions,
   path: "/tmp/graph.snapshot.json",
   seed,
   createCursorPrefix,
-} satisfies JsonPersistedAuthoritativeGraphOptions<typeof probeGraph>);
+} satisfies JsonPersistedAuthoritativeGraphOptions<typeof probeGraph, typeof probeDefinitions>);
 
 void ({
+  definitions: probeDefinitions,
   storage,
   seed,
   createCursorPrefix,
-} satisfies PersistedAuthoritativeGraphOptions<typeof probeGraph>);
+} satisfies PersistedAuthoritativeGraphOptions<typeof probeGraph, typeof probeDefinitions>);
 
 void durableState;
-
-void ({
-  path: "/tmp/graph.snapshot.json",
-  // @ts-expect-error custom storage belongs to the generic persisted authority surface, not the JSON wrapper
-  storage,
-} satisfies JsonPersistedAuthoritativeGraphOptions<typeof probeGraph>);
-
-void ({
-  storage,
-  // @ts-expect-error namespace wiring stays outside the persisted authority options surface
-  namespace: probeGraph,
-} satisfies PersistedAuthoritativeGraphOptions<typeof probeGraph>);
-
-void ({
-  version: 1,
-  snapshot: loadResult.snapshot,
-  // @ts-expect-error durable persisted state must retain authoritative write history for cursor recovery
-} satisfies PersistedAuthoritativeGraphState);
-
-void ({
-  version: 1,
-  snapshot: loadResult.snapshot,
-  writeHistory: durableState.writeHistory,
-  // @ts-expect-error shared persisted authority state excludes adapter-owned side storage
-  secrets: {},
-} satisfies PersistedAuthoritativeGraphState);

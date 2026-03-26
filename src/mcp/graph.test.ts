@@ -14,16 +14,16 @@ import {
   type GraphWriteTransaction,
 } from "@io/graph-kernel";
 import { type SyncPayload } from "@io/graph-sync";
+import {
+  createAuthoritativeGraphWriteSession,
+  createAuthoritativeTotalSyncPayload,
+} from "@io/graph-authority";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 
 import { core } from "../graph/modules/index.js";
 import { ops } from "../graph/modules/ops.js";
 import { pkm } from "../graph/modules/pkm.js";
-import {
-  createAuthoritativeGraphWriteSession,
-  createAuthoritativeTotalSyncPayload,
-} from "../graph/runtime/authority.js";
 import { kitchenSink } from "../graph/testing/kitchen-sink.js";
 import { createGraphMcpServer, createGraphMcpSession } from "./graph.js";
 

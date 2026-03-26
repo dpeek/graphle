@@ -89,7 +89,7 @@ Implemented on 2026-03-23:
   `src/web/lib/workflow-authority.ts` and the secret-field path in
   `src/web/lib/authority.ts` now use that planner instead of whole-store
   before/after diffing.
-- `src/graph/runtime/persisted-authority.ts` now reuses a single pre-write
+- `lib/graph-authority/src/persisted-authority.ts` now reuses a single pre-write
   snapshot through `applyWithSnapshot(...)` in the authoritative write session
   instead of snapshotting the full store again after every accepted write.
 - `src/web/lib/authority.ts` now caches compiled graph metadata plus a
@@ -100,7 +100,7 @@ Implemented on 2026-03-23:
   rebuilding and diffing a fresh seeded runtime graph for every test case.
 - `src/mcp/schema.ts` and `src/mcp/graph.ts` now cache MCP schema/session
   metadata per namespace, and `src/mcp/graph.test.ts` plus
-  `src/graph/runtime/authority.test.ts` now reuse cached bootstrapped or
+  `lib/graph-authority/src/authority.test.ts` now reuse cached bootstrapped or
   seeded snapshots instead of repeating raw schema bootstrap in every case.
 - `src/web/lib/example-runtime.test.ts` now uses an explicit `20_000ms`
   default timeout so the full profiled suite is stable under the slower JUnit
@@ -160,7 +160,7 @@ The original web authority bottleneck is no longer first-order:
 - `src/web/lib/workflow-authority.test.ts`: `6.53s` -> `0.49s`
 - `src/web/lib/example-runtime.test.ts`: `14.47s` -> `1.73s`
 - `src/mcp/graph.test.ts`: `7.72s` -> `2.69s`
-- `src/graph/runtime/authority.test.ts`: `2.76s` -> `0.31s`
+- `lib/graph-authority/src/authority.test.ts`: `2.76s` -> `0.31s`
 
 ## Success Criteria
 

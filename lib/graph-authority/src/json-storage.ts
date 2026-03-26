@@ -3,14 +3,17 @@ import { dirname } from "node:path";
 
 import {
   isAuthoritativeGraphRetainedHistoryPolicy,
+  type AnyTypeOutput,
   type AuthoritativeGraphRetainedHistoryPolicy,
   type AuthoritativeGraphWriteHistory,
   type AuthoritativeGraphWriteResult,
+  type GraphStore,
+  type GraphStoreSnapshot,
   unboundedAuthoritativeGraphRetainedHistoryPolicy,
 } from "@io/graph-kernel";
 import { graphSyncScope, type TotalSyncPayload } from "@io/graph-sync";
 
-import { validateAuthoritativeTotalSyncPayload } from "./authority-validation";
+import { resolveAuthoritativeDefinitions } from "./definitions.js";
 import {
   createPersistedAuthoritativeGraph,
   persistedAuthoritativeGraphStateVersion,
@@ -22,27 +25,8 @@ import {
   type PersistedAuthoritativeGraphState,
   type PersistedAuthoritativeGraphStorage,
   type PersistedAuthoritativeGraphStorageLoadResult,
-} from "./persisted-authority";
-import type { AnyTypeOutput } from "./schema";
-import type { GraphStore, GraphStoreSnapshot } from "./store";
-
-export * from "./persisted-authority";
-export {
-  createAuthoritativeGraphWriteSession,
-  createAuthoritativeTotalSyncPayload,
-} from "./authority-session";
-export type {
-  AuthoritativeGraphWriteSession,
-  ReplicatedPredicateTarget,
-  ReplicationReadAuthorizer,
-} from "./authority-types";
-export {
-  createAuthoritativeGraphWriteResultValidator,
-  createAuthoritativeTotalSyncValidator,
-  validateAuthoritativeGraphWriteResult,
-  validateAuthoritativeGraphWriteTransaction,
-  validateAuthoritativeTotalSyncPayload,
-} from "./authority-validation";
+} from "./persisted-authority.js";
+import { validateAuthoritativeTotalSyncPayload } from "./validation.js";
 
 function isObjectRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object";
@@ -51,7 +35,7 @@ function isObjectRecord(value: unknown): value is Record<string, unknown> {
 function validatePersistedSnapshot(
   snapshot: GraphStoreSnapshot,
   source: string,
-  namespace: Record<string, AnyTypeOutput>,
+  definitions: Record<string, AnyTypeOutput>,
 ): GraphStoreSnapshot {
   const validation = validateAuthoritativeTotalSyncPayload(
     {
@@ -62,7 +46,7 @@ function validatePersistedSnapshot(
       completeness: "complete",
       freshness: "current",
     } satisfies TotalSyncPayload,
-    namespace,
+    definitions,
   );
   if (validation.ok) return snapshot;
 
@@ -155,9 +139,18 @@ function readPersistedWriteHistory(rawHistory: unknown): {
   };
 }
 
+/**
+ * Creates the shipped file-backed JSON storage adapter for shared persisted
+ * authorities.
+ *
+ * The adapter persists only the versioned snapshot-plus-history contract owned
+ * by this package. It validates snapshots on load, rewrites through a temp
+ * file, and normalizes legacy write history that predates stored `writeScope`
+ * metadata.
+ */
 export function createJsonPersistedAuthoritativeGraphStorage<
-  const T extends Record<string, AnyTypeOutput>,
->(path: string, namespace: T): PersistedAuthoritativeGraphStorage {
+  const TDefinitions extends Record<string, AnyTypeOutput>,
+>(path: string, definitions: TDefinitions): PersistedAuthoritativeGraphStorage {
   async function load(): Promise<PersistedAuthoritativeGraphStorageLoadResult | null> {
     try {
       const rawSnapshot = await readFile(path, "utf8");
@@ -171,7 +164,7 @@ export function createJsonPersistedAuthoritativeGraphStorage<
         const snapshot = validatePersistedSnapshot(
           parsed.snapshot as GraphStoreSnapshot,
           path,
-          namespace,
+          definitions,
         );
         const persistedWriteHistory = readPersistedWriteHistory(parsed.writeHistory);
         return {
@@ -193,7 +186,7 @@ export function createJsonPersistedAuthoritativeGraphStorage<
       }
 
       return {
-        snapshot: validatePersistedSnapshot(parsed as GraphStoreSnapshot, path, namespace),
+        snapshot: validatePersistedSnapshot(parsed as GraphStoreSnapshot, path, definitions),
         recovery: "reset-baseline",
         startupDiagnostics: {
           recovery: "reset-baseline",
@@ -238,15 +231,21 @@ export function createJsonPersistedAuthoritativeGraphStorage<
   };
 }
 
+/**
+ * Creates a persisted authority backed by the shipped JSON storage adapter.
+ */
 export async function createJsonPersistedAuthoritativeGraph<
-  const T extends Record<string, AnyTypeOutput>,
+  const TNamespace extends Record<string, AnyTypeOutput>,
+  const TDefinitions extends Record<string, AnyTypeOutput> = TNamespace,
 >(
   store: GraphStore,
-  namespace: T,
-  options: JsonPersistedAuthoritativeGraphOptions<T>,
-): Promise<PersistedAuthoritativeGraph<T>> {
+  namespace: TNamespace,
+  options: JsonPersistedAuthoritativeGraphOptions<TNamespace, TDefinitions>,
+): Promise<PersistedAuthoritativeGraph<TNamespace, TDefinitions>> {
+  const definitions = resolveAuthoritativeDefinitions(namespace, options.definitions);
   return createPersistedAuthoritativeGraph(store, namespace, {
-    storage: createJsonPersistedAuthoritativeGraphStorage(options.path, namespace),
+    definitions,
+    storage: createJsonPersistedAuthoritativeGraphStorage(options.path, definitions),
     seed: options.seed,
     createCursorPrefix: options.createCursorPrefix,
     retainedHistoryPolicy: options.retainedHistoryPolicy,

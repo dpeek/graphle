@@ -3,12 +3,14 @@
 ## Purpose
 
 `graph` owns the reusable graph engine: schema authoring, stable ids,
-bootstrap, the append-only store, persisted authoritative runtimes, type-module
+bootstrap, the append-only store, root-safe runtime contracts, type-module
 contracts, graph-owned icon helpers, and the graph-aware adapter layer that
 binds shared `@io/web` primitives to graph predicates. The extracted
-`@io/graph-client` workspace package owns typed refs, local validation, synced
-client composition, and client-facing HTTP/query helpers on top of the graph
-kernel and sync packages.
+`@io/graph-authority` workspace package owns persisted authoritative runtimes,
+authority validation, authority-side replication filtering, and graph-owned
+authorization and policy contracts. The extracted `@io/graph-client` workspace
+package owns typed refs, local validation, synced-client composition, and
+client-facing HTTP/query helpers on top of the graph kernel and sync packages.
 
 ## Browser Editor Boundary
 
@@ -72,12 +74,10 @@ The graph package publishes these subpaths from `../../package.json`:
   `../../src/graph/runtime/index.ts` plus graph-owned icon helpers from
   `../../src/graph/icon.ts`
 - `@io/core/graph/runtime`: `../../src/graph/runtime/index.ts`; runtime,
-  persisted-authority, authorization, store, sync, schema, HTTP client,
-  type-module, and reference-policy surface
+  store, schema, bootstrap, root-safe contracts, type-module, projection, and
+  reference-policy surface
 - `@io/core/graph/runtime/react`: `../../src/graph/runtime/react/index.ts`;
   host-neutral React hooks and resolver primitives
-- `@io/core/graph/authority`: `../../src/graph/runtime/authority.ts`;
-  persisted authority helpers and the JSON file adapter
 - `@io/core/graph/def`: `../../src/graph/runtime/def.ts`; focused schema and
   type-module authoring exports
 - `@io/core/graph/modules`: `../../src/graph/modules/index.ts`; canonical
@@ -92,20 +92,28 @@ The graph package publishes these subpaths from `../../package.json`:
 
 The workspace also publishes:
 
+- `@io/graph-authority`: `../../lib/graph-authority/src/index.ts`; persisted
+  authority runtime, authoritative write sessions, total-sync payload
+  creation, authority validation, replication read filtering, and graph-owned
+  authorization and policy contracts
 - `@io/graph-client`: `../../lib/graph-client/src/index.ts`; typed client
   construction, refs, local validation, synced-client composition, HTTP sync
   transport helpers, and serialized-query request/response contracts
 
-The root `@io/core/graph` surface stays focused on runtime, schema, authority,
-and icon contracts. Client APIs now live on `@io/graph-client`. Module
-namespaces, slice exports, and host adapters stay on their dedicated subpaths.
+The root `@io/core/graph` surface stays focused on runtime, schema, and icon
+contracts. Authority APIs now live on `@io/graph-authority`, and client APIs
+live on `@io/graph-client`. Module namespaces, slice exports, and host
+adapters stay on their dedicated subpaths.
 
 ## Source Layout
 
 - `../../src/graph/runtime/`: runtime kernel, schema authoring contracts, ids,
-  additive bootstrap, authorization, persisted-authority contracts,
-  reference-policy helpers, and the file-backed JSON adapter used outside the
-  web Durable Object path
+  additive bootstrap, root-safe runtime contracts, projection metadata, and
+  reference-policy helpers
+- `../../lib/graph-authority/src/`: authoritative write sessions, persisted
+  authority contracts, authority validation, replication filtering, graph-owned
+  policy/share/admission contracts, and the file-backed JSON adapter used
+  outside the web Durable Object path
 - `../../lib/graph-client/src/`: typed client layers, local validation,
   synced-client composition, client-facing HTTP/query transport helpers, and
   bootstrap-snapshot helpers

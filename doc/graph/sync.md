@@ -9,13 +9,14 @@ This document is the entry point for agents working on sync payloads, authoritat
 The sync package now lives at `../../lib/graph-sync/` and is consumed through
 the workspace package `@io/graph-sync`.
 
-Authority-owned runtime behavior now lives under `../../src/graph/runtime/`:
+The relevant package split is now:
 
 - `@io/graph-kernel`: authoritative write-envelope contracts, canonicalization, and snapshot-diff helpers
 - `@io/graph-sync`: sync contracts, cursor helpers, sync-core validation, sync-specific transaction materialization/apply helpers, and total sync sessions
-- `authority.ts`: persisted authority orchestration and the public authority entrypoint
-- `authority-session.ts`: authoritative write session state, history replay, and incremental delivery
-- `sync.ts`: runtime synced-client behavior, including the runtime-only `"pushing"` flush state
+- `@io/graph-client`: synced-client runtime behavior, including the runtime-only `"pushing"` flush state
+- `json-storage.ts`: shipped JSON persistence adapter for durable authorities
+- `persisted-authority.ts`: durable authority contracts and startup recovery behavior
+- `session.ts`: authoritative write session state, history replay, and incremental delivery
 
 ## Current Contract
 
@@ -176,6 +177,8 @@ The current live workflow proof layers on top of that scoped sync baseline:
 
 ### Authoritative side
 
+Import these from `@io/graph-authority`:
+
 - `createAuthoritativeGraphWriteSession(store, namespace)`
 - `createJsonPersistedAuthoritativeGraph(store, namespace, { path, ... })`
 - `createPersistedAuthoritativeGraph(store, namespace, { storage, ... })`
@@ -184,7 +187,7 @@ The current live workflow proof layers on top of that scoped sync baseline:
 - `getBaseCursor()`
 - `getCursor()`
 - `getRetainedHistoryPolicy()`
-- `createSyncPayload({ freshness?, authorizeRead? })`
+- `createTotalSyncPayload({ freshness?, authorizeRead? })`
 - `getChangesAfter(cursor?)`
 - `getIncrementalSyncResult(after?, { freshness?, authorizeRead? })`
 - `getHistory()`
@@ -254,8 +257,8 @@ authoritative sync events:
 - `@io/graph-kernel` owns the authoritative write-envelope contract: `AuthoritativeGraphCursor`, `GraphWriteTransaction`, `GraphWriteOperation`, `GraphWriteScope`, retained-history policy, write results, and the canonical clone/canonicalize/snapshot-diff helpers around them.
 - `@io/graph-sync` owns the sync-specific payload/session contract layered on top of those kernel symbols. Consumers should import kernel-owned write-envelope symbols directly from `@io/graph-kernel`, not through `@io/graph-sync`.
 - `@io/graph-client` owns synced-client behavior such as `createSyncedGraphClient(...)`, `GraphSyncWriteError`, and the wider `GraphClientSyncStatus`/`GraphClientSyncState` model that can report `"pushing"`.
-- `@io/core/graph/authority` owns authority orchestration such as persisted authorities and authoritative write sessions.
-- Consumer packages own transport and endpoint policy: when to call `createSyncPayload()` or `getIncrementalSyncResult(...)`, how to expose them over HTTP or another transport, how to construct any `authorizeRead` callback from request-local auth context, and what auth wraps those endpoints.
+- `@io/graph-authority` owns authority orchestration such as persisted authorities and authoritative write sessions.
+- Consumer packages own transport and endpoint policy: when to call `createTotalSyncPayload()` or `getIncrementalSyncResult(...)`, how to expose them over HTTP or another transport, how to construct any `authorizeRead` callback from request-local auth context, and what auth wraps those endpoints.
 - The current web transport proof uses one shared HTTP sync-request shape on
   `GET /api/sync`: optional `after`, plus an explicit scope request via either
   `scopeKind=graph` or

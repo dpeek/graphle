@@ -1,7 +1,7 @@
 import type {
+  GraphClientSyncController,
   GraphClientSyncState,
   SyncedGraphClient,
-  GraphSyncController,
 } from "@io/graph-client";
 import type { AnyTypeOutput } from "@io/graph-kernel";
 import {
@@ -93,7 +93,7 @@ function useResolvedGraphRuntime<TNamespace extends GraphSchema, TDefs extends G
   return resolvedRuntime;
 }
 
-function useStableSyncState(sync: GraphSyncController): GraphClientSyncState {
+function useStableSyncState(sync: GraphClientSyncController): GraphClientSyncState {
   const hasSnapshotRef = useRef(false);
   const snapshotRef = useRef<GraphClientSyncState | undefined>(undefined);
 

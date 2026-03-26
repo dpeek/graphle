@@ -8,8 +8,8 @@ import {
   defineType,
   edgeId,
 } from "@io/core/graph";
-import { createAuthoritativeGraphWriteSession } from "@io/core/graph/authority";
 import { core, stringTypeModule } from "@io/core/graph/modules";
+import { createAuthoritativeGraphWriteSession as createResolvedAuthoritativeGraphWriteSession } from "@io/graph-authority";
 import { createSyncedGraphClient, createGraphClient, GraphValidationError } from "@io/graph-client";
 import { createTotalSyncPayload } from "@io/graph-sync";
 
@@ -23,6 +23,23 @@ type ValidatorCall = {
   phase: string;
   predicateKey: string;
 };
+
+function createAuthoritativeGraphWriteSession(
+  store: ReturnType<typeof createStore>,
+  namespace: Record<string, unknown>,
+  options: {
+    cursorPrefix?: string;
+  } = {},
+) {
+  return createResolvedAuthoritativeGraphWriteSession(
+    store,
+    namespace as never,
+    {
+      ...options,
+      definitions: { ...core, ...namespace },
+    } as never,
+  );
+}
 
 function createValidationLifecycleFixture() {
   const scalarCalls: ValidatorCall[] = [];

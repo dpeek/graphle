@@ -1,3 +1,5 @@
+import type { PolicyAudience, PolicyCapabilityKey, PolicyMutationMode } from "@io/graph-kernel";
+
 import type {
   AuthorizationCommandTouchedPredicate,
   AuthorizationContext,
@@ -9,8 +11,7 @@ import type {
   GraphCommandPolicy,
   PolicyError,
   PolicyErrorCode,
-} from "./contracts";
-import type { PolicyAudience, PolicyCapabilityKey, PolicyMutationMode } from "./schema";
+} from "./contracts.js";
 
 const graphMemberRoleKeys = new Set(["graph:member", "graph:owner"]);
 const authorityRoleKeys = new Set(["graph:authority"]);
@@ -304,6 +305,13 @@ function wrapCommandWriteDecision(
   );
 }
 
+/**
+ * Evaluates graph-owned read policy for one predicate target.
+ *
+ * This helper fails closed when policy data is missing or malformed. It does
+ * not refresh policy or capability snapshots on its own; callers are expected
+ * to supply a current request-bound `AuthorizationContext`.
+ */
 export function authorizeRead(input: AuthorizeReadInput): AuthorizationDecision {
   const policy = validateTargetPolicy(input.target, "policy.read.forbidden");
   if ("allowed" in policy) {
@@ -332,6 +340,13 @@ export function authorizeRead(input: AuthorizeReadInput): AuthorizationDecision 
   });
 }
 
+/**
+ * Evaluates graph-owned write policy for one predicate target.
+ *
+ * Required write scope is enforced after audience and capability checks so
+ * authority-only or command-only predicates fail closed when a narrower write
+ * path attempts to mutate them.
+ */
 export function authorizeWrite(input: AuthorizeWriteInput): AuthorizationDecision {
   const policy = validateTargetPolicy(input.target, "policy.write.forbidden");
   if ("allowed" in policy) {
@@ -370,6 +385,13 @@ export function authorizeWrite(input: AuthorizeWriteInput): AuthorizationDecisio
   );
 }
 
+/**
+ * Evaluates graph-owned command policy plus per-predicate write policy.
+ *
+ * Every declared touched predicate must be evaluated explicitly. Missing
+ * touched predicates are denied so downstream authority paths cannot silently
+ * skip protected writes.
+ */
 export function authorizeCommand(input: AuthorizeCommandInput): AuthorizationDecision {
   if (!input.commandPolicy) {
     return deny(

@@ -8,10 +8,14 @@ import {
   cloneAuthoritativeGraphRetainedHistoryPolicy,
   cloneAuthoritativeGraphWriteResult,
   cloneGraphWriteTransaction,
+  createGraphStore,
   isAuthoritativeGraphRetainedHistoryPolicy,
   isGraphWriteScope,
+  type AnyTypeOutput,
   type AuthoritativeGraphWriteResult,
   type AuthoritativeGraphRetainedHistoryPolicy,
+  type GraphStore,
+  type GraphStoreSnapshot,
   type GraphWriteScope,
   type GraphWriteTransaction,
 } from "@io/graph-kernel";
@@ -44,7 +48,8 @@ import {
   prepareGraphWriteTransaction,
 } from "@io/graph-sync";
 
-import { validateAuthoritativeFieldWritePolicies } from "./authority-replication";
+import { resolveAuthoritativeDefinitions } from "./definitions.js";
+import { validateAuthoritativeFieldWritePolicies } from "./replication.js";
 import {
   createTransactionValidationIssue,
   createGraphWriteResultValidationIssue,
@@ -61,10 +66,7 @@ import {
   prefixGraphWriteResultIssues,
   prefixIncrementalSyncTransactionIssues,
   withValidationValue,
-} from "./authority-validation-helpers";
-import { core } from "./core";
-import type { AnyTypeOutput } from "./schema";
-import { createStore, type GraphStore, type GraphStoreSnapshot } from "./store";
+} from "./validation-helpers.js";
 
 type SyncValidationIssueFactory = (
   path: string[],
@@ -96,12 +98,6 @@ function normalizeTransactionValidationResult(result: {
       createTransactionValidationIssue(issue.path, issue.code, issue.message),
     ),
   );
-}
-
-function resolveAuthorityDefinitions<const T extends Record<string, AnyTypeOutput>>(
-  namespace: T,
-): typeof core & T {
-  return { ...core, ...namespace } as typeof core & T;
 }
 
 function materializeSyncScope(scope: unknown): SyncScope {
@@ -1139,7 +1135,7 @@ export function prepareIncrementalSyncPayloadForApply(
     };
   }
 
-  const validationStore = createStore(store.snapshot());
+  const validationStore = createGraphStore(store.snapshot());
 
   for (const transaction of materialized.transactions) {
     const candidateSnapshot = materializeGraphWriteTransactionSnapshot(
@@ -1185,36 +1181,47 @@ export function prepareIncrementalSyncPayloadForApply(
 }
 
 export function validateAuthoritativeTotalSyncPayload<
-  const T extends Record<string, AnyTypeOutput>,
+  const TNamespace extends Record<string, AnyTypeOutput>,
+  const TDefinitions extends Record<string, AnyTypeOutput> = TNamespace,
 >(
   payload: TotalSyncPayload,
-  namespace: T,
+  namespace: TNamespace,
   options: {
+    definitions?: TDefinitions;
     preserveSnapshot?: GraphStoreSnapshot;
   } = {},
 ): GraphValidationResult<TotalSyncPayload> {
-  const definitions = resolveAuthorityDefinitions(namespace);
+  const definitions = resolveAuthoritativeDefinitions(namespace, options.definitions);
   const prepared = prepareTotalSyncPayload(payload, options);
   if (!prepared.ok) return prepared.result;
 
   const materialized = prepared.value;
-  const validationStore = createStore(materialized.snapshot);
+  const validationStore = createGraphStore(materialized.snapshot);
   return exposeTotalSyncValidationResult(
     withValidationValue(validateGraphStore(validationStore, definitions), materialized),
   );
 }
 
+/**
+ * Validates one authority-owned write transaction against the current graph
+ * state and field-authority policy.
+ *
+ * This is the shared write-admission boundary used before an authority accepts
+ * a transaction into durable retained history.
+ */
 export function validateAuthoritativeGraphWriteTransaction<
-  const T extends Record<string, AnyTypeOutput>,
+  const TNamespace extends Record<string, AnyTypeOutput>,
+  const TDefinitions extends Record<string, AnyTypeOutput> = TNamespace,
 >(
   transaction: GraphWriteTransaction,
   store: GraphStore,
-  namespace: T,
+  namespace: TNamespace,
   options: {
+    definitions?: TDefinitions;
     writeScope?: GraphWriteScope;
   } = {},
 ): GraphValidationResult<GraphWriteTransaction> {
-  const definitions = resolveAuthorityDefinitions(namespace);
+  const definitions = resolveAuthoritativeDefinitions(namespace, options.definitions);
   const prepared = prepareGraphWriteTransaction(transaction);
   if (!prepared.ok) {
     return exposeGraphWriteValidationResult(normalizeTransactionValidationResult(prepared.result));
@@ -1238,20 +1245,30 @@ export function validateAuthoritativeGraphWriteTransaction<
     );
   }
 
-  const validationStore = createStore(materialized.value);
+  const validationStore = createGraphStore(materialized.value);
   return exposeGraphWriteValidationResult(
     withValidationValue(validateGraphStore(validationStore, definitions), prepared.value),
   );
 }
 
+/**
+ * Validates one authoritative write result before replay or client reconcile.
+ *
+ * The accepted transaction is materialized against the provided store with its
+ * authoritative cursor and replay metadata preserved.
+ */
 export function validateAuthoritativeGraphWriteResult<
-  const T extends Record<string, AnyTypeOutput>,
+  const TNamespace extends Record<string, AnyTypeOutput>,
+  const TDefinitions extends Record<string, AnyTypeOutput> = TNamespace,
 >(
   result: AuthoritativeGraphWriteResult,
   store: GraphStore,
-  namespace: T,
+  namespace: TNamespace,
+  options: {
+    definitions?: TDefinitions;
+  } = {},
 ): GraphValidationResult<AuthoritativeGraphWriteResult> {
-  const definitions = resolveAuthorityDefinitions(namespace);
+  const definitions = resolveAuthoritativeDefinitions(namespace, options.definitions);
   const prepared = prepareAuthoritativeGraphWriteResult(result);
   if (!prepared.ok) return prepared.result;
 
@@ -1267,17 +1284,23 @@ export function validateAuthoritativeGraphWriteResult<
     );
   }
 
-  const validationStore = createStore(materialized.value);
+  const validationStore = createGraphStore(materialized.value);
   return exposeGraphWriteResultValidationResult(
     withValidationValue(validateGraphStore(validationStore, definitions), prepared.value),
   );
 }
 
+/**
+ * Creates a validator that throws when a total authority payload is malformed
+ * or would hydrate an invalid graph snapshot.
+ */
 export function createAuthoritativeTotalSyncValidator<
-  const T extends Record<string, AnyTypeOutput>,
+  const TNamespace extends Record<string, AnyTypeOutput>,
+  const TDefinitions extends Record<string, AnyTypeOutput> = TNamespace,
 >(
-  namespace: T,
+  namespace: TNamespace,
   options: {
+    definitions?: TDefinitions;
     preserveSnapshot?: GraphStoreSnapshot;
   } = {},
 ): TotalSyncPayloadValidator {
@@ -1287,11 +1310,24 @@ export function createAuthoritativeTotalSyncValidator<
   };
 }
 
+/**
+ * Creates a validator that throws when an authoritative write result is
+ * malformed or would replay into invalid graph state.
+ */
 export function createAuthoritativeGraphWriteResultValidator<
-  const T extends Record<string, AnyTypeOutput>,
->(store: GraphStore, namespace: T): AuthoritativeGraphWriteResultValidator {
+  const TNamespace extends Record<string, AnyTypeOutput>,
+  const TDefinitions extends Record<string, AnyTypeOutput> = TNamespace,
+>(
+  store: GraphStore,
+  namespace: TNamespace,
+  options: {
+    definitions?: TDefinitions;
+  } = {},
+): AuthoritativeGraphWriteResultValidator {
   return (result, validationStore = store) => {
-    const validation = validateAuthoritativeGraphWriteResult(result, validationStore, namespace);
+    const validation = validateAuthoritativeGraphWriteResult(result, validationStore, namespace, {
+      definitions: options.definitions,
+    });
     if (!validation.ok) throw new GraphValidationError(validation);
   };
 }

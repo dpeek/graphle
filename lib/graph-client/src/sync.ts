@@ -53,7 +53,7 @@ export type GraphWriteSink = (
   transaction: GraphWriteTransaction,
 ) => AuthoritativeGraphWriteResult | Promise<AuthoritativeGraphWriteResult>;
 
-export interface GraphSyncController {
+export interface GraphClientSyncController {
   apply(payload: SyncPayload): SyncPayload;
   applyWriteResult(result: AuthoritativeGraphWriteResult): AuthoritativeGraphWriteResult;
   flush(): Promise<readonly AuthoritativeGraphWriteResult[]>;
@@ -69,7 +69,7 @@ export type SyncedGraphClient<
 > = {
   store: GraphStore;
   graph: GraphClient<TNamespace, TDefs>;
-  sync: GraphSyncController;
+  sync: GraphClientSyncController;
 };
 
 export class GraphSyncWriteError extends Error {

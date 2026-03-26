@@ -1,6 +1,10 @@
 import { describe, expect, it } from "bun:test";
 
 import {
+  createAuthoritativeGraphWriteSession,
+  createAuthoritativeTotalSyncPayload,
+} from "@io/graph-authority";
+import {
   createHttpGraphClient,
   createSyncedGraphClient,
   defaultHttpGraphUrl,
@@ -28,10 +32,6 @@ import {
 } from "@io/graph-sync";
 
 import { pkm } from "../modules/pkm.js";
-import {
-  createAuthoritativeTotalSyncPayload,
-  createAuthoritativeGraphWriteSession,
-} from "./authority";
 import { bootstrap } from "./bootstrap";
 import { core } from "./core";
 import { createIdMap, applyIdMap } from "./identity";
@@ -80,6 +80,7 @@ function createAuthority() {
   graph.item.create({ name: "Seeded item" });
   const writes = createAuthoritativeGraphWriteSession(store, testGraph, {
     cursorPrefix: "server:",
+    definitions: testDefs,
   });
 
   return {
@@ -140,6 +141,7 @@ function createHiddenCursorAuthority(
   });
   const writes = createAuthoritativeGraphWriteSession(store, hiddenGraph, {
     cursorPrefix: "server:hidden:",
+    definitions: hiddenGraph,
     retainedHistoryPolicy: options.retainedHistoryPolicy,
   });
 
@@ -462,6 +464,7 @@ describe("createHttpGraphClient", () => {
           ? authority.writes.getIncrementalSyncResult(after)
           : createAuthoritativeTotalSyncPayload(authority.store, hiddenGraph, {
               cursor: authority.writes.getBaseCursor(),
+              definitions: hiddenGraph,
               diagnostics: createAuthoritySyncDiagnostics(authority),
             });
         return Response.json(payload);
@@ -552,6 +555,7 @@ describe("createHttpGraphClient", () => {
           ? authority.writes.getIncrementalSyncResult(after)
           : createAuthoritativeTotalSyncPayload(authority.store, hiddenGraph, {
               cursor: authority.writes.getBaseCursor(),
+              definitions: hiddenGraph,
               diagnostics: createAuthoritySyncDiagnostics(authority),
             });
         return Response.json(payload);
@@ -739,6 +743,7 @@ describe("createHttpGraphClient", () => {
 
     const payload = createAuthoritativeTotalSyncPayload(authorityStore, pkm, {
       cursor: "server:1",
+      definitions: { ...core, ...pkm },
     });
 
     const client = createSyncedGraphClient(pkm, {
