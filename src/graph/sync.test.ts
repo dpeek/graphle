@@ -10,8 +10,6 @@ import {
   createIncrementalSyncFallback,
   createIncrementalSyncPayload,
   createModuleSyncScope,
-  createGraphWriteOperationsFromSnapshots,
-  createGraphWriteTransactionFromSnapshots,
   createStore,
   createSyncedTypeClient,
   createTotalSyncController,
@@ -351,6 +349,52 @@ describe("total sync", () => {
     expect([...client.graph.company.get(companyId).tags].sort()).toEqual(
       [enterpriseTagId, platformTagId].sort(),
     );
+  });
+
+  it("publishes the compatibility pushing status while synced-client flush is in flight", async () => {
+    const server = createServerGraph();
+    const authority = createAuthoritativeGraphWriteSession(server.store, testNamespace, {
+      cursorPrefix: "server:",
+    });
+    let resolvePush: (() => void) | undefined;
+    const client = createSyncedTypeClient(testNamespace, {
+      pull: () =>
+        createTotalSyncPayload(server.store, { cursor: authority.getCursor() ?? "server:0" }),
+      push(transaction) {
+        return new Promise((resolve) => {
+          resolvePush = () => resolve(authority.apply(transaction));
+        });
+      },
+    });
+
+    client.sync.apply(createTotalSyncPayload(server.store, { cursor: "server:0" }));
+    client.graph.company.create({
+      name: "Queued Flush",
+      status: testNamespace.status.values.draft.id,
+      website: new URL("https://queued-flush.example"),
+    });
+
+    const flush = client.sync.flush();
+
+    expect(resolvePush).toBeDefined();
+    expect(client.sync.getState()).toMatchObject({
+      status: "pushing",
+      cursor: "server:0",
+      pendingCount: 1,
+    });
+
+    resolvePush?.();
+    await expect(flush).resolves.toEqual([
+      expect.objectContaining({
+        txId: "local:1",
+        cursor: "server:1",
+      }),
+    ]);
+    expect(client.sync.getState()).toMatchObject({
+      status: "ready",
+      cursor: "server:1",
+      pendingCount: 0,
+    });
   });
 
   it("keeps failed pending pushes retryable and surfaces structured flush errors", async () => {
@@ -2318,79 +2362,6 @@ describe("total sync", () => {
 });
 
 describe("authoritative graph writes", () => {
-  it("derives canonical write ops and transactions from before and after snapshots", () => {
-    const before = {
-      edges: [
-        {
-          id: "edge:existing",
-          s: "node:existing",
-          p: "predicate:existing",
-          o: "value:existing",
-        },
-      ],
-      retracted: ["edge:2"],
-    };
-    const after = {
-      edges: [
-        {
-          id: "edge:z",
-          s: "node:z",
-          p: "predicate:z",
-          o: "value:z",
-        },
-        {
-          id: "edge:existing",
-          s: "node:existing",
-          p: "predicate:existing",
-          o: "value:existing",
-        },
-        {
-          id: "edge:a",
-          s: "node:a",
-          p: "predicate:a",
-          o: "value:a",
-        },
-      ],
-      retracted: ["edge:3", "edge:1", "edge:2"],
-    };
-
-    const ops = createGraphWriteOperationsFromSnapshots(before, after);
-    const transaction = createGraphWriteTransactionFromSnapshots(before, after, "tx:derived");
-
-    expect(ops).toEqual([
-      {
-        op: "retract",
-        edgeId: "edge:1",
-      },
-      {
-        op: "retract",
-        edgeId: "edge:3",
-      },
-      {
-        op: "assert",
-        edge: {
-          id: "edge:a",
-          s: "node:a",
-          p: "predicate:a",
-          o: "value:a",
-        },
-      },
-      {
-        op: "assert",
-        edge: {
-          id: "edge:z",
-          s: "node:z",
-          p: "predicate:z",
-          o: "value:z",
-        },
-      },
-    ]);
-    expect(transaction).toEqual({
-      id: "tx:derived",
-      ops,
-    });
-  });
-
   it("rejects empty transaction identities and cursors", () => {
     const server = createServerGraph();
     const companyId = server.graph.company.create({
@@ -2628,63 +2599,6 @@ describe("authoritative graph writes", () => {
     });
   });
 
-  it("preserves module scope state through total sync apply", () => {
-    const server = createServerGraph();
-    const requestedScope = {
-      kind: "module" as const,
-      moduleId: "ops/workflow",
-      scopeId: "scope:ops/workflow:review",
-    };
-    const session = createTotalSyncSession(createStore(), {
-      requestedScope,
-    });
-    const moduleScope = createModuleSyncScope({
-      moduleId: requestedScope.moduleId,
-      scopeId: requestedScope.scopeId,
-      definitionHash: "scope-def:v1",
-      policyFilterVersion: "policy:v1",
-    });
-    const observedStates: ReturnType<typeof session.getState>[] = [];
-    const unsubscribe = session.subscribe((state) => {
-      observedStates.push(state);
-    });
-
-    const applied = session.apply(
-      createTotalSyncPayload(server.store, {
-        scope: moduleScope,
-        cursor: "module:1",
-        completeness: "incomplete",
-        freshness: "stale",
-      }),
-    );
-
-    expect(applied).toMatchObject({
-      mode: "total",
-      scope: moduleScope,
-      cursor: "module:1",
-      completeness: "incomplete",
-      freshness: "stale",
-    });
-    expect(session.getState()).toMatchObject({
-      requestedScope,
-      scope: moduleScope,
-      cursor: "module:1",
-      completeness: "incomplete",
-      freshness: "stale",
-      status: "ready",
-    });
-    expect(observedStates.at(-1)).toMatchObject({
-      requestedScope,
-      scope: moduleScope,
-      cursor: "module:1",
-      completeness: "incomplete",
-      freshness: "stale",
-      status: "ready",
-    });
-
-    unsubscribe();
-  });
-
   it("tracks one requested module scope through bootstrap and incremental refresh", async () => {
     const server = createServerGraph();
     const requestedScope = {
@@ -2887,126 +2801,6 @@ describe("authoritative graph writes", () => {
       value: noop,
       changedPredicateKeys: [],
     });
-  });
-
-  it("accepts module-scoped incremental fallbacks for scope and policy changes", () => {
-    const moduleScope = createModuleSyncScope({
-      moduleId: "ops/workflow",
-      scopeId: "scope:ops/workflow:review",
-      definitionHash: "scope-def:v1",
-      policyFilterVersion: "policy:v1",
-    });
-
-    const incremental = createIncrementalSyncPayload([], {
-      after: "module:1",
-      cursor: "module:2",
-      scope: moduleScope,
-      completeness: "incomplete",
-      freshness: "stale",
-    });
-
-    expect(validateIncrementalSyncResult(incremental)).toMatchObject({
-      ok: true,
-      phase: "authoritative",
-      event: "reconcile",
-      value: incremental,
-      changedPredicateKeys: [],
-    });
-
-    for (const fallback of ["scope-changed", "policy-changed"] as const) {
-      const result = createIncrementalSyncFallback(fallback, {
-        after: "module:2",
-        cursor: "module:3",
-        scope: moduleScope,
-        completeness: "incomplete",
-        freshness: "stale",
-      });
-
-      expect(validateIncrementalSyncResult(result)).toMatchObject({
-        ok: true,
-        phase: "authoritative",
-        event: "reconcile",
-        value: result,
-        changedPredicateKeys: [],
-      });
-    }
-  });
-
-  it("accepts empty incremental payloads that advance the cursor without fallback", () => {
-    const result = createIncrementalSyncPayload([], {
-      after: "server:1",
-      cursor: "server:2",
-      freshness: "stale",
-    });
-
-    expect(result).toEqual({
-      mode: "incremental",
-      scope: { kind: "graph" },
-      after: "server:1",
-      transactions: [],
-      cursor: "server:2",
-      completeness: "complete",
-      freshness: "stale",
-    });
-    expect(validateIncrementalSyncResult(result)).toMatchObject({
-      ok: true,
-      phase: "authoritative",
-      event: "reconcile",
-      value: result,
-      changedPredicateKeys: [],
-    });
-  });
-
-  it("requires incremental apply to stay on the active scope", () => {
-    const server = createServerGraph();
-    const session = createTotalSyncSession(createStore());
-    const activeScope = createModuleSyncScope({
-      moduleId: "ops/workflow",
-      scopeId: "scope:ops/workflow:review",
-      definitionHash: "scope-def:v1",
-      policyFilterVersion: "policy:v1",
-    });
-
-    session.apply(
-      createTotalSyncPayload(server.store, {
-        scope: activeScope,
-        cursor: "module:1",
-      }),
-    );
-
-    const mismatchedScope = createModuleSyncScope({
-      moduleId: activeScope.moduleId,
-      scopeId: activeScope.scopeId,
-      definitionHash: "scope-def:v2",
-      policyFilterVersion: activeScope.policyFilterVersion,
-    });
-
-    try {
-      session.apply(
-        createIncrementalSyncPayload([], {
-          after: "module:1",
-          cursor: "module:2",
-          scope: mismatchedScope,
-        }),
-      );
-      throw new Error("Expected incremental apply to reject a scope definition change.");
-    } catch (error) {
-      if (!(error instanceof GraphValidationError)) throw error;
-      expect(error.result).toMatchObject({
-        ok: false,
-        phase: "authoritative",
-        event: "reconcile",
-        changedPredicateKeys: ["$sync:incremental"],
-      });
-      expect(error.result.issues).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({
-            code: "sync.incremental.scope.current",
-            predicateKey: "$sync:incremental",
-          }),
-        ]),
-      );
-    }
   });
 
   it("surfaces unknown cursor, gap, and reset as explicit incremental pull fallbacks", () => {

@@ -14,6 +14,13 @@ export type AuthoritativeGraphCursor = string;
 
 export type SyncCompleteness = "complete" | "incomplete";
 export type SyncFreshness = "current" | "stale";
+
+/**
+ * Legacy runtime sync status.
+ *
+ * Unlike `@io/graph-sync`, the compatibility layer still exposes `"pushing"`
+ * while `createSyncedTypeClient(...).sync.flush()` is in flight.
+ */
 export type SyncStatus = "idle" | "syncing" | "pushing" | "ready" | "error";
 export type SyncActivity =
   | {

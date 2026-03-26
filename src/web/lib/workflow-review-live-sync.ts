@@ -44,7 +44,9 @@ function isWorkflowReviewLiveState(state: Pick<SyncState, "requestedScope" | "sc
 }
 
 function readWorkflowReviewLiveCursor(
-  state: Pick<SyncState, "cursor" | "requestedScope" | "scope">,
+  state: Pick<SyncState, "requestedScope" | "scope"> & {
+    cursor?: SyncState["cursor"];
+  },
 ) {
   if (!isWorkflowReviewLiveState(state)) {
     throw new Error(

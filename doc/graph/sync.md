@@ -6,14 +6,15 @@ This document is the entry point for agents working on sync payloads, authoritat
 
 ## Implementation Layout
 
-The public runtime entry surface remains `../../src/graph/runtime/sync.ts`.
-The internal implementation is now split by concern under `../../src/graph/runtime/sync/`:
+The public runtime compatibility surface remains `../../src/graph/runtime/sync.ts`.
+The extracted sync-core package now lives at `../../lib/graph-sync/`.
+The remaining runtime implementation under `../../src/graph/runtime/sync/` is the compatibility
+and authority/client layer on top of that package:
 
-- `contracts.ts`: public sync contracts, state types, clone helpers, and activity helpers
-- `transactions.ts`: graph write transaction derivation, canonicalization, and snapshot materialization
-- `validation.ts`: payload/result validation plus total and incremental apply preparation
+- `@io/graph-kernel`: authoritative write-envelope contracts, canonicalization, and snapshot-diff helpers
+- `@io/graph-sync`: sync contracts, cursor helpers, sync-core validation, sync-specific transaction materialization/apply helpers, total sync sessions, and compatibility re-exports of kernel-owned write-envelope symbols
 - `authority.ts`: authoritative write session state, history replay, and incremental delivery
-- `session.ts`: total-sync sessions, controller wiring, and the synced typed client
+- `session.ts`: synced typed client and runtime-specific wrapper behavior, including the legacy `"pushing"` flush state that stays in the compatibility layer
 
 ## Current Contract
 
@@ -218,6 +219,9 @@ contract without copying raw literal lists.
 - `getState()`
 - `subscribe(listener)`
 
+`@io/graph-sync` owns this total-sync session state model. Its `SyncStatus`
+remains limited to `idle | syncing | ready | error`.
+
 `SyncState.recentActivities` is the shared runtime-diagnostics surface for
 authoritative sync events:
 
@@ -234,6 +238,9 @@ authoritative sync events:
 - `sync.flush()` pushes queued writes
 - `sync.sync()` pulls authoritative state
 - `sync.getPendingTransactions()` and `sync.getState()` expose queue and delivery state
+- the runtime compatibility barrel widens `SyncStatus` with `"pushing"` while
+  `sync.flush()` is in flight; that synced-client state does not live in
+  `@io/graph-sync`
 - `SyncState.requestedScope` preserves the active graph-or-module scope request even before a total snapshot arrives
 - `SyncState.fallback` retains the last recovery-only incremental fallback so callers can see scoped `scope-changed` or `policy-changed` failures without silently widening the cache
 - `SyncState.diagnostics` retains the last authority-published retained-window
@@ -242,7 +249,9 @@ authoritative sync events:
 
 ## Ownership Boundary
 
-- `graph` owns the total/incremental payload contracts, cursor progression rules, fallback semantics, and the persisted-authority history that feeds those contracts after restart.
+- `@io/graph-kernel` owns the authoritative write-envelope contract: `AuthoritativeGraphCursor`, `GraphWriteTransaction`, `GraphWriteOperation`, `AuthoritativeWriteScope`, retained-history policy, write results, and the canonical clone/canonicalize/snapshot-diff helpers around them.
+- `@io/graph-sync` owns the sync-specific payload/session contract layered on top of those kernel symbols. It re-exports the kernel write-envelope surface for compatibility, but does not redefine it.
+- The runtime compatibility layer under `src/graph/runtime/sync/` owns synced-client behavior such as `createSyncedTypeClient(...)`, `GraphSyncWriteError`, and the wider `SyncStatus`/`SyncState` model that can report `"pushing"`.
 - Consumer packages own transport and endpoint policy: when to call `createSyncPayload()` or `getIncrementalSyncResult(...)`, how to expose them over HTTP or another transport, how to construct any `authorizeRead` callback from request-local auth context, and what auth wraps those endpoints.
 - The current web transport proof uses one shared HTTP sync-request shape on
   `GET /api/sync`: optional `after`, plus an explicit scope request via either

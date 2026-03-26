@@ -153,7 +153,9 @@ export async function createHttpGraphClient<const T extends Record<string, AnyTy
   const bearerToken = options.bearerToken?.trim() || undefined;
 
   async function fetchSyncPayload(
-    state: Pick<SyncState, "cursor" | "requestedScope">,
+    state: Pick<SyncState, "requestedScope"> & {
+      cursor?: SyncState["cursor"];
+    },
   ): Promise<SyncPayload> {
     const requestUrl = new URL(syncUrl);
     applyHttpSyncRequest(requestUrl, {
