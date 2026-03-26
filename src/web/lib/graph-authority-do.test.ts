@@ -383,6 +383,13 @@ const testOutsiderAuthorization = {
 function createProjectedAuthorizationContext(
   lookupInput: SessionPrincipalLookupInput,
   projection: {
+    readonly summary?: {
+      readonly principalId: string;
+      readonly principalKind: AuthorizationContext["principalKind"];
+      readonly roleKeys: readonly string[];
+      readonly capabilityGrantIds: readonly string[];
+      readonly capabilityVersion: number;
+    };
     readonly principalId: string;
     readonly principalKind: AuthorizationContext["principalKind"];
     readonly roleKeys?: readonly string[];
@@ -390,15 +397,16 @@ function createProjectedAuthorizationContext(
     readonly capabilityVersion?: number;
   },
 ): AuthorizationContext {
+  const summary = projection.summary;
   return {
     ...testAuthorization,
     graphId: lookupInput.graphId,
-    principalId: projection.principalId,
-    principalKind: projection.principalKind,
-    roleKeys: [...(projection.roleKeys ?? [])],
+    principalId: summary?.principalId ?? projection.principalId,
+    principalKind: summary?.principalKind ?? projection.principalKind,
+    roleKeys: [...(summary?.roleKeys ?? projection.roleKeys ?? [])],
     sessionId: "session:browser",
-    capabilityGrantIds: [...(projection.capabilityGrantIds ?? [])],
-    capabilityVersion: projection.capabilityVersion ?? 0,
+    capabilityGrantIds: [...(summary?.capabilityGrantIds ?? projection.capabilityGrantIds ?? [])],
+    capabilityVersion: summary?.capabilityVersion ?? projection.capabilityVersion ?? 0,
   };
 }
 

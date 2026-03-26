@@ -179,7 +179,7 @@ export function SyncPage({ scopeKey = "graph" }: { scopeKey?: WebSyncProofScopeK
 
   return (
     <GraphAccessGate
-      description="The sync inspector only mounts after the shell resolves an authenticated Better Auth session."
+      description="The sync inspector only mounts after the shell resolves the principal bootstrap contract."
       title="Sign in to inspect graph sync"
     >
       <GraphRuntimeBootstrap requestedScope={requestedScope}>

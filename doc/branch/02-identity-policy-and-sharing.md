@@ -498,6 +498,7 @@ interface PolicyError {
 | `GraphFieldAuthority`            | Low-level replication and write-scope metadata already used by validation and sync | schema authors, authority runtime             | graph runtime                                  | field definition                                                    | authored metadata                             | validation error if malformed                                            | `stable`                                                                                                                           |
 | `PredicatePolicyDescriptor`      | Principal-aware read, write, and sharing rule for a predicate                      | schema authors, module authors                | policy evaluator                               | predicate id, policy audiences, capabilities                        | descriptor                                    | `policy.write.forbidden` or `policy.read.forbidden` when violated        | `provisional`                                                                                                                      |
 | `AuthorizationContext`           | Request-local resolved actor and version snapshot                                  | auth bridge, authority runtime                | policy evaluator, sync, commands               | Better Auth session plus graph projection                           | principal id, roles, grants, versions         | `auth.unauthenticated`, `auth.principal_missing`, `policy.stale_context` | `stable`                                                                                                                           |
+| `WebPrincipalBootstrapPayload`   | Minimal browser bootstrap contract for principal summary consumers                 | Worker bootstrap route, app shell, tools      | web shell or operator bootstrap consumer       | request session plus graph principal projection                     | `WebPrincipalSession`, optional principal     | signed-out, expired, or bootstrap transport failure                      | `stable` for session and principal summary only                                                                                    |
 | `AdmissionPolicy`                | Graph-owned bootstrap, signup, domain-gate, and first-use provisioning contract    | auth bridge, authority runtime, operator UX   | authority persistence plus admission evaluator | graph id, bootstrap mode, signup mode, allowed domains, role grants | durable policy snapshot                       | admission denied or policy validation error                              | `stable` for bootstrap, signup, domain, and provisioning shape                                                                     |
 | `projectSessionToPrincipal(...)` | Map a Better Auth session to graph identity                                        | Worker auth bridge                            | Better Auth store plus graph projection lookup | request session, graph id                                           | `AuthorizationContext`                        | `auth.unauthenticated`, `auth.principal_missing`                         | `stable`                                                                                                                           |
 | `authorizeRead(...)`             | Decide whether a predicate may materialize for a principal                         | query and sync paths                          | policy evaluator                               | `AuthorizationContext`, subject id, predicate id                    | allow or deny                                 | `policy.read.forbidden` on explicit reads; sync omits denied predicates  | `stable`                                                                                                                           |
@@ -512,6 +513,21 @@ Contract rules:
 
 - `projectSessionToPrincipal(...)` must never trust a client-supplied
   `principalId`
+- `WebPrincipalSession` is the stable browser-visible shell identity state:
+  `booting`, `signed-out`, `ready`, or `expired`
+- `WebPrincipalBootstrapPayload` is the stable minimum bootstrap payload for the
+  current proof: `{ session, principal }`
+- `principal` in that bootstrap payload must be `null` unless
+  `session.authState = "ready"`
+- broader app-shell payloads may add routes, module contributions, or richer
+  account-profile fields, but they must not redefine the stable
+  `WebPrincipalSession` or `WebPrincipalSummary` fields
+- `WebPrincipalSummary.access` is authority-owned derived state published so
+  shells do not reconstruct authority, graph-member, or delegated-share access
+  from raw role and grant records on their own
+- `WebPrincipalSummary` intentionally omits account-management profile data,
+  raw share-surface selectors, and grant metadata beyond stable ids; those stay
+  outside the minimum bootstrap contract for now
 - `AdmissionPolicy` is graph-owned authorization data. Better Auth runtime
   config such as secrets, provider callbacks, database bindings, and route
   mounts remain outside this contract even when the Worker composes both during

@@ -6,10 +6,15 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@io/w
 import { Input } from "@io/web/input";
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 
-import { authClient, readWebAuthState, type WebAuthViewState } from "../lib/auth-client.js";
+import {
+  authClient,
+  fetchWebPrincipalBootstrap,
+  notifyWebPrincipalBootstrapChanged,
+  readWebAuthState,
+  subscribeWebPrincipalBootstrapChanged,
+  type WebAuthViewState,
+} from "../lib/auth-client.js";
 import { resetSharedGraphRuntime } from "./graph-runtime-bootstrap.js";
-
-type AuthSessionQuery = ReturnType<typeof authClient.useSession>;
 
 type AuthSessionFeedback =
   | {
@@ -21,7 +26,9 @@ type AuthSessionFeedback =
       readonly message: string;
     };
 
-type UseWebAuthSessionResult = WebAuthViewState & Pick<AuthSessionQuery, "refetch">;
+type UseWebAuthSessionResult = WebAuthViewState & {
+  refetch(): Promise<void>;
+};
 type GraphAccessActivationState =
   | { status: "idle" }
   | { status: "activating" }
@@ -39,10 +46,12 @@ function readAuthStatusLabel(auth: WebAuthViewState): string {
       return "Checking session";
     case "signed-out":
       return "Signed out";
+    case "expired":
+      return "Session expired";
     case "ready":
       return "Signed in";
     case "error":
-      return "Session unavailable";
+      return "Bootstrap unavailable";
   }
 }
 
@@ -60,16 +69,75 @@ function useResetSharedGraphRuntimeOnSessionChange(sessionId: string | null) {
 }
 
 export function useWebAuthSession(): UseWebAuthSessionResult {
-  const sessionQuery = authClient.useSession();
+  const [query, setQuery] = useState<{
+    readonly data: Awaited<ReturnType<typeof fetchWebPrincipalBootstrap>> | null;
+    readonly error: Error | null;
+    readonly isPending: boolean;
+    readonly isRefetching: boolean;
+  }>({
+    data: null,
+    error: null,
+    isPending: true,
+    isRefetching: false,
+  });
+  const [attempt, setAttempt] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    setQuery((current) => ({
+      data: null,
+      error: null,
+      isPending: true,
+      isRefetching: current.data !== null || current.error !== null,
+    }));
+
+    void fetchWebPrincipalBootstrap()
+      .then((data) => {
+        if (cancelled) {
+          return;
+        }
+
+        setQuery({
+          data,
+          error: null,
+          isPending: false,
+          isRefetching: false,
+        });
+      })
+      .catch((error) => {
+        if (cancelled) {
+          return;
+        }
+
+        setQuery({
+          data: null,
+          error: error instanceof Error ? error : new Error(String(error)),
+          isPending: false,
+          isRefetching: false,
+        });
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [attempt]);
+
+  useEffect(() => {
+    return subscribeWebPrincipalBootstrapChanged(() => {
+      setAttempt((current) => current + 1);
+    });
+  }, []);
 
   return {
-    ...readWebAuthState(sessionQuery),
-    refetch: sessionQuery.refetch,
+    ...readWebAuthState(query),
+    refetch: async () => {
+      setAttempt((current) => current + 1);
+    },
   };
 }
 
 export function AuthSessionLoadingCard({
-  description = "Resolving the current Better Auth session before graph-backed routes mount.",
+  description = "Resolving the principal bootstrap contract before graph-backed routes mount.",
   title = "Checking session",
 }: {
   readonly description?: string;
@@ -86,7 +154,8 @@ export function AuthSessionLoadingCard({
       </CardHeader>
       <CardContent className="text-muted-foreground text-sm">
         The worker keeps anonymous and authenticated graph requests separate, so the shell waits
-        here until the browser knows which path applies.
+        here until the bootstrap payload says whether this browser is signed out, ready, or needs
+        reauthentication.
       </CardContent>
     </Card>
   );
@@ -112,8 +181,8 @@ export function AuthSessionErrorCard({
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         <p className="text-muted-foreground text-sm">
-          The signed-out shell stays mounted, but the app will not bootstrap graph access until
-          Better Auth session reads are healthy again.
+          The signed-out shell stays mounted, but the app will not bootstrap graph access until the
+          principal-summary bootstrap path is healthy again.
         </p>
         <div>
           <Button onClick={onRetry} type="button" variant="outline">
@@ -180,6 +249,7 @@ export function AuthSessionEntryCard({
             ? "Session established. Loading graph-backed routes."
             : "Account created and signed in. Loading graph-backed routes.",
       });
+      notifyWebPrincipalBootstrapChanged();
     } finally {
       setPending(false);
     }
@@ -301,7 +371,10 @@ export function AppShellAuthStatus() {
       const result = await authClient.signOut();
       if (result.error) {
         setSignOutMessage(result.error.message || "Unable to sign out.");
+        return;
       }
+
+      notifyWebPrincipalBootstrapChanged();
     } finally {
       setSignOutPending(false);
     }
@@ -346,7 +419,7 @@ export function GraphAccessGateView({
     return (
       <AuthSessionLoadingCard
         description={description}
-        title="Checking session before graph bootstrap"
+        title="Checking bootstrap before graph access"
       />
     );
   }
@@ -356,7 +429,16 @@ export function GraphAccessGateView({
       <AuthSessionErrorCard
         description={auth.errorMessage}
         onRetry={onRetry ?? (() => {})}
-        title="Graph bootstrap is waiting on Better Auth"
+        title="Graph bootstrap is waiting on principal bootstrap"
+      />
+    );
+  }
+
+  if (auth.status === "expired") {
+    return (
+      <AuthSessionEntryCard
+        description="The worker rejected a stale browser session. Sign in again before graph-backed routes mount."
+        title="Session expired"
       />
     );
   }

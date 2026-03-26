@@ -23,7 +23,7 @@ export function HomePageStateView({
   if (auth.status === "booting") {
     return (
       <AuthSessionLoadingCard
-        description="The shell resolves Better Auth session state before it decides whether graph-backed routes may mount."
+        description="The shell resolves the principal-summary bootstrap payload before it decides whether graph-backed routes may mount."
         title="Checking web session"
       />
     );
@@ -34,7 +34,16 @@ export function HomePageStateView({
       <AuthSessionErrorCard
         description={auth.errorMessage}
         onRetry={onRetry ?? (() => {})}
-        title="Unable to read the Better Auth session"
+        title="Unable to read the principal bootstrap"
+      />
+    );
+  }
+
+  if (auth.status === "expired") {
+    return (
+      <AuthSessionEntryCard
+        description="The worker marked the existing browser session as expired. Sign in again before the shell boots the synced graph runtime."
+        title="Session expired"
       />
     );
   }
@@ -54,20 +63,22 @@ export function HomePageStateView({
         <CardHeader>
           <CardTitle>Session ready</CardTitle>
           <CardDescription>
-            Better Auth has established a browser session. The graph routes now bootstrap through
-            the request-bound auth bridge instead of the old operator shortcut.
+            The worker has returned the principal-summary bootstrap payload. Graph routes now use
+            that server-derived identity boundary instead of re-deriving session state in the
+            browser.
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4">
           <div className="flex flex-wrap gap-2">
-            <Badge variant="outline">{auth.displayName}</Badge>
+            {auth.displayName ? <Badge variant="outline">{auth.displayName}</Badge> : null}
             <Badge variant="outline">{auth.sessionId}</Badge>
-            {auth.userEmail ? <Badge variant="outline">{auth.userEmail}</Badge> : null}
+            <Badge variant="outline">{auth.principalId}</Badge>
+            <Badge variant="outline">capability v{auth.capabilityVersion}</Badge>
           </div>
 
           <p className="text-muted-foreground text-sm">
-            Role bindings remain graph-owned. This shell only proves that authenticated browser
-            sessions can now reach the Worker graph APIs as real principals.
+            Role bindings and authorization remain graph-owned. This shell only consumes the
+            request-bound summary that the worker returns.
           </p>
 
           <div className="flex flex-wrap gap-2">

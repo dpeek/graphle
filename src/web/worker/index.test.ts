@@ -7,6 +7,7 @@ import {
   type AuthorizationContext,
   type GraphWriteTransaction,
   type StoreSnapshot,
+  type WebPrincipalSummary,
 } from "@io/core/graph";
 import { core } from "@io/core/graph/modules";
 import { ops } from "@io/core/graph/modules/ops";
@@ -24,7 +25,12 @@ import { webSerializedQueryPath } from "../lib/query-transport.js";
 import { readRequestAuthorizationContext } from "../lib/server-routes.js";
 import { webWorkflowLivePath } from "../lib/workflow-live-transport.js";
 import { webWorkflowReadPath } from "../lib/workflow-transport.js";
-import worker, { BetterAuthSessionVerificationError, createWorkerFetchHandler } from "./index.js";
+import {
+  BetterAuthSessionVerificationError,
+  createWorkerFetchHandler,
+  webAppBootstrapPath,
+} from "./index.js";
+import worker from "./index.js";
 
 type DurableObjectSqlCursor<T extends Record<string, unknown>> = Iterable<T> & {
   one(): T;
@@ -40,6 +46,35 @@ const authorityAuthorization: AuthorizationContext = {
   capabilityVersion: 0,
   policyVersion: 0,
 };
+
+function createSessionPrincipalProjectionResponse(
+  overrides: Partial<WebPrincipalSummary> = {},
+): Record<string, unknown> {
+  const summary: WebPrincipalSummary = {
+    graphId: "graph:global",
+    principalId: "principal:user-better-auth",
+    principalKind: "human",
+    roleKeys: ["graph:member"],
+    capabilityGrantIds: ["grant-1"],
+    access: {
+      authority: false,
+      graphMember: true,
+      sharedRead: false,
+    },
+    capabilityVersion: 4,
+    policyVersion: 0,
+    ...overrides,
+  };
+
+  return {
+    summary,
+    principalId: summary.principalId,
+    principalKind: summary.principalKind,
+    roleKeys: summary.roleKeys,
+    capabilityGrantIds: summary.capabilityGrantIds,
+    capabilityVersion: summary.capabilityVersion,
+  };
+}
 
 function createBetterAuthEnv(): BetterAuthWorkerEnv {
   return {
@@ -354,6 +389,159 @@ function createWorkerEnv(
 }
 
 describe("web worker route forwarding", () => {
+  it("returns the explicit signed-out bootstrap payload for anonymous callers", async () => {
+    const { authorityPaths, env, principalLookupPaths } = createWorkerEnv();
+    const handler = createWorkerFetchHandler({
+      async getBetterAuthSession() {
+        return null;
+      },
+    });
+
+    const response = await handler.fetch(
+      new Request(`https://web.local${webAppBootstrapPath}`),
+      env,
+    );
+
+    expect(response.status).toBe(200);
+    expect(authorityPaths).toEqual([]);
+    expect(principalLookupPaths).toEqual([]);
+    expect(await response.json()).toEqual({
+      session: {
+        authState: "signed-out",
+        sessionId: null,
+        principalId: null,
+        capabilityVersion: null,
+      },
+      principal: null,
+    });
+  });
+
+  it("returns the authenticated principal-summary bootstrap payload", async () => {
+    const { authorityPaths, env, principalLookupPaths } = createWorkerEnv({
+      principalLookupResponse: Response.json(createSessionPrincipalProjectionResponse()),
+    });
+    const handler = createWorkerFetchHandler({
+      async getBetterAuthSession() {
+        return {
+          session: { id: "session-better-auth" },
+          user: { id: "user-better-auth", email: "operator@example.com" },
+        };
+      },
+    });
+
+    const response = await handler.fetch(
+      new Request(`https://web.local${webAppBootstrapPath}`),
+      env,
+    );
+
+    expect(response.status).toBe(200);
+    expect(authorityPaths).toEqual([]);
+    expect(principalLookupPaths).toEqual([webGraphAuthoritySessionPrincipalLookupPath]);
+    expect(await response.json()).toEqual({
+      session: {
+        authState: "ready",
+        sessionId: "session-better-auth",
+        principalId: "principal:user-better-auth",
+        capabilityVersion: 4,
+        displayName: "operator@example.com",
+      },
+      principal: {
+        graphId: "graph:global",
+        principalId: "principal:user-better-auth",
+        principalKind: "human",
+        roleKeys: ["graph:member"],
+        capabilityGrantIds: ["grant-1"],
+        access: {
+          authority: false,
+          graphMember: true,
+          sharedRead: false,
+        },
+        capabilityVersion: 4,
+        policyVersion: 0,
+      },
+    });
+  });
+
+  it("reports stale auth cookies as an explicit expired bootstrap state", async () => {
+    const { authorityPaths, env, principalLookupPaths } = createWorkerEnv();
+    const handler = createWorkerFetchHandler({
+      async getBetterAuthSession() {
+        return null;
+      },
+    });
+
+    const response = await handler.fetch(
+      new Request(`https://web.local${webAppBootstrapPath}`, {
+        headers: {
+          cookie: "better-auth.session_token=revoked",
+        },
+      }),
+      env,
+    );
+
+    expect(response.status).toBe(200);
+    expect(authorityPaths).toEqual([]);
+    expect(principalLookupPaths).toEqual([]);
+    expect(await response.json()).toEqual({
+      session: {
+        authState: "expired",
+        sessionId: null,
+        principalId: null,
+        capabilityVersion: null,
+      },
+      principal: null,
+    });
+  });
+
+  it("fails closed when bootstrap cannot resolve an authenticated principal projection", async () => {
+    const { authorityPaths, env, principalLookupPaths } = createWorkerEnv();
+    const handler = createWorkerFetchHandler({
+      async getBetterAuthSession() {
+        return {
+          session: { id: "session-better-auth" },
+          user: { id: "user-better-auth" },
+        };
+      },
+    });
+
+    const response = await handler.fetch(
+      new Request(`https://web.local${webAppBootstrapPath}`),
+      env,
+    );
+
+    expect(response.status).toBe(403);
+    expect(authorityPaths).toEqual([]);
+    expect(principalLookupPaths).toEqual([webGraphAuthoritySessionPrincipalLookupPath]);
+    expect(await response.json()).toMatchObject({
+      code: "auth.principal_missing",
+    });
+  });
+
+  it("returns 503 for bootstrap reads when Better Auth session verification is unavailable", async () => {
+    const { authorityPaths, env, principalLookupPaths } = createWorkerEnv();
+    const handler = createWorkerFetchHandler({
+      async getBetterAuthSession() {
+        throw new BetterAuthSessionVerificationError(new Error("AUTH_DB unavailable"));
+      },
+    });
+
+    const response = await handler.fetch(
+      new Request(`https://web.local${webAppBootstrapPath}`, {
+        headers: {
+          cookie: "better-auth.session_token=present",
+        },
+      }),
+      env,
+    );
+
+    expect(response.status).toBe(503);
+    expect(authorityPaths).toEqual([]);
+    expect(principalLookupPaths).toEqual([]);
+    expect(await response.json()).toMatchObject({
+      code: "auth.session_unavailable",
+    });
+  });
+
   it("mounts /api/auth/* on the Better Auth handler without falling through to assets or the graph authority", async () => {
     const { assetPaths, authorityPaths, env } = createWorkerEnv();
 
@@ -386,13 +574,7 @@ describe("web worker route forwarding", () => {
   it("forwards authenticated workflow reads over the first web transport route", async () => {
     const { authorityPaths, env, principalLookupPaths, readForwardedAuthorization } =
       createWorkerEnv({
-        principalLookupResponse: Response.json({
-          principalId: "principal:user-better-auth",
-          principalKind: "human",
-          roleKeys: ["graph:member"],
-          capabilityGrantIds: ["grant-1"],
-          capabilityVersion: 4,
-        }),
+        principalLookupResponse: Response.json(createSessionPrincipalProjectionResponse()),
       });
     const handler = createWorkerFetchHandler({
       async getBetterAuthSession() {
@@ -437,13 +619,7 @@ describe("web worker route forwarding", () => {
   it("forwards authenticated generic serialized queries over the shared query route", async () => {
     const { authorityPaths, env, principalLookupPaths, readForwardedAuthorization } =
       createWorkerEnv({
-        principalLookupResponse: Response.json({
-          principalId: "principal:user-better-auth",
-          principalKind: "human",
-          roleKeys: ["graph:member"],
-          capabilityGrantIds: ["grant-1"],
-          capabilityVersion: 4,
-        }),
+        principalLookupResponse: Response.json(createSessionPrincipalProjectionResponse()),
       });
     const handler = createWorkerFetchHandler({
       async getBetterAuthSession() {
@@ -655,13 +831,7 @@ describe("web worker route forwarding", () => {
   it("forwards authenticated workflow live registrations over the first web transport route", async () => {
     const { authorityPaths, env, principalLookupPaths, readForwardedAuthorization } =
       createWorkerEnv({
-        principalLookupResponse: Response.json({
-          principalId: "principal:user-better-auth",
-          principalKind: "human",
-          roleKeys: ["graph:member"],
-          capabilityGrantIds: ["grant-1"],
-          capabilityVersion: 4,
-        }),
+        principalLookupResponse: Response.json(createSessionPrincipalProjectionResponse()),
       });
     const handler = createWorkerFetchHandler({
       async getBetterAuthSession() {
@@ -738,13 +908,7 @@ describe("web worker route forwarding", () => {
 
   it("forwards authenticated graph writes with a session-derived authorization context", async () => {
     const { env, principalLookupPaths, readForwardedAuthorization } = createWorkerEnv({
-      principalLookupResponse: Response.json({
-        principalId: "principal:user-better-auth",
-        principalKind: "human",
-        roleKeys: ["graph:member"],
-        capabilityGrantIds: ["grant-1"],
-        capabilityVersion: 4,
-      }),
+      principalLookupResponse: Response.json(createSessionPrincipalProjectionResponse()),
       async onPrincipalLookup(request) {
         expect(await request.json()).toEqual({
           graphId: "graph:global",

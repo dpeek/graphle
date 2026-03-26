@@ -58,6 +58,57 @@ export type AuthorizationContext = {
 };
 
 /**
+ * Stable browser-visible shell session states. `booting` is client-local while
+ * the shell is still resolving whether it can fetch a principal summary.
+ * `expired` is the reauthentication-required state and must not be treated as
+ * fresh authorization evidence.
+ */
+export type WebPrincipalSessionState = "booting" | "signed-out" | "ready" | "expired";
+
+/**
+ * Stable minimal browser-visible session contract shared by app shells and
+ * tools. It intentionally stops at auth and principal-summary bootstrap
+ * concerns; richer account/profile presentation stays provisional.
+ */
+export type WebPrincipalSession = {
+  readonly authState: WebPrincipalSessionState;
+  readonly sessionId: string | null;
+  readonly principalId: string | null;
+  readonly capabilityVersion: CapabilityVersion | null;
+  readonly displayName?: string;
+};
+
+/**
+ * Stable graph-backed principal summary derived from the request-bound
+ * authorization context. This is the durable part of the web bootstrap
+ * boundary; route/module/bootstrap decorations stay provisional.
+ */
+export type WebPrincipalSummary = {
+  readonly graphId: string;
+  readonly principalId: string;
+  readonly principalKind: PrincipalKind;
+  readonly roleKeys: readonly string[];
+  readonly capabilityGrantIds: readonly string[];
+  readonly access: {
+    readonly authority: boolean;
+    readonly graphMember: boolean;
+    readonly sharedRead: boolean;
+  };
+  readonly capabilityVersion: CapabilityVersion;
+  readonly policyVersion: PolicyVersion;
+};
+
+/**
+ * Stable minimal bootstrap payload for anonymous and authenticated callers.
+ * App-shell route/module discovery can layer on top of this payload later, but
+ * should not redefine these identity fields.
+ */
+export type WebPrincipalBootstrapPayload = {
+  readonly session: WebPrincipalSession;
+  readonly principal: WebPrincipalSummary | null;
+};
+
+/**
  * Stable delegated-capability vocabulary shared by graph schema, authority
  * lookup, and future policy/runtime consumers.
  */
@@ -347,6 +398,142 @@ export function defineAdmissionPolicy<const T extends AdmissionPolicy>(policy: T
       ...policy.signupProvisioning,
       roleKeys: freezeStringValues(policy.signupProvisioning.roleKeys),
     }),
+  }) as Readonly<T>;
+}
+
+export function defineWebPrincipalSession<const T extends WebPrincipalSession>(
+  session: T,
+): Readonly<T> {
+  if (session.sessionId !== null) {
+    assertNonEmptyContractString(session.sessionId, "sessionId");
+  }
+
+  if (session.principalId !== null) {
+    assertNonEmptyContractString(session.principalId, "principalId");
+  }
+
+  if (session.displayName != null) {
+    assertNonEmptyContractString(session.displayName, "displayName");
+  }
+
+  if (session.capabilityVersion !== null && session.capabilityVersion < 0) {
+    throw new TypeError("capabilityVersion must not be negative.");
+  }
+
+  switch (session.authState) {
+    case "booting":
+    case "signed-out":
+      if (session.sessionId !== null) {
+        throw new TypeError(`sessionId must be null when authState is "${session.authState}".`);
+      }
+      if (session.principalId !== null) {
+        throw new TypeError(`principalId must be null when authState is "${session.authState}".`);
+      }
+      if (session.capabilityVersion !== null) {
+        throw new TypeError(
+          `capabilityVersion must be null when authState is "${session.authState}".`,
+        );
+      }
+      break;
+    case "ready":
+      if (session.sessionId === null) {
+        throw new TypeError('sessionId must be present when authState is "ready".');
+      }
+      if ((session.principalId === null) !== (session.capabilityVersion === null)) {
+        throw new TypeError(
+          'principalId and capabilityVersion must either both be present or both be null when authState is "ready".',
+        );
+      }
+      break;
+    case "expired":
+      if (session.principalId !== null) {
+        throw new TypeError('principalId must be null when authState is "expired".');
+      }
+      if (session.capabilityVersion !== null) {
+        throw new TypeError('capabilityVersion must be null when authState is "expired".');
+      }
+      break;
+    default: {
+      const exhaustive: never = session.authState;
+      return exhaustive;
+    }
+  }
+
+  return Object.freeze({
+    ...session,
+  }) as Readonly<T>;
+}
+
+export function defineWebPrincipalSummary<const T extends WebPrincipalSummary>(
+  summary: T,
+): Readonly<T> {
+  assertNonEmptyContractString(summary.graphId, "graphId");
+  assertNonEmptyContractString(summary.principalId, "principalId");
+  assertUniqueContractStrings(summary.roleKeys, "roleKeys");
+  assertUniqueContractStrings(summary.capabilityGrantIds, "capabilityGrantIds");
+
+  if (summary.principalKind === "anonymous") {
+    throw new TypeError('principalKind must not be "anonymous" in a web principal summary.');
+  }
+
+  if (summary.capabilityVersion < 0) {
+    throw new TypeError("capabilityVersion must not be negative.");
+  }
+
+  if (summary.policyVersion < 0) {
+    throw new TypeError("policyVersion must not be negative.");
+  }
+  if (typeof summary.access.authority !== "boolean") {
+    throw new TypeError("access.authority must be a boolean.");
+  }
+  if (typeof summary.access.graphMember !== "boolean") {
+    throw new TypeError("access.graphMember must be a boolean.");
+  }
+  if (typeof summary.access.sharedRead !== "boolean") {
+    throw new TypeError("access.sharedRead must be a boolean.");
+  }
+
+  return Object.freeze({
+    ...summary,
+    access: Object.freeze({
+      authority: summary.access.authority,
+      graphMember: summary.access.graphMember,
+      sharedRead: summary.access.sharedRead,
+    }),
+    roleKeys: freezeStringValues(summary.roleKeys),
+    capabilityGrantIds: freezeStringValues(summary.capabilityGrantIds),
+  }) as Readonly<T>;
+}
+
+export function defineWebPrincipalBootstrapPayload<const T extends WebPrincipalBootstrapPayload>(
+  payload: T,
+): Readonly<T> {
+  const session = defineWebPrincipalSession(payload.session);
+  const principal = payload.principal ? defineWebPrincipalSummary(payload.principal) : null;
+
+  if (session.authState !== "ready" && principal !== null) {
+    throw new TypeError('principal must be null unless session.authState is "ready".');
+  }
+
+  if (principal) {
+    if (session.principalId === null) {
+      throw new TypeError("session.principalId must be present when principal is provided.");
+    }
+    if (session.principalId !== principal.principalId) {
+      throw new TypeError("session.principalId must match principal.principalId.");
+    }
+    if (session.capabilityVersion === null) {
+      throw new TypeError("session.capabilityVersion must be present when principal is provided.");
+    }
+    if (session.capabilityVersion !== principal.capabilityVersion) {
+      throw new TypeError("session.capabilityVersion must match principal.capabilityVersion.");
+    }
+  }
+
+  return Object.freeze({
+    ...payload,
+    session,
+    principal,
   }) as Readonly<T>;
 }
 

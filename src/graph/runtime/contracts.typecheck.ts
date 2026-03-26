@@ -26,6 +26,10 @@ import type {
   PredicatePolicyDescriptor as PredicatePolicyDescriptorFromRoot,
   ShareGrant as ShareGrantFromRoot,
   ShareSurface as ShareSurfaceFromRoot,
+  WebPrincipalBootstrapPayload as WebPrincipalBootstrapPayloadFromRoot,
+  WebPrincipalSession as WebPrincipalSessionFromRoot,
+  WebPrincipalSessionState as WebPrincipalSessionStateFromRoot,
+  WebPrincipalSummary as WebPrincipalSummaryFromRoot,
   WorkflowSpec as WorkflowSpecFromRoot,
 } from "../index.js";
 import type {
@@ -56,6 +60,10 @@ import type {
   PredicatePolicyDescriptor,
   ShareGrant,
   ShareSurface,
+  WebPrincipalBootstrapPayload,
+  WebPrincipalSession,
+  WebPrincipalSessionState,
+  WebPrincipalSummary,
   WorkflowSpec,
 } from "./index.js";
 
@@ -195,6 +203,34 @@ const authorizationContext = {
   capabilityVersion: 3,
   policyVersion: 5,
 } satisfies AuthorizationContext;
+
+const webPrincipalSession = {
+  authState: "ready",
+  sessionId: authenticatedSession.sessionId,
+  principalId: "principal-1",
+  capabilityVersion: 3,
+  displayName: "Operator",
+} satisfies WebPrincipalSession;
+
+const webPrincipalSummary = {
+  graphId: authorizationContext.graphId,
+  principalId: "principal-1",
+  principalKind: "human",
+  roleKeys: ["graph:member"],
+  capabilityGrantIds: ["grant-1"],
+  access: {
+    authority: false,
+    graphMember: true,
+    sharedRead: false,
+  },
+  capabilityVersion: 3,
+  policyVersion: 5,
+} satisfies WebPrincipalSummary;
+
+const webPrincipalBootstrapPayload = {
+  session: webPrincipalSession,
+  principal: webPrincipalSummary,
+} satisfies WebPrincipalBootstrapPayload;
 
 const admissionProvisioning = {
   roleKeys: ["graph:member"],
@@ -341,6 +377,12 @@ const topicShareGrant = {
 const rootAuthSubject: AuthSubjectRefFromRoot = authSubject;
 const rootAuthenticatedSession: AuthenticatedSessionFromRoot = authenticatedSession;
 const rootAuthorizationContext: AuthorizationContextFromRoot = authorizationContext;
+const rootWebPrincipalSessionState: WebPrincipalSessionStateFromRoot =
+  webPrincipalSession.authState;
+const rootWebPrincipalSession: WebPrincipalSessionFromRoot = webPrincipalSession;
+const rootWebPrincipalSummary: WebPrincipalSummaryFromRoot = webPrincipalSummary;
+const rootWebPrincipalBootstrapPayload: WebPrincipalBootstrapPayloadFromRoot =
+  webPrincipalBootstrapPayload;
 const rootAdmissionPolicy: AdmissionPolicyFromRoot = admissionPolicy;
 const rootAdmissionProvisioning: AdmissionProvisioningFromRoot = admissionProvisioning;
 const rootAdmissionBootstrapMode: AdmissionBootstrapModeFromRoot = admissionPolicy.bootstrapMode;
@@ -361,6 +403,11 @@ const rootPolicyVersion: PolicyVersionFromRoot = authorizationContext.policyVers
 const rootPrincipalKind: PrincipalKindFromRoot = "remoteGraph";
 const runtimeCapabilityVersion: CapabilityVersion = rootCapabilityVersion;
 const runtimePolicyVersion: PolicyVersion = rootPolicyVersion;
+const runtimeWebPrincipalSessionState: WebPrincipalSessionState = rootWebPrincipalSessionState;
+const runtimeWebPrincipalSession: WebPrincipalSession = rootWebPrincipalSession;
+const runtimeWebPrincipalSummary: WebPrincipalSummary = rootWebPrincipalSummary;
+const runtimeWebPrincipalBootstrapPayload: WebPrincipalBootstrapPayload =
+  rootWebPrincipalBootstrapPayload;
 const runtimeAdmissionPolicy: AdmissionPolicy = rootAdmissionPolicy;
 const runtimeAdmissionProvisioning: AdmissionProvisioning = rootAdmissionProvisioning;
 const runtimeAdmissionBootstrapMode: AdmissionBootstrapMode = rootAdmissionBootstrapMode;
@@ -407,6 +454,10 @@ void rootRevokedModulePermissionRecord;
 void rootAuthSubject;
 void rootAuthenticatedSession;
 void rootAuthorizationContext;
+void rootWebPrincipalSessionState;
+void rootWebPrincipalSession;
+void rootWebPrincipalSummary;
+void rootWebPrincipalBootstrapPayload;
 void rootAdmissionPolicy;
 void rootAdmissionProvisioning;
 void rootAdmissionBootstrapMode;
@@ -426,6 +477,10 @@ void rootPolicyVersion;
 void rootPrincipalKind;
 void runtimeCapabilityVersion;
 void runtimePolicyVersion;
+void runtimeWebPrincipalSessionState;
+void runtimeWebPrincipalSession;
+void runtimeWebPrincipalSummary;
+void runtimeWebPrincipalBootstrapPayload;
 void runtimeAdmissionPolicy;
 void runtimeAdmissionProvisioning;
 void runtimeAdmissionBootstrapMode;

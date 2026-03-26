@@ -238,6 +238,13 @@ function createHumanAuthorizationContext(
 function createProjectedAuthorizationContext(
   lookupInput: SessionPrincipalLookupInput,
   projection: {
+    readonly summary?: {
+      readonly principalId: string;
+      readonly principalKind: AuthorizationContext["principalKind"];
+      readonly roleKeys: readonly string[];
+      readonly capabilityGrantIds: readonly string[];
+      readonly capabilityVersion: number;
+    };
     readonly principalId: string;
     readonly principalKind: AuthorizationContext["principalKind"];
     readonly roleKeys?: readonly string[];
@@ -246,14 +253,15 @@ function createProjectedAuthorizationContext(
   },
   overrides: Partial<AuthorizationContext> = {},
 ): AuthorizationContext {
+  const summary = projection.summary;
   return createTestAuthorizationContext({
     graphId: lookupInput.graphId,
-    principalId: projection.principalId,
-    principalKind: projection.principalKind,
+    principalId: summary?.principalId ?? projection.principalId,
+    principalKind: summary?.principalKind ?? projection.principalKind,
     sessionId: "session:browser",
-    roleKeys: [...(projection.roleKeys ?? [])],
-    capabilityGrantIds: [...(projection.capabilityGrantIds ?? [])],
-    capabilityVersion: projection.capabilityVersion ?? 0,
+    roleKeys: [...(summary?.roleKeys ?? projection.roleKeys ?? [])],
+    capabilityGrantIds: [...(summary?.capabilityGrantIds ?? projection.capabilityGrantIds ?? [])],
+    capabilityVersion: summary?.capabilityVersion ?? projection.capabilityVersion ?? 0,
     ...overrides,
   });
 }
@@ -3288,12 +3296,26 @@ describe("web authority", () => {
       },
     );
 
-    expect(await authority.lookupSessionPrincipal(lookupInput)).toEqual({
+    expect(await authority.lookupSessionPrincipal(lookupInput)).toMatchObject({
       principalId,
       principalKind: "human",
       roleKeys: ["graph:member"],
       capabilityGrantIds: [],
       capabilityVersion: 1,
+      summary: {
+        graphId: lookupInput.graphId,
+        principalId,
+        principalKind: "human",
+        roleKeys: ["graph:member"],
+        capabilityGrantIds: [],
+        access: {
+          authority: false,
+          graphMember: true,
+          sharedRead: false,
+        },
+        capabilityVersion: 1,
+        policyVersion: 0,
+      },
     });
   });
 
@@ -4057,6 +4079,11 @@ describe("web authority", () => {
     );
 
     const refreshedDelegateProjection = await authority.lookupSessionPrincipal(delegateLookupInput);
+    expect(refreshedDelegateProjection.summary.access).toEqual({
+      authority: false,
+      graphMember: false,
+      sharedRead: true,
+    });
     const refreshedDelegateAuthorization = createProjectedAuthorizationContext(
       delegateLookupInput,
       refreshedDelegateProjection,

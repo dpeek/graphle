@@ -60,6 +60,9 @@ Repo:
   - `AuthenticatedSession`
   - `AuthorizationContext`
   - `AdmissionPolicy`
+  - `WebPrincipalSession`
+  - `WebPrincipalSummary`
+  - `WebPrincipalBootstrapPayload`
 - `src/web/lib/auth-bridge.ts` already defines the stable request-time
   projection seam:
   - `projectSessionToPrincipal(...)`
@@ -1124,7 +1127,9 @@ or sharing already exist.
    product surface.
 2. Add an explicit operator bootstrap or allowlist rule for initial role
    assignment.
-3. Add graph-backed principal summary/bootstrap payload for the app shell.
+3. Extend the shipped graph-backed `GET /api/bootstrap` route beyond the stable
+   `WebPrincipalBootstrapPayload` when the shell needs additional provisional
+   route, module, or operator bootstrap data.
 4. Add graph-backed, operator-editable auth policy/config entities for
    non-secret Better Auth settings such as:
    - enabled providers

@@ -9,10 +9,19 @@ function createSignedOutAuthState(): WebAuthViewState {
   return {
     status: "signed-out",
     authState: "signed-out",
-    session: null,
+    bootstrap: {
+      session: {
+        authState: "signed-out",
+        sessionId: null,
+        principalId: null,
+        capabilityVersion: null,
+      },
+      principal: null,
+    },
+    principal: null,
     sessionId: null,
-    userId: null,
-    userEmail: null,
+    principalId: null,
+    capabilityVersion: null,
     displayName: null,
     errorMessage: null,
     isRefetching: false,

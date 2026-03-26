@@ -12,7 +12,7 @@ const workflowBranchTypeId = typeId(ops.workflowBranch);
 export function WorkflowPage() {
   return (
     <GraphAccessGate
-      description="Resolve an authenticated Better Auth session before booting the workflow view against /api/sync and /api/tx."
+      description="Resolve the principal bootstrap contract before booting the workflow view against /api/sync and /api/tx."
       title="Sign in to open workflow"
     >
       <GraphRuntimeBootstrap>

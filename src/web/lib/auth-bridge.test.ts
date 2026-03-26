@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
-import type { AuthSubjectRef, AuthenticatedSession } from "@io/core/graph";
+import type { AuthSubjectRef, AuthenticatedSession, WebPrincipalSummary } from "@io/core/graph";
 
 import {
   createBearerShareAuthorizationContext,
@@ -26,6 +26,24 @@ function createSession(sessionId: string): AuthenticatedSession {
   return {
     sessionId,
     subject,
+  };
+}
+
+function createPrincipalSummary(overrides: Partial<WebPrincipalSummary> = {}): WebPrincipalSummary {
+  return {
+    graphId: "graph-1",
+    principalId: "principal-1",
+    principalKind: "human",
+    roleKeys: ["graph:member"],
+    capabilityGrantIds: ["grant-1"],
+    access: {
+      authority: false,
+      graphMember: true,
+      sharedRead: false,
+    },
+    capabilityVersion: 4,
+    policyVersion: 7,
+    ...overrides,
   };
 }
 
@@ -86,6 +104,7 @@ describe("web auth bridge", () => {
     }) => {
       lookups.push({ graphId, subject: lookupSubject });
       return {
+        summary: createPrincipalSummary(),
         principalId: "principal-1",
         principalKind: "human" as const,
         roleKeys: ["graph:member"],
@@ -156,6 +175,11 @@ describe("web auth bridge", () => {
         expect(email).toBe("operator@example.com");
 
         return {
+          summary: createPrincipalSummary({
+            capabilityGrantIds: [],
+            capabilityVersion: 0,
+            policyVersion: 5,
+          }),
           principalId: "principal-1",
           principalKind: "human",
           roleKeys: ["graph:member"],

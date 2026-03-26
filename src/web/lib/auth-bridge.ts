@@ -3,6 +3,7 @@ import type {
   AuthenticatedSession,
   AuthorizationContext,
   PrincipalKind,
+  WebPrincipalSummary,
 } from "@io/core/graph";
 
 type MaybePromise<T> = T | Promise<T>;
@@ -69,6 +70,7 @@ export type SessionPrincipalLookupInput = {
  * durable-but-provisional records outside the session projection.
  */
 export type SessionPrincipalProjection = {
+  readonly summary: WebPrincipalSummary;
   readonly principalId: string;
   readonly principalKind: PrincipalKind;
   readonly roleKeys?: readonly string[];
@@ -266,12 +268,12 @@ export async function projectSessionToPrincipal(
 
   return {
     graphId: input.graphId,
-    principalId: projection.principalId,
-    principalKind: projection.principalKind,
+    principalId: projection.summary.principalId,
+    principalKind: projection.summary.principalKind,
     sessionId: input.session.sessionId,
-    roleKeys: cloneStringList(projection.roleKeys),
-    capabilityGrantIds: cloneStringList(projection.capabilityGrantIds),
-    capabilityVersion: projection.capabilityVersion ?? 0,
+    roleKeys: cloneStringList(projection.summary.roleKeys),
+    capabilityGrantIds: cloneStringList(projection.summary.capabilityGrantIds),
+    capabilityVersion: projection.summary.capabilityVersion,
     policyVersion: input.policyVersion,
   };
 }

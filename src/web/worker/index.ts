@@ -1,3 +1,5 @@
+import { defineWebPrincipalBootstrapPayload } from "@io/core/graph";
+
 import {
   BearerShareTokenProjectionError,
   type BearerShareLookupInput,
@@ -47,6 +49,7 @@ const webAppGraphId = "graph:global";
 const webAppPolicyVersion = 0;
 const betterAuthCookieMarker = "better-auth";
 const webAppActivateAccessPath = "/api/access/activate";
+export const webAppBootstrapPath = "/api/bootstrap";
 
 export type WorkerBetterAuthSessionLookup = (
   request: Request,
@@ -149,6 +152,10 @@ function isGraphApiRequest(url: URL): boolean {
 
 function isSessionActivationRequest(url: URL): boolean {
   return url.pathname === webAppActivateAccessPath;
+}
+
+function isBootstrapRequest(url: URL): boolean {
+  return url.pathname === webAppBootstrapPath;
 }
 
 function isHtmlNavigationRequest(request: Request): boolean {
@@ -461,11 +468,17 @@ async function handleSessionActivationRequest(
     const betterAuthSession = await (
       dependencies.getBetterAuthSession ?? getRequestBetterAuthSession
     )(request, env);
-    const reducedSession = reduceBetterAuthSession(betterAuthSession);
-    if (!reducedSession) {
+    if (!betterAuthSession) {
       throw new SessionActivationRequestError(
         "An authenticated Better Auth session is required to activate graph access.",
         401,
+      );
+    }
+
+    const reducedSession = reduceBetterAuthSession(betterAuthSession);
+    if (!reducedSession) {
+      throw new BetterAuthSessionReductionError(
+        "Unable to reduce the Better Auth session into the shared authenticated-session shape.",
       );
     }
 
@@ -493,6 +506,93 @@ async function handleSessionActivationRequest(
   }
 }
 
+async function handleBootstrapRequest(
+  request: Request,
+  env: Env,
+  dependencies: WorkerFetchDependencies,
+): Promise<Response> {
+  if (request.method !== "GET") {
+    return new Response("Method Not Allowed", {
+      status: 405,
+      headers: { allow: "GET" },
+    });
+  }
+
+  try {
+    const betterAuthSession = await (
+      dependencies.getBetterAuthSession ?? getRequestBetterAuthSession
+    )(request, env);
+
+    if (!betterAuthSession) {
+      const authState = requestCarriesBetterAuthSession(request) ? "expired" : "signed-out";
+      return Response.json(
+        defineWebPrincipalBootstrapPayload({
+          session: {
+            authState,
+            sessionId: null,
+            principalId: null,
+            capabilityVersion: null,
+          },
+          principal: null,
+        }),
+        {
+          headers: {
+            "cache-control": "no-store",
+          },
+        },
+      );
+    }
+
+    const reducedSession = reduceBetterAuthSession(betterAuthSession);
+    if (!reducedSession) {
+      throw new BetterAuthSessionReductionError(
+        "Unable to reduce the Better Auth session into the shared authenticated-session shape.",
+      );
+    }
+
+    const projection = await (dependencies.lookupPrincipal ?? lookupGraphPrincipal)(
+      {
+        graphId: webAppGraphId,
+        subject: reducedSession.subject,
+        email: reducedSession.email,
+      },
+      { env, request },
+    );
+    if (!projection) {
+      throw new SessionPrincipalProjectionError({
+        graphId: webAppGraphId,
+        subject: reducedSession.subject,
+        email: reducedSession.email,
+      });
+    }
+
+    return Response.json(
+      defineWebPrincipalBootstrapPayload({
+        session: {
+          authState: "ready",
+          sessionId: reducedSession.sessionId,
+          principalId: projection.summary.principalId,
+          capabilityVersion: projection.summary.capabilityVersion,
+          ...(reducedSession.email ? { displayName: reducedSession.email } : {}),
+        },
+        principal: projection.summary,
+      }),
+      {
+        headers: {
+          "cache-control": "no-store",
+        },
+      },
+    );
+  } catch (error) {
+    const authErrorResponse = createGraphAuthorizationErrorResponse(error);
+    if (authErrorResponse) {
+      return authErrorResponse;
+    }
+
+    throw error;
+  }
+}
+
 export function createWorkerFetchHandler(dependencies: WorkerFetchDependencies = {}) {
   return {
     async fetch(request: Request, env: Env): Promise<Response> {
@@ -508,6 +608,10 @@ export function createWorkerFetchHandler(dependencies: WorkerFetchDependencies =
 
       if (isSessionActivationRequest(url)) {
         return handleSessionActivationRequest(request, env, dependencies);
+      }
+
+      if (isBootstrapRequest(url)) {
+        return handleBootstrapRequest(request, env, dependencies);
       }
 
       return serveSpaAsset(request, env);

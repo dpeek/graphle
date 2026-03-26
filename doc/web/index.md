@@ -14,11 +14,60 @@ now runs through a raw-SQL SQLite-backed Durable Object adapter that retains a
 bounded transaction window and keeps secret plaintext in authority-only side
 storage. The current auth foundation now also reserves a dedicated Better Auth
 D1 store and migration path that stays separate from the graph authority's
-SQLite Durable Object storage. The current shell now also reads Better Auth
-session state client-side, exposes minimal email/password sign-in and sign-out
-controls, and gates graph runtime bootstrap until the browser resolves an
-authenticated session. That create-account path is still a provisional local
-demo surface rather than a finished account-management product.
+SQLite Durable Object storage. The current shell now also consumes the Worker
+served principal-summary bootstrap contract, keeps Better Auth limited to the
+sign-in and sign-out mutations, and gates graph runtime bootstrap until the
+browser resolves an explicit signed-out, ready, or expired bootstrap state.
+The shared graph runtime contracts now also publish the
+stable minimum browser identity bootstrap surface:
+`WebPrincipalSession`, `WebPrincipalSummary`, and
+`WebPrincipalBootstrapPayload`. That create-account path is still a provisional
+local demo surface rather than a finished account-management product.
+
+## Principal Bootstrap Contract
+
+`GET /api/bootstrap` is the one stable browser identity bootstrap seam for the
+current web shell. It resolves before any graph-backed route mounts and it does
+not duplicate graph sync bootstrap. The Worker derives this payload from the
+request-bound Better Auth session check plus authority-side principal lookup,
+then the browser consumes that result without inferring identity locally.
+
+Stable payload semantics:
+
+- `signed-out`: anonymous caller or no active Better Auth session. The payload
+  returns `session.authState = "signed-out"` with `sessionId = null`,
+  `principalId = null`, `capabilityVersion = null`, and `principal = null`.
+- `ready`: authenticated caller with a resolved graph principal. The payload
+  returns a `WebPrincipalSummary` plus matching `session.sessionId`,
+  `session.principalId`, and `session.capabilityVersion`.
+- `expired`: the browser presented Better Auth cookies, but the Worker could no
+  longer verify them. The payload returns `session.authState = "expired"` and
+  `principal = null` so the shell can require reauthentication without
+  pretending the old principal summary is still current.
+
+Failure behavior outside the payload:
+
+- bootstrap fetch failure: the shell stays outside graph runtime bootstrap and
+  enters an explicit retryable error state instead of guessing `signed-out` or
+  `ready`
+- authenticated principal lookup failure: the Worker fails closed with
+  `403 auth.principal_missing`; callers must not downgrade that response into an
+  anonymous bootstrap
+- session verification unavailable: the Worker returns
+  `503 auth.session_unavailable`; callers should keep the signed-out shell
+  chrome mounted and offer retry
+- retry: refetching the principal bootstrap keeps the last resolved shell state
+  visible until the new fetch settles, so shells and tools do not thrash
+  between ready, signed-out, and loading during transient failures
+
+Current proof anchors:
+
+- `../../src/web/worker/index.test.ts`: anonymous, ready, expired,
+  `auth.principal_missing`, and `auth.session_unavailable` worker responses
+- `../../src/web/lib/auth-client.test.ts`: shared client projection, retry, and
+  bootstrap-error handling
+- `../../src/web/components/auth-shell.test.tsx`: graph-route gating for
+  signed-out, expired, ready, and retryable bootstrap-error states
 
 ## Ownership Boundary
 
@@ -69,9 +118,9 @@ command registries.
 - `../../src/web/components/home-page.tsx`: session-aware landing page that
   keeps the signed-out auth entry flow and the signed-in bootstrap summary in
   one place
-- `../../src/web/components/auth-shell.tsx`: Better Auth session hook,
-  sign-in/sign-out chrome, provisional create-account form, and the gate that
-  keeps graph surfaces from booting until session state is known
+- `../../src/web/components/auth-shell.tsx`: principal-bootstrap consumer
+  hook, sign-in/sign-out chrome, provisional create-account form, and the gate
+  that keeps graph surfaces from booting until bootstrap state is known
 - `../../src/web/components/graph-runtime-bootstrap.tsx`: shared synced graph
   runtime bootstrap for browser pages
 - `../../src/web/components/entity-type-browser.tsx`: reusable list/detail
@@ -121,8 +170,8 @@ command registries.
   for the dedicated `AUTH_DB` binding, optional trusted-origin wiring, the
   stable `/api/auth` base path, and the minimal email/password browser demo
   flow
-- `../../src/web/lib/auth-client.ts`: Better Auth React client helper plus the
-  derived shell session-state projection consumed by the SPA
+- `../../src/web/lib/auth-client.ts`: Better Auth React client mutations plus
+  the shared principal-bootstrap fetch and shell-state projection helpers
 - `../../src/web/lib/workflow-transport.ts`: shared `POST /api/workflow-read`
   request and response envelopes plus the fetch helper that browser, TUI, or
   MCP callers can reuse for the first shipped `ProjectBranchScope` and
@@ -197,9 +246,11 @@ command registries.
   now verifies Better Auth sessions with cookie-cache bypass for graph
   requests, reduces them into the repo's stable `AuthenticatedSession` shape,
   forwards anonymous requests as anonymous, resolves authenticated subjects
-  through the Durable Object's internal lookup-and-repair seam, exposes the
-  explicit `POST /api/access/activate` initial role-binding workflow for the
-  current authenticated principal, forwards the
+  through the Durable Object's internal lookup-and-repair seam, serves
+  `GET /api/bootstrap` as the explicit
+  `WebPrincipalBootstrapPayload` seam for anonymous, authenticated, and stale
+  browser sessions, exposes the explicit `POST /api/access/activate` initial
+  role-binding workflow for the current authenticated principal, forwards the
   `POST /api/query`, `POST /api/workflow-read`, and `POST /api/workflow-live`
   routes alongside `/api/sync`, `/api/tx`, and `/api/commands`, hashes issued
   bearer share tokens locally before calling the Durable Object's internal

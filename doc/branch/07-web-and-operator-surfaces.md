@@ -163,10 +163,18 @@ Stability target for this branch:
 Branch 7 owns the surface model that sits between upstream platform contracts
 and concrete UI screens.
 
-Inference: the bootstrap and module-host interfaces below are not implemented
-as first-class repo contracts today. They normalize the seams implied by the
-current `src/web` shell, the recommended `web/app-shell`, `web/module-host`,
-and `web/auth-bridge` split, and the Branch 7 brief.
+Inference: the bootstrap and module-host interfaces below are still partly
+provisional. `src/graph/runtime/contracts.ts` now publishes the stable Branch 2
+minimum for identity bootstrap:
+
+- `WebPrincipalSession`
+- `WebPrincipalSummary`
+- `WebPrincipalBootstrapPayload`
+
+The richer app-shell, capability, and module-host surfaces below continue to
+normalize the seams implied by the current `src/web` shell, the recommended
+`web/app-shell`, `web/module-host`, and `web/auth-bridge` split, and the
+Branch 7 brief.
 
 ### Web principal session
 
@@ -174,11 +182,11 @@ and `web/auth-bridge` split, and the Branch 7 brief.
 type ShellAuthState = "booting" | "signed-out" | "ready" | "expired";
 
 interface WebPrincipalSession {
-  sessionId: string;
   authState: ShellAuthState;
-  principalId?: string;
+  sessionId: string | null;
+  principalId: string | null;
+  capabilityVersion: number | null;
   displayName?: string;
-  capabilityVersion?: string;
 }
 ```
 
@@ -189,6 +197,17 @@ Responsibilities:
   reauthentication
 - version session-linked capability state so stale browser caches can be
   invalidated explicitly
+
+Stable invariants:
+
+- `booting` is client-local loading before a bootstrap payload or session query
+  resolves
+- `signed-out` carries `sessionId = null`, `principalId = null`, and
+  `capabilityVersion = null`
+- `ready` requires a non-null `sessionId`; `principalId` and
+  `capabilityVersion` either both appear or both stay `null`
+- `expired` is a reauth-required state; it must not be treated as fresh
+  principal-summary evidence
 
 Lifecycle:
 
@@ -432,33 +451,52 @@ Contract rules:
   supported until scoped bootstrap is stable
 - a route may not assume a ready graph runtime outside the bootstrap boundary
 
-### `AppShellBootstrapPayload`
+### `WebPrincipalBootstrapPayload`
 
-Inference: the repo does not yet expose a first-class bootstrap payload beyond
-static routes plus `/api/sync`. Once Branch 2 and Branch 4 land, the shell
-needs one bootstrap surface that carries identity and installed-module data.
+The stable current-proof bootstrap contract is the minimal identity payload
+published from `src/graph/runtime/contracts.ts`.
 
 Canonical shape:
 
 ```ts
-interface AppShellBootstrapPayload {
+interface WebPrincipalSummary {
+  graphId: string;
+  principalId: string;
+  principalKind: PrincipalKind;
+  roleKeys: readonly string[];
+  capabilityGrantIds: readonly string[];
+  access: {
+    authority: boolean;
+    graphMember: boolean;
+    sharedRead: boolean;
+  };
+  capabilityVersion: number;
+  policyVersion: number;
+}
+
+interface WebPrincipalBootstrapPayload {
   session: WebPrincipalSession;
-  capabilities?: CapabilitySnapshot;
-  routes: readonly AppShellRouteContribution[];
-  modules: readonly {
-    moduleId: string;
-    version: string;
-    surfaceIds: readonly string[];
-  }[];
+  principal: WebPrincipalSummary | null;
 }
 ```
 
 Contract rules:
 
-- transport may be server-inlined HTML bootstrap data or a dedicated fetch, but
-  the payload shape must be equivalent
-- route visibility must already reflect session and coarse capability state
-- missing or stale capability data must fail closed; the shell should not guess
+- `principal` must be `null` unless `session.authState = "ready"`
+- when present, `principal.principalId` and `principal.capabilityVersion` must
+  match the same fields on `session`
+- `principal.access` is authority-owned derived state so shells can gate
+  authority, graph-member, and delegated-share affordances without
+  reconstructing policy from raw roles or grants
+- bootstrap transport may be server-inlined HTML data or a dedicated fetch, but
+  the identity shape must stay equivalent
+- loading and fetch-error UI are shell concerns outside the payload; callers
+  must not synthesize a fake principal summary after a failed bootstrap read
+- richer route lists, installed modules, account-profile details, and
+  capability snapshots remain provisional layers on top of this payload rather
+  than part of the stable Branch 2 minimum
+- raw share-surface selectors, account-management profile data, and grant
+  metadata beyond stable ids remain intentionally out of this summary for now
 
 ### `ModuleSurfaceContribution`
 

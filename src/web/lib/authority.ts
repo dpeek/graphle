@@ -43,6 +43,7 @@ import {
   type QueryLiteral,
   type QueryResultItem,
   type QueryResultPage,
+  type WebPrincipalSummary,
   readPredicateValue as decodePredicateValue,
   type SerializedQueryRequest,
   type SerializedQueryResponse,
@@ -438,6 +439,7 @@ const graphWriteTransactionValidationKey = "$sync:tx";
 const webAppAuthorityPolicyVersion = 0;
 const webAppGraphId = "graph:global";
 const authorityRoleKey = "graph:authority";
+const graphMemberRoleKey = "graph:member";
 const ownerRoleKey = "graph:owner";
 const setAdmissionApprovalCommandKey = "set-admission-approval";
 const writeSecretFieldCommandKey = "write-secret-field";
@@ -2012,11 +2014,39 @@ function readPrincipalRoleKeys(store: Store, principalId: string): readonly stri
   ).sort();
 }
 
-function readSessionPrincipalProjection(
+function principalHasAuthorityAccess(
+  principalKind: PrincipalKind,
+  roleKeys: readonly string[],
+): boolean {
+  return (
+    principalKind === "service" || principalKind === "agent" || roleKeys.includes(authorityRoleKey)
+  );
+}
+
+function principalHasGraphMemberAccess(
+  principalKind: PrincipalKind,
+  roleKeys: readonly string[],
+): boolean {
+  return (
+    principalHasAuthorityAccess(principalKind, roleKeys) ||
+    roleKeys.includes(graphMemberRoleKey) ||
+    roleKeys.includes(ownerRoleKey)
+  );
+}
+
+function readPrincipalSharedReadAccess(store: Store, principalId: string): boolean {
+  return readActivePrincipalCapabilityGrantIds(store, principalId).some((capabilityGrantId) => {
+    const grant = readResolvedAuthorizationCapabilityGrant(store, capabilityGrantId);
+    return grant !== null && readValidatedActiveShareGrants(store, grant).length > 0;
+  });
+}
+
+function readWebPrincipalSummary(
   store: Store,
   principalId: string,
   graphId: string,
-): SessionPrincipalProjection | null {
+  policyVersion: number,
+): WebPrincipalSummary | null {
   if (!hasEntityOfType(store, principalId, principalTypeId)) return null;
   if (getFirstObject(store, principalId, principalStatusPredicateId) !== activePrincipalStatusId) {
     return null;
@@ -2029,12 +2059,45 @@ function readSessionPrincipalProjection(
   const principalKind = principalKindId ? principalKindById.get(principalKindId) : undefined;
   if (!principalKind) return null;
 
+  const roleKeys = readPrincipalRoleKeys(store, principalId);
+  const capabilityGrantIds = readActivePrincipalCapabilityGrantIds(store, principalId);
+
   return {
+    graphId,
     principalId,
     principalKind,
-    roleKeys: readPrincipalRoleKeys(store, principalId),
-    capabilityGrantIds: readActivePrincipalCapabilityGrantIds(store, principalId),
+    roleKeys,
+    capabilityGrantIds,
+    access: {
+      authority: principalHasAuthorityAccess(principalKind, roleKeys),
+      graphMember: principalHasGraphMemberAccess(principalKind, roleKeys),
+      sharedRead: readPrincipalSharedReadAccess(store, principalId),
+    },
     capabilityVersion: readPrincipalCapabilityVersion(store, principalId),
+    policyVersion,
+  };
+}
+
+function readSessionPrincipalProjection(
+  store: Store,
+  principalId: string,
+  graphId: string,
+): SessionPrincipalProjection | null {
+  const summary = readWebPrincipalSummary(
+    store,
+    principalId,
+    graphId,
+    webAppAuthorityPolicyVersion,
+  );
+  if (!summary) return null;
+
+  return {
+    summary,
+    principalId: summary.principalId,
+    principalKind: summary.principalKind,
+    roleKeys: summary.roleKeys,
+    capabilityGrantIds: summary.capabilityGrantIds,
+    capabilityVersion: summary.capabilityVersion,
   };
 }
 
@@ -2829,9 +2892,8 @@ function createAuthorizationTarget(
 
 function authorizationHasAuthorityAccess(authorization: AuthorizationContext): boolean {
   return (
-    authorization.principalKind === "service" ||
-    authorization.principalKind === "agent" ||
-    authorization.roleKeys.includes(authorityRoleKey)
+    authorization.principalKind !== null &&
+    principalHasAuthorityAccess(authorization.principalKind, authorization.roleKeys)
   );
 }
 
