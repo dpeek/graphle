@@ -1,5 +1,5 @@
-import { defineScalar, defineScalarModule } from "@io/core/graph/def";
-import type { TypeModuleFilter, TypeModuleMeta } from "@io/core/graph/def";
+import { defineScalar, defineScalarModule } from "@io/graph-module";
+import type { TypeModuleFilter, TypeModuleMeta } from "@io/graph-module";
 
 import { graphIconSeeds } from "../icon/seed.js";
 

@@ -1009,14 +1009,13 @@ own fact storage itself.
 
 ## 13. Recommended First Code Targets
 
-- `lib/graph-authority/src/contracts.ts` and `src/graph/definition-contracts.ts`
+- `lib/graph-authority/src/contracts.ts` and `lib/graph-module/src/definition-contracts.ts`
   Publish authority-owned permission contracts from `graph-authority`, and keep
-  any remaining root-safe manifest or definition contracts in the small
-  root-owned definition surface instead of reviving a mixed runtime bucket.
-- `src/graph/def.ts` and `src/graph/index.ts`
-  Export only the deliberate root-owned definition contracts from `def`, and
-  keep the root graph surface curated instead of reintroducing a catch-all
-  runtime barrel.
+  module-authored manifest or definition contracts in `graph-module` instead of
+  reviving a mixed runtime bucket.
+- `lib/graph-module/src/index.ts` and `src/graph/index.ts`
+  Keep module-definition authorship on `graph-module`, and keep the root graph
+  surface curated instead of reintroducing a catch-all runtime barrel.
 - `src/graph/modules/workflow/env-var/module.ts`
   Wrap the existing env-var schema and secret-aware descriptors as the first
   optional built-in module bundle.

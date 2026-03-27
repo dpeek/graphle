@@ -1,4 +1,5 @@
-import { defineScalarModule } from "../../../type-module.js";
+import { defineScalarModule } from "@io/graph-module";
+
 import { durationFilter } from "./filter.js";
 import { durationMeta } from "./meta.js";
 import {

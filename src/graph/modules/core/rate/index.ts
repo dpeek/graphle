@@ -1,4 +1,5 @@
-import { defineScalarModule } from "../../../type-module.js";
+import { defineScalarModule } from "@io/graph-module";
+
 import { rateFilter } from "./filter.js";
 import { rateMeta } from "./meta.js";
 import {

@@ -1,4 +1,5 @@
-import { defineScalarModule } from "../../../type-module.js";
+import { defineScalarModule } from "@io/graph-module";
+
 import { dateFilter } from "./filter.js";
 import { dateMeta } from "./meta.js";
 import { dateType } from "./type.js";

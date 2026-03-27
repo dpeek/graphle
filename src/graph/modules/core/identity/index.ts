@@ -1,8 +1,8 @@
-import { defineEnum, defineType } from "@io/core/graph/def";
+import { defineEnum, defineType } from "@io/graph-module";
+import { defineReferenceField } from "@io/graph-module";
+import { defineDefaultEnumTypeModule } from "@io/graph-module";
 
-import { defineReferenceField } from "../../../type-module.js";
 import { dateTypeModule } from "../date/index.js";
-import { defineDefaultEnumTypeModule } from "../enum-module.js";
 import { node } from "../node/index.js";
 import { numberTypeModule } from "../number/index.js";
 import { stringTypeModule } from "../string/index.js";

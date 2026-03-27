@@ -1,5 +1,5 @@
 import { edgeId } from "@io/core/graph";
-import type { GraphCommandSpec } from "@io/core/graph/def";
+import type { GraphCommandSpec } from "@io/graph-module";
 
 import { branch, commit, project, repository } from "./type.js";
 

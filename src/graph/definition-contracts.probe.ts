@@ -13,9 +13,9 @@ import {
   fieldPolicyDescriptor,
   type PredicatePolicyDescriptor,
 } from "@io/graph-kernel";
+import { defineReferenceField, defineType, type GraphCommandSpec } from "@io/graph-module";
+import type { ObjectViewSpec, WorkflowSpec } from "@io/graph-module";
 
-import { defineReferenceField, defineType, type GraphCommandSpec } from "./def.js";
-import type { ObjectViewSpec, WorkflowSpec } from "./def.js";
 import { core, stringTypeModule } from "./modules/index.js";
 
 // Test-only root-safe contract probes that feature work can copy from.

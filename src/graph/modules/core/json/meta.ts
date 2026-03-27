@@ -1,4 +1,4 @@
-import type { TypeModuleMeta } from "../../../type-module.js";
+import type { TypeModuleMeta } from "@io/graph-module";
 
 function formatJson(value: unknown): string {
   return JSON.stringify(value);

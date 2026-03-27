@@ -1,5 +1,6 @@
-import { defineType } from "../../index.js";
-import { core, defineDefaultEnumTypeModule } from "../../modules/index.js";
+import { defineDefaultEnumTypeModule, defineType } from "@io/graph-module";
+
+import { core } from "../../modules/index.js";
 import { kitchenSink } from "../../testing/kitchen-sink.js";
 import type { FilterOperandEditorProps } from "./index.js";
 import { defaultWebFilterResolver } from "./index.js";

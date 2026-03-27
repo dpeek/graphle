@@ -1,4 +1,4 @@
-import { defineScalarModule } from "@io/core/graph/def";
+import { defineScalarModule } from "@io/graph-module";
 
 import { booleanFilter } from "./filter.js";
 import { booleanMeta } from "./meta.js";

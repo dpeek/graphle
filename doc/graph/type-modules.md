@@ -3,38 +3,49 @@
 ## Purpose
 
 This document is the entry point for scalar and enum families, field metadata
-and filter contracts, and the root-safe object-view, workflow, and command
+and filter contracts, and the pure object-view, workflow, and command
 contracts that live beside graph-owned types.
 
 ## Package Surfaces
 
-`../../src/graph/type-module.ts` defines the root-owned type-module authoring
-surface. `../../src/graph/def.ts` re-exports the focused authoring subset, and
-`../../src/graph/definition-contracts.ts` holds the pure shared contracts for
-object views, workflows, and command descriptors.
+`../../lib/graph-module/src/type-module.ts` defines the module-authoring
+surface. `../../lib/graph-module/src/index.ts` re-exports the curated authoring
+subset, and `../../lib/graph-module/src/definition-contracts.ts` holds the pure
+shared contracts for object views, workflows, and command descriptors.
+
+Naming:
+
+- `@io/graph-module` is the extracted workspace package
+- "graph modules" are concrete authored namespace slices such as `core` and
+  `workflow`
+- "type modules" are the reusable `{ type, meta, filter, field(...) }`
+  authoring objects returned by `defineScalarModule(...)`,
+  `defineEnumModule(...)`, and the packaged defaults
 
 Canonical imports:
 
-- `@io/core/graph/def`: focused schema and type-module authoring helpers from
-  `../../src/graph/def.ts`, including `ObjectViewSpec`, `WorkflowSpec`, and
-  `GraphCommandSpec`
+- `@io/graph-module`: focused schema and type-module authoring helpers from
+  `../../lib/graph-module/src/index.ts`, including `TypeModule`,
+  `ObjectViewSpec`, `WorkflowSpec`, and `GraphCommandSpec`
 - `@io/core/graph`: small root helper surface for curated kernel aliases,
-  icon helpers, and reference-field authoring helpers
+  icon helpers, modules, and adapters
 - `@io/graph-authority`: authority-owned permission/admission/share contracts
   such as `ModulePermissionRequest` and `ModulePermissionApprovalRecord`
 
-Exported building blocks in `../../src/graph/type-module.ts` include:
+Exported building blocks in `../../lib/graph-module/src/type-module.ts`
+include:
 
 - `defineScalarModule(...)`
 - `defineEnumModule(...)`
 - `defineReferenceField(...)`
 - `defineSecretField(...)`
+- `TypeModule`
 - `TypeModuleMeta`
 - `TypeModuleFilter`
 - field-level metadata and filter override types
 
-`../../src/graph/def.typecheck.ts` and nearby module/type tests show the
-intended usage in real code.
+`../../lib/graph-module/src/index.typecheck.ts` and nearby module/type tests
+show the intended usage in real code.
 
 ## Secret-Field Contract
 
@@ -107,7 +118,7 @@ Current fields:
 - optional `policy.capabilities`, reusing the shared authorization capability-key vocabulary
 - optional `policy.touchesPredicates`, where each entry names a touched `predicateId`
 
-The descriptor belongs in `@io/core/graph/def`. The authoritative
+The descriptor belongs in `@io/graph-module`. The authoritative
 implementation, transport wiring, and route ownership still belong in `app`.
 
 ## `ModulePermissionRequest`
@@ -169,7 +180,8 @@ Examples:
 - `../../src/graph/modules/core/string/`
 - `../../src/graph/modules/core/number/`
 - `../../src/graph/modules/core/boolean/`
-- `../../src/graph/modules/core/enum-module.ts`
+- `../../lib/graph-module/src/enum-module.ts`
+- `../../lib/graph-module/src/validated-string.ts`
 
 ## Per-Type Authoring Layout
 
@@ -191,7 +203,7 @@ authoring boundary and publish it through the canonical module subpaths above.
 Physical colocation and package export ownership are separate concerns.
 
 - published type and slice entry files must stay root-safe for
-  `@io/core/graph`, `@io/core/graph/def`, or the module subpaths
+  `@io/graph-module`, `@io/core/graph`, or the module subpaths
 - root-safe exports may include canonical schema, metadata, filters, pure view
   specs, pure command descriptors, and reusable fixtures
 - published module entry files must not import browser APIs, OpenTUI code, or
@@ -208,10 +220,12 @@ Type modules provide:
 - field-level metadata overrides
 - field-level filter narrowing and default-operator overrides
 - collection metadata hooks such as ordered versus unordered semantics
+- a `field(...)` method that freezes one field definition against those shared
+  defaults
 
 ## Reference Fields
 
-`@io/core/graph` exports a small helper surface for relationship authoring:
+`@io/graph-module` exports the relationship-authoring helpers:
 
 - `existingEntityReferenceField(...)`
 - `existingEntityReferenceFieldMeta(...)`

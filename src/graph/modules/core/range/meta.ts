@@ -1,4 +1,5 @@
-import type { TypeModuleMeta } from "../../../type-module.js";
+import type { TypeModuleMeta } from "@io/graph-module";
+
 import { formatRange, formatRangeEditorValue, parseRange, type RangeValue } from "./type.js";
 
 export const rangeMeta = {

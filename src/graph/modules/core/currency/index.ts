@@ -1,6 +1,6 @@
-import { defineEnum } from "@io/core/graph/def";
+import { defineEnum } from "@io/graph-module";
+import { defineDefaultEnumTypeModule } from "@io/graph-module";
 
-import { defineDefaultEnumTypeModule } from "../enum-module.js";
 import { currencyOptions } from "./data.js";
 
 export const currency = defineEnum({

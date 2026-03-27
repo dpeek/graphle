@@ -1,6 +1,5 @@
-import { defineEnum } from "@io/core/graph/def";
-
-import { defineDefaultEnumTypeModule } from "../enum-module.js";
+import { defineEnum } from "@io/graph-module";
+import { defineDefaultEnumTypeModule } from "@io/graph-module";
 
 export const language = defineEnum({
   values: { key: "core:language", name: "Language" },

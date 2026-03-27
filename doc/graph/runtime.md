@@ -7,7 +7,7 @@ low-level runtime seams after the package split.
 
 There is no longer a public non-React `@io/core/graph/runtime` surface. The
 old catch-all runtime layer has been collapsed into the owning packages plus a
-small root definition surface.
+small extracted module-authoring surface.
 
 ## Current Ownership
 
@@ -56,22 +56,29 @@ Key source files:
 - `../../lib/graph-authority/src/persisted-authority.ts`
 - `../../lib/graph-authority/src/contracts.ts`
 
-### Root Definition Surface
+### `@io/graph-module` Package
 
-`@io/core/graph/def` is the small root-owned definition surface for graph
-helpers that do not belong in an extracted package:
+`@io/graph-module` is the definition-time authoring package layered directly
+above `@io/graph-kernel`:
 
 - type-module authoring helpers
 - existing-entity reference authoring policy
 - pure definition-time contracts such as `ObjectViewSpec`, `WorkflowSpec`, and
   `GraphCommandSpec`
 
+Naming note:
+
+- use "graph modules" for concrete namespace slices such as `core` and
+  `workflow`
+- use "type modules" for the reusable `{ type, meta, filter, field(...) }`
+  authoring objects exposed by `@io/graph-module`
+
 Key source files:
 
-- `../../src/graph/def.ts`
-- `../../src/graph/type-module.ts`
-- `../../src/graph/reference-policy.ts`
-- `../../src/graph/definition-contracts.ts`
+- `../../lib/graph-module/src/index.ts`
+- `../../lib/graph-module/src/type-module.ts`
+- `../../lib/graph-module/src/reference-policy.ts`
+- `../../lib/graph-module/src/definition-contracts.ts`
 
 ### React Runtime
 
@@ -100,8 +107,7 @@ they depend on core-schema conventions such as `core:predicate.key`,
 
 - Storage stays opaque and string-based; scalar decode/encode lives above it.
 - Field trees preserve authoring shape, but runtime linking uses resolved ids.
-- Reference fields should be authored through `defineReferenceField(...)` or
-  helpers layered on top of it.
+- Reference fields should be authored through `@io/graph-module`.
 - Store indexes remain an internal implementation detail; the public surface is
   still pattern lookups.
 - Transport and generic command dispatch remain consumer-owned.

@@ -8,20 +8,72 @@ import {
 } from "@io/graph-kernel";
 
 import {
+  defineDefaultEnumTypeModule,
+  defineEnum,
   defineSecretField,
+  defineType,
+  defineValidatedStringTypeModule,
   existingEntityReferenceField,
   existingEntityReferenceFieldMeta,
   readDefinitionIconId,
-} from "./def.js";
-import { core } from "./modules/core.js";
+} from "./index.js";
+
+const secretHandle = defineType({
+  values: { key: "probe:secretHandle", name: "Secret Handle" },
+  fields: {},
+});
+
+const status = defineEnum({
+  values: { key: "probe:status", name: "Status" },
+  options: {
+    draft: { name: "Draft" },
+    published: { name: "Published" },
+  },
+});
+
+const statusTypeModule = defineDefaultEnumTypeModule(status);
+
+const emailTypeModule = defineValidatedStringTypeModule({
+  values: { key: "probe:email", name: "Email" },
+  parse: (raw: string) => raw.trim().toLowerCase(),
+  filter: {
+    defaultOperator: "equals",
+    operators: {
+      equals: {
+        label: "Equals",
+        operand: {
+          kind: "string",
+          placeholder: "team@example.com",
+        },
+        parse: (raw: string) => raw.trim().toLowerCase(),
+        format: (operand: string) => operand,
+        test: (value: string, operand: string) => value === operand,
+      },
+      domain: {
+        label: "Domain",
+        operand: {
+          kind: "string",
+          placeholder: "example.com",
+        },
+        parse: (raw: string) => raw.trim().toLowerCase(),
+        format: (operand: string) => operand,
+        test: (value: string, operand: string) => value.endsWith(`@${operand}`),
+      },
+    },
+  },
+  placeholder: "team@example.com",
+  inputType: "email",
+  inputMode: "email",
+  autocomplete: "email",
+});
 
 const replicatedSecretField = defineSecretField({
-  range: core.secretHandle,
+  range: secretHandle,
   cardinality: "one?",
 });
 
 const hiddenSecretField = defineSecretField({
-  range: core.secretHandle,
+  range: secretHandle,
   cardinality: "one?",
   authority: {
     visibility: "authority-only",
@@ -30,7 +82,7 @@ const hiddenSecretField = defineSecretField({
 });
 
 const explicitSecretMetadataField = defineSecretField({
-  range: core.secretHandle,
+  range: secretHandle,
   cardinality: "one?",
   authority: {
     visibility: "authority-only",
@@ -40,7 +92,7 @@ const explicitSecretMetadataField = defineSecretField({
   rotateCapability: "secret:rotate",
 });
 
-describe("root graph definition helpers", () => {
+describe("@io/graph-module", () => {
   it("authors secret-backed fields without reimplementing kernel authority rules", () => {
     expect(fieldVisibility(replicatedSecretField)).toBe("replicated");
     expect(fieldWritePolicy(replicatedSecretField)).toBe("server-command");
@@ -62,7 +114,7 @@ describe("root graph definition helpers", () => {
     });
   });
 
-  it("keeps entity-reference policy helpers on the root definition surface", () => {
+  it("authors existing-entity reference policies as reusable field metadata", () => {
     expect(
       existingEntityReferenceFieldMeta({
         label: "Related items",
@@ -86,13 +138,13 @@ describe("root graph definition helpers", () => {
       },
     });
 
-    const field = existingEntityReferenceField(core.node, {
+    const field = existingEntityReferenceField(secretHandle, {
       cardinality: "many",
       label: "Related nodes",
       create: true,
     });
 
-    expect(field.range).toBe(core.node);
+    expect(field.range).toBe(secretHandle);
     expect(field).toMatchObject({
       cardinality: "many",
       meta: {
@@ -103,6 +155,43 @@ describe("root graph definition helpers", () => {
         },
       },
     });
+  });
+
+  it("ships generic enum-module defaults outside the built-in core module tree", () => {
+    const field = statusTypeModule.field({
+      cardinality: "one",
+      meta: {
+        display: {
+          kind: "badge",
+        },
+      },
+      filter: {
+        operators: ["is"] as const,
+      },
+    });
+
+    expect(statusTypeModule.type).toBe(status);
+    expect(field.meta.display.kind).toBe("badge");
+    expect(field.meta.editor.kind).toBe("select");
+    expect(field.filter.defaultOperator).toBe("is");
+    expect(Object.keys(field.filter.operators)).toEqual(["is"]);
+  });
+
+  it("ships generic validated-string helpers outside the built-in core module tree", () => {
+    const field = emailTypeModule.field({
+      cardinality: "one",
+      filter: {
+        operators: ["equals"] as const,
+      },
+    });
+
+    expect(emailTypeModule.type.values.key).toBe("probe:email");
+    expect(field.meta.editor.inputType).toBe("email");
+    expect(field.meta.editor.inputMode).toBe("email");
+    expect(field.meta.editor.autocomplete).toBe("email");
+    expect(field.meta.editor.parse?.(" TEAM@ACME.COM ")).toBe("team@acme.com");
+    expect(field.filter.defaultOperator).toBe("equals");
+    expect(Object.keys(field.filter.operators)).toEqual(["equals"]);
   });
 
   it("re-exports icon-ref reading for definition-time callers", () => {

@@ -1,11 +1,11 @@
+import { defineScalar, type DefinitionIconRef } from "@io/graph-kernel";
+
 import {
-  defineScalar,
   defineScalarModule,
-  type DefinitionIconRef,
   type EditorInputMode,
   type TypeModuleFilter,
   type TypeModuleMeta,
-} from "@io/core/graph/def";
+} from "./type-module.js";
 
 type ValidatedStringModuleInput<
   Key extends string,
@@ -25,6 +25,10 @@ type ValidatedStringModuleInput<
   autocomplete?: string;
 };
 
+/**
+ * Builds a scalar type module whose encode/decode contract is the provided
+ * string parser.
+ */
 export function defineValidatedStringTypeModule<
   const Key extends string,
   const Filter extends TypeModuleFilter<string, any>,

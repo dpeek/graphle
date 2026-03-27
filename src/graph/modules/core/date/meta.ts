@@ -1,4 +1,5 @@
-import type { TypeModuleMeta } from "../../../type-module.js";
+import type { TypeModuleMeta } from "@io/graph-module";
+
 import { formatDate } from "./parse.js";
 
 export const dateMeta = {

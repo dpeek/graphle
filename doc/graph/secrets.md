@@ -52,7 +52,7 @@ of it.
 ## Relevant Files
 
 - `../../src/graph/index.ts`
-- `../../src/graph/type-module.ts`
+- `../../lib/graph-module/src/type-module.ts`
 - `../../src/graph/modules/core/secret/type.ts`
 - `../../src/graph/modules/workflow/env-var/type.ts`
 - `../branch/01-graph-kernel-and-authority.md`

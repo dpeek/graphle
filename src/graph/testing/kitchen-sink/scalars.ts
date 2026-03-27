@@ -1,4 +1,4 @@
-import { defineScalar, defineScalarModule } from "@io/core/graph/def";
+import { defineScalar, defineScalarModule } from "@io/graph-module";
 
 function parseKitchenSinkScore(raw: string): number {
   const value = Number(raw);

@@ -24,7 +24,6 @@ type GraphPackageJson = {
 
 const canonicalGraphSubpaths = [
   "./graph",
-  "./graph/def",
   "./graph/modules",
   "./graph/modules/core",
   "./graph/modules/workflow",
@@ -62,27 +61,39 @@ const retiredGraphSubpaths = [
 const requiredRootExports = [
   "createIdMap",
   "applyIdMap",
-  "defineReferenceField",
-  "defineSecretField",
-  "defineType",
-  "existingEntityReferenceField",
-  "existingEntityReferenceFieldMeta",
   "fieldSecretMetadataVisibility",
   "graphFieldVisibilities",
   "graphFieldWritePolicies",
   "isGraphFieldVisibility",
   "isGraphFieldWritePolicy",
-  "readDefinitionIconId",
   "sanitizeSvgMarkup",
 ] as const;
 
-const requiredDefExports = [
+const forbiddenRootAuthoringExports = [
   "defineEnum",
-  "applyIdMap",
   "defineReferenceField",
   "defineScalar",
   "defineSecretField",
   "defineType",
+  "existingEntityReferenceField",
+  "existingEntityReferenceFieldMeta",
+  "readDefinitionIconId",
+] as const;
+
+const requiredGraphModuleExports = [
+  "defineDefaultEnumTypeModule",
+  "defineEnum",
+  "defineEnumModule",
+  "defineReferenceField",
+  "defineScalar",
+  "defineScalarModule",
+  "defineSecretField",
+  "defineType",
+  "defineValidatedStringTypeModule",
+  "entityReferenceComboboxEditorKind",
+  "entityReferenceListDisplayKind",
+  "existingEntityReferenceField",
+  "existingEntityReferenceFieldMeta",
   "readDefinitionIconId",
 ] as const;
 
@@ -222,19 +233,22 @@ describe("@io/core/graph package entry surfaces", () => {
     }
   });
 
-  it("keeps the root and schema-authoring surfaces focused", async () => {
-    const [rootExports, defExports] = await Promise.all([
+  it("keeps the root and module-authoring surfaces focused", async () => {
+    const [rootExports, moduleExports] = await Promise.all([
       import("@io/core/graph"),
-      import("@io/core/graph/def"),
+      import("@io/graph-module"),
     ]);
 
     expectNamedExports(rootExports, requiredRootExports);
-    expectNamedExports(defExports, requiredDefExports);
+    expectNamedExports(moduleExports, requiredGraphModuleExports);
 
     for (const name of forbiddenRootModuleExports) {
       expect(Object.keys(rootExports)).not.toContain(name);
     }
     for (const name of forbiddenProjectionContractValueExports) {
+      expect(Object.keys(rootExports)).not.toContain(name);
+    }
+    for (const name of forbiddenRootAuthoringExports) {
       expect(Object.keys(rootExports)).not.toContain(name);
     }
 
@@ -249,7 +263,15 @@ describe("@io/core/graph package entry surfaces", () => {
     expect(Object.keys(rootExports)).not.toContain("authorizeRead");
     expect(Object.keys(rootExports)).not.toContain("authorizeWrite");
     expect(Object.keys(rootExports)).not.toContain("authorizeCommand");
-    expect(Object.keys(defExports)).not.toContain("createStore");
+    expect(Object.keys(moduleExports)).not.toContain("applyIdMap");
+    expect(Object.keys(moduleExports)).not.toContain("authorizeRead");
+    expect(Object.keys(moduleExports)).not.toContain("bootstrap");
+    expect(Object.keys(moduleExports)).not.toContain("core");
+    expect(Object.keys(moduleExports)).not.toContain("createGraphClient");
+    expect(Object.keys(moduleExports)).not.toContain("createStore");
+    expect(Object.keys(moduleExports)).not.toContain("workflow");
+    const retiredDefSubpath = "@io/core/graph/def";
+    await expect(import(retiredDefSubpath)).rejects.toThrow();
     const retiredRuntimeSubpath = "@io/core/graph/runtime";
     await expect(import(retiredRuntimeSubpath)).rejects.toThrow();
     const retiredAuthoritySubpath = "@io/core/graph/authority";

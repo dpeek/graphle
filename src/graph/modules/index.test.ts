@@ -466,6 +466,8 @@ describe("module entry surfaces", () => {
     expect(moduleExports.rangeTypeModule).toBe(rangeTypeModule);
     expect(moduleExports.rateTypeModule).toBe(rateTypeModule);
     expect(moduleExports.svgTypeModule).toBe(svgTypeModule);
+    expect("defineDefaultEnumTypeModule" in moduleExports).toBe(false);
+    expect("defineValidatedStringTypeModule" in moduleExports).toBe(false);
   });
 
   it("keeps contract probes root-safe without polluting the canonical module tree", () => {

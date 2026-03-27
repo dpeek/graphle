@@ -24,6 +24,9 @@ type MetaDisplayKinds<Meta extends TypeModuleMeta<any, any, any>> =
   Meta extends TypeModuleMeta<any, infer DisplayKinds, any> ? DisplayKinds : readonly string[];
 type MetaEditorKinds<Meta extends TypeModuleMeta<any, any, any>> =
   Meta extends TypeModuleMeta<any, any, infer EditorKinds> ? EditorKinds : readonly string[];
+/**
+ * HTML input-mode hints that authoring metadata can attach to text editors.
+ */
 export type EditorInputMode =
   | "decimal"
   | "email"
@@ -61,6 +64,9 @@ type FieldFilterOperators<
   ? Pick<Filter["operators"], Allowed[number]>
   : Filter["operators"];
 
+/**
+ * Host-neutral metadata that travels with one scalar or enum type module.
+ */
 export type TypeModuleMeta<
   Decoded,
   DisplayKinds extends readonly string[] = readonly string[],
@@ -114,6 +120,10 @@ type TypeFilterEnumOperand<Operand> = unknown extends Operand
         selection: "one";
       };
 
+/**
+ * Declarative operand shape that host layers can use to render one filter
+ * operator input.
+ */
 export type TypeFilterOperand<Operand> =
   | {
       kind: "string";
@@ -137,6 +147,9 @@ export type TypeFilterOperand<Operand> =
     }
   | TypeFilterEnumOperand<Operand>;
 
+/**
+ * One decoded-value filter operator authored for a type module.
+ */
 export type TypeFilterOperator<
   Decoded,
   Operand,
@@ -149,6 +162,9 @@ export type TypeFilterOperator<
   test: (value: Decoded, operand: Operand) => boolean;
 };
 
+/**
+ * Named filter operators plus the default operator for one type module.
+ */
 export type TypeModuleFilter<
   Decoded,
   Operators extends Record<string, TypeFilterOperator<Decoded, any>> = Record<
@@ -160,11 +176,20 @@ export type TypeModuleFilter<
   operators: Operators;
 };
 
+/**
+ * Resolves the decoded value type carried by one scalar type definition.
+ */
 export type ScalarModuleValue<Type extends ScalarTypeOutput<any, any>> =
   Type extends ScalarTypeOutput<infer Decoded, any> ? Decoded : never;
+/**
+ * Resolves the authored value union carried by one enum type definition.
+ */
 export type EnumModuleValue<Type extends EnumTypeLike> = EnumOptionIdentity<
   Type["options"][keyof Type["options"]]
 >;
+/**
+ * Resolves the authored value type for either a scalar or enum definition.
+ */
 export type TypeModuleValue<Type extends ScalarTypeOutput<any, any> | EnumTypeLike> =
   Type extends ScalarTypeOutput<any, any>
     ? ScalarModuleValue<Type>
@@ -172,6 +197,9 @@ export type TypeModuleValue<Type extends ScalarTypeOutput<any, any> | EnumTypeLi
       ? EnumModuleValue<Type>
       : never;
 
+/**
+ * Field-local metadata overrides layered on top of a type module's defaults.
+ */
 export type FieldMetaOverride<Meta extends TypeModuleMeta<any, any, any>> = Omit<
   Partial<Meta>,
   "display" | "editor"
@@ -184,6 +212,9 @@ export type FieldMetaOverride<Meta extends TypeModuleMeta<any, any, any>> = Omit
   };
 };
 
+/**
+ * Field-local filter narrowing layered on top of a type module's defaults.
+ */
 export type FieldFilterOverride<
   Filter extends { operators: Record<string, unknown>; defaultOperator: string },
   Allowed extends readonly FilterKey<Filter>[] | undefined = undefined,
@@ -194,6 +225,9 @@ export type FieldFilterOverride<
     : FilterKey<Filter>;
 };
 
+/**
+ * Frozen field contract produced by `TypeModule.field(...)`.
+ */
 export type TypeModuleFieldInput<
   Type extends ScalarTypeOutput<any, any> | EnumTypeOutput<any, any>,
   Meta extends TypeModuleMeta<any, any, any>,
@@ -219,6 +253,9 @@ export type TypeModuleFieldInput<
 > &
   (CreateOptional extends true ? { createOptional: true } : {}) & { cardinality: Card };
 
+/**
+ * Base reference-field contract accepted by `defineReferenceField(...)`.
+ */
 export type ReferenceFieldInput<
   Range extends RangeRef = RangeRef,
   Extra extends object = {},
@@ -230,14 +267,32 @@ export type ReferenceFieldInput<
     cardinality: Card;
   };
 
-type TypeModuleShape<
+/**
+ * Reusable type-module authoring object returned by `defineScalarModule(...)`
+ * and `defineEnumModule(...)`.
+ */
+export type TypeModule<
   Type extends ScalarTypeOutput<any, any> | EnumTypeOutput<any, any>,
   Meta extends TypeModuleMeta<any, any, any>,
   Filter extends TypeModuleFilter<any, any>,
 > = {
+  /**
+   * Canonical scalar or enum type definition owned by this type module.
+   */
   type: Type;
+  /**
+   * Normalized default metadata applied to fields built from this type module.
+   */
   meta: NormalizedMeta<Meta>;
+  /**
+   * Normalized default filter contract applied to fields built from this type
+   * module.
+   */
   filter: NormalizedFilter<Filter>;
+  /**
+   * Freezes one field definition against the module's type, metadata defaults,
+   * and filter defaults.
+   */
   field<
     Card extends Cardinality,
     Allowed extends readonly FilterKey<NormalizedFilter<Filter>>[] | undefined = undefined,
@@ -335,7 +390,7 @@ function createTypeModule<
   Type extends ScalarTypeOutput<any, any> | EnumTypeOutput<any, any>,
   Meta extends TypeModuleMeta<any, any, any>,
   Filter extends TypeModuleFilter<any, any>,
->(input: { type: Type; meta: Meta; filter: Filter }): TypeModuleShape<Type, Meta, Filter> {
+>(input: { type: Type; meta: Meta; filter: Filter }): TypeModule<Type, Meta, Filter> {
   const moduleMeta = input.meta as NormalizedMeta<Meta>;
   const moduleFilter = input.filter as unknown as NormalizedFilter<Filter>;
 
@@ -383,14 +438,21 @@ function createTypeModule<
   };
 }
 
+/**
+ * Defines a reusable type module for one scalar type definition.
+ */
 export function defineScalarModule<
   const Type extends ScalarTypeOutput<any, any>,
   const Meta extends TypeModuleMeta<ScalarModuleValue<Type>, any, any>,
   const Filter extends TypeModuleFilter<ScalarModuleValue<Type>, any>,
->(input: { type: Type; meta: Meta; filter: Filter }): TypeModuleShape<Type, Meta, Filter> {
+>(input: { type: Type; meta: Meta; filter: Filter }): TypeModule<Type, Meta, Filter> {
   return createTypeModule(input);
 }
 
+/**
+ * Freezes an authored reference-field definition without adding runtime
+ * behavior.
+ */
 export function defineReferenceField<
   const Range extends RangeRef,
   const Extra extends object = {},
@@ -402,6 +464,9 @@ export function defineReferenceField<
   return input;
 }
 
+/**
+ * Input contract for `defineSecretField(...)`.
+ */
 export type SecretFieldInput = {
   range: RangeRef;
   cardinality: Cardinality;
@@ -416,6 +481,14 @@ const defaultSecretFieldAuthority = {
   write: "server-command",
 } as const satisfies Pick<GraphFieldAuthority, "visibility" | "write">;
 
+/**
+ * Authors a secret-backed reference field using the shared sealed-handle
+ * authority contract.
+ *
+ * The returned field always carries a concrete `authority.secret` payload and
+ * defaults to replicated visibility plus `server-command` writes unless the
+ * caller narrows those values explicitly.
+ */
 export function defineSecretField<const Input extends SecretFieldInput>(
   input: Input,
 ): Omit<Input, "authority" | "metadataVisibility" | "revealCapability" | "rotateCapability"> & {
@@ -462,10 +535,13 @@ export function defineSecretField<const Input extends SecretFieldInput>(
   };
 }
 
+/**
+ * Defines a reusable type module for one enum type definition.
+ */
 export function defineEnumModule<
   const Type extends EnumTypeOutput<any, any>,
   const Meta extends TypeModuleMeta<EnumModuleValue<Type>, any, any>,
   const Filter extends TypeModuleFilter<EnumModuleValue<Type>, any>,
->(input: { type: Type; meta: Meta; filter: Filter }): TypeModuleShape<Type, Meta, Filter> {
+>(input: { type: Type; meta: Meta; filter: Filter }): TypeModule<Type, Meta, Filter> {
   return createTypeModule(input);
 }

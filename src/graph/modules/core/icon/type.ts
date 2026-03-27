@@ -1,4 +1,4 @@
-import { defineType } from "@io/core/graph/def";
+import { defineType } from "@io/graph-module";
 
 import { normalizeSvgMarkup, validateSvgMarkup } from "../../../icon.js";
 import { node } from "../node/index.js";

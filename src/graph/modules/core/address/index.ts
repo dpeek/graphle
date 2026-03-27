@@ -1,4 +1,4 @@
-import { defineType } from "@io/core/graph/def";
+import { defineType } from "@io/graph-module";
 
 import { countryTypeModule } from "../country/index.js";
 import { stringTypeModule } from "../string/index.js";

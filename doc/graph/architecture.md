@@ -24,10 +24,9 @@ This document is the high-level entry point for agents reasoning about the engin
 
 - `../../lib/graph-kernel/src/`: canonical ids, append-only store primitives,
   schema helpers, stable-id utilities, and authoritative write envelopes
-- `../../src/graph/def.ts`, `../../src/graph/type-module.ts`,
-  `../../src/graph/reference-policy.ts`, and
-  `../../src/graph/definition-contracts.ts`: the remaining root-owned
-  definition-time helpers that do not belong in an extracted package
+- `../../lib/graph-module/src/`: module-definition authoring helpers,
+  reference-field policy, secret-field helpers, and pure authored command/view
+  and workflow contracts layered above the kernel
 - `../../lib/graph-bootstrap/src/`: schema bootstrap into live stores plus
   convergent bootstrapped snapshots
 - `../../lib/graph-client/src/`: typed CRUD, refs, local validation, synced-client state, write flushing, reconcile behavior, and HTTP/query client helpers
@@ -113,6 +112,8 @@ The likely direction is still the same as the legacy docs, but it should now be 
 - Keep predicate-specific rules with field definitions.
 - Keep store-dependent graph invariants in the shared runtime validation pass.
 - Keep UI adapter concerns outside the runtime core.
+- Keep module authoring in `@io/graph-module`, and keep installation or runtime
+  module management out of that package.
 
 ## Future Work Suggestions
 

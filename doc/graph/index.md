@@ -4,16 +4,20 @@
 
 The graph engine now spans the root `@io/core/graph` package plus the extracted
 `@io/graph-kernel`, `@io/graph-bootstrap`, `@io/graph-client`,
-`@io/graph-authority`, `@io/graph-sync`, and `@io/graph-projection` workspace
-packages.
+`@io/graph-module`, `@io/graph-authority`, `@io/graph-sync`, and
+`@io/graph-projection` workspace packages.
 
 The root `@io/core/graph` surface owns a small curated graph helper layer:
-selected kernel aliases, local definition authoring contracts on
-`@io/core/graph/def`, built-in namespace assembly, graph-owned icon helpers,
-and the graph-aware adapter layer that binds shared `@io/web` primitives to
-graph predicates. The extracted packages own the layered engine boundaries:
-kernel storage and write envelopes, schema bootstrap, typed client behavior,
-authoritative runtime behavior, sync contracts, and projection metadata.
+selected kernel aliases, built-in namespace assembly, graph-owned icon
+helpers, and the graph-aware adapter layer that binds shared `@io/web`
+primitives to graph predicates. The extracted packages own the layered engine
+boundaries: kernel storage and write envelopes, module-definition authorship,
+schema bootstrap, typed client behavior, authoritative runtime behavior, sync
+contracts, and projection metadata.
+
+Naming note: `@io/graph-module` is the extracted authoring package. Concrete
+built-in graph modules such as `core` and `workflow` still live under
+`../../src/graph/modules/`.
 
 ## Browser Editor Boundary
 
@@ -75,9 +79,7 @@ The root `@io/core` package publishes these graph subpaths from
 `../../package.json`:
 
 - `@io/core/graph`: `../../src/graph/index.ts`; re-exports
-  curated kernel aliases plus graph-owned icon and reference helpers
-- `@io/core/graph/def`: `../../src/graph/def.ts`; focused schema and
-  type-module authoring exports plus root-owned definition contracts
+  curated kernel aliases plus graph-owned icon helpers
 - `@io/core/graph/modules`: `../../src/graph/modules/index.ts`; canonical
   namespace root plus representative built-ins
 - `@io/core/graph/modules/core`, `@io/core/graph/modules/workflow`:
@@ -89,6 +91,9 @@ The workspace also publishes:
 - `@io/graph-kernel`: `../../lib/graph-kernel/src/index.ts`; opaque ids,
   append-oriented store primitives, schema helpers, stable-id utilities, and
   authoritative write-envelope contracts
+- `@io/graph-module`: `../../lib/graph-module/src/index.ts`; module-definition
+  authoring helpers, reference-policy helpers, pure authored contracts, and a
+  curated re-export of kernel schema-authoring primitives
 - `@io/graph-bootstrap`: `../../lib/graph-bootstrap/src/index.ts`; additive
   schema bootstrap and convergent bootstrapped snapshots
 - `@io/graph-authority`: `../../lib/graph-authority/src/index.ts`; persisted
@@ -108,19 +113,18 @@ The workspace also publishes:
   contracts, and retained projection compatibility helpers
 
 The root `@io/core/graph` surface stays focused on a small helper layer,
-definition-time exports, modules, adapters, and icon contracts. Bootstrap,
-client, authority, sync, and projection APIs now live on their extracted
-packages. Module namespaces, slice exports, and host adapters stay on their
-dedicated root-package subpaths.
+modules, adapters, and icon contracts. Definition-time authorship now lives on
+`@io/graph-module`. Bootstrap, client, authority, sync, and projection APIs
+live on their extracted packages. Module namespaces, slice exports, and host
+adapters stay on their dedicated root-package subpaths.
 
 ## Source Layout
 
 - `../../lib/graph-kernel/src/`: canonical ids, store primitives, schema
   helpers, stable-id reconciliation, and authoritative write envelopes
-- `../../src/graph/def.ts`, `../../src/graph/type-module.ts`,
-  `../../src/graph/reference-policy.ts`, and
-  `../../src/graph/definition-contracts.ts`: root-owned definition-authoring
-  helpers that do not belong in an extracted package
+- `../../lib/graph-module/src/`: module-definition authoring helpers,
+  reference-field policy, secret-field helpers, and pure authored
+  command/view/workflow contracts
 - `../../src/graph/inspect.ts`: internal graph inspection helpers; not part of
   the published package surface
 - `../../lib/graph-bootstrap/src/`: additive bootstrap runtime and convergent

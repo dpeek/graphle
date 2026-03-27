@@ -3,9 +3,9 @@
  *
  * Internal callers should prefer the owning package (`@io/graph-kernel`,
  * `@io/graph-authority`, `@io/graph-bootstrap`, and friends) over this umbrella
- * barrel. This surface stays focused on a small set of low-level kernel aliases
- * plus root-owned graph helpers such as SVG sanitization and definition-only
- * reference helpers.
+ * barrel. Module-definition authoring now lives on `@io/graph-module`; this
+ * surface stays focused on low-level kernel aliases plus root-owned helpers
+ * such as SVG sanitization.
  */
 export {
   applyGraphIdMap as applyIdMap,
@@ -14,9 +14,6 @@ export {
   createGraphIdMap as createIdMap,
   createGraphStore as createStore,
   createFallbackPolicyDescriptor,
-  defineEnum,
-  defineScalar,
-  defineType,
   edgeId,
   extractGraphSchemaKeys as extractSchemaKeys,
   fieldPolicyDescriptor,
@@ -36,7 +33,6 @@ export {
   isGraphFieldWritePolicy,
   isScalarType,
   isSecretBackedField,
-  readDefinitionIconId,
   rangeOf,
   resolveFieldPolicyDescriptor,
   typeId,
@@ -74,9 +70,4 @@ export {
   type ValidationIssueInput,
 } from "@io/graph-kernel";
 
-export { defineReferenceField, defineSecretField } from "./type-module.js";
-export {
-  existingEntityReferenceField,
-  existingEntityReferenceFieldMeta,
-} from "./reference-policy.js";
 export { sanitizeSvgMarkup, type SvgSanitizationResult } from "./icon.js";

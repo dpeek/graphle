@@ -1,4 +1,4 @@
-import type { TypeModuleFilter } from "@io/core/graph/def";
+import type { TypeModuleFilter } from "@io/graph-module";
 
 function parseBoolean(raw: string): boolean {
   if (raw === "true") return true;

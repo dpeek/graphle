@@ -1,4 +1,4 @@
-import type { TypeModuleFilter } from "../../../type-module.js";
+import type { TypeModuleFilter } from "@io/graph-module";
 
 function parseUrl(raw: string): URL {
   return new URL(raw);

@@ -1,4 +1,4 @@
-import { defineType } from "@io/core/graph/def";
+import { defineType } from "@io/graph-module";
 
 import { colorTypeModule } from "../color/index.js";
 import { graphIconSeeds } from "../icon/seed.js";

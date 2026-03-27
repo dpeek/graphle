@@ -1,10 +1,10 @@
-import { defineEnum, defineType } from "@io/core/graph/def";
+import { defineEnum, defineType } from "@io/graph-module";
+import { existingEntityReferenceField } from "@io/graph-module";
+import { defineDefaultEnumTypeModule } from "@io/graph-module";
 
-import { existingEntityReferenceField } from "../../reference-policy.js";
 import { core } from "../core.js";
 import { booleanTypeModule } from "../core/boolean/index.js";
 import { dateTypeModule } from "../core/date/index.js";
-import { defineDefaultEnumTypeModule } from "../core/enum-module.js";
 import { jsonTypeModule } from "../core/json/index.js";
 import { numberTypeModule } from "../core/number/index.js";
 import { stringTypeModule } from "../core/string/index.js";

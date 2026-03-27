@@ -1,12 +1,13 @@
-import { defineEnum, defineType } from "@io/core/graph/def";
-
 import {
+  defineDefaultEnumTypeModule,
+  defineEnum,
+  defineType,
   entityReferenceComboboxEditorKind,
   existingEntityReferenceField,
-} from "../../../reference-policy.js";
+} from "@io/graph-module";
+
 import { core } from "../../core.js";
 import { booleanTypeModule } from "../../core/boolean/index.js";
-import { defineDefaultEnumTypeModule } from "../../core/enum-module.js";
 import { markdownTypeModule } from "../../core/markdown/index.js";
 import { numberTypeModule } from "../../core/number/index.js";
 import { slugTypeModule } from "../../core/slug/index.js";

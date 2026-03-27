@@ -4,8 +4,6 @@ import {
   createIdMap,
   createStore,
   applyIdMap,
-  defineSecretField,
-  defineType,
   edgeId,
   type AnyTypeOutput,
   type GraphStoreSnapshot,
@@ -27,6 +25,7 @@ import {
   type SerializedQueryRequest,
 } from "@io/graph-client";
 import { type GraphWriteTransaction } from "@io/graph-kernel";
+import { defineSecretField, defineType } from "@io/graph-module";
 import { type InvalidationEvent } from "@io/graph-projection";
 
 import {

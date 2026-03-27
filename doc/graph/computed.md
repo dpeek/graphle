@@ -66,23 +66,23 @@ alongside the typed client surface, not inside the schema-agnostic kernel.
 The extracted package split changes where each part of this feature should
 live.
 
-### Definition-time authoring belongs on `@io/core/graph/def`
+### Definition-time authoring belongs on `@io/graph-module`
 
-Schema authors should define computed predicates through `@io/core/graph/def`,
-the same focused root-owned authoring surface that already gathers:
+Schema authors should define computed predicates through `@io/graph-module`,
+the same focused authoring surface that already gathers:
 
 - `defineType(...)`, `defineScalar(...)`, and `defineEnum(...)` from
   `@io/graph-kernel`
 - field-authoring helpers such as `defineReferenceField(...)`
-- root-owned definition-time contracts that do not belong in an extracted
-  runtime package cleanly
+- pure definition-time contracts that do not belong in a runtime package
+  cleanly
 
 That keeps model authoring coherent. A type author should not need to import
 `@io/graph-client` just to declare that a type has computed predicates.
 
 In the current source tree, that means the canonical import surface is
-`../../src/graph/def.ts`, with the actual computed-definition helpers likely
-living in a small root-owned definition module re-exported from that barrel.
+`../../lib/graph-module/src/index.ts`, with the actual computed-definition
+helpers likely living in a small sibling module re-exported from that package.
 
 ### Runtime evaluation belongs in `@io/graph-client`
 
@@ -183,11 +183,11 @@ happen while the compute function runs.
 The cleanest first shape is to define computed values adjacent to a durable type
 definition rather than mixing them into `defineType(...)` itself.
 
-The canonical authoring import should be `@io/core/graph/def`, even though the
+The canonical authoring import should be `@io/graph-module`, even though the
 evaluation runtime lives elsewhere.
 
 ```ts
-import { computed, defineComputed, defineType } from "@io/core/graph/def";
+import { computed, defineComputed, defineType } from "@io/graph-module";
 ```
 
 ```ts
@@ -227,7 +227,7 @@ The important properties of that shape are:
 - computed values are explicitly grouped under `computed`
 - the body uses ordinary typed refs, not a special dependency DSL
 - return type metadata stays explicit enough for inference and tooling
-- the schema author stays on the root-owned definition surface rather than
+- the schema author stays on the module-authoring surface rather than
   importing client runtime internals
 
 Whether the helper ends up named `defineComputed(...)`, `defineDerived(...)`, or
@@ -514,20 +514,20 @@ subscription behavior become.
 This feature should not force major package reshaping, but it does need one
 clear split between definition-time helpers and runtime evaluation.
 
-### Root-owned definition surface
+### Module-authoring surface
 
-Definition-only helpers should be exported from `../../src/graph/def.ts`.
+Definition-only helpers should be exported from
+`../../lib/graph-module/src/index.ts`.
 
-That barrel already exists to gather:
+That package already exists to gather:
 
 - kernel-owned schema primitives that remain part of the authoring surface
-- root-owned definition helpers that do not fit an extracted package cleanly
-- root-owned definition contracts such as command and view manifests
+- module-owned definition helpers that do not fit a runtime package cleanly
+- pure definition contracts such as command and view manifests
 
 Computed-predicate authoring utilities belong in that same category. The
-underlying implementation likely belongs in a small sibling module such as a
-new computed-definition file re-exported from `def.ts`, rather than inside
-`@io/graph-client`.
+underlying implementation likely belongs in a small sibling module re-exported
+from `@io/graph-module`, rather than inside `@io/graph-client`.
 
 ### Client runtime
 
@@ -575,7 +575,7 @@ itself as a client-side read abstraction.
 
 The smallest useful implementation would be:
 
-1. introduce definition-time helpers on `@io/core/graph/def` such as
+1. introduce definition-time helpers on `@io/graph-module` such as
    `computed(...)` and `defineComputed(...)`
 2. introduce a `ComputedRef<T>` runtime contract with `get()` and
    `subscribe(...)` in `@io/graph-client`
@@ -590,7 +590,7 @@ query planner or a new persistence model.
 
 ## Open Design Questions
 
-- Assuming the canonical import stays `@io/core/graph/def`, should computed
+- Assuming the canonical import stays `@io/graph-module`, should computed
   definitions live entirely beside `defineType(...)`, or should type authoring
   eventually grow a `computed` section?
 - Should the first cut allow custom equality for expensive or unordered derived

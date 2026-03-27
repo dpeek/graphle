@@ -1,4 +1,5 @@
-import type { TypeModuleFilter } from "../../../type-module.js";
+import type { TypeModuleFilter } from "@io/graph-module";
+
 import { structuredValuePartEquals } from "../structured-value.js";
 import { formatRate, parseRate, type RateValue } from "./type.js";
 

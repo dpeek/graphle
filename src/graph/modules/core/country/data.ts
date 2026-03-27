@@ -1,4 +1,4 @@
-import type { EnumOptionInput } from "@io/core/graph/def";
+import type { EnumOptionInput } from "@io/graph-module";
 
 type CountryOptionData = EnumOptionInput & {
   name: string;

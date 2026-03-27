@@ -1,19 +1,21 @@
 import { isSecretBackedField } from "@io/graph-kernel";
 
 import {
+  defineDefaultEnumTypeModule,
   defineEnum,
   defineReferenceField,
   defineScalar,
   defineScalarModule,
   defineSecretField,
   defineType,
+  defineValidatedStringTypeModule,
   existingEntityReferenceField,
+  type GraphCommandSpec,
   type GraphSecretFieldAuthority,
-} from "./def.js";
-import { core } from "./modules/core.js";
-import { booleanTypeModule } from "./modules/core/boolean/index.js";
-import { defineDefaultEnumTypeModule } from "./modules/core/enum-module.js";
-import { stringTypeModule } from "./modules/core/string/index.js";
+  type ObjectViewSpec,
+  type TypeModule,
+  type WorkflowSpec,
+} from "./index.js";
 
 const probeStringType = defineScalar({
   values: { key: "probe:string", name: "Probe String" },
@@ -21,8 +23,19 @@ const probeStringType = defineScalar({
   decode: (raw) => raw,
 });
 
+const probeBooleanType = defineScalar({
+  values: { key: "probe:boolean", name: "Probe Boolean" },
+  encode: (value: boolean) => (value ? "true" : "false"),
+  decode: (raw) => raw === "true",
+});
+
 const probeEntityType = defineType({
   values: { key: "probe:entity", name: "Probe Entity" },
+  fields: {},
+});
+
+const probeSecretHandleType = defineType({
+  values: { key: "probe:secretHandle", name: "Probe Secret Handle" },
   fields: {},
 });
 
@@ -35,6 +48,73 @@ const probeStatusType = defineEnum({
 });
 
 const probeStatusTypeModule = defineDefaultEnumTypeModule(probeStatusType);
+
+const probeStringTypeModule = defineValidatedStringTypeModule({
+  values: { key: "probe:validatedString", name: "Probe Validated String" },
+  parse: (raw: string) => raw.trim(),
+  filter: {
+    defaultOperator: "equals",
+    operators: {
+      equals: {
+        label: "Equals",
+        operand: {
+          kind: "string",
+        },
+        parse: (raw: string) => raw.trim(),
+        format: (operand: string) => operand,
+        test: (value: string, operand: string) => value === operand,
+      },
+      contains: {
+        label: "Contains",
+        operand: {
+          kind: "string",
+        },
+        parse: (raw: string) => raw.trim(),
+        format: (operand: string) => operand,
+        test: (value: string, operand: string) => value.includes(operand),
+      },
+    },
+  },
+});
+
+const probeBooleanTypeModule = defineScalarModule({
+  type: probeBooleanType,
+  meta: {
+    display: {
+      kind: "boolean",
+      allowed: ["boolean", "text"] as const,
+    },
+    editor: {
+      kind: "checkbox",
+      allowed: ["checkbox", "switch"] as const,
+    },
+  },
+  filter: {
+    defaultOperator: "is",
+    operators: {
+      is: {
+        label: "Is",
+        operand: {
+          kind: "boolean",
+        },
+        parse: (raw: string) => raw === "true",
+        format: (operand: boolean) => String(operand),
+        test: (value: boolean, operand: boolean) => value === operand,
+      },
+      isNot: {
+        label: "Is not",
+        operand: {
+          kind: "boolean",
+        },
+        parse: (raw: string) => raw === "true",
+        format: (operand: boolean) => String(operand),
+        test: (value: boolean, operand: boolean) => value !== operand,
+      },
+    },
+  },
+});
+
+void (probeBooleanTypeModule satisfies TypeModule<any, any, any>);
 
 void defineReferenceField({
   range: probeEntityType,
@@ -55,7 +135,7 @@ void existingEntityReferenceField(probeEntityType, {
 });
 
 const secretField = defineSecretField({
-  range: core.secretHandle,
+  range: probeSecretHandleType,
   cardinality: "one?",
   revealCapability: "secret:reveal",
   rotateCapability: "secret:rotate",
@@ -72,7 +152,7 @@ if (isSecretBackedField(secretField)) {
   void secretField.authority.secret.command;
 }
 
-void stringTypeModule.field({
+void probeStringTypeModule.field({
   cardinality: "one",
   authority: {
     visibility: "authority-only",
@@ -80,13 +160,13 @@ void stringTypeModule.field({
   },
   meta: {
     editor: {
-      kind: "textarea",
+      kind: "text",
       multiline: true,
     },
   },
 });
 
-void stringTypeModule.field({
+void probeStringTypeModule.field({
   cardinality: "one",
   meta: {
     editor: {
@@ -96,7 +176,7 @@ void stringTypeModule.field({
   },
 });
 
-void stringTypeModule.field({
+void probeStringTypeModule.field({
   cardinality: "one",
   filter: {
     // @ts-expect-error string fields cannot narrow to unknown filter operators
@@ -113,7 +193,7 @@ void probeStatusTypeModule.field({
   },
 });
 
-void booleanTypeModule.field({
+void probeBooleanTypeModule.field({
   cardinality: "one?",
   meta: {
     editor: {
@@ -122,7 +202,7 @@ void booleanTypeModule.field({
   },
 });
 
-void booleanTypeModule.field({
+void probeBooleanTypeModule.field({
   cardinality: "one?",
   meta: {
     editor: {
@@ -165,3 +245,50 @@ void defineScalarModule({
     },
   },
 });
+
+void ({
+  key: "probe:view",
+  entity: probeEntityType.values.key,
+  titleField: "name",
+  sections: [
+    {
+      key: "summary",
+      title: "Summary",
+      fields: [{ path: "name", label: "Name", span: 2 }],
+    },
+  ],
+  commands: ["probe:save"],
+} satisfies ObjectViewSpec);
+
+void ({
+  key: "probe:save",
+  label: "Save probe",
+  subject: probeEntityType.values.key,
+  execution: "optimisticVerify",
+  input: {
+    name: "Probe",
+  },
+  output: {
+    itemId: "probe-1",
+  },
+} satisfies GraphCommandSpec<{ name: string }, { itemId: string }>);
+
+void ({
+  key: "probe:workflow",
+  label: "Probe workflow",
+  description: "Review a probe entity.",
+  subjects: [probeEntityType.values.key],
+  steps: [
+    {
+      key: "review",
+      title: "Review",
+      objectView: "probe:view",
+    },
+    {
+      key: "save",
+      title: "Save",
+      command: "probe:save",
+    },
+  ],
+  commands: ["probe:save"],
+} satisfies WorkflowSpec);

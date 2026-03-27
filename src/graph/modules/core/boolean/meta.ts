@@ -1,4 +1,4 @@
-import type { TypeModuleMeta } from "@io/core/graph/def";
+import type { TypeModuleMeta } from "@io/graph-module";
 
 export const booleanMeta = {
   summary: {

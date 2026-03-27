@@ -1,10 +1,10 @@
 import { describe, expect, it } from "bun:test";
 
 import { createIdMap, createStore, applyIdMap } from "@io/core/graph";
-import { defineType } from "@io/core/graph/def";
 import { core, coreGraphBootstrapOptions } from "@io/core/graph/modules";
 import { bootstrap } from "@io/graph-bootstrap";
 import { createGraphClient, GraphValidationError } from "@io/graph-client";
+import { defineType } from "@io/graph-module";
 
 import {
   createGraphFieldResolver,

@@ -1,16 +1,16 @@
 import {
-  entityReferenceComboboxEditorKind,
-  entityReferenceListDisplayKind,
-  type EditorInputMode,
-  type ExistingEntityReferencePolicy,
-} from "@io/core/graph/def";
-import {
   type EntityRef,
   type PredicateRangeTypeOf,
   type PredicateRef,
   type PredicateValueOf,
 } from "@io/graph-client";
 import { isEntityType, isEnumType, type AnyTypeOutput, type EdgeOutput } from "@io/graph-kernel";
+import {
+  entityReferenceComboboxEditorKind,
+  entityReferenceListDisplayKind,
+  type EditorInputMode,
+  type ExistingEntityReferencePolicy,
+} from "@io/graph-module";
 import { useMemo, useRef, useSyncExternalStore } from "react";
 
 export type PredicateFieldMeta<T extends EdgeOutput> = T extends { meta: infer Meta }

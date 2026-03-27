@@ -1,10 +1,11 @@
 import { describe, expect, it } from "bun:test";
 
-import { createStore, applyIdMap, defineScalar, defineType, edgeId } from "@io/core/graph";
+import { createStore, applyIdMap, edgeId } from "@io/core/graph";
 import { core, coreGraphBootstrapOptions, stringTypeModule } from "@io/core/graph/modules";
 import { createAuthoritativeGraphWriteSession as createResolvedAuthoritativeGraphWriteSession } from "@io/graph-authority";
 import { bootstrap } from "@io/graph-bootstrap";
 import { createSyncedGraphClient, createGraphClient, GraphValidationError } from "@io/graph-client";
+import { defineScalar, defineType } from "@io/graph-module";
 import { createTotalSyncPayload } from "@io/graph-sync";
 
 import { testNamespace } from "./test-graph.js";

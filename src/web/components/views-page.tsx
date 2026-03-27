@@ -7,7 +7,6 @@ import {
   genericWebFieldEditorCapabilities,
   genericWebFieldViewCapabilities,
 } from "@io/core/graph/adapters/react-dom";
-import { defineType } from "@io/core/graph/def";
 import {
   core,
   coreGraphBootstrapOptions,
@@ -16,6 +15,7 @@ import {
 } from "@io/core/graph/modules";
 import { bootstrap } from "@io/graph-bootstrap";
 import { createGraphClient, serializedQueryVersion, type PredicateRef } from "@io/graph-client";
+import { defineType } from "@io/graph-module";
 import {
   getPredicateDisplayKind,
   getPredicateEditorKind,

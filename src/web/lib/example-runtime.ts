@@ -1,4 +1,4 @@
-import { createIdMap, applyIdMap, defineType, createStore } from "@io/core/graph";
+import { createIdMap, applyIdMap, createStore } from "@io/core/graph";
 import { core, coreGraphBootstrapOptions } from "@io/core/graph/modules";
 import { workflow } from "@io/core/graph/modules/workflow";
 import { createAuthoritativeGraphWriteSession } from "@io/graph-authority";
@@ -14,6 +14,7 @@ import {
   type GraphWriteScope,
   type GraphWriteTransaction,
 } from "@io/graph-kernel";
+import { defineType } from "@io/graph-module";
 import {
   createTotalSyncPayload,
   type IncrementalSyncResult,

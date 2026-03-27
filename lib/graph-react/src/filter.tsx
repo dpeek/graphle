@@ -1,4 +1,3 @@
-import type { TypeFilterOperator } from "@io/core/graph/def";
 import { type PredicateRef } from "@io/graph-client";
 import {
   isEnumType,
@@ -7,6 +6,7 @@ import {
   type ResolvedAnyTypeOutput,
   typeId,
 } from "@io/graph-kernel";
+import type { TypeFilterOperator } from "@io/graph-module";
 import type { ComponentType, ReactNode } from "react";
 
 type FieldFilterContract = {

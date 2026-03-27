@@ -1,5 +1,6 @@
+import { defineValidatedStringTypeModule } from "@io/graph-module";
+
 import { graphIconSeeds } from "../icon/seed.js";
-import { defineValidatedStringTypeModule } from "../validated-string.js";
 import { emailFilter } from "./filter.js";
 import { emailAddressLabel, parseEmail } from "./parse.js";
 

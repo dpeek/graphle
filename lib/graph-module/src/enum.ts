@@ -1,10 +1,11 @@
+import type { EnumTypeOutput } from "@io/graph-kernel";
+
 import {
   defineEnumModule,
   type EnumModuleValue,
   type TypeModuleFilter,
   type TypeModuleMeta,
-} from "@io/core/graph/def";
-import type { EnumTypeOutput } from "@io/core/graph/def";
+} from "./type-module.js";
 
 type DefaultEnumModuleValue<Type extends EnumTypeOutput<any, any>> = EnumModuleValue<Type>;
 
@@ -33,6 +34,10 @@ function createEnumValueParser<Type extends EnumTypeOutput<any, any>>(
   };
 }
 
+/**
+ * Builds the default type-module metadata and filter contract for an enum
+ * definition.
+ */
 export function defineDefaultEnumTypeModule<const Type extends EnumTypeOutput<any, any>>(
   type: Type,
 ) {

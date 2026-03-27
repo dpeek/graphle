@@ -5,6 +5,10 @@
 `../../src/graph/modules/` owns built-in graph namespaces and the slice code
 that backs the published module subpaths.
 
+This document is about concrete built-in graph modules. The extracted
+`@io/graph-module` package that owns type-module authoring helpers is covered
+in [`type-modules.md`](./type-modules.md).
+
 ## Public Entry Surfaces
 
 - `@io/core/graph/modules`: `../../src/graph/modules/index.ts`; re-exports

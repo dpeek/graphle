@@ -1,4 +1,5 @@
-import { defineScalarModule } from "../../../type-module.js";
+import { defineScalarModule } from "@io/graph-module";
+
 import { rangeFilter } from "./filter.js";
 import { rangeMeta } from "./meta.js";
 import {

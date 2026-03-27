@@ -1,6 +1,6 @@
-import { defineEnum } from "@io/core/graph/def";
+import { defineEnum } from "@io/graph-module";
+import { defineDefaultEnumTypeModule } from "@io/graph-module";
 
-import { defineDefaultEnumTypeModule } from "../enum-module.js";
 import { graphIconSeeds } from "../icon/seed.js";
 import { countryOptions } from "./data.js";
 

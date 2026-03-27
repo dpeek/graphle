@@ -1,6 +1,7 @@
-import type { TypeModuleFilter } from "../../../type-module.js";
+import type { TypeModuleFilter } from "@io/graph-module";
+import { defineValidatedStringTypeModule } from "@io/graph-module";
+
 import { graphIconSeeds } from "../icon/seed.js";
-import { defineValidatedStringTypeModule } from "../validated-string.js";
 
 const slugLabel = "company-slug";
 const slugPattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;

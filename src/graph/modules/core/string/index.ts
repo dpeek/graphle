@@ -1,4 +1,5 @@
-import { defineScalarModule } from "../../../type-module.js";
+import { defineScalarModule } from "@io/graph-module";
+
 import { stringFilter } from "./filter.js";
 import { stringMeta } from "./meta.js";
 import { stringType } from "./type.js";

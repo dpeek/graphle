@@ -1,20 +1,42 @@
 import type { Cardinality, RangeRef } from "@io/graph-kernel";
 
-import type { ReferenceFieldInput } from "./type-module.js";
-import { defineReferenceField } from "./type-module.js";
+import type { ReferenceFieldInput } from "./type.js";
+import { defineReferenceField } from "./type.js";
 
+/**
+ * Canonical display kind for read-only entity-reference collections.
+ */
 export const entityReferenceListDisplayKind = "entity-reference-list";
+
+/**
+ * Canonical editor kind for entity-reference search and selection.
+ */
 export const entityReferenceComboboxEditorKind = "entity-reference-combobox";
 
+/**
+ * Editor kinds supported by the shared existing-entity reference policy.
+ */
 export type EntityReferenceEditorKind = typeof entityReferenceComboboxEditorKind;
+
+/**
+ * Collection ordering semantics supported by the shared existing-entity
+ * reference policy.
+ */
 export type EntityReferenceCollectionKind = "ordered" | "unordered";
 
+/**
+ * Shared policy payload for fields that only permit selecting existing
+ * entities.
+ */
 export type ExistingEntityReferencePolicy = {
   selection: "existing-only";
   create: boolean;
   excludeSubject?: boolean;
 };
 
+/**
+ * Host-neutral metadata payload attached to existing-entity reference fields.
+ */
 export type EntityReferenceFieldMeta = {
   label?: string;
   reference: ExistingEntityReferencePolicy;
@@ -26,6 +48,10 @@ export type EntityReferenceFieldMeta = {
   };
 };
 
+/**
+ * Produces the shared authored metadata contract for existing-entity reference
+ * fields.
+ */
 export function existingEntityReferenceFieldMeta(input?: {
   label?: string;
   create?: boolean;
@@ -56,6 +82,9 @@ type ExistingEntityReferenceFieldInput<Range extends RangeRef, Card extends Card
   excludeSubject?: boolean;
 };
 
+/**
+ * Authors a reference field that only permits selecting existing entities.
+ */
 export function existingEntityReferenceField<
   const Range extends RangeRef,
   const Card extends Cardinality,

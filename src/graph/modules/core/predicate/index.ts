@@ -1,6 +1,6 @@
-import { defineType } from "@io/core/graph/def";
+import { defineType } from "@io/graph-module";
+import { defineReferenceField } from "@io/graph-module";
 
-import { defineReferenceField } from "../../../type-module.js";
 import { cardinalityTypeModule } from "../cardinality/index.js";
 import { iconReferenceField } from "../icon/index.js";
 import { graphIconSeeds } from "../icon/seed.js";

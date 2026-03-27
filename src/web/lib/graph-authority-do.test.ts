@@ -5,8 +5,6 @@ import {
   createIdMap,
   createStore,
   applyIdMap,
-  defineSecretField,
-  defineType,
   edgeId,
   type AnyTypeOutput,
   type GraphStoreSnapshot,
@@ -30,6 +28,7 @@ import {
   type AuthoritativeGraphRetainedHistoryPolicy,
   type GraphWriteTransaction,
 } from "@io/graph-kernel";
+import { defineSecretField, defineType } from "@io/graph-module";
 
 import {
   createBearerShareAuthorizationContext,

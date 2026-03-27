@@ -1,4 +1,4 @@
-import { defineScalar } from "@io/core/graph/def";
+import { defineScalar } from "@io/graph-module";
 
 import { graphIconSeeds } from "../icon/seed.js";
 import { expectUrlInput } from "../input.js";

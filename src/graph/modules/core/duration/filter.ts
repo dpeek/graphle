@@ -1,4 +1,5 @@
-import type { TypeModuleFilter } from "../../../type-module.js";
+import type { TypeModuleFilter } from "@io/graph-module";
+
 import { formatDuration, parseDuration } from "./type.js";
 
 export const durationFilter = {
