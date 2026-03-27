@@ -1,5 +1,5 @@
 import { type GraphClient } from "@io/graph-client";
-import { applyGraphIdMap as applyIdMap } from "@io/graph-kernel";
+import { applyGraphIdMap as applyIdMap, type ResolvedGraphNamespace } from "@io/graph-kernel";
 import { core } from "@io/graph-module-core";
 import {
   findRetainedProjectionRecord,
@@ -55,6 +55,39 @@ import {
   contextBundleEntrySource,
 } from "./type.js";
 import workflowIds from "./workflow.json";
+
+type ProjectionWorkflowSchemaInput = {
+  agentSession: typeof agentSession;
+  agentSessionEvent: typeof agentSessionEvent;
+  agentSessionEventPhase: typeof agentSessionEventPhase;
+  agentSessionEventType: typeof agentSessionEventType;
+  agentSessionKind: typeof agentSessionKind;
+  agentSessionRawLineEncoding: typeof agentSessionRawLineEncoding;
+  agentSessionRuntimeState: typeof agentSessionRuntimeState;
+  agentSessionStatusCode: typeof agentSessionStatusCode;
+  agentSessionStatusFormat: typeof agentSessionStatusFormat;
+  agentSessionStream: typeof agentSessionStream;
+  agentSessionSubjectKind: typeof agentSessionSubjectKind;
+  artifact: typeof artifact;
+  artifactKind: typeof artifactKind;
+  branch: typeof branch;
+  branchState: typeof branchState;
+  commit: typeof commit;
+  commitState: typeof commitState;
+  contextBundle: typeof contextBundle;
+  contextBundleEntry: typeof contextBundleEntry;
+  contextBundleEntrySource: typeof contextBundleEntrySource;
+  decision: typeof decision;
+  decisionKind: typeof decisionKind;
+  project: typeof project;
+  repository: typeof repository;
+  repositoryBranch: typeof repositoryBranch;
+  repositoryCommit: typeof repositoryCommit;
+  repositoryCommitLeaseState: typeof repositoryCommitLeaseState;
+  repositoryCommitState: typeof repositoryCommitState;
+};
+
+type ProjectionWorkflowSchema = ResolvedGraphNamespace<ProjectionWorkflowSchemaInput>;
 
 export const projectBranchScopeFailureCodes = [
   "project-not-found",
@@ -195,7 +228,7 @@ export interface CommitQueueScopeResult {
   readonly rows: readonly CommitQueueScopeCommitRow[];
 }
 
-const projectionWorkflowSchema = applyIdMap(workflowIds, {
+const projectionWorkflowSchema: ProjectionWorkflowSchema = applyIdMap(workflowIds, {
   project,
   repository,
   branchState,
@@ -226,11 +259,13 @@ const projectionWorkflowSchema = applyIdMap(workflowIds, {
   contextBundleEntry,
 });
 
-export const projectionSchema = {
+export type ProjectionSchema = typeof core & typeof documentSchema & ProjectionWorkflowSchema;
+
+export const projectionSchema: ProjectionSchema = {
   ...core,
   ...documentSchema,
   ...projectionWorkflowSchema,
-} as const;
+};
 
 type WorkflowProjectionClient = GraphClient<typeof projectionSchema>;
 type WorkflowProjectEntity = ReturnType<WorkflowProjectionClient["project"]["get"]>;

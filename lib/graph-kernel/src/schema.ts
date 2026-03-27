@@ -1,5 +1,7 @@
 import { fieldsMeta } from "./field-tree-meta.js";
 
+export { fieldsMeta };
+
 /**
  * Allowed cardinalities for one predicate slot.
  */
@@ -229,6 +231,19 @@ export type ResolvedEdgeOutput<T extends EdgeInput = EdgeInput> = EdgeOutput<T> 
 export interface FieldsInput {
   [key: string]: EdgeInput<RangeRef> | EdgeOutput | FieldsInput;
 }
+
+type StripFieldTreeMeta<T> = T extends (...args: any[]) => any
+  ? T
+  : T extends readonly unknown[]
+    ? T
+    : T extends object
+      ? {
+          [K in keyof T as K extends typeof fieldsMeta ? never : K]: StripFieldTreeMeta<T[K]>;
+        }
+      : T;
+
+type PublicFieldsInput<T extends FieldsInput> =
+  StripFieldTreeMeta<T> extends FieldsInput ? StripFieldTreeMeta<T> : FieldsInput;
 
 /**
  * Normalized field tree with durable authored keys on every nested branch.
@@ -647,9 +662,9 @@ export function typeId(typeDef: AnyTypeOutput | ResolvedAnyTypeOutput): string {
  */
 export function defineType<const Key extends string, const Fields extends FieldsInput>(
   input: EntityTypeInput<Fields, Key>,
-): EntityTypeOutput<Fields, Key> {
+): EntityTypeOutput<PublicFieldsInput<Fields>, Key> {
   const fields = ns(input.values.key, input.fields);
-  return { kind: "entity", ...input, fields };
+  return { kind: "entity", ...input, fields } as EntityTypeOutput<PublicFieldsInput<Fields>, Key>;
 }
 
 /**

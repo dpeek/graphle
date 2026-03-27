@@ -19,6 +19,7 @@ clients.
 - OpenTUI-specific rendering
 - web bootstrap, loading, and error UI
 - kernel ids, store primitives, or schema authoring helpers
+- workflow or other domain-specific schema packages
 - sync transport and client construction APIs
 
 ## Package Split

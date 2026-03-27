@@ -12,6 +12,8 @@ import {
   type FieldsOutput,
 } from "./schema.js";
 
+export { fieldsMeta };
+
 /**
  * Durable mapping from schema-authored keys to stable opaque ids.
  */

@@ -34,7 +34,38 @@ import {
   repository,
 } from "./type.js";
 
-export const workflowSchema = {
+export type WorkflowSchema = {
+  agentSession: typeof agentSession;
+  agentSessionEvent: typeof agentSessionEvent;
+  agentSessionEventPhase: typeof agentSessionEventPhase;
+  agentSessionEventType: typeof agentSessionEventType;
+  agentSessionKind: typeof agentSessionKind;
+  agentSessionRawLineEncoding: typeof agentSessionRawLineEncoding;
+  agentSessionRuntimeState: typeof agentSessionRuntimeState;
+  agentSessionStatusCode: typeof agentSessionStatusCode;
+  agentSessionStatusFormat: typeof agentSessionStatusFormat;
+  agentSessionStream: typeof agentSessionStream;
+  agentSessionSubjectKind: typeof agentSessionSubjectKind;
+  artifact: typeof artifact;
+  artifactKind: typeof artifactKind;
+  branch: typeof branch;
+  branchState: typeof branchState;
+  commit: typeof commit;
+  commitState: typeof commitState;
+  contextBundle: typeof contextBundle;
+  contextBundleEntry: typeof contextBundleEntry;
+  contextBundleEntrySource: typeof contextBundleEntrySource;
+  decision: typeof decision;
+  decisionKind: typeof decisionKind;
+  project: typeof project;
+  repository: typeof repository;
+  repositoryBranch: typeof repositoryBranch;
+  repositoryCommit: typeof repositoryCommit;
+  repositoryCommitLeaseState: typeof repositoryCommitLeaseState;
+  repositoryCommitState: typeof repositoryCommitState;
+};
+
+export const workflowSchema: WorkflowSchema = {
   project,
   repository,
   branchState,
@@ -63,4 +94,4 @@ export const workflowSchema = {
   contextBundle,
   contextBundleEntrySource,
   contextBundleEntry,
-} as const;
+};

@@ -2,11 +2,16 @@
 
 import { expect, test } from "bun:test";
 
-import { createStore } from "@io/core/graph";
 import { bootstrap } from "@io/graph-bootstrap";
 import { createSyncedGraphClient, createGraphClient } from "@io/graph-client";
+import {
+  applyGraphIdMap as applyIdMap,
+  createGraphIdMap as createIdMap,
+  createGraphStore as createStore,
+} from "@io/graph-kernel";
+import type { AnyTypeOutput } from "@io/graph-kernel";
+import { defineEnum, defineType } from "@io/graph-module";
 import { core, coreGraphBootstrapOptions } from "@io/graph-module-core";
-import { workflow } from "@io/graph-module-workflow";
 import { createTotalSyncPayload } from "@io/graph-sync";
 import { createTestRenderer } from "@opentui/core/testing";
 import { createRoot, flushSync } from "@opentui/react";
@@ -24,7 +29,105 @@ import {
   globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
-const productGraph = { ...core, ...workflow } as const;
+const branchState = defineEnum({
+  values: { key: "test:branch-state", name: "Branch State" },
+  options: {
+    active: { name: "Active" },
+    backlog: { name: "Backlog" },
+  },
+});
+
+const commitState = defineEnum({
+  values: { key: "test:commit-state", name: "Commit State" },
+  options: {
+    active: { name: "Active" },
+    ready: { name: "Ready" },
+  },
+});
+
+const project = defineType({
+  values: { key: "test:project", name: "Project" },
+  fields: {
+    ...core.node.fields,
+    projectKey: {
+      range: core.string,
+      cardinality: "one",
+    },
+  },
+});
+
+const document = defineType({
+  values: { key: "test:document", name: "Document" },
+  fields: {
+    ...core.node.fields,
+  },
+});
+
+const branch = defineType({
+  values: { key: "test:branch", name: "Branch" },
+  fields: {
+    ...core.node.fields,
+    project: {
+      range: "test:project",
+      cardinality: "one",
+    },
+    branchKey: {
+      range: core.string,
+      cardinality: "one",
+    },
+    state: {
+      range: "test:branch-state",
+      cardinality: "one",
+    },
+    queueRank: {
+      range: core.number,
+      cardinality: "one",
+    },
+    goalDocument: {
+      range: "test:document",
+      cardinality: "one?",
+    },
+    activeCommit: {
+      range: "test:commit",
+      cardinality: "one?",
+    },
+  },
+});
+
+const commit = defineType({
+  values: { key: "test:commit", name: "Commit" },
+  fields: {
+    ...core.node.fields,
+    branch: {
+      range: "test:branch",
+      cardinality: "one",
+    },
+    commitKey: {
+      range: core.string,
+      cardinality: "one",
+    },
+    state: {
+      range: "test:commit-state",
+      cardinality: "one",
+    },
+    order: {
+      range: core.number,
+      cardinality: "one",
+    },
+  },
+});
+
+const runtimeSchema = {
+  branch,
+  branchState,
+  commit,
+  commitState,
+  document,
+  project,
+} as const satisfies Record<string, AnyTypeOutput>;
+
+const runtimeNamespace = applyIdMap(createIdMap(runtimeSchema).map, runtimeSchema);
+const productGraph = { ...core, ...runtimeNamespace } as const;
 
 function date(value: string): Date {
   return new Date(value);
@@ -51,7 +154,7 @@ function createWorkflowRuntimeFixture() {
     name: "Workflow runtime contract",
     project: projectId,
     branchKey: "branch:workflow-runtime-contract",
-    state: workflow.branchState.values.active.id,
+    state: runtimeNamespace.branchState.values.active.id,
     queueRank: 1,
     goalDocument: goalDocumentId,
     createdAt: date("2026-01-02T00:00:00.000Z"),
@@ -61,7 +164,7 @@ function createWorkflowRuntimeFixture() {
     name: "Define branch board scope",
     branch: branchId,
     commitKey: "commit:define-branch-board-scope",
-    state: workflow.commitState.values.active.id,
+    state: runtimeNamespace.commitState.values.active.id,
     order: 1,
     createdAt: date("2026-01-03T00:00:00.000Z"),
     updatedAt: date("2026-01-05T00:00:00.000Z"),
@@ -151,7 +254,7 @@ test("graph-react provider exposes synced graph query selectors across renderers
         name: "Bind workflow queries",
         branch: ids.branchId,
         commitKey: "commit:bind-workflow-queries",
-        state: workflow.commitState.values.ready.id,
+        state: runtimeNamespace.commitState.values.ready.id,
         order: 2,
         createdAt: date("2026-01-06T00:00:00.000Z"),
         updatedAt: date("2026-01-06T00:00:00.000Z"),
