@@ -1,13 +1,15 @@
 import { defineEnum, defineType } from "@io/graph-module";
 import { existingEntityReferenceField } from "@io/graph-module";
 import { defineDefaultEnumTypeModule } from "@io/graph-module";
+import {
+  booleanTypeModule,
+  core,
+  dateTypeModule,
+  jsonTypeModule,
+  numberTypeModule,
+  stringTypeModule,
+} from "@io/graph-module-core";
 
-import { core } from "../core.js";
-import { booleanTypeModule } from "../core/boolean/index.js";
-import { dateTypeModule } from "../core/date/index.js";
-import { jsonTypeModule } from "../core/json/index.js";
-import { numberTypeModule } from "../core/number/index.js";
-import { stringTypeModule } from "../core/string/index.js";
 import { document } from "./document/schema.js";
 
 function resolvedEnumValue(value: { key: string; id?: string }): string {

@@ -17,7 +17,8 @@ Icons are graph-owned entities. SVG is graph-owned scalar data. The explorer sho
 - Missing icons are inferred before falling back to `unknown.svg`:
   enum types default to `tag.svg`, and predicates whose range is another entity type default to
   `edge.svg`.
-- Rendering happens through shared DOM helpers such as `GraphIcon` and `SvgMarkup`.
+- Rendering happens through shared DOM helpers such as `GraphIcon` from
+  `@io/graph-module-core/react-dom` and `SvgMarkup` from `@io/graph-react-dom`.
 
 ## Ownership Model
 
@@ -64,14 +65,14 @@ No global `icon` predicate is inherited from `core:node`.
 
 ### Seed Registry
 
-`graphIconSeeds` in `src/graph/modules/core/icon/seed.ts` is the canonical built-in core seed
-registry:
+`graphIconSeeds` in `../../lib/graph-module-core/src/core/icon/seed.ts` is the
+canonical built-in core seed registry:
 
 - each seed owns a stable graph id, slug key, display name, and raw SVG payload
 - the registry is domain-owned rather than globally owned by bootstrap or client
 - schema definitions can reference a seed object directly, similar to enum option references
-- `src/graph/modules/core/bootstrap.ts` passes the core catalog and the core default type/predicate
-  icon resolvers into `@io/graph-bootstrap`
+- `../../lib/graph-module-core/src/core/bootstrap.ts` passes the core catalog
+  and the core default type/predicate icon resolvers into `@io/graph-bootstrap`
 - bootstrap can also materialize icons through per-id lookup for installable or remapped catalogs,
   so definitions only need to commit to stable icon ids
 

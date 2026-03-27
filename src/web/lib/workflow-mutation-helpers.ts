@@ -1,5 +1,4 @@
 import { edgeId, type GraphStore, type GraphStoreSnapshot } from "@io/core/graph";
-import { core } from "@io/core/graph/modules";
 import { workflow } from "@io/core/graph/modules/workflow";
 import {
   type RepositoryCommitLeaseStateValue,
@@ -15,6 +14,7 @@ import {
 } from "@io/core/graph/modules/workflow";
 import { type GraphClient } from "@io/graph-client";
 import { type GraphWriteTransaction } from "@io/graph-kernel";
+import { core } from "@io/graph-module-core";
 
 import { planRecordedMutation } from "./mutation-planning.js";
 

@@ -1,9 +1,6 @@
 import { defineType } from "@io/graph-module";
 import { defineSecretField } from "@io/graph-module";
-
-import { core } from "../../core.js";
-import { secretHandle } from "../../core/secret/index.js";
-import { stringTypeModule } from "../../core/string/index.js";
+import { core, secretHandle, stringTypeModule } from "@io/graph-module-core";
 
 export const envVarNamePattern = /^[A-Z][A-Z0-9_]*$/;
 

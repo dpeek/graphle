@@ -5,13 +5,14 @@ import {
   entityReferenceComboboxEditorKind,
   existingEntityReferenceField,
 } from "@io/graph-module";
-
-import { core } from "../../core.js";
-import { booleanTypeModule } from "../../core/boolean/index.js";
-import { markdownTypeModule } from "../../core/markdown/index.js";
-import { numberTypeModule } from "../../core/number/index.js";
-import { slugTypeModule } from "../../core/slug/index.js";
-import { stringTypeModule } from "../../core/string/index.js";
+import {
+  booleanTypeModule,
+  core,
+  markdownTypeModule,
+  numberTypeModule,
+  slugTypeModule,
+  stringTypeModule,
+} from "@io/graph-module-core";
 
 function validateRequiredString(label: string, value: unknown) {
   return typeof value === "string" && value.trim().length > 0

@@ -3,16 +3,10 @@ import type { PredicateFieldEditorCapability } from "@io/graph-react";
 import { CheckboxFieldEditor } from "./checkbox.js";
 import { ColorFieldEditor } from "./color.js";
 import { DateFieldEditor } from "./date.js";
-import { DurationFieldEditor } from "./duration.js";
 import { EnumComboboxEditor } from "./enum-combobox.js";
 import { MarkdownFieldEditor } from "./markdown.js";
-import { MoneyFieldEditor } from "./money.js";
 import { NumberFieldEditor } from "./number.js";
 import { PercentFieldEditor } from "./percent.js";
-import { QuantityFieldEditor } from "./quantity.js";
-import { RangeFieldEditor } from "./range.js";
-import { RateFieldEditor } from "./rate.js";
-import { EntityReferenceComboboxEditor } from "./reference.js";
 import { SvgFieldEditor } from "./svg.js";
 import { TextFieldEditor } from "./text.js";
 import { UrlFieldEditor } from "./url.js";
@@ -27,13 +21,7 @@ export const genericWebFieldEditorCapabilities = [
   { kind: "svg", Component: SvgFieldEditor },
   { kind: "date", Component: DateFieldEditor },
   { kind: "number", Component: NumberFieldEditor },
-  { kind: "number/duration", Component: DurationFieldEditor },
   { kind: "number/percent", Component: PercentFieldEditor },
-  { kind: "number/quantity", Component: QuantityFieldEditor },
-  { kind: "number/range", Component: RangeFieldEditor },
-  { kind: "number/rate", Component: RateFieldEditor },
-  { kind: "money/amount", Component: MoneyFieldEditor },
   { kind: "url", Component: UrlFieldEditor },
   { kind: "select", Component: EnumComboboxEditor },
-  { kind: "entity-reference-combobox", Component: EntityReferenceComboboxEditor },
 ] satisfies readonly PredicateFieldEditorCapability<any, any>[];

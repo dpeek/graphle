@@ -1058,6 +1058,6 @@ Important failure modes:
   evaluation and final read or write enforcement
 - `src/web/lib/auth-bridge.ts`: add the Better Auth session-to-principal
   projection seam
-- `src/graph/modules/core/`: add core principal, role, capability, and share
+- `lib/graph-module-core/src/core/`: add core principal, role, capability, and share
   graph types that downstream branches can reference, including
   `core:admissionPolicy`

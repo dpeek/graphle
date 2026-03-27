@@ -4,6 +4,7 @@ import { expect, setDefaultTimeout, test } from "bun:test";
 
 import { bootstrap } from "@io/graph-bootstrap";
 import { createSyncedGraphClient, createGraphClient } from "@io/graph-client";
+import { core, coreGraphBootstrapOptions } from "@io/graph-module-core";
 import {
   GraphRuntimeProvider,
   useGraphQuery,
@@ -16,7 +17,7 @@ import { createRoot, flushSync } from "@opentui/react";
 import { act } from "react";
 
 import { createStore } from "../graph/index.js";
-import { core, coreGraphBootstrapOptions, workflow } from "../graph/modules/index.js";
+import { workflow } from "../graph/modules/workflow.js";
 import { useCommitQueueScope, useProjectBranchScope, useWorkflowProjectionIndex } from "./index.js";
 
 (

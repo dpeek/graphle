@@ -13,11 +13,11 @@ import {
   type GraphStoreSnapshot,
   type GraphWriteTransaction,
 } from "@io/graph-kernel";
+import { core, coreGraphBootstrapOptions } from "@io/graph-module-core";
 import { type SyncPayload } from "@io/graph-sync";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 
-import { core, coreGraphBootstrapOptions } from "../graph/modules/index.js";
 import { workflow } from "../graph/modules/workflow.js";
 import { kitchenSink } from "../graph/testing/kitchen-sink.js";
 import { createGraphMcpServer, createGraphMcpSession } from "./graph.js";

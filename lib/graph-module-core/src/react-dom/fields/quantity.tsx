@@ -1,16 +1,15 @@
-import type { QuantityValue } from "@io/core/graph/modules";
+import type { QuantityValue } from "@io/graph-module-core";
 import { performValidatedMutation, usePredicateField } from "@io/graph-react";
-import { InputGroup, InputGroupInput } from "@io/web/input-group";
-import { useEffect, useState } from "react";
-
 import {
-  createFormattedFieldViewCapability,
   clearOrRejectRequiredValue,
+  createFormattedFieldViewCapability,
   setPredicateValue,
   useFieldMutationCallbacks,
   validatePredicateValue,
   type AnyFieldProps,
-} from "./shared.js";
+} from "@io/graph-react-dom/internal";
+import { InputGroup, InputGroupInput } from "@io/web/input-group";
+import { useEffect, useState } from "react";
 
 function normalizeCommittedQuantity(value: unknown): QuantityValue | undefined {
   if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;

@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 
 import { bootstrap } from "@io/graph-bootstrap";
 import { createGraphClient } from "@io/graph-client";
+import { core, coreGraphBootstrapOptions, defaultMoneyCurrencyKey } from "@io/graph-module-core";
 
 import {
   createStore,
@@ -11,8 +12,6 @@ import {
   fieldWritePolicy,
   isSecretBackedField,
 } from "../index.js";
-import { defaultMoneyCurrencyKey } from "../modules/core/money/index.js";
-import { core, coreGraphBootstrapOptions } from "../modules/index.js";
 import {
   kitchenSink,
   kitchenSinkBlock,

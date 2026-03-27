@@ -15,8 +15,7 @@ import {
 } from "@io/graph-kernel";
 import { defineReferenceField, defineType, type GraphCommandSpec } from "@io/graph-module";
 import type { ObjectViewSpec, WorkflowSpec } from "@io/graph-module";
-
-import { core, stringTypeModule } from "./modules/index.js";
+import { core, stringTypeModule } from "@io/graph-module-core";
 
 // Test-only root-safe contract probes that feature work can copy from.
 export const probeContractItem = defineType({

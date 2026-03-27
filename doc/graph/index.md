@@ -8,16 +8,17 @@ The graph engine now spans the root `@io/core/graph` package plus the extracted
 `@io/graph-projection` workspace packages.
 
 The root `@io/core/graph` surface owns a small curated graph helper layer:
-selected kernel aliases, built-in namespace assembly, and graph-owned icon
-helpers. The extracted packages own the layered engine boundaries:
-kernel storage and write envelopes, module-definition authorship, schema
+selected kernel aliases and graph-owned icon helpers. The extracted packages
+own the layered engine boundaries: kernel storage and write envelopes,
+module-definition authorship, the built-in `core:` namespace, schema
 bootstrap, typed client behavior, authoritative runtime behavior, sync
 contracts, projection metadata, the host-neutral React layer, and the browser
-adapter layer.
+adapter layers.
 
-Naming note: `@io/graph-module` is the extracted authoring package. Concrete
-built-in graph modules such as `core` and `workflow` still live under
-`../../src/graph/modules/`.
+Naming note: `@io/graph-module` is the extracted authoring package.
+`@io/graph-module-core` is the extracted built-in `core:` package.
+`workflow:` is still root-owned under `../../src/graph/modules/workflow/`
+pending its own extraction.
 
 ## Browser Editor Boundary
 
@@ -28,8 +29,9 @@ rather than generic browser chrome.
   source/preview shells, markdown rendering, and reusable controls
 - keep graph-aware, host-neutral React helpers in
   `../../lib/graph-react/src/`
-- keep DOM capability registries and default browser composition in
+- keep generic DOM capability registries and browser composition in
   `../../lib/graph-react-dom/src/`
+- keep core-coupled DOM defaults in `../../lib/graph-module-core/src/react-dom/`
 - keep validation, predicate mutation wiring, field metadata, typed
   entity-reference behavior, and SVG sanitization in `graph`
 
@@ -80,13 +82,12 @@ The root `@io/core` package publishes these graph subpaths from
 
 - `@io/core/graph`: `../../src/graph/index.ts`; re-exports
   curated kernel aliases plus graph-owned icon helpers
-- `@io/core/graph/modules`: `../../src/graph/modules/index.ts`; canonical
-  namespace root plus representative built-ins
-- `@io/core/graph/modules/core`, `@io/core/graph/modules/workflow`:
-  namespace assembly entrypoints
+- `@io/core/graph/modules/workflow`: `../../src/graph/modules/workflow.ts`;
+  canonical `workflow:` namespace assembly and workflow slice root
 
 There is no longer a root `@io/core/graph/adapters/react-dom` export. Browser
-callers import `@io/graph-react-dom` directly.
+callers import `@io/graph-react-dom` or `@io/graph-module-core/react-dom`
+directly.
 
 The workspace also publishes:
 
@@ -96,6 +97,10 @@ The workspace also publishes:
 - `@io/graph-module`: `../../lib/graph-module/src/index.ts`; module-definition
   authoring helpers, reference-policy helpers, pure authored contracts, and a
   curated re-export of kernel schema-authoring primitives
+- `@io/graph-module-core`: `../../lib/graph-module-core/src/index.ts`;
+  canonical `core:` namespace assembly, built-in core scalars/entities/enums,
+  bootstrap inputs, icon seeds, structured-value helpers, locale/currency
+  datasets, and other core-owned contracts
 - `@io/graph-bootstrap`: `../../lib/graph-bootstrap/src/index.ts`; additive
   schema bootstrap and convergent bootstrapped snapshots
 - `@io/graph-authority`: `../../lib/graph-authority/src/index.ts`; persisted
@@ -107,9 +112,13 @@ The workspace also publishes:
   transport helpers, and serialized-query request/response contracts
 - `@io/graph-react`: `../../lib/graph-react/src/index.ts`; host-neutral React
   graph runtime hooks and mutation helpers
-- `@io/graph-react-dom`: `../../lib/graph-react-dom/src/index.ts`; canonical
+- `@io/graph-react-dom`: `../../lib/graph-react-dom/src/index.ts`; generic
   browser field/filter adapters, DOM fallback rendering, and graph-aware SVG
   helpers
+- `@io/graph-module-core/react-dom`:
+  `../../lib/graph-module-core/src/react-dom/index.ts`; core-owned browser
+  defaults such as `GraphIcon`, structured-value editors, and tag-aware
+  reference behavior
 - `@io/graph-sync`: `../../lib/graph-sync/src/index.ts`; sync scopes,
   total/incremental payload contracts, cursor helpers, validation, and total
   sync sessions
@@ -117,12 +126,13 @@ The workspace also publishes:
   read-scope definitions, projection metadata, dependency keys, invalidation
   contracts, and retained projection compatibility helpers
 
-The root `@io/core/graph` surface stays focused on a small helper layer,
-modules, and icon contracts. Definition-time authorship now lives on
-`@io/graph-module`. Bootstrap, client, authority, sync, projection, the
-host-neutral React layer, and the browser adapter layer live on their extracted
-packages. Module namespaces and slice exports stay on their dedicated root-package
-subpaths.
+The root `@io/core/graph` surface stays focused on a small helper layer and
+icon contracts. Definition-time authorship now lives on `@io/graph-module`.
+The built-in `core:` namespace now lives on `@io/graph-module-core`.
+Bootstrap, client, authority, sync, projection, the host-neutral React layer,
+and the browser adapter layers live on their extracted packages. `workflow:`
+slice exports stay on the remaining root-package subpath until that module is
+extracted too.
 
 ## Source Layout
 
@@ -131,6 +141,9 @@ subpaths.
 - `../../lib/graph-module/src/`: module-definition authoring helpers,
   reference-field policy, secret-field helpers, and pure authored
   command/view/workflow contracts
+- `../../lib/graph-module-core/src/`: canonical `core:` namespace assembly,
+  built-in scalar/entity/enum families, bootstrap inputs, icon seeds, and
+  structured-value helpers
 - `../../src/graph/inspect.ts`: internal graph inspection helpers; not part of
   the published package surface
 - `../../lib/graph-bootstrap/src/`: additive bootstrap runtime and convergent
@@ -146,18 +159,16 @@ subpaths.
   helpers, validation, and total sync sessions
 - `../../lib/graph-projection/src/`: projection contracts, module read scopes,
   dependency keys, and retained projection compatibility helpers
-- `../../src/graph/modules/`: built-in namespace assembly and slice authoring;
-  `core.ts` and `workflow.ts` assemble namespaces from `core.json` and
-  `workflow.json`
-- `../../src/graph/modules/core/`: built-in scalar, enum, and helper modules
 - `../../src/graph/modules/workflow/schema.ts`,
   `../../src/graph/modules/workflow/env-var/schema.ts`, and
   `../../src/graph/modules/workflow/document/schema.ts`: the workflow module
   and its internal slice entrypoints
 - `../../lib/graph-react/src/`: host-neutral React runtime, resolver
   primitives, and predicate/entity hooks
-- `../../lib/graph-react-dom/src/`: DOM capability registries, default field
-  views/editors, filter resolvers, icon rendering, and SVG preview helpers
+- `../../lib/graph-react-dom/src/`: generic DOM capability registries, generic
+  field views/editors, filter resolvers, and SVG preview helpers
+- `../../lib/graph-module-core/src/react-dom/`: core-owned DOM defaults,
+  `GraphIcon`, structured-value editors, and tag-aware reference behavior
 - `../../src/graph/icon.ts`: graph-owned icon helpers
 - `../../src/graph/testing/kitchen-sink/`: private test fixtures used by graph
   proof coverage

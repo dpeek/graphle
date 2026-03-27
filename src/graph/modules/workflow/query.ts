@@ -1,12 +1,12 @@
 import { type GraphClient } from "@io/graph-client";
 import { applyGraphIdMap as applyIdMap } from "@io/graph-kernel";
+import { core } from "@io/graph-module-core";
 import {
   findRetainedProjectionRecord,
   type RetainedProjectionCheckpointRecord,
   type RetainedProjectionRowRecord,
 } from "@io/graph-projection";
 
-import { core } from "../core.js";
 import workflowIds from "../workflow.json";
 import type {
   RepositoryBranchSummary,

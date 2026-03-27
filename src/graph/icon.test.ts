@@ -1,10 +1,10 @@
 import { describe, expect, it } from "bun:test";
 
 import { createStore, sanitizeSvgMarkup, typeId } from "@io/core/graph";
-import { core, coreGraphBootstrapOptions, graphIconSeeds } from "@io/core/graph/modules";
 import { workflow } from "@io/core/graph/modules/workflow";
 import { bootstrap } from "@io/graph-bootstrap";
 import { createGraphClient, GraphValidationError } from "@io/graph-client";
+import { core, coreGraphBootstrapOptions, graphIconSeeds } from "@io/graph-module-core";
 
 function createGraph() {
   const store = createStore();

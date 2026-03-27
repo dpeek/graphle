@@ -24,8 +24,10 @@ clients.
 ## Adapter Split
 
 - `@io/graph-react` owns the host-neutral React runtime contracts.
-- `@io/graph-react-dom` owns browser capabilities and default DOM composition
-  on top of those contracts.
+- `@io/graph-react-dom` owns the generic browser capabilities and DOM
+  composition on top of those contracts.
+- `@io/graph-module-core/react-dom` owns the browser defaults that depend on
+  the built-in `core:` contracts.
 - The former `react-opentui` adapter has been collapsed away because its shared
   runtime provider and query hooks were host-neutral and now live here.
 

@@ -24,7 +24,7 @@ Repo sources used for this guide:
 - `lib/graph-authority/src/contracts.ts`
 - `lib/graph-authority/src/authorization.ts`
 - `src/graph/runtime/contracts.ts`
-- `src/graph/modules/core/identity/index.ts`
+- `lib/graph-module-core/src/core/identity/index.ts`
 - `package.json`
 - `wrangler.jsonc`
 
@@ -79,7 +79,7 @@ Repo:
   - the Worker auth bridge owns session verification plus reduction into
     `AuthorizationContext`
   - the authority runtime owns final read, write, and command enforcement
-- `src/graph/modules/core/identity/index.ts` already adds the first graph types
+- `lib/graph-module-core/src/core/identity/index.ts` already adds the first graph types
   needed for identity projection:
   - `core:principal`
   - `core:authSubjectProjection`
@@ -153,7 +153,7 @@ Repo:
 - graph-backed admission policy now has one stable Branch 2 contract:
   `AdmissionPolicy` in `lib/graph-authority/src/contracts.ts` and the authority-owned
   `core:admissionPolicy` entity plus enum vocabulary in
-  `src/graph/modules/core/identity/index.ts`.
+  `lib/graph-module-core/src/core/identity/index.ts`.
 - graph-backed initial-access approvals now also have one explicit contract:
   the authority-owned `core:admissionApproval` entity and the bootstrap or
   approval command paths in `src/web/lib/authority.ts`.
@@ -220,7 +220,7 @@ Repo:
 
 - Branch 2 explicitly says the graph, not Better Auth, is the durable
   application model for identity and authorization.
-- `src/graph/modules/core/identity/index.ts` already establishes the beginning
+- `lib/graph-module-core/src/core/identity/index.ts` already establishes the beginning
   of that model.
 
 In this repo the graph should own:
@@ -1070,7 +1070,7 @@ The repo now includes the runtime foundation described here:
   - later resolve capability grants
 - keep final read, write, and command enforcement where it already lives
 
-`src/graph/modules/core/identity/index.ts`
+`lib/graph-module-core/src/core/identity/index.ts`
 
 - add whatever missing durable identity fields the repo decides to make
   canonical for request projection

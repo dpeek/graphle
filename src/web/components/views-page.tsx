@@ -1,26 +1,26 @@
 "use client";
 
 import { createIdMap, createStore, applyIdMap } from "@io/core/graph";
+import { bootstrap } from "@io/graph-bootstrap";
+import { createGraphClient, serializedQueryVersion, type PredicateRef } from "@io/graph-client";
+import { defineType } from "@io/graph-module";
 import {
   core,
   coreGraphBootstrapOptions,
   defaultMoneyCurrencyKey,
   urlTypeModule,
-} from "@io/core/graph/modules";
-import { bootstrap } from "@io/graph-bootstrap";
-import { createGraphClient, serializedQueryVersion, type PredicateRef } from "@io/graph-client";
-import { defineType } from "@io/graph-module";
-import {
-  getPredicateDisplayKind,
-  getPredicateEditorKind,
-  usePredicateField,
-} from "@io/graph-react";
+} from "@io/graph-module-core";
 import {
   PredicateFieldEditor,
   PredicateFieldView,
   genericWebFieldEditorCapabilities,
   genericWebFieldViewCapabilities,
-} from "@io/graph-react-dom";
+} from "@io/graph-module-core/react-dom";
+import {
+  getPredicateDisplayKind,
+  getPredicateEditorKind,
+  usePredicateField,
+} from "@io/graph-react";
 import { Badge } from "@io/web/badge";
 import { Button } from "@io/web/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@io/web/card";

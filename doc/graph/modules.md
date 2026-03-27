@@ -2,8 +2,11 @@
 
 ## Purpose
 
-`../../src/graph/modules/` owns built-in graph namespaces and the slice code
-that backs the published module subpaths.
+Built-in graph namespaces are now split by owner:
+
+- `../../lib/graph-module-core/src/` owns the built-in `core:` namespace
+- `../../src/graph/modules/workflow/` still owns the built-in `workflow:`
+  namespace pending extraction
 
 This document is about concrete built-in graph modules. The extracted
 `@io/graph-module` package that owns type-module authoring helpers is covered
@@ -11,32 +14,35 @@ in [`type-modules.md`](./type-modules.md).
 
 ## Public Entry Surfaces
 
-- `@io/core/graph/modules`: `../../src/graph/modules/index.ts`; re-exports
-  `core` and `workflow` plus representative built-ins such as
-  `stringTypeModule`, `envVar`, and `document`
-- `@io/core/graph/modules/core`: `../../src/graph/modules/core.ts`; canonical
-  `core:` namespace assembly
+- `@io/graph-module-core`: `../../lib/graph-module-core/src/index.ts`;
+  canonical `core:` namespace assembly plus curated built-in core contracts
+- `@io/graph-module-core/react-dom`:
+  `../../lib/graph-module-core/src/react-dom/index.ts`; core-owned browser
+  defaults such as `GraphIcon`, structured-value editors, and tag-aware
+  reference behavior
 - `@io/core/graph/modules/workflow`: `../../src/graph/modules/workflow.ts`;
   canonical `workflow:` namespace assembly and workflow slice root
 
-The `core` entrypoint exports only its namespace object. The `workflow`
-entrypoint exports its namespace object plus the workflow, env-var, and
-document slice symbols. The module root re-exports both namespaces plus
-representative built-ins.
+`@io/graph-module-core` owns the canonical `core:` namespace object plus the
+curated slice symbols that callers use directly. The `workflow` entrypoint
+exports its namespace object plus the workflow, env-var, and document slice
+symbols.
 
 ## Source Layout
 
-- `../../src/graph/modules/core.ts` and
-  `../../src/graph/modules/workflow.ts`: namespace assembly entrypoints that
-  pair `*.json` id maps with slice exports
-- `../../src/graph/modules/core/`: built-in scalar, enum, and helper families
-- `../../src/graph/modules/core/identity/`: Branch 2 identity anchors for
+- `../../lib/graph-module-core/src/core.ts`: namespace assembly entrypoint for
+  the extracted `core:` package
+- `../../lib/graph-module-core/src/core/`: built-in scalar, enum, and helper
+  families
+- `../../lib/graph-module-core/src/core/identity/`: Branch 2 identity anchors for
   `principal`, `authSubjectProjection`, and `principalRoleBinding` plus the
   enum vocabulary those graph-owned types depend on
 - `../../src/graph/modules/workflow/`: Branch 6 workflow root and the merged
   workflow, env-var, and document slice implementation
 - `../../src/graph/modules/workflow/document/`: reusable markdown documents, ordered
   document blocks, and external placement trees
+- `../../lib/graph-module-core/src/react-dom/`: core-owned browser defaults
+  that depend on built-in `core:` value contracts or entity shapes
 - type-specific directories keep schema, metadata, filters, and helper enums
   together with common files such as `type.ts`, `meta.ts`, `filter.ts`,
   `kind.ts`, `index.ts`, and `data.ts`

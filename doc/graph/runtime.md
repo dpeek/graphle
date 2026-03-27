@@ -80,6 +80,22 @@ Key source files:
 - `../../lib/graph-module/src/reference-policy.ts`
 - `../../lib/graph-module/src/definition-contracts.ts`
 
+### `@io/graph-module-core` Package
+
+`@io/graph-module-core` is the extracted built-in `core:` package:
+
+- canonical `core:` namespace assembly
+- built-in scalar/entity/enum families
+- core bootstrap inputs and icon seed ownership
+- structured-value helpers plus locale/country/currency datasets
+
+Key source files:
+
+- `../../lib/graph-module-core/src/index.ts`
+- `../../lib/graph-module-core/src/core.ts`
+- `../../lib/graph-module-core/src/core/bootstrap.ts`
+- `../../lib/graph-module-core/src/core/icon/seed.ts`
+
 ### React Runtime
 
 The host-neutral React layer now lives in the extracted `@io/graph-react`
@@ -89,9 +105,12 @@ package:
   resolver contracts, persisted-mutation helpers, and synced-runtime React
   hooks
 - `../../lib/graph-react/src/` contains those implementation files
-- `@io/graph-react-dom` now owns the browser/DOM adapter layer on top of those
-  contracts, including default field/filter capabilities and graph-aware SVG
-  rendering helpers
+- `@io/graph-react-dom` now owns the generic browser/DOM adapter layer on top
+  of those contracts, including generic field/filter capabilities and
+  graph-aware SVG rendering helpers
+- `@io/graph-module-core/react-dom` owns the browser defaults that depend on
+  the built-in `core:` contracts, including `GraphIcon`, structured-value
+  editors, and tag-aware entity-reference behavior
 
 The root package no longer exports `@io/core/graph/runtime/react`, and the old
 `react-opentui` adapter was removed because its runtime provider and query

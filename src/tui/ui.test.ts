@@ -3,10 +3,11 @@ import { expect, test } from "bun:test";
 import { createStore } from "@io/core/graph";
 import { bootstrap } from "@io/graph-bootstrap";
 import { createGraphClient } from "@io/graph-client";
+import { core, coreGraphBootstrapOptions } from "@io/graph-module-core";
 import { createTestRenderer } from "@opentui/core/testing";
 import { act } from "react";
 
-import { core, coreGraphBootstrapOptions, workflow } from "../graph/modules/index.js";
+import { workflow } from "../graph/modules/workflow.js";
 import { createWorkflowProjectionIndex } from "../graph/modules/workflow/query.js";
 import { buildWorkflowTuiRootComponentModel } from "./layout.js";
 import {

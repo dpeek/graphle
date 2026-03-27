@@ -1,7 +1,7 @@
 import { createStore } from "@io/core/graph";
-import { core, coreGraphBootstrapOptions } from "@io/core/graph/modules";
 import { createBootstrappedSnapshot } from "@io/graph-bootstrap";
 import { createGraphClient } from "@io/graph-client";
+import { core, coreGraphBootstrapOptions } from "@io/graph-module-core";
 
 import { kitchenSink } from "./testing/kitchen-sink.js";
 

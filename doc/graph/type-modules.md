@@ -28,7 +28,10 @@ Canonical imports:
   `../../lib/graph-module/src/index.ts`, including `TypeModule`,
   `ObjectViewSpec`, `WorkflowSpec`, and `GraphCommandSpec`
 - `@io/core/graph`: small root helper surface for curated kernel aliases,
-  icon helpers, and modules
+  and icon helpers
+- `@io/graph-module-core`: canonical built-in `core:` namespace plus the
+  extracted core-owned type modules, datasets, bootstrap inputs, and helper
+  contracts
 - `@io/graph-authority`: authority-owned permission/admission/share contracts
   such as `ModulePermissionRequest` and `ModulePermissionApprovalRecord`
 
@@ -163,23 +166,23 @@ from audit history.
 
 ## Canonical Module Layout
 
-Built-in graph modules live under `../../src/graph/modules/`:
+Built-in graph modules now live under their owning package trees:
 
-- `../../src/graph/modules/core/` for `core:` families
+- `../../lib/graph-module-core/src/core/` for `core:` families
 - `../../src/graph/modules/workflow/` for public `workflow:` slices
-- `../../src/graph/modules/core.ts` and
+- `../../lib/graph-module-core/src/core.ts` and
   `../../src/graph/modules/workflow.ts`: namespace assembly entrypoints
 - `../../src/graph/modules/workflow/env-var/schema.ts` and
   `../../src/graph/modules/workflow/document/schema.ts`: internal slice entrypoints
 
 Examples:
 
-- `../../src/graph/modules/core/date/`
-- `../../src/graph/modules/core/url/`
-- `../../src/graph/modules/core/email/`
-- `../../src/graph/modules/core/string/`
-- `../../src/graph/modules/core/number/`
-- `../../src/graph/modules/core/boolean/`
+- `../../lib/graph-module-core/src/core/date/`
+- `../../lib/graph-module-core/src/core/url/`
+- `../../lib/graph-module-core/src/core/email/`
+- `../../lib/graph-module-core/src/core/string/`
+- `../../lib/graph-module-core/src/core/number/`
+- `../../lib/graph-module-core/src/core/boolean/`
 - `../../lib/graph-module/src/enum-module.ts`
 - `../../lib/graph-module/src/validated-string.ts`
 
@@ -209,7 +212,8 @@ Physical colocation and package export ownership are separate concerns.
 - published module entry files must not import browser APIs, OpenTUI code, or
   route registration helpers
 - host-specific composition belongs on `@io/graph-react` for host-neutral React
-  contracts or `@io/graph-react-dom` for browser defaults
+  contracts, `@io/graph-react-dom` for generic browser defaults, or
+  `@io/graph-module-core/react-dom` for core-owned browser defaults
 
 ## Authoring Semantics
 

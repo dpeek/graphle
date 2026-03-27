@@ -1,8 +1,8 @@
 import { handleExit } from "@io/core/lib";
 import { createHttpGraphClient } from "@io/graph-client";
+import { coreGraphBootstrapOptions } from "@io/graph-module-core";
 
 import { loadWorkflowFile } from "../agent/workflow.js";
-import { coreGraphBootstrapOptions } from "../graph/modules/index.js";
 import {
   createWorkflowProjectionIndex,
   WorkflowProjectionQueryError,

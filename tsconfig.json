@@ -20,9 +20,12 @@
       "@io/graph-client": ["./lib/graph-client/src/index.ts"],
       "@io/graph-kernel": ["./lib/graph-kernel/src/index.ts"],
       "@io/graph-module": ["./lib/graph-module/src/index.ts"],
+      "@io/graph-module-core": ["./lib/graph-module-core/src/index.ts"],
+      "@io/graph-module-core/react-dom": ["./lib/graph-module-core/src/react-dom/index.ts"],
       "@io/graph-projection": ["./lib/graph-projection/src/index.ts"],
       "@io/graph-react": ["./lib/graph-react/src/index.ts"],
       "@io/graph-react-dom": ["./lib/graph-react-dom/src/index.ts"],
+      "@io/graph-react-dom/internal": ["./lib/graph-react-dom/src/internal.ts"],
       "@io/graph-sync": ["./lib/graph-sync/src/index.ts"],
       "@io/web": ["./lib/web/src/index.ts"],
       "*": ["./*"]

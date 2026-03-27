@@ -1,5 +1,5 @@
-import { core } from "@io/core/graph/modules";
 import type { GraphMutationValidationResult } from "@io/graph-client";
+import { core } from "@io/graph-module-core";
 import {
   getPredicateEntityReferenceOptions,
   getPredicateEntityReferencePolicy,
@@ -9,17 +9,8 @@ import {
   usePredicateField,
   type PredicateFieldViewCapability,
 } from "@io/graph-react";
-
-import { OptionComboboxEditor } from "./option-combobox.js";
 import {
-  createTagKey,
-  EntityReferenceReadonlyChip,
-  EntityReferenceReadonlyChipList,
-  EntityReferenceOptionContent,
-  getEntityReferenceLabel,
-  type EntityReferenceEntity,
-} from "./reference-ui.js";
-import {
+  OptionComboboxEditor,
   addPredicateItem,
   clearPredicateValue,
   getPredicateFieldLabel,
@@ -31,7 +22,16 @@ import {
   validatePredicateRemove,
   validatePredicateValue,
   type AnyFieldProps,
-} from "./shared.js";
+} from "@io/graph-react-dom/internal";
+
+import {
+  createTagKey,
+  EntityReferenceReadonlyChip,
+  EntityReferenceReadonlyChipList,
+  EntityReferenceOptionContent,
+  getEntityReferenceLabel,
+  type EntityReferenceEntity,
+} from "./reference-ui.js";
 
 type TagCreateGraphHandle = {
   create(input: { color: string; key: string; name: string }): string;

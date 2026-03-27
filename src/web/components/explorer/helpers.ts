@@ -1,6 +1,6 @@
 import { edgeId, isEntityType, type AnyTypeOutput, type GraphStore, typeId } from "@io/core/graph";
-import { core, graphIconSeeds, resolvePredicateDefinitionIconId } from "@io/core/graph/modules";
 import { formatValidationPath, GraphValidationError } from "@io/graph-client";
+import { core, graphIconSeeds, resolvePredicateDefinitionIconId } from "@io/graph-module-core";
 import { format as formatDate } from "date-fns";
 
 import type { WriteSecretFieldWebAuthorityCommand } from "../../lib/authority.js";

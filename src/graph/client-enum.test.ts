@@ -1,9 +1,9 @@
 import { describe, expect, it } from "bun:test";
 
 import { createStore } from "@io/core/graph";
-import { core, coreGraphBootstrapOptions } from "@io/core/graph/modules";
 import { bootstrap } from "@io/graph-bootstrap";
 import { createGraphClient, GraphValidationError, formatValidationPath } from "@io/graph-client";
+import { core, coreGraphBootstrapOptions } from "@io/graph-module-core";
 
 import { kitchenSink } from "./testing/kitchen-sink.js";
 

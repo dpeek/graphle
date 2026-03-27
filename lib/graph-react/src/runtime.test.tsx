@@ -3,9 +3,10 @@
 import { expect, test } from "bun:test";
 
 import { createStore } from "@io/core/graph";
-import { core, coreGraphBootstrapOptions, workflow } from "@io/core/graph/modules";
+import { workflow } from "@io/core/graph/modules/workflow";
 import { bootstrap } from "@io/graph-bootstrap";
 import { createSyncedGraphClient, createGraphClient } from "@io/graph-client";
+import { core, coreGraphBootstrapOptions } from "@io/graph-module-core";
 import { createTotalSyncPayload } from "@io/graph-sync";
 import { createTestRenderer } from "@opentui/core/testing";
 import { createRoot, flushSync } from "@opentui/react";

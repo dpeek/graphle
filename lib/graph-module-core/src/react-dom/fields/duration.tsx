@@ -5,20 +5,19 @@ import {
   durationUnits,
   formatDurationAmount,
   type DurationUnitKey,
-} from "@io/core/graph/modules";
+} from "@io/graph-module-core";
 import { performValidatedMutation, usePredicateField } from "@io/graph-react";
-import { InputGroup, InputGroupInput } from "@io/web/input-group";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@io/web/select";
-import { useEffect, useState } from "react";
-
 import {
-  createFormattedFieldViewCapability,
   clearOrRejectRequiredValue,
+  createFormattedFieldViewCapability,
   setPredicateValue,
   useFieldMutationCallbacks,
   validatePredicateValue,
   type AnyFieldProps,
-} from "./shared.js";
+} from "@io/graph-react-dom/internal";
+import { InputGroup, InputGroupInput } from "@io/web/input-group";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@io/web/select";
+import { useEffect, useState } from "react";
 
 const durationUnitKeys = new Set(durationUnits.map((unit) => unit.key));
 

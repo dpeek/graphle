@@ -1,10 +1,10 @@
 import { describe, expect, it } from "bun:test";
 
 import { createStore, applyIdMap, edgeId } from "@io/core/graph";
-import { core, coreGraphBootstrapOptions, stringTypeModule } from "@io/core/graph/modules";
 import { bootstrap } from "@io/graph-bootstrap";
 import { createGraphClient, GraphValidationError, formatValidationPath } from "@io/graph-client";
 import { defineReferenceField, defineType } from "@io/graph-module";
+import { core, coreGraphBootstrapOptions, stringTypeModule } from "@io/graph-module-core";
 
 import { createTestGraph, testNamespace } from "./test-graph.js";
 

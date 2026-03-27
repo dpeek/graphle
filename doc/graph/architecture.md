@@ -27,6 +27,9 @@ This document is the high-level entry point for agents reasoning about the engin
 - `../../lib/graph-module/src/`: module-definition authoring helpers,
   reference-field policy, secret-field helpers, and pure authored command/view
   and workflow contracts layered above the kernel
+- `../../lib/graph-module-core/src/`: extracted built-in `core:` namespace
+  package, including core schema families, bootstrap inputs, icon seeds, and
+  core-owned helper contracts
 - `../../lib/graph-bootstrap/src/`: schema bootstrap into live stores plus
   convergent bootstrapped snapshots
 - `../../lib/graph-client/src/`: typed CRUD, refs, local validation, synced-client state, write flushing, reconcile behavior, and HTTP/query client helpers
@@ -56,20 +59,22 @@ This document is the high-level entry point for agents reasoning about the engin
 The initial namespace and schema-module ownership rules are concrete now:
 
 - `core:` is reserved for the engine metamodel plus the shared built-in type
-  families shipped from `../../src/graph/modules/core/`. That means `core:node`,
+  families shipped from `../../lib/graph-module-core/src/core/`. That means `core:node`,
   `core:type`, `core:predicate`, `core:enum`, `core:string`, `core:number`,
   `core:boolean`, `core:date`, `core:url`, `core:email`, `core:slug`,
   `core:address`, `core:country`, `core:currency`, `core:language`, and
-  `core:locale` stay in `core:` for now.
+  `core:locale` stay in `core:` for now, and the canonical owner is now
+  `@io/graph-module-core`.
 - `workflow:` is the current product namespace bucket justified today. It owns
   the workflow, retained execution, document, context, and env-var slices used
-  by the app and reusable installs.
+  by the app and reusable installs, and it is still root-owned pending its own
+  extraction.
 - Do not pre-create extra namespace buckets such as `geo:`, `locale:`,
   `finance:`, or `collab:` before reusable code actually needs them.
 - Promotion into a more specific namespace should happen only as a concrete
   refactor that updates imports, tests, and docs together.
 
-The `graph` package owns canonical namespace keys and the long-term schema
+The graph workspace owns canonical namespace keys and the long-term schema
 module layout for `core:` plus the current product namespaces. Consumer
 packages such as `app` compose those modules into routes, seed data, and
 authority surfaces, but they do not own new durable namespace buckets.

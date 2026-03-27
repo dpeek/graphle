@@ -1,6 +1,6 @@
 import { applyGraphIdMap, createGraphIdMap, defineType } from "@io/graph-kernel";
+import { core } from "@io/graph-module-core";
 
-import { core } from "../../../src/graph/modules/core.js";
 import type {
   JsonPersistedAuthoritativeGraphOptions,
   PersistedAuthoritativeGraphCursorPrefixFactory,

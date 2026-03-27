@@ -1,5 +1,4 @@
 import { edgeId, type AnyTypeOutput, type Cardinality, typeId } from "@io/core/graph";
-import { core } from "@io/core/graph/modules";
 import { workflow } from "@io/core/graph/modules/workflow";
 import {
   type EntityRef,
@@ -7,6 +6,7 @@ import {
   type GraphClient,
   type PredicateRef,
 } from "@io/graph-client";
+import { core } from "@io/graph-module-core";
 
 import type { WriteSecretFieldInput, WriteSecretFieldResult } from "../../lib/secret-fields.js";
 import type { GraphRuntime } from "../graph-runtime-bootstrap.js";

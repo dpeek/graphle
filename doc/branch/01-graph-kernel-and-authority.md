@@ -896,7 +896,7 @@ commands target.
 
 ## 13. Recommended First Code Targets
 
-- `src/graph/runtime/identity.ts`, `src/graph/modules/core/bootstrap.ts`, and
+- `src/graph/runtime/identity.ts`, `lib/graph-module-core/src/core/bootstrap.ts`, and
   `lib/graph-bootstrap/src/index.ts` to lock stable schema-id and bootstrap
   behavior in code comments and tests
 - `lib/graph-sync/src/contracts.ts`, `lib/graph-authority/src/session.ts`, and

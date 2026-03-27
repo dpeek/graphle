@@ -3,9 +3,8 @@ import { describe, expect, it } from "bun:test";
 import { createStore } from "@io/core/graph";
 import { bootstrap } from "@io/graph-bootstrap";
 import { createGraphClient } from "@io/graph-client";
+import { core, coreGraphBootstrapOptions } from "@io/graph-module-core";
 
-import { core } from "../core.js";
-import { coreGraphBootstrapOptions } from "../core/bootstrap.js";
 import { workflow } from "../workflow.js";
 import {
   createRetainedWorkflowProjectionState,

@@ -6,14 +6,8 @@ import {
 } from "@io/graph-react";
 
 import { colorFieldViewCapability } from "./fields/color.js";
-import { durationFieldViewCapability } from "./fields/duration.js";
 import { markdownFieldViewCapability } from "./fields/markdown.js";
-import { moneyFieldViewCapability } from "./fields/money.js";
 import { percentFieldViewCapability } from "./fields/percent.js";
-import { quantityFieldViewCapability } from "./fields/quantity.js";
-import { rangeFieldViewCapability } from "./fields/range.js";
-import { rateFieldViewCapability } from "./fields/rate.js";
-import { entityReferenceListViewCapability } from "./fields/reference.js";
 import { svgFieldViewCapability } from "./fields/svg.js";
 
 type AnyFieldProps = PredicateFieldProps<any, any>;
@@ -105,16 +99,10 @@ export const genericWebFieldViewCapabilities = [
   svgFieldViewCapability,
   { kind: "date", Component: DateFieldView },
   { kind: "number", Component: NumberFieldView },
-  durationFieldViewCapability,
   percentFieldViewCapability,
-  quantityFieldViewCapability,
-  rangeFieldViewCapability,
-  rateFieldViewCapability,
-  moneyFieldViewCapability,
   { kind: "link", Component: LinkFieldView },
   { kind: "external-link", Component: ExternalLinkFieldView },
   { kind: "badge", Component: BadgeFieldView },
-  entityReferenceListViewCapability,
 ] satisfies readonly PredicateFieldViewCapability<any, any>[];
 
 export { genericWebFieldEditorCapabilities } from "./fields/index.js";

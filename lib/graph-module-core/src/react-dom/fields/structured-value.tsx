@@ -4,12 +4,12 @@ import {
   decomposeDuration,
   durationUnits,
   defaultMoneyCurrencyKey,
+  formatStructuredEditorPrimaryValue,
   moneyCurrencies,
   normalizeDurationInput,
-  normalizeMoneyInput,
-  formatStructuredEditorPrimaryValue,
   normalizeDurationUnitKey,
   normalizeMoneyCurrencyKey,
+  normalizeMoneyInput,
   normalizePercentInput,
   normalizeQuantityInput,
   normalizeStructuredValueDraftKind,
@@ -18,7 +18,7 @@ import {
   type MoneyCurrencyKey,
   type StructuredValueKind,
   type StructuredValuePart,
-} from "@io/core/graph/modules";
+} from "@io/graph-module-core";
 import { InputGroup, InputGroupAddon, InputGroupInput, InputGroupText } from "@io/web/input-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@io/web/select";
 

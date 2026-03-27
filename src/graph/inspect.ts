@@ -1,7 +1,6 @@
 import type { GraphId, GraphStore } from "@io/graph-kernel";
 import { edgeId, typeId, type EdgeOutput } from "@io/graph-kernel";
-
-import { core } from "./modules/core.js";
+import { core } from "@io/graph-module-core";
 
 /**
  * Internal graph inspection helpers for turning store state into plain objects.

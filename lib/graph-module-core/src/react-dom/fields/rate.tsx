@@ -1,15 +1,15 @@
-import { normalizeRateInput, type RateValue } from "@io/core/graph/modules";
+import { normalizeRateInput, type RateValue } from "@io/graph-module-core";
 import { performValidatedMutation, usePredicateField } from "@io/graph-react";
-import { useEffect, useState } from "react";
-
 import {
-  createFormattedFieldViewCapability,
   clearOrRejectRequiredValue,
+  createFormattedFieldViewCapability,
   setPredicateValue,
   useFieldMutationCallbacks,
   validatePredicateValue,
   type AnyFieldProps,
-} from "./shared.js";
+} from "@io/graph-react-dom/internal";
+import { useEffect, useState } from "react";
+
 import {
   createStructuredValueDraft,
   parseStructuredValueDraft,

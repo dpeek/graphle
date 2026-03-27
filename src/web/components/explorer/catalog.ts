@@ -1,10 +1,10 @@
 import { edgeId, isEntityType, type AnyTypeOutput, type GraphStore, typeId } from "@io/core/graph";
+import { isFieldGroupRef, type GraphMutationValidationResult } from "@io/graph-client";
 import {
   core,
   resolvePredicateDefinitionIconId,
   resolveTypeDefinitionIconId,
-} from "@io/core/graph/modules";
-import { isFieldGroupRef, type GraphMutationValidationResult } from "@io/graph-client";
+} from "@io/graph-module-core";
 
 import type {
   AnyEntityRef,

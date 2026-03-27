@@ -1,23 +1,25 @@
 import { defineType } from "@io/graph-module";
 import { entityReferenceComboboxEditorKind, existingEntityReferenceField } from "@io/graph-module";
 import { defineSecretField } from "@io/graph-module";
+import {
+  booleanTypeModule,
+  colorTypeModule,
+  core,
+  dateTypeModule,
+  durationTypeModule,
+  emailTypeModule,
+  markdownTypeModule,
+  moneyTypeModule,
+  numberTypeModule,
+  percentTypeModule,
+  quantityTypeModule,
+  rangeTypeModule,
+  rateTypeModule,
+  slugTypeModule,
+  stringTypeModule,
+  urlTypeModule,
+} from "@io/graph-module-core";
 
-import { core } from "../../modules/core.js";
-import { booleanTypeModule } from "../../modules/core/boolean/index.js";
-import { colorTypeModule } from "../../modules/core/color/index.js";
-import { dateTypeModule } from "../../modules/core/date/index.js";
-import { durationTypeModule } from "../../modules/core/duration/index.js";
-import { emailTypeModule } from "../../modules/core/email/index.js";
-import { markdownTypeModule } from "../../modules/core/markdown/index.js";
-import { moneyTypeModule } from "../../modules/core/money/index.js";
-import { numberTypeModule } from "../../modules/core/number/index.js";
-import { percentTypeModule } from "../../modules/core/percent/index.js";
-import { quantityTypeModule } from "../../modules/core/quantity/index.js";
-import { rangeTypeModule } from "../../modules/core/range/index.js";
-import { rateTypeModule } from "../../modules/core/rate/index.js";
-import { slugTypeModule } from "../../modules/core/slug/index.js";
-import { stringTypeModule } from "../../modules/core/string/index.js";
-import { urlTypeModule } from "../../modules/core/url/index.js";
 import { kitchenSinkSeverityTypeModule, kitchenSinkStatusTypeModule } from "./enums.js";
 import { kitchenSinkReferenceField } from "./reference-field.js";
 import { kitchenSinkScoreTypeModule } from "./scalars.js";

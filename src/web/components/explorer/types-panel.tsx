@@ -1,6 +1,6 @@
 import { edgeId } from "@io/core/graph";
-import { core } from "@io/core/graph/modules";
-import { GraphIcon } from "@io/graph-react-dom";
+import { core } from "@io/graph-module-core";
+import { GraphIcon } from "@io/graph-module-core/react-dom";
 import { Button } from "@io/web/button";
 
 import { asTypeMetadataFields } from "./catalog.js";

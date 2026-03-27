@@ -4,19 +4,19 @@ import {
   structuredValueKinds,
   type RangeValue,
   type StructuredValueKind,
-} from "@io/core/graph/modules";
+} from "@io/graph-module-core";
 import { performValidatedMutation, usePredicateField } from "@io/graph-react";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@io/web/select";
-import { useEffect, useState } from "react";
-
 import {
-  createFormattedFieldViewCapability,
   clearOrRejectRequiredValue,
+  createFormattedFieldViewCapability,
   setPredicateValue,
   useFieldMutationCallbacks,
   validatePredicateValue,
   type AnyFieldProps,
-} from "./shared.js";
+} from "@io/graph-react-dom/internal";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@io/web/select";
+import { useEffect, useState } from "react";
+
 import {
   createStructuredValueDraft,
   normalizeStructuredValueDraftKind,

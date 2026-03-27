@@ -1,4 +1,4 @@
-import { core } from "@io/core/graph/modules";
+import { core } from "@io/graph-module-core";
 import type { ReactNode } from "react";
 
 import { GraphIcon } from "../icon.js";

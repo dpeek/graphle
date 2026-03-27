@@ -31,9 +31,9 @@ contracts it described are now implemented.
 
 ## Relevant Code
 
-- [core secret type](../../src/graph/modules/core/secret/type.ts)
+- [core secret type](../../lib/graph-module-core/src/core/secret/type.ts)
 - [env-var type](../../src/graph/modules/workflow/env-var/type.ts)
 - [runtime schema](../../src/graph/runtime/schema.ts)
-- [type-module helpers](../../src/graph/runtime/type-module.ts)
+- [type-module helpers](../../lib/graph-module/src/type-module.ts)
 - [web authority](../../src/web/lib/authority.ts)
 - [MCP schema filtering](../../src/mcp/schema.ts)

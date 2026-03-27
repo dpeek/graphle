@@ -1,4 +1,3 @@
-import { core } from "@io/core/graph/modules";
 import { workflow } from "@io/core/graph/modules/workflow";
 import { shareSurfaceContractVersion, type PolicyVersion } from "@io/graph-authority";
 import {
@@ -7,6 +6,7 @@ import {
   fieldPolicyFallbackContractVersion,
   resolveFieldPolicyDescriptor,
 } from "@io/graph-kernel";
+import { core } from "@io/graph-module-core";
 
 import { webAuthorityPolicyEvaluatorVersion } from "./policy-contract.js";
 

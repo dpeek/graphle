@@ -1,7 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
 import { createStore, edgeId, typeId } from "@io/core/graph";
-import { core, coreGraphBootstrapOptions } from "@io/core/graph/modules";
 import {
   createAuthoritativeGraphWriteResultValidator as createResolvedAuthoritativeGraphWriteResultValidator,
   createAuthoritativeGraphWriteSession as createResolvedAuthoritativeGraphWriteSession,
@@ -19,6 +18,7 @@ import {
   GraphValidationError,
 } from "@io/graph-client";
 import { type GraphWriteTransaction } from "@io/graph-kernel";
+import { core, coreGraphBootstrapOptions } from "@io/graph-module-core";
 import {
   createIncrementalSyncFallback,
   createIncrementalSyncPayload,

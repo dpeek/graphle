@@ -17,9 +17,9 @@ import {
   type AuthoritativeGraphWriteResult,
   type GraphWriteTransaction,
 } from "@io/graph-kernel";
+import { core, coreGraphBootstrapOptions } from "@io/graph-module-core";
 import { validateIncrementalSyncResult } from "@io/graph-sync";
 
-import { core, coreGraphBootstrapOptions } from "../../../src/graph/modules/index.js";
 import { kitchenSink } from "../../../src/graph/testing/kitchen-sink.js";
 import {
   authorizeRead,

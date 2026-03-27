@@ -32,6 +32,9 @@ The exported surface is:
   reads from workflow, repository, and session records
   consumed by projections and operator surfaces
 
+`workflow:` is still the remaining root-owned built-in module. The built-in
+`core:` namespace has already moved to `@io/graph-module-core`.
+
 The first workflow slice currently defines:
 
 - workflow lineage entities:

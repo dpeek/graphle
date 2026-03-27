@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
 import { rangeOf, typeId } from "@io/core/graph";
-import { core, country } from "@io/core/graph/modules";
+import { core, country } from "@io/graph-module-core";
 
 import { testNamespace } from "./test-graph.js";
 import { kitchenSinkRecord, kitchenSinkStatus } from "./testing/kitchen-sink.js";

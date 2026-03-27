@@ -8,7 +8,6 @@ import {
   type AnyTypeOutput,
   type GraphStoreSnapshot,
 } from "@io/core/graph";
-import { core, coreGraphBootstrapOptions } from "@io/core/graph/modules";
 import { workflow } from "@io/core/graph/modules/workflow";
 import {
   type RetainedWorkflowProjectionState,
@@ -26,6 +25,7 @@ import {
 } from "@io/graph-client";
 import { type GraphWriteTransaction } from "@io/graph-kernel";
 import { defineSecretField, defineType } from "@io/graph-module";
+import { core, coreGraphBootstrapOptions } from "@io/graph-module-core";
 import { type InvalidationEvent } from "@io/graph-projection";
 
 import {

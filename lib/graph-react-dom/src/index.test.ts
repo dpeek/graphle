@@ -2,7 +2,6 @@ import { describe, expect, it } from "bun:test";
 
 const requiredExports = [
   "FilterOperandEditor",
-  "GraphIcon",
   "PredicateFieldEditor",
   "PredicateFieldView",
   "SvgMarkup",
@@ -24,6 +23,7 @@ const forbiddenExports = [
   "usePredicateField",
   "createGraphFieldResolver",
   "createGraphFilterResolver",
+  "GraphIcon",
 ] as const;
 
 describe("@io/graph-react-dom", () => {

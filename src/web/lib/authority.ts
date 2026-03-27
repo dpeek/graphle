@@ -1,4 +1,3 @@
-import { core, coreGraphBootstrapOptions } from "@io/core/graph/modules";
 import { workflow } from "@io/core/graph/modules/workflow";
 import {
   agentSession,
@@ -86,6 +85,7 @@ import {
   type AuthoritativeGraphWriteResult,
   type GraphWriteScope,
 } from "@io/graph-kernel";
+import { core, coreGraphBootstrapOptions } from "@io/graph-module-core";
 import {
   createModuleReadScope,
   matchesModuleReadScopeRequest,

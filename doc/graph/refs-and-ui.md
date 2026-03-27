@@ -66,7 +66,8 @@ What the root engine entry does not ship:
 ## React And Adapter Split
 
 React package boundaries split between the canonical host-neutral surface at
-`@io/graph-react` and the browser entry `@io/graph-react-dom`.
+`@io/graph-react`, the generic browser entry at `@io/graph-react-dom`, and the
+core-owned browser defaults at `@io/graph-module-core/react-dom`.
 
 `@io/graph-react` ships the host-neutral layer from `../../lib/graph-react/src/`:
 
@@ -81,14 +82,23 @@ React package boundaries split between the canonical host-neutral surface at
   capabilities
 - generic synced-runtime provider, sync-state, and query hooks
 
-`@io/graph-react-dom` ships DOM defaults from
+`@io/graph-react-dom` ships generic DOM defaults from
 `../../lib/graph-react-dom/src/`:
 
 - default field view and editor capabilities
-- field-family modules under `../../lib/graph-react-dom/src/fields/`
+- generic field-family modules under `../../lib/graph-react-dom/src/fields/`
 - default filter operand editors and filter resolvers
 - browser fallback rendering around `PredicateFieldView` and
   `PredicateFieldEditor`
+
+`@io/graph-module-core/react-dom` ships the core-coupled DOM defaults from
+`../../lib/graph-module-core/src/react-dom/`:
+
+- `GraphIcon`
+- structured-value editors and helpers for duration, money, quantity, range,
+  rate, and related value families
+- tag-aware entity-reference create-and-attach behavior
+- the built-in default field resolver bundle for the current `core:` module
 
 There is no dedicated `react-opentui` adapter anymore. The workflow TUI reads
 the same host-neutral runtime provider and query hooks directly from
@@ -102,8 +112,10 @@ the same host-neutral runtime provider and query hooks directly from
 - `@io/graph-react` may read those root-safe contracts and
   type-module metadata, but it should not introduce DOM tags, route
   registration, or authoritative command execution
-- `@io/graph-react-dom` may provide HTML widgets, browser fallbacks, and DOM
-  capability registries on top of the host-neutral React layer
+- `@io/graph-react-dom` may provide generic HTML widgets, browser fallbacks,
+  and DOM capability registries on top of the host-neutral React layer
+- `@io/graph-module-core/react-dom` may provide browser defaults that depend
+  on the built-in `core:` value contracts or entity shapes
 - `app` owns route registration, shell chrome, experiment selection, transport,
   and the authoritative implementations behind `GraphCommandSpec`
 
@@ -121,15 +133,16 @@ The current reference-policy helpers are intentionally small:
 `@io/graph-react` reads that policy through
 `getPredicateEntityReferencePolicy(...)` and uses it to infer the default
 entity-reference display and editor kinds.
-`@io/graph-react-dom` then supplies the default list view plus a
+`@io/graph-react-dom` then supplies the shared generic list view plus a
 shared Base UI entity-reference combobox editor for both single-value and
 collection relationships. That editor lives in its own module, uses the
 standard clear affordance for optional single-value edges, renders inline chips
 for `many` fields, and includes target icons wherever the referenced entities
 expose them. Shared combobox option rows must expose visible hover,
 highlight, and selected states so pointer and keyboard navigation are both
-legible. Tag fields currently add the extra create-on-Enter behavior on top of
-that shared combobox. Enum-backed and other closed-option pickers use the same
+legible. `@io/graph-module-core/react-dom` now layers the extra tag
+create-on-Enter behavior on top of that shared combobox for built-in
+`core:tag` fields. Enum-backed and other closed-option pickers use the same
 shared Base UI combobox mechanics with a lighter-weight item renderer.
 
 That keeps reference-selection semantics in the graph authoring layer while

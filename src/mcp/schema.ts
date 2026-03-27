@@ -12,8 +12,7 @@ import {
   type GraphFieldWritePolicy,
   type TypeOutput,
 } from "@io/graph-kernel";
-
-import { core } from "../graph/modules/index.js";
+import { core } from "@io/graph-module-core";
 
 type GraphMcpNamespace = Record<string, AnyTypeOutput>;
 type GraphTypeKind = AnyTypeOutput["kind"] | "unknown";

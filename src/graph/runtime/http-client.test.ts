@@ -31,6 +31,7 @@ import {
   type GraphWriteTransaction,
   typeId,
 } from "@io/graph-kernel";
+import { core, coreGraphBootstrapOptions } from "@io/graph-module-core";
 import {
   createIncrementalSyncFallback,
   createIncrementalSyncPayload,
@@ -39,8 +40,6 @@ import {
   type SyncPayload,
 } from "@io/graph-sync";
 
-import { core } from "../modules/core.js";
-import { coreGraphBootstrapOptions } from "../modules/index.js";
 import { workflow } from "../modules/workflow.js";
 
 const item = defineType({

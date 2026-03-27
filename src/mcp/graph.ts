@@ -7,11 +7,11 @@ import {
   type SyncedGraphClient,
 } from "@io/graph-client";
 import { isEntityType, type AnyTypeOutput } from "@io/graph-kernel";
+import { core, coreGraphBootstrapOptions } from "@io/graph-module-core";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import * as z from "zod/v4";
 
-import { core, coreGraphBootstrapOptions } from "../graph/modules/index.js";
 import { workflow } from "../graph/modules/workflow.js";
 import {
   GraphMcpToolError,

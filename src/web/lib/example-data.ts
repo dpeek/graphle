@@ -1,6 +1,6 @@
-import { core } from "@io/core/graph/modules";
 import { workflow } from "@io/core/graph/modules/workflow";
 import { type GraphClient } from "@io/graph-client";
+import { core } from "@io/graph-module-core";
 
 const exampleGraph = { ...core, ...workflow } as const;
 

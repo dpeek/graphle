@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
 import { edgeId, type EdgeOutput, typeId } from "@io/core/graph";
-import { core } from "@io/core/graph/modules";
+import { core } from "@io/graph-module-core";
 
 import { createTestGraph, testNamespace } from "./test-graph.js";
 

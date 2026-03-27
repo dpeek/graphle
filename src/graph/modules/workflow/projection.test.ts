@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
-import { core } from "../core.js";
+import { core } from "@io/graph-module-core";
+
 import {
   compileWorkflowReviewScopeDependencyKeys,
   compileWorkflowReviewWriteDependencyKeys,

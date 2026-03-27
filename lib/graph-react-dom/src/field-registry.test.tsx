@@ -1,9 +1,9 @@
 import { describe, expect, it } from "bun:test";
 
 import { createStore } from "@io/core/graph";
-import { core, coreGraphBootstrapOptions, defaultMoneyCurrencyKey } from "@io/core/graph/modules";
 import { bootstrap } from "@io/graph-bootstrap";
 import { createGraphClient } from "@io/graph-client";
+import { core, coreGraphBootstrapOptions, defaultMoneyCurrencyKey } from "@io/graph-module-core";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { kitchenSink } from "../../../src/graph/testing/kitchen-sink.js";
@@ -68,69 +68,38 @@ function createRecordFields() {
 
   return {
     accentColor: recordRef.fields.accentColor,
-    budget: recordRef.fields.budget,
-    budgetBand: recordRef.fields.budgetBand,
-    burnRate: recordRef.fields.burnRate,
     completion: recordRef.fields.completion,
-    completionBand: recordRef.fields.completionBand,
     details: recordRef.fields.details,
-    estimate: recordRef.fields.estimate,
+    headline: recordRef.fields.headline,
     iconSvg: iconRef.fields.svg,
-    quantity: recordRef.fields.quantity,
-    tags: recordRef.fields.tags,
-    tagId: platformTagId,
   };
 }
 
 describe("generic graph-react-dom field registry coverage", () => {
-  it("resolves structured value fields through the shared web resolver", () => {
+  it("resolves generic browser fields through the shared web resolver", () => {
     const fields = createRecordFields();
 
     const colorView = defaultWebFieldResolver.resolveView(fields.accentColor);
     const colorEditor = defaultWebFieldResolver.resolveEditor(fields.accentColor);
-    const moneyView = defaultWebFieldResolver.resolveView(fields.budget);
-    const moneyEditor = defaultWebFieldResolver.resolveEditor(fields.budget);
     const percentView = defaultWebFieldResolver.resolveView(fields.completion);
     const percentEditor = defaultWebFieldResolver.resolveEditor(fields.completion);
-    const estimateView = defaultWebFieldResolver.resolveView(fields.estimate);
-    const estimateEditor = defaultWebFieldResolver.resolveEditor(fields.estimate);
-    const quantityView = defaultWebFieldResolver.resolveView(fields.quantity);
-    const quantityEditor = defaultWebFieldResolver.resolveEditor(fields.quantity);
-    const rateView = defaultWebFieldResolver.resolveView(fields.burnRate);
-    const rateEditor = defaultWebFieldResolver.resolveEditor(fields.burnRate);
-    const percentRangeView = defaultWebFieldResolver.resolveView(fields.completionBand);
-    const percentRangeEditor = defaultWebFieldResolver.resolveEditor(fields.completionBand);
-    const budgetRangeView = defaultWebFieldResolver.resolveView(fields.budgetBand);
-    const budgetRangeEditor = defaultWebFieldResolver.resolveEditor(fields.budgetBand);
+    const textView = defaultWebFieldResolver.resolveView(fields.headline);
+    const textEditor = defaultWebFieldResolver.resolveEditor(fields.headline);
     const markdownView = defaultWebFieldResolver.resolveView(fields.details);
     const markdownEditor = defaultWebFieldResolver.resolveEditor(fields.details);
     const svgView = defaultWebFieldResolver.resolveView(fields.iconSvg);
     const svgEditor = defaultWebFieldResolver.resolveEditor(fields.iconSvg);
-    const tagsView = defaultWebFieldResolver.resolveView(fields.tags);
-    const tagsEditor = defaultWebFieldResolver.resolveEditor(fields.tags);
 
     expect(colorView.status).toBe("resolved");
     expect(colorEditor.status).toBe("resolved");
-    expect(moneyView.status).toBe("resolved");
-    expect(moneyEditor.status).toBe("resolved");
     expect(percentView.status).toBe("resolved");
     expect(percentEditor.status).toBe("resolved");
-    expect(estimateView.status).toBe("resolved");
-    expect(estimateEditor.status).toBe("resolved");
-    expect(quantityView.status).toBe("resolved");
-    expect(quantityEditor.status).toBe("resolved");
-    expect(rateView.status).toBe("resolved");
-    expect(rateEditor.status).toBe("resolved");
-    expect(percentRangeView.status).toBe("resolved");
-    expect(percentRangeEditor.status).toBe("resolved");
-    expect(budgetRangeView.status).toBe("resolved");
-    expect(budgetRangeEditor.status).toBe("resolved");
+    expect(textView.status).toBe("resolved");
+    expect(textEditor.status).toBe("resolved");
     expect(markdownView.status).toBe("resolved");
     expect(markdownEditor.status).toBe("resolved");
     expect(svgView.status).toBe("resolved");
     expect(svgEditor.status).toBe("resolved");
-    expect(tagsView.status).toBe("resolved");
-    expect(tagsEditor.status).toBe("resolved");
 
     if (colorView.status === "resolved") {
       expect(colorView.capability.kind).toBe("color");
@@ -138,47 +107,17 @@ describe("generic graph-react-dom field registry coverage", () => {
     if (colorEditor.status === "resolved") {
       expect(colorEditor.capability.kind).toBe("color");
     }
-    if (moneyView.status === "resolved") {
-      expect(moneyView.capability.kind).toBe("money/amount");
-    }
-    if (moneyEditor.status === "resolved") {
-      expect(moneyEditor.capability.kind).toBe("money/amount");
-    }
     if (percentView.status === "resolved") {
       expect(percentView.capability.kind).toBe("number/percent");
     }
     if (percentEditor.status === "resolved") {
       expect(percentEditor.capability.kind).toBe("number/percent");
     }
-    if (estimateView.status === "resolved") {
-      expect(estimateView.capability.kind).toBe("number/duration");
+    if (textView.status === "resolved") {
+      expect(textView.capability.kind).toBe("text");
     }
-    if (estimateEditor.status === "resolved") {
-      expect(estimateEditor.capability.kind).toBe("number/duration");
-    }
-    if (quantityView.status === "resolved") {
-      expect(quantityView.capability.kind).toBe("number/quantity");
-    }
-    if (quantityEditor.status === "resolved") {
-      expect(quantityEditor.capability.kind).toBe("number/quantity");
-    }
-    if (rateView.status === "resolved") {
-      expect(rateView.capability.kind).toBe("number/rate");
-    }
-    if (rateEditor.status === "resolved") {
-      expect(rateEditor.capability.kind).toBe("number/rate");
-    }
-    if (percentRangeView.status === "resolved") {
-      expect(percentRangeView.capability.kind).toBe("number/range");
-    }
-    if (percentRangeEditor.status === "resolved") {
-      expect(percentRangeEditor.capability.kind).toBe("number/range");
-    }
-    if (budgetRangeView.status === "resolved") {
-      expect(budgetRangeView.capability.kind).toBe("number/range");
-    }
-    if (budgetRangeEditor.status === "resolved") {
-      expect(budgetRangeEditor.capability.kind).toBe("number/range");
+    if (textEditor.status === "resolved") {
+      expect(textEditor.capability.kind).toBe("text");
     }
     if (markdownView.status === "resolved") {
       expect(markdownView.capability.kind).toBe("markdown");
@@ -192,15 +131,9 @@ describe("generic graph-react-dom field registry coverage", () => {
     if (svgEditor.status === "resolved") {
       expect(svgEditor.capability.kind).toBe("svg");
     }
-    if (tagsView.status === "resolved") {
-      expect(tagsView.capability.kind).toBe("entity-reference-list");
-    }
-    if (tagsEditor.status === "resolved") {
-      expect(tagsEditor.capability.kind).toBe("entity-reference-combobox");
-    }
   });
 
-  it("renders structured value fields with their specialized shared components", () => {
+  it("renders generic browser fields with their shared components", () => {
     const fields = createRecordFields();
 
     const colorViewMarkup = renderToStaticMarkup(
@@ -209,43 +142,15 @@ describe("generic graph-react-dom field registry coverage", () => {
     const colorEditorMarkup = renderToStaticMarkup(
       <PredicateFieldEditor predicate={fields.accentColor} />,
     );
-    const moneyViewMarkup = renderToStaticMarkup(<PredicateFieldView predicate={fields.budget} />);
-    const moneyEditorMarkup = renderToStaticMarkup(
-      <PredicateFieldEditor predicate={fields.budget} />,
-    );
     const percentViewMarkup = renderToStaticMarkup(
       <PredicateFieldView predicate={fields.completion} />,
-    );
-    const estimateViewMarkup = renderToStaticMarkup(
-      <PredicateFieldView predicate={fields.estimate} />,
     );
     const percentEditorMarkup = renderToStaticMarkup(
       <PredicateFieldEditor predicate={fields.completion} />,
     );
-    const estimateEditorMarkup = renderToStaticMarkup(
-      <PredicateFieldEditor predicate={fields.estimate} />,
-    );
-    const quantityViewMarkup = renderToStaticMarkup(
-      <PredicateFieldView predicate={fields.quantity} />,
-    );
-    const quantityEditorMarkup = renderToStaticMarkup(
-      <PredicateFieldEditor predicate={fields.quantity} />,
-    );
-    const rateViewMarkup = renderToStaticMarkup(<PredicateFieldView predicate={fields.burnRate} />);
-    const rateEditorMarkup = renderToStaticMarkup(
-      <PredicateFieldEditor predicate={fields.burnRate} />,
-    );
-    const percentRangeViewMarkup = renderToStaticMarkup(
-      <PredicateFieldView predicate={fields.completionBand} />,
-    );
-    const percentRangeEditorMarkup = renderToStaticMarkup(
-      <PredicateFieldEditor predicate={fields.completionBand} />,
-    );
-    const budgetRangeViewMarkup = renderToStaticMarkup(
-      <PredicateFieldView predicate={fields.budgetBand} />,
-    );
-    const budgetRangeEditorMarkup = renderToStaticMarkup(
-      <PredicateFieldEditor predicate={fields.budgetBand} />,
+    const textViewMarkup = renderToStaticMarkup(<PredicateFieldView predicate={fields.headline} />);
+    const textEditorMarkup = renderToStaticMarkup(
+      <PredicateFieldEditor predicate={fields.headline} />,
     );
     const markdownViewMarkup = renderToStaticMarkup(
       <PredicateFieldView predicate={fields.details} />,
@@ -257,45 +162,20 @@ describe("generic graph-react-dom field registry coverage", () => {
     const svgEditorMarkup = renderToStaticMarkup(
       <PredicateFieldEditor predicate={fields.iconSvg} />,
     );
-    const tagsViewMarkup = renderToStaticMarkup(<PredicateFieldView predicate={fields.tags} />);
-    const tagsEditorMarkup = renderToStaticMarkup(<PredicateFieldEditor predicate={fields.tags} />);
 
     expect(colorViewMarkup).toContain('data-web-field-kind="color"');
     expect(colorViewMarkup).toContain('data-web-color-swatch="#2563eb"');
     expect(colorViewMarkup).toContain("#2563EB");
     expect(colorEditorMarkup).toContain('data-web-field-kind="color"');
     expect(colorEditorMarkup).toContain('value="#2563eb"');
-    expect(moneyViewMarkup).toContain('data-web-field-kind="money/amount"');
-    expect(moneyViewMarkup).toContain("1250 USD");
-    expect(moneyEditorMarkup).toContain('data-web-field-kind="money/amount"');
-    expect(moneyEditorMarkup).toContain('value="1250"');
     expect(percentViewMarkup).toContain('data-web-field-kind="number/percent"');
     expect(percentViewMarkup).toContain("72.5%");
-    expect(estimateViewMarkup).toContain('data-web-field-kind="number/duration"');
-    expect(estimateViewMarkup).toContain("30 min");
-    expect(quantityViewMarkup).toContain('data-web-field-kind="number/quantity"');
-    expect(quantityViewMarkup).toContain("12.5 kg");
-    expect(rateViewMarkup).toContain('data-web-field-kind="number/rate"');
-    expect(rateViewMarkup).toContain("1250 USD / 1 day");
-    expect(percentRangeViewMarkup).toContain('data-web-field-kind="number/range"');
-    expect(percentRangeViewMarkup).toContain("10% .. 80%");
-    expect(budgetRangeViewMarkup).toContain('data-web-field-kind="number/range"');
-    expect(budgetRangeViewMarkup).toContain("1500 USD .. 3000 USD");
     expect(percentEditorMarkup).toContain('data-web-field-kind="number/percent"');
     expect(percentEditorMarkup).toContain("%");
-    expect(estimateEditorMarkup).toContain('data-web-field-kind="number/duration"');
-    expect(estimateEditorMarkup).toContain('value="30"');
-    expect(quantityEditorMarkup).toContain('data-web-field-kind="number/quantity"');
-    expect(quantityEditorMarkup).toContain('value="12.5"');
-    expect(quantityEditorMarkup).toContain('value="kg"');
-    expect(rateEditorMarkup).toContain('data-web-field-kind="number/rate"');
-    expect(rateEditorMarkup).toContain("per");
-    expect(rateEditorMarkup).toContain('value="1250"');
-    expect(percentRangeEditorMarkup).toContain('data-web-field-kind="number/range"');
-    expect(percentRangeEditorMarkup).toContain('value="10"');
-    expect(budgetRangeEditorMarkup).toContain('data-web-field-kind="number/range"');
-    expect(budgetRangeEditorMarkup).toContain('value="1500"');
-    expect(budgetRangeEditorMarkup).toContain('value="3000"');
+    expect(textViewMarkup).toContain('data-web-field-kind="text"');
+    expect(textViewMarkup).toContain("KS-1");
+    expect(textEditorMarkup).toContain('data-web-field-kind="text"');
+    expect(textEditorMarkup).toContain('value="KS-1"');
     expect(markdownViewMarkup).toContain('data-web-field-kind="markdown"');
     expect(markdownViewMarkup).toContain("<strong>markdown</strong>");
     expect(markdownEditorMarkup).toContain('data-web-field-kind="markdown"');
@@ -304,14 +184,5 @@ describe("generic graph-react-dom field registry coverage", () => {
     expect(svgViewMarkup).toContain('data-web-svg-preview="ready"');
     expect(svgEditorMarkup).toContain('data-web-field-kind="svg"');
     expect(svgEditorMarkup).toContain('data-web-svg-preview="ready"');
-    expect(tagsViewMarkup).toContain('data-web-field-kind="entity-reference-list"');
-    expect(tagsViewMarkup).toContain('data-web-reference-display="inert"');
-    expect(tagsViewMarkup).toContain(`data-web-reference-chip="${fields.tagId}"`);
-    expect(tagsViewMarkup).toContain(`data-web-reference-id="${fields.tagId}"`);
-    expect(tagsViewMarkup).toContain("Platform");
-    expect(tagsViewMarkup).not.toContain("<code>");
-    expect(tagsEditorMarkup).toContain('data-web-field-kind="entity-reference-combobox"');
-    expect(tagsEditorMarkup).toContain(`data-web-reference-selected-id="${fields.tagId}"`);
-    expect(tagsEditorMarkup).toContain("Platform");
   });
 });
