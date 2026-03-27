@@ -5,7 +5,7 @@ import {
   graphIconSeedList,
   resolvePredicateDefinitionIconId,
   resolveTypeDefinitionIconId,
-} from "./icon/seed.js";
+} from "../icon/seed.js";
 
 /**
  * Domain-owned bootstrap adapter for the built-in core namespace.

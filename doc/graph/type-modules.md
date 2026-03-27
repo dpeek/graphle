@@ -177,12 +177,12 @@ Built-in graph modules now live under their owning package trees:
 
 Examples:
 
-- `../../lib/graph-module-core/src/core/date/`
-- `../../lib/graph-module-core/src/core/url/`
-- `../../lib/graph-module-core/src/core/email/`
-- `../../lib/graph-module-core/src/core/string/`
-- `../../lib/graph-module-core/src/core/number/`
-- `../../lib/graph-module-core/src/core/boolean/`
+- `../../lib/graph-module-core/src/core/date.ts`
+- `../../lib/graph-module-core/src/core/url.ts`
+- `../../lib/graph-module-core/src/core/email.ts`
+- `../../lib/graph-module-core/src/core/string.ts`
+- `../../lib/graph-module-core/src/core/number.ts`
+- `../../lib/graph-module-core/src/core/boolean.ts`
 - `../../lib/graph-module/src/enum-module.ts`
 - `../../lib/graph-module/src/validated-string.ts`
 

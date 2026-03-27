@@ -34,7 +34,7 @@ symbols.
   the extracted `core:` package
 - `../../lib/graph-module-core/src/core/`: built-in scalar, enum, and helper
   families
-- `../../lib/graph-module-core/src/core/identity/`: Branch 2 identity anchors for
+- `../../lib/graph-module-core/src/core/identity.ts`: Branch 2 identity anchors for
   `principal`, `authSubjectProjection`, and `principalRoleBinding` plus the
   enum vocabulary those graph-owned types depend on
 - `../../src/graph/modules/workflow/`: Branch 6 workflow root and the merged

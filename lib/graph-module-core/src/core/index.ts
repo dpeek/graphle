@@ -1,33 +1,65 @@
-export * from "./address/index.js";
-export * from "./boolean/index.js";
+export * from "./address.js";
+
+export * from "./boolean.js";
+
 export * from "./bootstrap.js";
-export * from "./cardinality/index.js";
-export * from "./color/index.js";
-export * from "./country/index.js";
-export * from "./currency/index.js";
-export * from "./date/index.js";
-export * from "./duration/index.js";
-export * from "./email/index.js";
-export * from "./enum/index.js";
-export * from "./icon/index.js";
-export * from "./identity/index.js";
-export * from "./json/index.js";
-export * from "./language/index.js";
-export * from "./locale/index.js";
-export * from "./markdown/index.js";
-export * from "./money/index.js";
-export * from "./node/index.js";
-export * from "./number/index.js";
-export * from "./percent/index.js";
-export * from "./predicate/index.js";
-export * from "./quantity/index.js";
-export * from "./range/index.js";
-export * from "./rate/index.js";
-export * from "./secret/index.js";
-export * from "./slug/index.js";
-export * from "./svg/index.js";
+
+export * from "./cardinality.js";
+
+export * from "./color.js";
+
+export * from "./country.js";
+
+export * from "./currency.js";
+
+export * from "./date.js";
+
+export * from "./duration.js";
+
+export * from "./email.js";
+
+export * from "./enum.js";
+
+export * from "./icon.js";
+
+export * from "./identity.js";
+
+export * from "./json.js";
+
+export * from "./language.js";
+
+export * from "./locale.js";
+
+export * from "./markdown.js";
+
+export * from "./money.js";
+
+export * from "./node.js";
+
+export * from "./number.js";
+
+export * from "./percent.js";
+
+export * from "./predicate.js";
+
+export * from "./quantity.js";
+
+export * from "./range.js";
+
+export * from "./rate.js";
+
+export * from "./secret.js";
+
+export * from "./slug.js";
+
+export * from "./svg.js";
+
 export * from "./structured-value.js";
-export * from "./string/index.js";
-export * from "./tag/index.js";
-export * from "./type/index.js";
-export * from "./url/index.js";
+
+export * from "./string.js";
+
+export * from "./tag.js";
+
+export * from "./type.js";
+
+export * from "./url.js";

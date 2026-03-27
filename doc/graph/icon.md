@@ -65,7 +65,7 @@ No global `icon` predicate is inherited from `core:node`.
 
 ### Seed Registry
 
-`graphIconSeeds` in `../../lib/graph-module-core/src/core/icon/seed.ts` is the
+`graphIconSeeds` in `../../lib/graph-module-core/src/icon/seed.ts` is the
 canonical built-in core seed registry:
 
 - each seed owns a stable graph id, slug key, display name, and raw SVG payload

@@ -6,7 +6,7 @@ import {
   normalizeDurationInput,
   parseDuration,
   type DurationUnitKey,
-} from "./duration/index.js";
+} from "./duration.js";
 import { expectRecordInput, expectStringInput } from "./input.js";
 import {
   defaultMoneyCurrencyKey,
@@ -16,19 +16,19 @@ import {
   parseMoney,
   type MoneyCurrencyKey,
   type MoneyValue,
-} from "./money/index.js";
+} from "./money.js";
 import {
   formatPercent,
   formatPercentInputValue,
   normalizePercentInput,
   parsePercent,
-} from "./percent/index.js";
+} from "./percent.js";
 import {
   formatQuantity,
   normalizeQuantityInput,
   parseQuantity,
   type QuantityValue,
-} from "./quantity/index.js";
+} from "./quantity.js";
 
 export const structuredValueKinds = ["duration", "money", "percent", "quantity"] as const;
 
@@ -62,7 +62,9 @@ export const structuredValueKindOptions = structuredValueKinds.map((kind) => ({
 }>[];
 
 const structuredValueKindSet = new Set<StructuredValueKind>(structuredValueKinds);
+
 const durationUnitKeys = new Set(durationUnits.map((unit) => unit.key));
+
 const moneyCurrencyKeys = new Set(moneyCurrencies.map((currency) => currency.key));
 
 export function isStructuredValueKind(value: string): value is StructuredValueKind {

@@ -53,7 +53,7 @@ of it.
 
 - `../../src/graph/index.ts`
 - `../../lib/graph-module/src/type-module.ts`
-- `../../lib/graph-module-core/src/core/secret/type.ts`
+- `../../lib/graph-module-core/src/core/secret.ts`
 - `../../src/graph/modules/workflow/env-var/type.ts`
 - `../branch/01-graph-kernel-and-authority.md`
 - `../graph/env-vars.md`

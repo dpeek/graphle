@@ -94,7 +94,7 @@ Key source files:
 - `../../lib/graph-module-core/src/index.ts`
 - `../../lib/graph-module-core/src/core.ts`
 - `../../lib/graph-module-core/src/core/bootstrap.ts`
-- `../../lib/graph-module-core/src/core/icon/seed.ts`
+- `../../lib/graph-module-core/src/icon/seed.ts`
 
 ### React Runtime
 

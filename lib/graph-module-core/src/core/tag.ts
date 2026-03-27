@@ -1,0 +1,31 @@
+import { defineType } from "@io/graph-module";
+
+import { graphIconSeeds } from "../icon/seed.js";
+import { colorTypeModule } from "./color.js";
+import { node } from "./node.js";
+import { slugTypeModule } from "./slug.js";
+
+export const tag = defineType({
+  values: { key: "core:tag", name: "Tag", icon: graphIconSeeds.tag },
+  fields: {
+    ...node.fields,
+    key: slugTypeModule.field({
+      cardinality: "one",
+      icon: graphIconSeeds.string,
+      meta: {
+        label: "Key",
+      },
+      filter: {
+        operators: ["equals", "prefix"] as const,
+        defaultOperator: "equals",
+      },
+    }),
+    color: colorTypeModule.field({
+      cardinality: "one",
+      icon: graphIconSeeds.color,
+      meta: {
+        label: "Color",
+      },
+    }),
+  },
+});
