@@ -96,6 +96,7 @@ function BadgeFieldView({ predicate }: AnyFieldProps) {
   return <span data-web-field-kind="badge">{formatPredicateValue(predicate, value)}</span>;
 }
 
+/** Built-in browser field view capabilities for the current DOM adapter. */
 export const genericWebFieldViewCapabilities = [
   { kind: "boolean", Component: BooleanFieldView },
   colorFieldViewCapability,

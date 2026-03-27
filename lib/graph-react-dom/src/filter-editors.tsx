@@ -229,6 +229,7 @@ function BooleanFilterOperandEditor({ operator, onChange, value }: AnyOperandPro
   );
 }
 
+/** Built-in browser operand editors for the current DOM filter adapter. */
 export const genericWebFilterOperandEditorCapabilities = [
   { kind: "string", Component: TextFilterOperandEditor },
   { kind: "date", Component: DateFilterOperandEditor },

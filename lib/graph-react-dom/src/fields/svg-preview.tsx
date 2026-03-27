@@ -1,9 +1,10 @@
+import { sanitizeSvgMarkup } from "@io/core/graph";
 import { EmptyPreview, sourcePreviewPanelClassName } from "@io/web/source-preview";
 import { cn } from "@io/web/utils";
 
-import { sanitizeSvgMarkup } from "../../../index.js";
 import { SvgMarkup } from "../icon.js";
 
+/** Default browser preview chrome for SVG field/source editors. */
 export function SvgPreview({ content }: { content: string }) {
   if (content.trim().length === 0) {
     return <EmptyPreview attribute="svg">Paste SVG markup to preview it.</EmptyPreview>;

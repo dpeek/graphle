@@ -1,3 +1,4 @@
+import { core } from "@io/core/graph/modules";
 import type { GraphMutationValidationResult } from "@io/graph-client";
 import {
   getPredicateEntityReferenceOptions,
@@ -9,7 +10,6 @@ import {
   type PredicateFieldViewCapability,
 } from "@io/graph-react";
 
-import { core } from "../../../modules/index.js";
 import { OptionComboboxEditor } from "./option-combobox.js";
 import {
   createTagKey,
@@ -105,6 +105,7 @@ export function EntityReferenceComboboxEditor({
   const referencePolicy = getPredicateEntityReferencePolicy(predicate.field);
   const fieldLabel = getPredicateFieldLabel(predicate);
   const tagGraph = runtime?.graph?.tag;
+  // Tag creation remains a built-in browser default for the current core tag module.
   const canCreateTag =
     referencePolicy?.create === true &&
     predicate.rangeType?.values.key === core.tag.values.key &&

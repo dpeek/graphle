@@ -66,8 +66,7 @@ What the root engine entry does not ship:
 ## React And Adapter Split
 
 React package boundaries split between the canonical host-neutral surface at
-`@io/graph-react` and the host-specific browser entry
-`@io/core/graph/adapters/react-dom`.
+`@io/graph-react` and the browser entry `@io/graph-react-dom`.
 
 `@io/graph-react` ships the host-neutral layer from `../../lib/graph-react/src/`:
 
@@ -82,11 +81,11 @@ React package boundaries split between the canonical host-neutral surface at
   capabilities
 - generic synced-runtime provider, sync-state, and query hooks
 
-`@io/core/graph/adapters/react-dom` ships DOM defaults from
-`../../src/graph/adapters/react-dom/`:
+`@io/graph-react-dom` ships DOM defaults from
+`../../lib/graph-react-dom/src/`:
 
 - default field view and editor capabilities
-- field-family modules under `../../src/graph/adapters/react-dom/fields/`
+- field-family modules under `../../lib/graph-react-dom/src/fields/`
 - default filter operand editors and filter resolvers
 - browser fallback rendering around `PredicateFieldView` and
   `PredicateFieldEditor`
@@ -103,9 +102,8 @@ the same host-neutral runtime provider and query hooks directly from
 - `@io/graph-react` may read those root-safe contracts and
   type-module metadata, but it should not introduce DOM tags, route
   registration, or authoritative command execution
-- `@io/core/graph/adapters/react-dom` may provide HTML widgets, browser
-  fallbacks, and DOM capability registries on top of the host-neutral React
-  layer
+- `@io/graph-react-dom` may provide HTML widgets, browser fallbacks, and DOM
+  capability registries on top of the host-neutral React layer
 - `app` owns route registration, shell chrome, experiment selection, transport,
   and the authoritative implementations behind `GraphCommandSpec`
 
@@ -123,7 +121,7 @@ The current reference-policy helpers are intentionally small:
 `@io/graph-react` reads that policy through
 `getPredicateEntityReferencePolicy(...)` and uses it to infer the default
 entity-reference display and editor kinds.
-`@io/core/graph/adapters/react-dom` then supplies the default list view plus a
+`@io/graph-react-dom` then supplies the default list view plus a
 shared Base UI entity-reference combobox editor for both single-value and
 collection relationships. That editor lives in its own module, uses the
 standard clear affordance for optional single-value edges, renders inline chips

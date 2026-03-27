@@ -28,7 +28,7 @@ Canonical imports:
   `../../lib/graph-module/src/index.ts`, including `TypeModule`,
   `ObjectViewSpec`, `WorkflowSpec`, and `GraphCommandSpec`
 - `@io/core/graph`: small root helper surface for curated kernel aliases,
-  icon helpers, modules, and adapters
+  icon helpers, and modules
 - `@io/graph-authority`: authority-owned permission/admission/share contracts
   such as `ModulePermissionRequest` and `ModulePermissionApprovalRecord`
 
@@ -209,7 +209,7 @@ Physical colocation and package export ownership are separate concerns.
 - published module entry files must not import browser APIs, OpenTUI code, or
   route registration helpers
 - host-specific composition belongs on `@io/graph-react` for host-neutral React
-  contracts or `@io/core/graph/adapters/react-dom` for browser defaults
+  contracts or `@io/graph-react-dom` for browser defaults
 
 ## Authoring Semantics
 

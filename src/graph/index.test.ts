@@ -27,13 +27,13 @@ const canonicalGraphSubpaths = [
   "./graph/modules",
   "./graph/modules/core",
   "./graph/modules/workflow",
-  "./graph/adapters/react-dom",
 ] as const;
 
 const retiredGraphSubpaths = [
   "./graph/graph/*",
   "./graph/modules/*",
   "./graph/adapters/*",
+  "./graph/adapters/react-dom",
   "./graph/modules/app",
   "./graph/modules/app/topic",
   "./graph/modules/workflow/env-var",
@@ -143,7 +143,15 @@ const requiredReactDomExports = [
   "GraphIcon",
   "PredicateFieldEditor",
   "PredicateFieldView",
+  "SvgMarkup",
+  "SvgPreview",
+  "createWebFieldResolver",
+  "createWebFilterResolver",
+  "defaultWebFieldResolver",
   "defaultWebFilterResolver",
+  "genericWebFieldEditorCapabilities",
+  "genericWebFieldViewCapabilities",
+  "genericWebFilterOperandEditorCapabilities",
 ] as const;
 
 const requiredModulesExports = [
@@ -276,6 +284,8 @@ describe("@io/core/graph package entry surfaces", () => {
     await expect(import(retiredRuntimeSubpath)).rejects.toThrow();
     const retiredAuthoritySubpath = "@io/core/graph/authority";
     await expect(import(retiredAuthoritySubpath)).rejects.toThrow();
+    const retiredReactDomAdapterSubpath = "@io/core/graph/adapters/react-dom";
+    await expect(import(retiredReactDomAdapterSubpath)).rejects.toThrow();
 
     expect(probeContractItem.kind).toBe("entity");
     expect(probeContractObjectView).toMatchObject({
@@ -436,10 +446,10 @@ describe("@io/core/graph package entry surfaces", () => {
     ]);
   });
 
-  it("keeps graph-react and react-dom focused on separate responsibilities", async () => {
+  it("keeps graph-react and graph-react-dom focused on separate responsibilities", async () => {
     const [graphReactExports, reactDomAdapterExports] = await Promise.all([
       import("@io/graph-react"),
-      import("@io/core/graph/adapters/react-dom"),
+      import("@io/graph-react-dom"),
     ]);
 
     expectNamedExports(graphReactExports, requiredGraphReactExports);

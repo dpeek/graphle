@@ -1,3 +1,4 @@
+import type { AnyTypeOutput, EdgeOutput } from "@io/graph-kernel";
 import {
   PredicateFieldEditor as GraphPredicateFieldEditor,
   PredicateFieldView as GraphPredicateFieldView,
@@ -15,12 +16,15 @@ import {
 } from "@io/graph-react";
 import type { ReactNode } from "react";
 
-import type { AnyTypeOutput, EdgeOutput } from "../../index.js";
 import {
   genericWebFieldEditorCapabilities,
   genericWebFieldViewCapabilities,
 } from "./field-registry.js";
 
+/**
+ * Creates a browser field resolver by layering DOM capabilities over the
+ * host-neutral `@io/graph-react` resolver contracts.
+ */
 export const createWebFieldResolver = createGraphFieldResolver;
 export type {
   PredicateFieldEditorCapability,
@@ -38,6 +42,7 @@ export type WebFieldViewResolution<
   Defs extends Record<string, AnyTypeOutput>,
 > = GraphFieldViewResolution<T, Defs>;
 
+/** Default browser resolver for the built-in DOM field capabilities. */
 export const defaultWebFieldResolver = createWebFieldResolver({
   view: genericWebFieldViewCapabilities,
   editor: genericWebFieldEditorCapabilities,
@@ -47,6 +52,7 @@ function UnsupportedField({ kind, reason }: UnsupportedFieldFallbackProps): Reac
   return <span data-web-field-status="unsupported">{kind ? `${reason}:${kind}` : reason}</span>;
 }
 
+/** Browser fallback wrapper over the host-neutral `PredicateFieldView`. */
 export function PredicateFieldView<
   T extends EdgeOutput,
   Defs extends Record<string, AnyTypeOutput>,
@@ -60,6 +66,7 @@ export function PredicateFieldView<
   );
 }
 
+/** Browser fallback wrapper over the host-neutral `PredicateFieldEditor`. */
 export function PredicateFieldEditor<
   T extends EdgeOutput,
   Defs extends Record<string, AnyTypeOutput>,

@@ -1,3 +1,4 @@
+import type { AnyTypeOutput, EdgeOutput } from "@io/graph-kernel";
 import {
   FilterOperandEditor as GraphFilterOperandEditor,
   compileGraphFilterQuery,
@@ -28,9 +29,12 @@ import {
 } from "@io/graph-react";
 import type { ReactNode } from "react";
 
-import type { AnyTypeOutput, EdgeOutput } from "../../index.js";
 import { genericWebFilterOperandEditorCapabilities } from "./filter-editors.js";
 
+/**
+ * Creates a browser filter resolver by layering DOM operand editors over the
+ * host-neutral `@io/graph-react` filter contracts.
+ */
 export const createWebFilterResolver = createGraphFilterResolver;
 export type {
   FieldFilterOf,
@@ -97,6 +101,7 @@ export {
   lowerGraphFilterQuery as lowerWebFilterQuery,
 };
 
+/** Default browser resolver for the built-in DOM filter operand editors. */
 export const defaultWebFilterResolver = createWebFilterResolver({
   operandEditors: genericWebFilterOperandEditorCapabilities,
 });
@@ -108,6 +113,7 @@ function UnsupportedFilterOperand({
   return <span data-web-filter-status="unsupported">{kind ? `${reason}:${kind}` : reason}</span>;
 }
 
+/** Browser fallback wrapper over the host-neutral `FilterOperandEditor`. */
 export function FilterOperandEditor<
   T extends EdgeOutput,
   Defs extends Record<string, AnyTypeOutput>,

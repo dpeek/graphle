@@ -89,6 +89,9 @@ package:
   resolver contracts, persisted-mutation helpers, and synced-runtime React
   hooks
 - `../../lib/graph-react/src/` contains those implementation files
+- `@io/graph-react-dom` now owns the browser/DOM adapter layer on top of those
+  contracts, including default field/filter capabilities and graph-aware SVG
+  rendering helpers
 
 The root package no longer exports `@io/core/graph/runtime/react`, and the old
 `react-opentui` adapter was removed because its runtime provider and query

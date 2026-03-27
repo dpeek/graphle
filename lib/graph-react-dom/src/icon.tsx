@@ -1,8 +1,7 @@
+import { sanitizeSvgMarkup } from "@io/core/graph";
 import { useOptionalMutationRuntime, usePredicateField } from "@io/graph-react";
 import { cn } from "@io/web/utils";
 import type { ReactNode } from "react";
-
-import { sanitizeSvgMarkup } from "../../icon.js";
 
 type GraphIconHandle = {
   fields: {
@@ -38,6 +37,7 @@ function injectRootSvgClass(svg: string): string {
   return svg.replace(/^<svg(?=[\s>])/, '<svg class="block size-full shrink-0 overflow-visible"');
 }
 
+/** Renders sanitized SVG markup with the browser adapter's default sizing chrome. */
 export function SvgMarkup({ className, data, fallback, svg, title }: SvgMarkupProps) {
   const result = sanitizeSvgMarkup(svg);
   if (!result.ok) {
@@ -60,6 +60,11 @@ export function SvgMarkup({ className, data, fallback, svg, title }: SvgMarkupPr
   );
 }
 
+/**
+ * Resolves and renders the current built-in core icon entity shape through the
+ * active graph mutation runtime. Callers with a different icon contract should
+ * provide their own wrapper.
+ */
 export function GraphIcon({ className, fallback, iconId, title }: GraphIconProps) {
   const runtime = useOptionalMutationRuntime() as GraphIconRuntime | null;
 

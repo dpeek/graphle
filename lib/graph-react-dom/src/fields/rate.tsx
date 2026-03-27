@@ -1,7 +1,7 @@
+import { normalizeRateInput, type RateValue } from "@io/core/graph/modules";
 import { performValidatedMutation, usePredicateField } from "@io/graph-react";
 import { useEffect, useState } from "react";
 
-import { normalizeRateInput, type RateValue } from "../../../modules/core/rate/index.js";
 import {
   createFormattedFieldViewCapability,
   clearOrRejectRequiredValue,

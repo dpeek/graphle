@@ -1,6 +1,6 @@
+import { core } from "@io/core/graph/modules";
 import type { ReactNode } from "react";
 
-import { core } from "../../../modules/index.js";
 import { GraphIcon } from "../icon.js";
 
 export type EntityReferenceEntity = {
@@ -38,6 +38,7 @@ function getEntityReferenceIconId(entity: EntityReferenceEntity): string | undef
   const typeIds = Array.isArray(snapshot.type)
     ? snapshot.type.filter((value): value is string => typeof value === "string")
     : [];
+  // Browser defaults still understand the built-in core icon entity shape.
   const iconTypeId = core.icon.values.id ?? core.icon.values.key;
   if (typeIds.includes(iconTypeId)) return entity.id;
 

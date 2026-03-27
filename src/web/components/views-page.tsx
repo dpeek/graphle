@@ -2,12 +2,6 @@
 
 import { createIdMap, createStore, applyIdMap } from "@io/core/graph";
 import {
-  PredicateFieldEditor,
-  PredicateFieldView,
-  genericWebFieldEditorCapabilities,
-  genericWebFieldViewCapabilities,
-} from "@io/core/graph/adapters/react-dom";
-import {
   core,
   coreGraphBootstrapOptions,
   defaultMoneyCurrencyKey,
@@ -21,6 +15,12 @@ import {
   getPredicateEditorKind,
   usePredicateField,
 } from "@io/graph-react";
+import {
+  PredicateFieldEditor,
+  PredicateFieldView,
+  genericWebFieldEditorCapabilities,
+  genericWebFieldViewCapabilities,
+} from "@io/graph-react-dom";
 import { Badge } from "@io/web/badge";
 import { Button } from "@io/web/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@io/web/card";

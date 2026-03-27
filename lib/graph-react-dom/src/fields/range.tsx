@@ -1,13 +1,14 @@
+import {
+  getStructuredValueKindLabel,
+  normalizeRangeInput,
+  structuredValueKinds,
+  type RangeValue,
+  type StructuredValueKind,
+} from "@io/core/graph/modules";
 import { performValidatedMutation, usePredicateField } from "@io/graph-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@io/web/select";
 import { useEffect, useState } from "react";
 
-import { normalizeRangeInput, type RangeValue } from "../../../modules/core/range/index.js";
-import {
-  getStructuredValueKindLabel,
-  structuredValueKinds,
-  type StructuredValueKind,
-} from "../../../modules/core/structured-value.js";
 import {
   createFormattedFieldViewCapability,
   clearOrRejectRequiredValue,

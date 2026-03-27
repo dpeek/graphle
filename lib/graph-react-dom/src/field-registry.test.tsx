@@ -1,12 +1,12 @@
 import { describe, expect, it } from "bun:test";
 
+import { createStore } from "@io/core/graph";
+import { core, coreGraphBootstrapOptions, defaultMoneyCurrencyKey } from "@io/core/graph/modules";
 import { bootstrap } from "@io/graph-bootstrap";
 import { createGraphClient } from "@io/graph-client";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import { createStore } from "../../index.js";
-import { core, coreGraphBootstrapOptions, defaultMoneyCurrencyKey } from "../../modules/index.js";
-import { kitchenSink } from "../../testing/kitchen-sink.js";
+import { kitchenSink } from "../../../src/graph/testing/kitchen-sink.js";
 import { PredicateFieldEditor, PredicateFieldView, defaultWebFieldResolver } from "./resolver.js";
 
 function createRecordFields() {
@@ -82,7 +82,7 @@ function createRecordFields() {
   };
 }
 
-describe("generic react-dom field registry coverage", () => {
+describe("generic graph-react-dom field registry coverage", () => {
   it("resolves structured value fields through the shared web resolver", () => {
     const fields = createRecordFields();
 

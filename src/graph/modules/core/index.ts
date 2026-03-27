@@ -27,6 +27,7 @@ export * from "./rate/index.js";
 export * from "./secret/index.js";
 export * from "./slug/index.js";
 export * from "./svg/index.js";
+export * from "./structured-value.js";
 export * from "./string/index.js";
 export * from "./tag/index.js";
 export * from "./type/index.js";

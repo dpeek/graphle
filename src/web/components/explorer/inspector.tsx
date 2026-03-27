@@ -1,5 +1,5 @@
 import { isSecretBackedField } from "@io/core/graph";
-import { GraphIcon } from "@io/core/graph/adapters/react-dom";
+import { GraphIcon } from "@io/graph-react-dom";
 import { type ReactNode } from "react";
 
 import { PredicateRow, SecretFieldEditor } from "./field-editor.js";

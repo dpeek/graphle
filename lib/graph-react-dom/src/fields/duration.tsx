@@ -1,8 +1,3 @@
-import { performValidatedMutation, usePredicateField } from "@io/graph-react";
-import { InputGroup, InputGroupInput } from "@io/web/input-group";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@io/web/select";
-import { useEffect, useState } from "react";
-
 import {
   convertDurationAmount,
   decomposeDuration,
@@ -10,7 +5,12 @@ import {
   durationUnits,
   formatDurationAmount,
   type DurationUnitKey,
-} from "../../../modules/core/duration/index.js";
+} from "@io/core/graph/modules";
+import { performValidatedMutation, usePredicateField } from "@io/graph-react";
+import { InputGroup, InputGroupInput } from "@io/web/input-group";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@io/web/select";
+import { useEffect, useState } from "react";
+
 import {
   createFormattedFieldViewCapability,
   clearOrRejectRequiredValue,

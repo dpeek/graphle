@@ -1,7 +1,7 @@
+import { core } from "@io/core/graph/modules";
 import { defineDefaultEnumTypeModule, defineType } from "@io/graph-module";
 
-import { core } from "../../modules/index.js";
-import { kitchenSink } from "../../testing/kitchen-sink.js";
+import { kitchenSink } from "../../../src/graph/testing/kitchen-sink.js";
 import type { FilterOperandEditorProps } from "./index.js";
 import { defaultWebFilterResolver } from "./index.js";
 

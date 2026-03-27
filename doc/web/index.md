@@ -76,7 +76,7 @@ package. The terminal sibling surface lives in `../../src/tui/*`.
 - keep reusable browser UI and editor chrome in `../../lib/web/src/*`
 - keep graph-aware field resolver, predicate mutation, and typed preview logic
   in `../../lib/graph-react/src/*` and
-  `../../src/graph/adapters/react-dom/*`
+  `../../lib/graph-react-dom/src/*`
 - keep route/page composition, explorer state, and Worker
   authority wiring in `../../src/web/*`
 

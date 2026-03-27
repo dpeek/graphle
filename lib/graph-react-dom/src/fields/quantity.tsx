@@ -1,8 +1,8 @@
+import type { QuantityValue } from "@io/core/graph/modules";
 import { performValidatedMutation, usePredicateField } from "@io/graph-react";
 import { InputGroup, InputGroupInput } from "@io/web/input-group";
 import { useEffect, useState } from "react";
 
-import type { QuantityValue } from "../../../modules/core/quantity/index.js";
 import {
   createFormattedFieldViewCapability,
   clearOrRejectRequiredValue,
