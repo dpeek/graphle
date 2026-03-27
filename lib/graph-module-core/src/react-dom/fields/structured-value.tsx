@@ -1,26 +1,31 @@
+import { InputGroup, InputGroupAddon, InputGroupInput, InputGroupText } from "@io/web/input-group";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@io/web/select";
+
 import {
   convertDurationAmount,
   defaultDurationUnitKey,
   decomposeDuration,
   durationUnits,
-  defaultMoneyCurrencyKey,
-  formatStructuredEditorPrimaryValue,
-  moneyCurrencies,
   normalizeDurationInput,
+  type DurationUnitKey,
+} from "../../core/duration.js";
+import {
+  defaultMoneyCurrencyKey,
+  moneyCurrencies,
+  normalizeMoneyInput,
+  type MoneyCurrencyKey,
+} from "../../core/money.js";
+import { normalizePercentInput } from "../../core/percent.js";
+import { normalizeQuantityInput } from "../../core/quantity.js";
+import {
+  formatStructuredEditorPrimaryValue,
   normalizeDurationUnitKey,
   normalizeMoneyCurrencyKey,
-  normalizeMoneyInput,
-  normalizePercentInput,
-  normalizeQuantityInput,
   normalizeStructuredValueDraftKind,
   structuredValueKindOptions,
-  type DurationUnitKey,
-  type MoneyCurrencyKey,
   type StructuredValueKind,
   type StructuredValuePart,
-} from "@io/graph-module-core";
-import { InputGroup, InputGroupAddon, InputGroupInput, InputGroupText } from "@io/web/input-group";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@io/web/select";
+} from "../../core/structured-value.js";
 
 export type StructuredValueDraft = Readonly<{
   kind: StructuredValueKind;

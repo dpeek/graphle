@@ -38,7 +38,6 @@
     "@io/graph-module-core": "workspace:*",
     "@io/graph-projection": "workspace:*",
     "@io/graph-react": "workspace:*",
-    "@io/graph-react-dom": "workspace:*",
     "@io/graph-sync": "workspace:*",
     "@io/web": "workspace:*",
     "@linear/sdk": "^76.0.0",

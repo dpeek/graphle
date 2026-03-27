@@ -1,6 +1,6 @@
-import { core } from "@io/graph-module-core";
 import type { ReactNode } from "react";
 
+import { core } from "../../core.js";
 import { GraphIcon } from "../icon.js";
 
 export type EntityReferenceEntity = {

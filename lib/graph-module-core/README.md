@@ -23,19 +23,22 @@
 
 - generic type-module authoring helpers from `@io/graph-module`
 - host-neutral React runtime contracts from `@io/graph-react`
-- generic DOM/browser wrappers from `@io/graph-react-dom`
 - the still-root-owned `workflow:` module tree
 - module installation, activation, or runtime registry logic
 
 ## Browser Defaults
 
-The `@io/graph-module-core/react-dom` subpath owns the browser defaults that
-depend on built-in core value contracts and entity shapes, including:
+The `@io/graph-module-core/react-dom` subpath is the canonical home for the
+current default DOM/browser implementation, including:
 
 - `GraphIcon`
+- `SvgMarkup` and `SvgPreview`
+- the default field and filter resolver bundles
+- generic browser field views, editors, and filter operand editors used by the
+  current graph UI
 - core structured-value editors and helpers
 - tag-aware entity-reference create-and-attach behavior
-- the default built-in field resolver bundle for the current core module
+- the default built-in browser behavior for the current `core:` module
 
-Generic DOM resolver wrappers, SVG rendering, and generic browser primitives
-stay on `@io/graph-react-dom`.
+The package root stays React-free. Callers that need the browser layer import
+the `react-dom` subpath directly.

@@ -212,8 +212,8 @@ Physical colocation and package export ownership are separate concerns.
 - published module entry files must not import browser APIs, OpenTUI code, or
   route registration helpers
 - host-specific composition belongs on `@io/graph-react` for host-neutral React
-  contracts, `@io/graph-react-dom` for generic browser defaults, or
-  `@io/graph-module-core/react-dom` for core-owned browser defaults
+  contracts or `@io/graph-module-core/react-dom` for the current default
+  browser implementation
 
 ## Authoring Semantics
 

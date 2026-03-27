@@ -105,11 +105,9 @@ package:
   resolver contracts, persisted-mutation helpers, and synced-runtime React
   hooks
 - `../../lib/graph-react/src/` contains those implementation files
-- `@io/graph-react-dom` now owns the generic browser/DOM adapter layer on top
-  of those contracts, including generic field/filter capabilities and
-  graph-aware SVG rendering helpers
-- `@io/graph-module-core/react-dom` owns the browser defaults that depend on
-  the built-in `core:` contracts, including `GraphIcon`, structured-value
+- `@io/graph-module-core/react-dom` now owns the current browser/DOM adapter
+  layer on top of those contracts, including the default field/filter
+  capabilities, graph-aware SVG helpers, `GraphIcon`, structured-value
   editors, and tag-aware entity-reference behavior
 
 The root package no longer exports `@io/core/graph/runtime/react`, and the old

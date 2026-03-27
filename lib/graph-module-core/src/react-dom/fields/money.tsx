@@ -1,10 +1,14 @@
+import { performValidatedMutation, usePredicateField } from "@io/graph-react";
+import { InputGroup, InputGroupInput } from "@io/web/input-group";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@io/web/select";
+import { useEffect, useState } from "react";
+
 import {
   defaultMoneyCurrencyKey,
   moneyCurrencies,
   type MoneyCurrencyKey,
   type MoneyValue,
-} from "@io/graph-module-core";
-import { performValidatedMutation, usePredicateField } from "@io/graph-react";
+} from "../../core/money.js";
 import {
   clearOrRejectRequiredValue,
   createFormattedFieldViewCapability,
@@ -12,10 +16,7 @@ import {
   useFieldMutationCallbacks,
   validatePredicateValue,
   type AnyFieldProps,
-} from "@io/graph-react-dom/internal";
-import { InputGroup, InputGroupInput } from "@io/web/input-group";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@io/web/select";
-import { useEffect, useState } from "react";
+} from "../internal.js";
 
 const moneyCurrencyKeys = new Set(moneyCurrencies.map((currency) => currency.key));
 

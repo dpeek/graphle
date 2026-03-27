@@ -1,3 +1,8 @@
+import { performValidatedMutation, usePredicateField } from "@io/graph-react";
+import { InputGroup, InputGroupInput } from "@io/web/input-group";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@io/web/select";
+import { useEffect, useState } from "react";
+
 import {
   convertDurationAmount,
   decomposeDuration,
@@ -5,8 +10,7 @@ import {
   durationUnits,
   formatDurationAmount,
   type DurationUnitKey,
-} from "@io/graph-module-core";
-import { performValidatedMutation, usePredicateField } from "@io/graph-react";
+} from "../../core/duration.js";
 import {
   clearOrRejectRequiredValue,
   createFormattedFieldViewCapability,
@@ -14,10 +18,7 @@ import {
   useFieldMutationCallbacks,
   validatePredicateValue,
   type AnyFieldProps,
-} from "@io/graph-react-dom/internal";
-import { InputGroup, InputGroupInput } from "@io/web/input-group";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@io/web/select";
-import { useEffect, useState } from "react";
+} from "../internal.js";
 
 const durationUnitKeys = new Set(durationUnits.map((unit) => unit.key));
 

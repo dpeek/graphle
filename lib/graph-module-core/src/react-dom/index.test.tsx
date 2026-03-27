@@ -11,15 +11,29 @@ import { PredicateFieldEditor, PredicateFieldView, defaultWebFieldResolver } fro
 
 const requiredExports = [
   "GraphIcon",
+  "FilterOperandEditor",
   "PredicateFieldEditor",
   "PredicateFieldView",
+  "SvgMarkup",
+  "SvgPreview",
   "createWebFieldResolver",
+  "createWebFilterResolver",
   "defaultWebFieldResolver",
+  "defaultWebFilterResolver",
   "genericWebFieldEditorCapabilities",
   "genericWebFieldViewCapabilities",
+  "genericWebFilterOperandEditorCapabilities",
 ] as const;
 
-const forbiddenExports = ["FilterOperandEditor", "SvgMarkup", "SvgPreview"] as const;
+const forbiddenExports = [
+  "GraphMutationRuntimeProvider",
+  "GraphRuntimeProvider",
+  "createGraphFieldResolver",
+  "createGraphFilterResolver",
+  "useGraphQuery",
+  "useGraphRuntime",
+  "usePredicateField",
+] as const;
 
 function createRecordFields() {
   const store = createStore();

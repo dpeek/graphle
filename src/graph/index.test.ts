@@ -159,15 +159,7 @@ const requiredCoreModuleExports = [
   "coreGraphBootstrapOptions",
 ] as const;
 
-const requiredCoreReactDomExports = [
-  "GraphIcon",
-  "PredicateFieldEditor",
-  "PredicateFieldView",
-  "createWebFieldResolver",
-  "defaultWebFieldResolver",
-  "genericWebFieldEditorCapabilities",
-  "genericWebFieldViewCapabilities",
-] as const;
+const requiredCoreReactDomExports = ["GraphIcon", ...requiredReactDomExports] as const;
 
 const requiredEnvVarExports = [
   "buildSecretHandleName",
@@ -448,18 +440,22 @@ describe("@io/core/graph package entry surfaces", () => {
     ]);
   });
 
-  it("keeps graph-react and graph-react-dom focused on separate responsibilities", async () => {
-    const [graphReactExports, reactDomAdapterExports] = await Promise.all([
+  it("keeps graph-react host-neutral while module-core owns the DOM defaults", async () => {
+    const [graphReactExports, coreReactDomExports] = await Promise.all([
       import("@io/graph-react"),
-      import("@io/graph-react-dom"),
+      import("@io/graph-module-core/react-dom"),
     ]);
 
     expectNamedExports(graphReactExports, requiredGraphReactExports);
     expect(Object.keys(graphReactExports)).not.toContain("GraphIcon");
-    expectNamedExports(reactDomAdapterExports, requiredReactDomExports);
-    expect(Object.keys(reactDomAdapterExports)).not.toContain("GraphIcon");
-    expect(Object.keys(reactDomAdapterExports)).not.toContain("GraphMutationRuntimeProvider");
-    expect(Object.keys(reactDomAdapterExports)).not.toContain("GraphRuntimeProvider");
+    expect(Object.keys(graphReactExports)).not.toContain("SvgMarkup");
+    expectNamedExports(coreReactDomExports, requiredCoreReactDomExports);
+    expect(Object.keys(coreReactDomExports)).not.toContain("GraphMutationRuntimeProvider");
+    expect(Object.keys(coreReactDomExports)).not.toContain("GraphRuntimeProvider");
+    expect(Object.keys(coreReactDomExports)).not.toContain("createGraphFieldResolver");
+    expect(Object.keys(coreReactDomExports)).not.toContain("createGraphFilterResolver");
+    const retiredReactDomPackage = "@io/graph-react-dom";
+    await expect(import(retiredReactDomPackage)).rejects.toThrow();
   });
 
   it("keeps the canonical module entry surfaces explicit", async () => {
@@ -473,7 +469,6 @@ describe("@io/core/graph package entry surfaces", () => {
     expectNamedExports(coreReactDomExports, requiredCoreReactDomExports);
     expect(Object.keys(coreModuleExports)).not.toContain("workflow");
     expect(Object.keys(coreModuleExports)).not.toContain("FilterOperandEditor");
-    expect(Object.keys(coreReactDomExports)).not.toContain("FilterOperandEditor");
     const retiredModulesSubpath = "@io/core/graph/modules";
     await expect(import(retiredModulesSubpath)).rejects.toThrow();
     const retiredCoreModulesSubpath = "@io/core/graph/modules/core";

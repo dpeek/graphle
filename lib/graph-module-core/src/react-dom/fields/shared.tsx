@@ -1,9 +1,4 @@
 import {
-  GraphValidationError,
-  type GraphMutationValidationResult,
-  type PredicateRef,
-} from "@io/graph-client";
-import {
   formatPredicateValue,
   performValidatedMutation,
   usePersistedMutationCallbacks,
@@ -14,8 +9,8 @@ import {
   type PredicateFieldViewCapability,
 } from "@io/graph-react";
 
-export type AnyPredicate = PredicateRef<any, any>;
 export type AnyFieldProps = PredicateFieldProps<any, any>;
+export type AnyPredicate = AnyFieldProps["predicate"];
 
 export const fieldActionClassName =
   "border-input bg-muted/30 text-foreground inline-flex items-center justify-center rounded-lg border px-2.5 py-1.5 text-xs font-medium transition hover:bg-muted";
@@ -57,21 +52,17 @@ export function validatePredicateValue(
   value: unknown,
 ): MutationValidation {
   if (typeof (predicate as { validateSet?: unknown }).validateSet !== "function") return false;
-  return (
-    predicate as { validateSet(nextValue: unknown): GraphMutationValidationResult }
-  ).validateSet(value);
+  return (predicate as { validateSet(nextValue: unknown): MutationValidation }).validateSet(value);
 }
 
 export function validatePredicateClear(predicate: AnyPredicate): MutationValidation {
   if (typeof (predicate as { validateClear?: unknown }).validateClear !== "function") return false;
-  return (predicate as { validateClear(): GraphMutationValidationResult }).validateClear();
+  return (predicate as { validateClear(): MutationValidation }).validateClear();
 }
 
 export function validatePredicateAdd(predicate: AnyPredicate, value: unknown): MutationValidation {
   if (typeof (predicate as { validateAdd?: unknown }).validateAdd !== "function") return false;
-  return (
-    predicate as { validateAdd(nextValue: unknown): GraphMutationValidationResult }
-  ).validateAdd(value);
+  return (predicate as { validateAdd(nextValue: unknown): MutationValidation }).validateAdd(value);
 }
 
 export function validatePredicateRemove(
@@ -80,11 +71,9 @@ export function validatePredicateRemove(
 ): MutationValidation {
   if (typeof (predicate as { validateRemove?: unknown }).validateRemove !== "function")
     return false;
-  return (
-    predicate as {
-      validateRemove(nextValue: unknown): GraphMutationValidationResult;
-    }
-  ).validateRemove(value);
+  return (predicate as { validateRemove(nextValue: unknown): MutationValidation }).validateRemove(
+    value,
+  );
 }
 
 export function clearOrRejectRequiredValue(
@@ -99,11 +88,11 @@ export function clearOrRejectRequiredValue(
     );
   }
 
-  const validation = validatePredicateValue(predicate, undefined);
-  if (validation !== false && !validation.ok) {
-    callbacks.onMutationError?.(new GraphValidationError(validation));
-  }
-  return false;
+  return performValidatedMutation(
+    callbacks,
+    () => validatePredicateValue(predicate, undefined),
+    () => false,
+  );
 }
 
 export function normalizeTextValue(value: unknown): string {

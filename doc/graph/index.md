@@ -29,9 +29,8 @@ rather than generic browser chrome.
   source/preview shells, markdown rendering, and reusable controls
 - keep graph-aware, host-neutral React helpers in
   `../../lib/graph-react/src/`
-- keep generic DOM capability registries and browser composition in
-  `../../lib/graph-react-dom/src/`
-- keep core-coupled DOM defaults in `../../lib/graph-module-core/src/react-dom/`
+- keep the current default DOM capability registries, browser composition, and
+  core-coupled DOM defaults in `../../lib/graph-module-core/src/react-dom/`
 - keep validation, predicate mutation wiring, field metadata, typed
   entity-reference behavior, and SVG sanitization in `graph`
 
@@ -86,8 +85,7 @@ The root `@io/core` package publishes these graph subpaths from
   canonical `workflow:` namespace assembly and workflow slice root
 
 There is no longer a root `@io/core/graph/adapters/react-dom` export. Browser
-callers import `@io/graph-react-dom` or `@io/graph-module-core/react-dom`
-directly.
+callers import `@io/graph-module-core/react-dom` directly.
 
 The workspace also publishes:
 
@@ -112,13 +110,10 @@ The workspace also publishes:
   transport helpers, and serialized-query request/response contracts
 - `@io/graph-react`: `../../lib/graph-react/src/index.ts`; host-neutral React
   graph runtime hooks and mutation helpers
-- `@io/graph-react-dom`: `../../lib/graph-react-dom/src/index.ts`; generic
-  browser field/filter adapters, DOM fallback rendering, and graph-aware SVG
-  helpers
 - `@io/graph-module-core/react-dom`:
-  `../../lib/graph-module-core/src/react-dom/index.ts`; core-owned browser
-  defaults such as `GraphIcon`, structured-value editors, and tag-aware
-  reference behavior
+  `../../lib/graph-module-core/src/react-dom/index.ts`; the canonical browser
+  field/filter adapter layer plus core-owned defaults such as `GraphIcon`,
+  structured-value editors, and tag-aware reference behavior
 - `@io/graph-sync`: `../../lib/graph-sync/src/index.ts`; sync scopes,
   total/incremental payload contracts, cursor helpers, validation, and total
   sync sessions
@@ -165,14 +160,13 @@ extracted too.
   and its internal slice entrypoints
 - `../../lib/graph-react/src/`: host-neutral React runtime, resolver
   primitives, and predicate/entity hooks
-- `../../lib/graph-react-dom/src/`: generic DOM capability registries, generic
-  field views/editors, filter resolvers, and SVG preview helpers
-- `../../lib/graph-module-core/src/react-dom/`: core-owned DOM defaults,
-  `GraphIcon`, structured-value editors, and tag-aware reference behavior
+- `../../lib/graph-module-core/src/react-dom/`: the canonical DOM capability
+  registries, field/filter adapters, `GraphIcon`, structured-value editors,
+  and tag-aware reference behavior
 - `../../src/graph/icon.ts`: graph-owned icon helpers
 - `../../src/graph/testing/kitchen-sink/`: private test fixtures used by graph
   proof coverage
 - `../../src/graph/*.test.ts`,
   `../../lib/graph-react/src/*.test.tsx`,
-  `../../lib/graph-react-dom/src/*.test.tsx`: focused package-surface proof
+  `../../lib/graph-module-core/src/react-dom/*.test.tsx`: focused package-surface proof
   coverage

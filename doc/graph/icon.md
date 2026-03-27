@@ -18,7 +18,7 @@ Icons are graph-owned entities. SVG is graph-owned scalar data. The explorer sho
   enum types default to `tag.svg`, and predicates whose range is another entity type default to
   `edge.svg`.
 - Rendering happens through shared DOM helpers such as `GraphIcon` from
-  `@io/graph-module-core/react-dom` and `SvgMarkup` from `@io/graph-react-dom`.
+  `@io/graph-module-core/react-dom`, which also owns `SvgMarkup`.
 
 ## Ownership Model
 

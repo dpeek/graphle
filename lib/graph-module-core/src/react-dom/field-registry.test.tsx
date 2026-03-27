@@ -6,7 +6,7 @@ import { createGraphClient } from "@io/graph-client";
 import { core, coreGraphBootstrapOptions, defaultMoneyCurrencyKey } from "@io/graph-module-core";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import { kitchenSink } from "../../../src/graph/testing/kitchen-sink.js";
+import { kitchenSink } from "../../../../src/graph/testing/kitchen-sink.js";
 import { PredicateFieldEditor, PredicateFieldView, defaultWebFieldResolver } from "./resolver.js";
 
 function createRecordFields() {
@@ -75,8 +75,8 @@ function createRecordFields() {
   };
 }
 
-describe("generic graph-react-dom field registry coverage", () => {
-  it("resolves generic browser fields through the shared web resolver", () => {
+describe("@io/graph-module-core/react-dom generic field registry coverage", () => {
+  it("resolves shared browser fields through the canonical module-core resolver", () => {
     const fields = createRecordFields();
 
     const colorView = defaultWebFieldResolver.resolveView(fields.accentColor);
@@ -133,7 +133,7 @@ describe("generic graph-react-dom field registry coverage", () => {
     }
   });
 
-  it("renders generic browser fields with their shared components", () => {
+  it("renders shared browser fields with their moved module-core components", () => {
     const fields = createRecordFields();
 
     const colorViewMarkup = renderToStaticMarkup(

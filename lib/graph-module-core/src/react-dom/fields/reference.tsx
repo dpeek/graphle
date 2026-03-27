@@ -1,14 +1,15 @@
-import type { GraphMutationValidationResult } from "@io/graph-client";
-import { core } from "@io/graph-module-core";
 import {
   getPredicateEntityReferenceOptions,
   getPredicateEntityReferencePolicy,
   getPredicateEntityReferenceSelection,
+  type MutationValidation,
   performValidatedMutation,
   useOptionalMutationRuntime,
   usePredicateField,
   type PredicateFieldViewCapability,
 } from "@io/graph-react";
+
+import { core } from "../../core.js";
 import {
   OptionComboboxEditor,
   addPredicateItem,
@@ -22,8 +23,7 @@ import {
   validatePredicateRemove,
   validatePredicateValue,
   type AnyFieldProps,
-} from "@io/graph-react-dom/internal";
-
+} from "../internal.js";
 import {
   createTagKey,
   EntityReferenceReadonlyChip,
@@ -36,11 +36,7 @@ import {
 type TagCreateGraphHandle = {
   create(input: { color: string; key: string; name: string }): string;
   list(): Array<{ id: string; key: string; name: string }>;
-  validateCreate(input: {
-    color: string;
-    key: string;
-    name: string;
-  }): GraphMutationValidationResult;
+  validateCreate(input: { color: string; key: string; name: string }): MutationValidation;
 };
 
 type EntityReferenceComboboxRuntime = {
