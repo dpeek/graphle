@@ -278,6 +278,18 @@ type WorkflowProjectionRow = {
   sort_key: string;
 };
 
+type RetainedRecordRow = {
+  materialized_at_cursor: string | null;
+  payload_json: string;
+  record_id: string;
+  record_kind: string;
+  version: number;
+};
+
+function parseRetainedRecordPayload(row: Pick<RetainedRecordRow, "payload_json">): unknown {
+  return JSON.parse(row.payload_json);
+}
+
 type SyncPayload = {
   readonly mode: "incremental" | "total";
   readonly scope?: {
@@ -678,6 +690,73 @@ function buildTransactionFromGraphSnapshot<TGraph extends Record<string, AnyType
     result,
     transaction: buildGraphWriteTransaction(before, mutationStore.snapshot(), id),
   };
+}
+
+async function seedRetainedDocumentFixture(
+  authority: WebAppAuthority,
+  fixture: Awaited<ReturnType<typeof createTestWorkflowFixture>>,
+  authorization: AuthorizationContext,
+): Promise<{
+  readonly blockId: string;
+  readonly documentId: string;
+}> {
+  const created = buildTransactionFromSnapshot(
+    authority.readSnapshot({ authorization }),
+    "tx:create-retained-document",
+    (graph) => {
+      const documentId = graph.document.create({
+        description: "Recover durable workflow document memory after restart.",
+        isArchived: false,
+        name: "Retained Workflow Goal",
+        slug: "retained-workflow-goal",
+      });
+      const blockId = graph.documentBlock.create({
+        content: "Retained markdown block body.",
+        description: "Restored into the live graph from retained rows.",
+        document: documentId,
+        kind: workflow.documentBlockKind.values.markdown.id,
+        name: "Overview",
+        order: 0,
+      });
+
+      return {
+        blockId,
+        documentId,
+      };
+    },
+  );
+
+  await authority.applyTransaction(created.transaction, { authorization });
+  await authority.executeCommand(
+    {
+      kind: "workflow-mutation",
+      input: {
+        action: "updateBranch",
+        branchId: fixture.branchId,
+        goalDocumentId: created.result.documentId,
+      },
+    },
+    {
+      authorization,
+    },
+  );
+
+  return created.result;
+}
+
+function deleteLiveDocumentGraphRows(db: Database, ...entityIds: string[]): void {
+  if (entityIds.length === 0) {
+    return;
+  }
+  db.query(
+    `DELETE FROM io_graph_edge
+    WHERE s IN (${entityIds.map(() => "?").join(", ")})`,
+  ).run(...(entityIds as never as Parameters<ReturnType<typeof db.query>["run"]>));
+}
+
+function clearWorkflowProjectionRows(db: Database): void {
+  db.query("DELETE FROM io_workflow_projection_row").run();
+  db.query("DELETE FROM io_workflow_projection_checkpoint").run();
 }
 
 function createPersistedStorageAdapter(
@@ -2026,6 +2105,249 @@ describe("web graph authority durable object", () => {
     );
   });
 
+  it("persists retained document rows and keeps branch document memory readable after durable restart", async () => {
+    const { db, state } = createSqliteDurableObjectState();
+    const durableObject = createTestDurableObject(state);
+    const authority = await getDurableAuthority<WebAppAuthority>(durableObject);
+    const fixture = await createTestWorkflowFixture(authority, testAuthorityAuthorization);
+    const retained = await seedRetainedDocumentFixture(
+      authority,
+      fixture,
+      testAuthorityAuthorization,
+    );
+
+    const rows = queryAll<RetainedRecordRow>(
+      db,
+      `SELECT record_kind, record_id, version, payload_json, materialized_at_cursor
+      FROM io_retained_record
+      WHERE record_kind IN ('document', 'document-block')
+      ORDER BY record_kind ASC, record_id ASC`,
+    );
+    const restarted = createTestDurableObject(state);
+    const restartedAuthority = await getDurableAuthority<WebAppAuthority>(restarted);
+    const restartedGraph = readProductGraph(restartedAuthority, testAuthorityAuthorization);
+    const branchBoard = await postWorkflowRead(restarted, {
+      kind: "project-branch-scope",
+      query: {
+        projectId: fixture.projectId,
+        limit: 3,
+      },
+    });
+
+    expect(rows).toMatchObject([
+      {
+        record_kind: "document",
+        record_id: retained.documentId,
+        version: 1,
+        materialized_at_cursor: expect.any(String),
+      },
+      {
+        record_kind: "document-block",
+        record_id: retained.blockId,
+        version: 1,
+        materialized_at_cursor: expect.any(String),
+      },
+    ]);
+    expect(rows.map(parseRetainedRecordPayload)).toEqual([
+      {
+        title: "Retained Workflow Goal",
+        description: "Recover durable workflow document memory after restart.",
+        slug: "retained-workflow-goal",
+        isArchived: false,
+        tagIds: [],
+      },
+      {
+        title: "Overview",
+        description: "Restored into the live graph from retained rows.",
+        documentId: retained.documentId,
+        order: 0,
+        kind: "markdown",
+        content: "Retained markdown block body.",
+      },
+    ]);
+    expect(restartedGraph.document.get(retained.documentId)).toMatchObject({
+      id: retained.documentId,
+      name: "Retained Workflow Goal",
+      description: "Recover durable workflow document memory after restart.",
+      slug: "retained-workflow-goal",
+      isArchived: false,
+    });
+    expect(restartedGraph.documentBlock.get(retained.blockId)).toMatchObject({
+      id: retained.blockId,
+      document: retained.documentId,
+      order: 0,
+      content: "Retained markdown block body.",
+    });
+    expect(branchBoard.response.status).toBe(200);
+    expect(branchBoard.payload).toMatchObject({
+      kind: "project-branch-scope",
+      result: {
+        rows: [
+          {
+            branch: {
+              id: fixture.branchId,
+              goalDocumentId: retained.documentId,
+              goalSummary: "Recover durable workflow document memory after restart.",
+            },
+          },
+        ],
+      },
+    });
+  });
+
+  it("rebuilds live document facts from retained rows when the durable baseline loses workflow documents", async () => {
+    const { db, state } = createSqliteDurableObjectState();
+    const durableObject = createTestDurableObject(state);
+    const authority = await getDurableAuthority<WebAppAuthority>(durableObject);
+    const fixture = await createTestWorkflowFixture(authority, testAuthorityAuthorization);
+    const retained = await seedRetainedDocumentFixture(
+      authority,
+      fixture,
+      testAuthorityAuthorization,
+    );
+
+    deleteLiveDocumentGraphRows(db, retained.documentId, retained.blockId);
+    clearWorkflowProjectionRows(db);
+
+    const restarted = createTestDurableObject(state);
+    const restartedAuthority = await getDurableAuthority<WebAppAuthority>(restarted);
+    const restartedGraph = readProductGraph(restartedAuthority, testAuthorityAuthorization);
+    const branchBoard = await postWorkflowRead(restarted, {
+      kind: "project-branch-scope",
+      query: {
+        projectId: fixture.projectId,
+        limit: 3,
+      },
+    });
+
+    expect(restartedGraph.document.get(retained.documentId)).toMatchObject({
+      id: retained.documentId,
+      name: "Retained Workflow Goal",
+      description: "Recover durable workflow document memory after restart.",
+    });
+    expect(restartedGraph.documentBlock.get(retained.blockId)).toMatchObject({
+      id: retained.blockId,
+      document: retained.documentId,
+      content: "Retained markdown block body.",
+    });
+    expect(branchBoard.response.status).toBe(200);
+    expect(branchBoard.payload).toMatchObject({
+      kind: "project-branch-scope",
+      result: {
+        rows: [
+          {
+            branch: {
+              id: fixture.branchId,
+              goalDocumentId: retained.documentId,
+              goalSummary: "Recover durable workflow document memory after restart.",
+            },
+          },
+        ],
+      },
+    });
+  });
+
+  it("upgrades legacy retained document payload rows and rematerializes workflow documents after restart", async () => {
+    const { db, state } = createSqliteDurableObjectState();
+    const durableObject = createTestDurableObject(state);
+    const authority = await getDurableAuthority<WebAppAuthority>(durableObject);
+    const fixture = await createTestWorkflowFixture(authority, testAuthorityAuthorization);
+    const retained = await seedRetainedDocumentFixture(
+      authority,
+      fixture,
+      testAuthorityAuthorization,
+    );
+
+    db.query(
+      `UPDATE io_retained_record
+      SET version = 0,
+        payload_json = ?
+      WHERE record_kind = 'document'
+        AND record_id = ?`,
+    ).run(
+      JSON.stringify({
+        title: "Retained Workflow Goal",
+        description: "Recover durable workflow document memory after restart.",
+        slug: "retained-workflow-goal",
+        archived: false,
+        tagIds: [],
+      }),
+      retained.documentId,
+    );
+    db.query(
+      `UPDATE io_retained_record
+      SET version = 0,
+        payload_json = ?
+      WHERE record_kind = 'document-block'
+        AND record_id = ?`,
+    ).run(
+      JSON.stringify({
+        title: "Overview",
+        description: "Restored into the live graph from retained rows.",
+        documentId: retained.documentId,
+        position: 0,
+        kind: "markdown",
+        markdown: "Retained markdown block body.",
+      }),
+      retained.blockId,
+    );
+    deleteLiveDocumentGraphRows(db, retained.documentId, retained.blockId);
+    clearWorkflowProjectionRows(db);
+
+    const restarted = createTestDurableObject(state);
+    const restartedAuthority = await getDurableAuthority<WebAppAuthority>(restarted);
+    const restartedGraph = readProductGraph(restartedAuthority, testAuthorityAuthorization);
+    const migratedRows = queryAll<RetainedRecordRow>(
+      db,
+      `SELECT record_kind, record_id, version, payload_json, materialized_at_cursor
+      FROM io_retained_record
+      WHERE record_kind IN ('document', 'document-block')
+      ORDER BY record_kind ASC, record_id ASC`,
+    );
+
+    expect(restartedGraph.document.get(retained.documentId)).toMatchObject({
+      id: retained.documentId,
+      name: "Retained Workflow Goal",
+      description: "Recover durable workflow document memory after restart.",
+    });
+    expect(restartedGraph.documentBlock.get(retained.blockId)).toMatchObject({
+      id: retained.blockId,
+      document: retained.documentId,
+      content: "Retained markdown block body.",
+    });
+    expect(migratedRows).toMatchObject([
+      {
+        record_kind: "document",
+        record_id: retained.documentId,
+        version: 1,
+        materialized_at_cursor: expect.any(String),
+      },
+      {
+        record_kind: "document-block",
+        record_id: retained.blockId,
+        version: 1,
+        materialized_at_cursor: expect.any(String),
+      },
+    ]);
+    expect(migratedRows.map(parseRetainedRecordPayload)).toEqual([
+      {
+        title: "Retained Workflow Goal",
+        description: "Recover durable workflow document memory after restart.",
+        slug: "retained-workflow-goal",
+        isArchived: false,
+        tagIds: [],
+      },
+      {
+        title: "Overview",
+        description: "Restored into the live graph from retained rows.",
+        documentId: retained.documentId,
+        order: 0,
+        kind: "markdown",
+        content: "Retained markdown block body.",
+      },
+    ]);
+  });
+
   it("accepts generic serialized queries over /api/query with stable validation and fail-closed pagination identity", async () => {
     const { db, state } = createSqliteDurableObjectState();
     const durableObject = createTestDurableObject(state);
@@ -3124,6 +3446,8 @@ describe("web graph authority durable object", () => {
       `SELECT type, name
       FROM sqlite_master
       WHERE name LIKE 'io_graph_%'
+        OR name = 'io_retained_record'
+        OR name = 'io_retained_record_kind_cursor_idx'
         OR name LIKE 'io_workflow_projection_%'
         OR name = 'io_secret_value'
       ORDER BY type ASC, name ASC`,
@@ -3135,12 +3459,14 @@ describe("web graph authority durable object", () => {
         { type: "table", name: "io_graph_tx" },
         { type: "table", name: "io_graph_tx_op" },
         { type: "table", name: "io_graph_edge" },
+        { type: "table", name: "io_retained_record" },
         { type: "table", name: "io_secret_value" },
         { type: "table", name: "io_workflow_projection_checkpoint" },
         { type: "table", name: "io_workflow_projection_row" },
         { type: "index", name: "io_graph_edge_subject_predicate_idx" },
         { type: "index", name: "io_graph_edge_predicate_object_idx" },
         { type: "index", name: "io_graph_edge_retracted_tx_seq_idx" },
+        { type: "index", name: "io_retained_record_kind_cursor_idx" },
         { type: "index", name: "io_workflow_projection_checkpoint_source_cursor_idx" },
         { type: "index", name: "io_workflow_projection_row_lookup_idx" },
       ]),
@@ -4526,8 +4852,14 @@ describe("web graph authority durable object", () => {
               load() {
                 return storage.load();
               },
+              loadRetainedDocuments() {
+                return storage.loadRetainedDocuments();
+              },
               loadWorkflowProjection() {
                 return storage.loadWorkflowProjection();
+              },
+              replaceRetainedDocuments(retainedDocuments) {
+                return storage.replaceRetainedDocuments(retainedDocuments);
               },
               replaceWorkflowProjection(projection) {
                 return storage.replaceWorkflowProjection(projection);

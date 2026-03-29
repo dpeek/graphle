@@ -116,6 +116,14 @@ import {
   type WriteSecretFieldInput,
   type WriteSecretFieldResult,
 } from "./secret-fields.js";
+import {
+  createRetainedDocumentState,
+  hasRetainedDocumentState,
+  planRetainedDocumentRecovery,
+  sameRetainedDocumentState,
+  type LoadedRetainedDocumentState,
+  type RetainedDocumentState,
+} from "./retained-documents.js";
 import { runWorkflowMutationCommand } from "./workflow-authority.js";
 import type { WorkflowReviewLiveRegistrationTarget } from "./workflow-live-transport.js";
 
@@ -310,7 +318,9 @@ type WebAuthorityMutationStageContext = {
  */
 export interface WebAppAuthorityStorage {
   load(): Promise<PersistedAuthoritativeGraphStorageLoadResult | null>;
+  loadRetainedDocuments(): Promise<LoadedRetainedDocumentState | null>;
   loadWorkflowProjection(): Promise<RetainedWorkflowProjectionState | null>;
+  replaceRetainedDocuments(retainedDocuments: RetainedDocumentState | null): Promise<void>;
   replaceWorkflowProjection(projection: RetainedWorkflowProjectionState | null): Promise<void>;
   inspectSecrets(): Promise<Record<string, WebAppAuthoritySecretInventoryRecord>>;
   /**
@@ -324,6 +334,7 @@ export interface WebAppAuthorityStorage {
   commit(
     input: PersistedAuthoritativeGraphStorageCommitInput,
     options?: {
+      readonly retainedDocuments?: RetainedDocumentState | null;
       readonly secretWrite?: WebAppAuthoritySecretWrite;
       readonly projection?: RetainedWorkflowProjectionState;
     },
@@ -331,6 +342,7 @@ export interface WebAppAuthorityStorage {
   persist(
     input: PersistedAuthoritativeGraphStoragePersistInput,
     options?: {
+      readonly retainedDocuments?: RetainedDocumentState | null;
       readonly projection?: RetainedWorkflowProjectionState;
     },
   ): Promise<void>;
@@ -669,6 +681,10 @@ function buildRetainedWorkflowProjectionState(
       sourceCursor,
     },
   );
+}
+
+function buildRetainedDocumentState(snapshot: GraphStoreSnapshot): RetainedDocumentState {
+  return createRetainedDocumentState(snapshot);
 }
 
 function sameRetainedWorkflowProjectionState(
@@ -3328,6 +3344,7 @@ function createAuthorityStorage(
       const secretWrite = pendingSecretWriteRef.current
         ? clonePersistedValue(pendingSecretWriteRef.current)
         : undefined;
+      const retainedDocuments = buildRetainedDocumentState(input.snapshot);
       const projection = buildRetainedWorkflowProjectionState(
         input.snapshot,
         headCursor(input.writeHistory),
@@ -3335,6 +3352,7 @@ function createAuthorityStorage(
 
       try {
         await storage.commit(clonePersistedValue(input), {
+          retainedDocuments: hasRetainedDocumentState(retainedDocuments) ? retainedDocuments : null,
           ...(secretWrite ? { secretWrite } : {}),
           projection,
         });
@@ -3344,11 +3362,13 @@ function createAuthorityStorage(
       }
     },
     async persist(input): Promise<void> {
+      const retainedDocuments = buildRetainedDocumentState(input.snapshot);
       const projection = buildRetainedWorkflowProjectionState(
         input.snapshot,
         headCursor(input.writeHistory),
       );
       await storage.persist(clonePersistedValue(input), {
+        retainedDocuments: hasRetainedDocumentState(retainedDocuments) ? retainedDocuments : null,
         projection,
       });
       retainedWorkflowProjectionRef.current = clonePersistedValue(projection);
@@ -3363,6 +3383,7 @@ export async function createWebAppAuthority(
   const authorityPolicyVersion = options.policyVersion ?? webAppPolicyVersion;
   const graph = options.graph ?? webAppGraph;
   const persistedState = await storage.load();
+  const persistedRetainedDocuments = persistedState ? await storage.loadRetainedDocuments() : null;
   const persistedWorkflowProjection = persistedState
     ? await storage.loadWorkflowProjection()
     : null;
@@ -3443,6 +3464,33 @@ export async function createWebAppAuthority(
   // `homeGraphId`. Repair them before any sync or direct graph reads materialize
   // those entities through the typed client.
   await repairLegacyPrincipalHomeGraphIds(authority);
+
+  async function replaceRetainedDocuments(retainedDocuments: RetainedDocumentState): Promise<void> {
+    await storage.replaceRetainedDocuments(clonePersistedValue(retainedDocuments));
+  }
+
+  const authoritativeRetainedDocuments = buildRetainedDocumentState(authority.store.snapshot());
+  if (!persistedRetainedDocuments) {
+    if (hasRetainedDocumentState(authoritativeRetainedDocuments)) {
+      await replaceRetainedDocuments(authoritativeRetainedDocuments);
+    }
+  } else {
+    const recoveredDocuments = planRetainedDocumentRecovery(
+      authority.store.snapshot(),
+      persistedRetainedDocuments.state,
+      `recover:retained-documents:${Date.now()}`,
+    );
+    if (recoveredDocuments.changed) {
+      await authority.applyTransaction(recoveredDocuments.transaction, {
+        writeScope: "authority-only",
+      });
+    } else if (
+      persistedRetainedDocuments.repairReasons.length > 0 ||
+      !sameRetainedDocumentState(authoritativeRetainedDocuments, persistedRetainedDocuments.state)
+    ) {
+      await replaceRetainedDocuments(persistedRetainedDocuments.state);
+    }
+  }
 
   async function replaceRetainedWorkflowProjection(
     projection: RetainedWorkflowProjectionState,

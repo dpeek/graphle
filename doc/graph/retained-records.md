@@ -13,16 +13,24 @@ graph shape around it changes or the live graph must be rebuilt.
 
 ## Status
 
-This is a working proposal, not current runtime behavior.
+This document defines the current Branch 6 restore contract for the first
+retained-record family.
 
-The current implementation persists:
+The current implementation now proves the first retained consumer for
+document-oriented workspace memory:
 
-- authoritative graph rows and retained transaction history
-- secret side storage
-- retained workflow projections as rebuildable derived state
+- authoritative writes persist canonical retained `document` and
+  `document-block` rows beside the live graph
+- durable restart reloads those retained rows and keeps restored workflow
+  document memory readable through the live graph and workflow scopes
+- retained rows can re-materialize `Document` and `DocumentBlock` facts when
+  the live graph baseline must be rebuilt
+- versioned retained payloads forward-migrate during load before
+  re-materialization
 
-The current implementation does not yet publish a separate retained-record
-contract for migration-stable workspace data.
+The current implementation still does not yet extend this retained-record
+contract to later families such as `WorkflowArtifact`, `WorkflowDecision`,
+`ContextBundle`, or `ContextBundleEntry`.
 
 ## Logical Ownership
 
@@ -83,19 +91,31 @@ Use this split:
 This keeps durable storage tied to stable business meaning rather than to the
 exact current graph predicate layout.
 
-For the first concrete use case, the retained boundary should focus on
-workspace-native Branch 6 records:
+For the first concrete use case, the retained boundary should focus on the
+document-oriented Branch 6 workspace-memory family:
 
 - `Document`
 - `DocumentBlock`
-- `WorkflowArtifact`
-- `WorkflowDecision`
-- `ContextBundle`
-- `ContextBundleEntry`
 
-The exact record families may expand later, but the first goal is to preserve
-workspace notes, specs, context, and execution outputs without requiring whole-
-graph snapshots.
+The exact record families may expand later to `WorkflowArtifact`,
+`WorkflowDecision`, `ContextBundle`, and `ContextBundleEntry`, but the first
+goal is to preserve authored workspace memory without requiring whole-graph
+snapshots.
+
+The first restore target is intentionally narrower than "all retained workflow
+history".
+
+It includes the document-oriented workspace-memory family whose product value
+must survive a graph-baseline rewrite:
+
+- `Document`
+- `DocumentBlock`
+
+It does not yet require the storage seam to preserve exact `AgentSession` or
+`AgentSessionEvent` playback as part of retained-record restore. Those records
+may remain durable graph history, but the first restore contract is about
+restoring durable authored workspace memory rather than reproducing every
+execution log line.
 
 ## Why SQL Plus JSON
 
@@ -207,6 +227,69 @@ question of whether `Document` should own explicit revision snapshots.
 - secrets and blobs are referenced by durable handles, not embedded inline
 - derived indexes may be promoted into side columns or side tables without
   becoming the canonical source of truth
+- `record_kind` should name the semantic family such as `document` or
+  `document-block`, not the current graph type key such as
+  `workflow:document` or `workflow:documentBlock`
+
+## First Retained Family
+
+The first retained-record family is intentionally narrow. It covers authored
+document workspace memory plus the minimum workflow document-reference seams
+needed to restore meaningful Branch 6 context.
+
+Stable retained record families for the first milestone:
+
+- `record_kind = "document"` for one retained `Document`
+- `record_kind = "document-block"` for one retained `DocumentBlock`
+
+Version 1 `document` payloads own the canonical document-head fields needed to
+re-materialize the current `Document` meaning:
+
+- stable logical document identity at `record_id`
+- title, optional description, optional slug, and archive state
+- tag references or equivalent stable tag identity data needed to restore tags
+
+Version 1 `document-block` payloads own the canonical ordered child surface for
+one `DocumentBlock`:
+
+- stable logical block identity at `record_id`
+- owning `documentId`
+- `order`
+- `kind: "markdown" | "entity" | "repo-path"`
+- the block-local fields required to restore the authored body or include
+  target for that kind
+
+For `DocumentBlock.kind`, the retained payload meaning is:
+
+- `markdown`: authored markdown text remains canonical retained content
+- `entity`: the payload keeps the referenced graph-entity identity as data, not
+  as a recoverable raw edge list
+- `repo-path`: the payload keeps the repository path include as data while git
+  remains authoritative for the file content
+
+The first retained family does not yet include:
+
+- `DocumentPlacement`
+- `DocumentLink`
+- `WorkflowArtifact`
+- `WorkflowDecision`
+- `ContextBundle`
+- `ContextBundleEntry`
+
+### Required Workflow-Linked Document References
+
+Restoring only retained `Document` and `DocumentBlock` rows is not enough to
+recover meaningful Branch 6 context. The first milestone must also preserve the
+workflow document-reference slots that point at restored documents:
+
+- `WorkflowBranch.goalDocumentId`
+- `WorkflowBranch.contextDocumentId`
+- `WorkflowCommit.contextDocumentId`
+
+These are semantic workflow slots, not a reason to retain arbitrary raw graph
+edges. Restore should re-bind those slots to restored `Document` identities, or
+surface them as unresolved repair items when the target document cannot be
+materialized.
 
 ## Materialization Model
 
@@ -228,20 +311,86 @@ only recovery-grade representation of every durable workspace object.
 
 ## Restore Semantics
 
-The retained boundary should let the runtime recover selected workspace data
-without replaying or preserving the entire graph forever.
+Restore in Branch 6 means re-establishing the durable workspace-memory surface
+from retained records after forward migration. It does not mean reproducing the
+exact prior graph encoding, retained sync window, or every derived read model
+byte for byte.
 
-Expected restore properties:
+### First restore target
 
-- if retained sync history is pruned or unusable, workspace documents and
-  retained workflow memory still remain restorable
-- if projections are lost, they rebuild from graph facts or retained records
-- if the live graph baseline must be rewritten, retained workspace records can
-  be re-materialized into a fresh graph baseline
-- restore targets the selected durable workspace surface, not every helper edge
-  or transient read model ever written
+The first retained-record restore target is:
 
-This is the main reason to add a retained-record layer at all.
+- `Document`
+- `DocumentBlock`
+- workflow document-reference slots on `WorkflowBranch.goalDocumentId`,
+  `WorkflowBranch.contextDocumentId`, and `WorkflowCommit.contextDocumentId`
+
+A successful restore must preserve, for every retained object in that set:
+
+- stable retained identity at the `(record_kind, record_id)` boundary for
+  `Document` and `DocumentBlock`
+- canonical payload meaning after applying forward migrations
+- semantic parent-child membership and ordering for ordered `DocumentBlock`
+  records
+- workflow document-reference slot meaning for branch goal and branch or commit
+  context documents
+- `DocumentBlock.kind` meaning for `markdown`, `entity`, and `repo-path`
+- tombstones and non-destructive delete intent, so deleted objects are not
+  resurrected by rebuild
+- unresolved repair state when a referenced entity, repository path target, or
+  workflow document target cannot be re-materialized cleanly
+
+### Restorable Versus Rebuildable
+
+Restore must recreate the selected durable workspace surface. It may rebuild or
+replace the operational graph surfaces around it.
+
+Restorable durable state:
+
+- canonical retained rows for the first restore target
+- migrated payload JSON and stable retained ids
+- semantic document membership and ordered block composition
+- workflow goal and context document references on branches and commits
+- document content plus document-block include intent
+
+Rebuildable derived or operational state:
+
+- graph facts materialized from restored payloads
+- helper edges, denormalized read models, and computed indexes
+- Branch 3 projections, query indexes, and checkpoint rows
+- retained sync windows, cursor ranges, and other incremental-replay
+  boundaries
+- `materialized_at_cursor` checkpoints used only to coordinate
+  re-materialization
+
+### Restore Does Not Promise
+
+- byte-for-byte recreation of the previous graph rows, tx ids, or cursors
+- preservation of every helper edge or transient read model that once existed
+- preservation of local runtime state such as locks, worktree leases, PTYs, or
+  in-memory session buses
+- exact replayable `AgentSession` or `AgentSessionEvent` history as part of the
+  first retained-record restore target
+- inclusion of `WorkflowArtifact`, `WorkflowDecision`, `ContextBundle`, or
+  `ContextBundleEntry` in the first retained family
+
+### Failure Expectations
+
+Restore should fail closed per retained object, not by silently dropping or
+inventing workspace memory.
+
+- if retained sync history is pruned or unusable, the first restore target
+  still restores from retained rows
+- if projections are lost or incompatible, rebuild them from restored graph
+  facts or directly from retained records
+- if the live graph baseline must be rewritten, re-materialize restored records
+  into a fresh baseline rather than preserving the old graph shape
+- if one retained record cannot be migrated or materialized, keep its canonical
+  row for repair, mark that object unresolved, and continue restoring unrelated
+  records when safe
+- if a referenced entity, repository path target, or workflow document target
+  is missing, preserve the retained row and surface the missing reference as
+  repairable data loss rather than erasing the parent record
 
 ## When To Promote Fields Out Of JSON
 
@@ -266,6 +415,7 @@ Retained-record migrations should be:
 - forward-only in the stable contract
 - idempotent per `(record_kind, record_id, from_version, to_version)` step
 - explicit about semantic changes rather than graph-shape rewrites
+- applied before graph materialization rather than during ad hoc graph repair
 
 The preferred migration surface is:
 
@@ -281,6 +431,10 @@ type RetainedRecordMigration = {
 Graph materialization then consumes the migrated canonical payload rather than
 trying to infer workspace meaning from partially stale graph facts.
 
+If a migration step is missing or fails for one retained object, restore should
+leave that object's canonical payload untouched for repair instead of
+materializing a partial best-effort graph shape.
+
 ## Relationship To Existing Graph Storage
 
 [`./storage.md`](./storage.md) should remain the canonical doc for the current
@@ -292,6 +446,6 @@ This document adds a second boundary above it:
 - `retained-records.md`: how selected durable workspace data should survive
   refactors, recovery, and graph-baseline rewrites over time
 
-If this proposal hardens into a canonical branch contract, its primary home
-should move under Branch 6 with a smaller Branch 1 note covering the storage
-seam needed to support it.
+If this contract later hardens into the implemented storage seam, its primary
+home should move under Branch 6 with a smaller Branch 1 note covering the
+storage seam needed to support it.

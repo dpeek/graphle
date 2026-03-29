@@ -1293,11 +1293,12 @@ Authoritative persistence for Branch 6 records is provided by Branch 1's
 graph storage. Branch 6 owns the workflow entity families stored inside that
 graph.
 
-The current working proposal for preserving workspace-native graph documents,
-context, artifacts, and decisions without whole-graph snapshots lives in
+The current working contract for preserving document-oriented workspace memory
+and the workflow document-reference slots that make Branch 6 context
+restorable without whole-graph snapshots lives in
 [`../graph/retained-records.md`](../graph/retained-records.md). Treat that
-proposal as the current design note for Branch 6 restore semantics on top of
-Branch 1 storage.
+doc as the Branch 6 restore-semantics contract for the first retained-record
+family on top of Branch 1 storage.
 
 ### Canonical records
 
@@ -1326,6 +1327,28 @@ Branch 1 storage.
   efficiency, but the underlying retained records remain the durable audit
   trail
 
+### First restore target
+
+The first retained-record restore target is narrower than all retained workflow
+history. It covers the workspace-memory records defined in
+[`../graph/retained-records.md`](../graph/retained-records.md):
+
+- `Document`
+- `DocumentBlock`
+- workflow document-reference slots on `WorkflowBranch.goalDocumentId`,
+  `WorkflowBranch.contextDocumentId`, and `WorkflowCommit.contextDocumentId`
+
+The initial restore contract does not require byte-for-byte recreation of
+`AgentSession` or `AgentSessionEvent` playback, repository observations,
+projections, helper edges, or transient runtime state. Restore succeeds when
+the durable workspace-memory surface can be forward-migrated and
+re-materialized into a fresh graph baseline with ordered document blocks,
+workflow document links, and tombstones intact.
+
+`WorkflowArtifact`, `WorkflowDecision`, `ContextBundle`, and
+`ContextBundleEntry` remain durable Branch 6 records and likely later retained
+families, but they are not part of the first retained-record family.
+
 ### Derived versus authoritative
 
 - Branch 3 projections may materialize branch boards, commit queues, recent
@@ -1333,6 +1356,10 @@ Branch 1 storage.
 - those projections are rebuildable from graph records plus fresh git
   inspection
 - no projection may become the only copy of workflow history
+
+Restore therefore treats retained-row loss as durable workspace-memory loss,
+while projection, helper-edge, and checkpoint loss remains repairable derived-
+state loss.
 
 ### Rebuild rules
 

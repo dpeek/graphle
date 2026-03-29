@@ -34,10 +34,16 @@ import {
   type DurableObjectSqlStorageLike,
 } from "./graph-authority-sql-startup.js";
 import {
+  bootstrapRetainedRecordTables,
+  readRetainedDocumentStateFromSql,
+  replaceRetainedDocumentRows,
+} from "./graph-authority-sql-retained-records.js";
+import {
   bootstrapWorkflowProjectionTables,
   readWorkflowProjectionFromSql,
   replaceWorkflowProjectionRows,
 } from "./graph-authority-sql-workflow-projection.js";
+import type { LoadedRetainedDocumentState, RetainedDocumentState } from "./retained-documents.js";
 
 export type DurableObjectStorageLike = {
   sql: DurableObjectSqlStorageLike;
@@ -279,6 +285,7 @@ function pruneRetainedTransactionRows(
 function rewritePersistedState(
   sql: DurableObjectSqlStorageLike,
   input: DurableAuthorityPersistInput,
+  retainedDocuments?: RetainedDocumentState | null,
   projection?: RetainedWorkflowProjectionState,
 ): void {
   const now = new Date().toISOString();
@@ -289,6 +296,7 @@ function rewritePersistedState(
   sql.exec("DELETE FROM io_graph_edge");
   insertTransactionHistoryRows(sql, input.writeHistory, now);
   insertSnapshotEdges(sql, input.snapshot, input.writeHistory);
+  replaceRetainedDocumentRows(sql, retainedDocuments, headCursor(input.writeHistory));
   replaceWorkflowProjectionRows(sql, projection);
   pruneOrphanedSecretValues(sql, input.snapshot);
   writeGraphMetaRow(sql, {
@@ -306,6 +314,7 @@ function applyCommittedTransaction(
   sql: DurableObjectSqlStorageLike,
   input: DurableAuthorityCommitInput,
   secretWrite?: WebAppAuthoritySecretWrite,
+  retainedDocuments?: RetainedDocumentState | null,
   projection?: RetainedWorkflowProjectionState,
 ): void {
   if (input.result.replayed) return;
@@ -380,6 +389,7 @@ function applyCommittedTransaction(
   if (secretWrite) {
     upsertSecretValue(sql, secretWrite, now);
   }
+  replaceRetainedDocumentRows(sql, retainedDocuments, input.result.cursor);
   replaceWorkflowProjectionRows(sql, projection);
   pruneOrphanedSecretValues(sql, input.snapshot);
   if ((existingMeta?.historyRetainedFromSeq ?? 0) < input.writeHistory.baseSequence) {
@@ -419,12 +429,21 @@ export function createSqliteDurableObjectAuthorityStorage(
         expectedSchemaVersion: durableObjectAuthoritySchemaVersion,
       });
     },
+    async loadRetainedDocuments(): Promise<LoadedRetainedDocumentState | null> {
+      return readRetainedDocumentStateFromSql(state.storage.sql);
+    },
     async loadWorkflowProjection(): Promise<RetainedWorkflowProjectionState | null> {
       const meta = readGraphMetaRow(state.storage.sql, defaultRetainedHistoryPolicy);
       if (!meta) {
         return null;
       }
       return readWorkflowProjectionFromSql(state.storage.sql, meta.headCursor);
+    },
+    async replaceRetainedDocuments(retainedDocuments: RetainedDocumentState | null): Promise<void> {
+      const meta = readGraphMetaRow(state.storage.sql, defaultRetainedHistoryPolicy);
+      await runStorageTransaction(state.storage, () => {
+        replaceRetainedDocumentRows(state.storage.sql, retainedDocuments, meta?.headCursor);
+      });
     },
     async replaceWorkflowProjection(
       projection: RetainedWorkflowProjectionState | null,
@@ -452,13 +471,19 @@ export function createSqliteDurableObjectAuthorityStorage(
           state.storage.sql,
           input,
           options?.secretWrite,
+          options?.retainedDocuments,
           options?.projection,
         );
       });
     },
     async persist(input, options): Promise<void> {
       await runStorageTransaction(state.storage, () => {
-        rewritePersistedState(state.storage.sql, input, options?.projection);
+        rewritePersistedState(
+          state.storage.sql,
+          input,
+          options?.retainedDocuments,
+          options?.projection,
+        );
       });
     },
   };
@@ -549,6 +574,7 @@ export function bootstrapDurableObjectAuthoritySchema(storage: DurableObjectStor
   if (!graphEdgeColumns.has("retracted_op_index")) {
     storage.sql.exec("ALTER TABLE io_graph_edge ADD COLUMN retracted_op_index INTEGER");
   }
+  bootstrapRetainedRecordTables(storage.sql);
   bootstrapSecretValueTable(storage.sql);
   bootstrapWorkflowProjectionTables(storage.sql);
   storage.sql.exec(
