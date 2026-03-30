@@ -6,6 +6,9 @@ This document is the entry point for typed refs, predicate-slot subscriptions,
 reference policies, and the split between the root runtime surface, the
 host-neutral React layer, and host-specific adapters.
 
+For the higher-level surface and edit-session roadmap that should sit on top of
+these primitives, see `./surfaces-and-editing.md`.
+
 ## Engine Surface
 
 Typed refs and synced-client ergonomics now live in `@io/graph-client`,

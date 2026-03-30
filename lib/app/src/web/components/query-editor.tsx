@@ -34,7 +34,7 @@ import {
   type QueryEditorRawValue,
   type QueryEditorValueDraft,
 } from "../lib/query-editor.js";
-import { installedModuleQueryEditorCatalog } from "../lib/query-surface-registry.js";
+import { getInstalledModuleQueryEditorCatalog } from "../lib/query-surface-registry.js";
 
 type QueryEditorProps = {
   readonly catalog: QueryEditorCatalog;
@@ -958,7 +958,7 @@ function defaultParameterValue(type: string): QueryEditorRawValue {
 }
 
 export function createInstalledQueryEditorCatalog(): QueryEditorCatalog {
-  return installedModuleQueryEditorCatalog;
+  return getInstalledModuleQueryEditorCatalog();
 }
 
 function NativeSelect(props: React.ComponentProps<"select">) {

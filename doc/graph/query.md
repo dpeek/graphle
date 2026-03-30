@@ -775,10 +775,16 @@ Rules:
 - inline queries are valid for drafts, previews, temporary dialogs, and URL
   state
 - saved-query containers are the durable product-grade path
+- durable scaffolded collection surfaces should usually bind to a `SavedView`,
+  which carries the saved-query reference plus renderer and container defaults
 - data cache identity is renderer-independent and derived from the resolved
   query identity, execution context, and page settings
 - page lifecycle remains container-local through `containerId` even when
   multiple containers share the same cached query pages
+
+For the higher-level collection-surface model that should sit on top of this
+query substrate, including the first scaffolded entity-table direction, see
+`./surfaces-and-editing.md`.
 
 ### Renderer contract
 

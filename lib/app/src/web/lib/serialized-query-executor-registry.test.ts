@@ -7,14 +7,16 @@ import { workflowBuiltInQuerySurfaceIds } from "@io/graph-module-workflow";
 import {
   type InstalledModuleQuerySurface,
   type InstalledModuleQuerySurfaceRegistry,
+  getInstalledModuleQuerySurfaceRegistry,
   getInstalledModuleQuerySurface,
-  installedModuleQuerySurfaceRegistry,
 } from "./query-surface-registry.js";
 import {
   createSerializedQueryExecutorRegistry,
   resolveSerializedQueryCollectionExecutor,
   resolveSerializedQueryScopeExecutor,
 } from "./serialized-query-executor-registry.js";
+
+const installedModuleQuerySurfaceRegistry = getInstalledModuleQuerySurfaceRegistry();
 
 function createCollectionPage(_context?: unknown): QueryResultPage {
   return {

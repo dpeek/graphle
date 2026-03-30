@@ -23,6 +23,7 @@ shared env/log/process helpers.
 - `./agent/cli.md`
 - `./agent/tui.md`
 - `./graph/index.md`
+- `./graph/surfaces-and-editing.md`
 - `./integration.md`
 - `./graph/computed.md`
 - `./graph/mcp.md`
@@ -50,6 +51,8 @@ shared env/log/process helpers.
 - `./graph/index.md`: graph workspace layout including the root `@io/app/graph`
   surface, extracted `lib/graph-*` packages, adapters, taxonomies, and
   focused subdocs
+- `./graph/surfaces-and-editing.md`: proposed graph-native record and
+  collection surfaces, edit-session semantics, and the command UI boundary
 - `./integration.md`: plan for consolidating graph integration coverage into a
   dedicated downstream `@io/graph-integration` package
 - `./graph/computed.md`: proposed computed-value layer for lazy, memoized, read-only graph derivations

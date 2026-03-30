@@ -15,8 +15,8 @@ import {
 } from "@io/graph-module-workflow";
 
 import {
+  getInstalledModuleQuerySurfaceRegistry,
   getInstalledModuleQuerySurface,
-  installedModuleQuerySurfaceRegistry,
 } from "./query-surface-registry.js";
 import { createWebAppSerializedQueryExecutorRegistry } from "./registered-serialized-query-executors.js";
 import {
@@ -35,6 +35,8 @@ const normalizedMetadata = {
   requestHash: "request-hash",
   requestJson: "{}",
 } as const;
+
+const installedModuleQuerySurfaceRegistry = getInstalledModuleQuerySurfaceRegistry();
 
 function createCollectionRequest(
   query: Extract<NormalizedQueryRequest["query"], { readonly kind: "collection" }>,

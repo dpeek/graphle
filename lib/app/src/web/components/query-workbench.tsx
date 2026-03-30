@@ -37,9 +37,9 @@ import {
   type QueryWorkbenchRouteSearch,
 } from "../lib/query-workbench.js";
 import {
+  getInstalledModuleQuerySurfaceRegistry,
   getInstalledModuleQuerySurface,
   getInstalledModuleQuerySurfaceRendererCompatibility,
-  installedModuleQuerySurfaceRegistry,
 } from "../lib/query-surface-registry.js";
 import { QueryEditor, createInstalledQueryEditorCatalog } from "./query-editor.js";
 import {
@@ -94,7 +94,10 @@ function createPreviewRendererBindingForSurface(
   rendererId: PreviewControls["rendererId"],
   surfaceId: string,
 ) {
-  const surface = getInstalledModuleQuerySurface(installedModuleQuerySurfaceRegistry, surfaceId);
+  const surface = getInstalledModuleQuerySurface(
+    getInstalledModuleQuerySurfaceRegistry(),
+    surfaceId,
+  );
   const fieldIds = surface?.selections?.map((selection) => selection.fieldId) ?? [
     "title",
     "state",

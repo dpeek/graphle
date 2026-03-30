@@ -15,7 +15,7 @@ import {
   workflowBuiltInQuerySurfaces,
 } from "@io/graph-module-workflow";
 
-import { installedModuleQuerySurfaceRegistry } from "./query-surface-registry.js";
+import { getInstalledModuleQuerySurfaceRegistry } from "./query-surface-registry.js";
 import {
   createSerializedQueryExecutorRegistry,
   type RegisteredSerializedQueryScopeExecutor,
@@ -319,7 +319,7 @@ function createRegisteredModuleScopeExecutor<ReadOptions>(
 export function createWebAppSerializedQueryExecutorRegistry<ReadOptions>(
   dependencies: WebAppSerializedQueryExecutorDependencies<ReadOptions>,
 ): SerializedQueryExecutorRegistry<ReadOptions> {
-  return createSerializedQueryExecutorRegistry(installedModuleQuerySurfaceRegistry, [
+  return createSerializedQueryExecutorRegistry(getInstalledModuleQuerySurfaceRegistry(), [
     {
       queryKind: "collection",
       surfaceId: workflowBuiltInQuerySurfaces.projectBranchBoard.surfaceId,

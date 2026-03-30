@@ -70,6 +70,9 @@ compose shared `@io/web` primitives rather than duplicate browser chrome.
   field metadata/filter contracts, and root-safe UI-adjacent specs
 - [`refs-and-ui.md`](./refs-and-ui.md): typed refs, predicate-slot
   subscriptions, reference policies, and the React/adapter split
+- [`surfaces-and-editing.md`](./surfaces-and-editing.md): proposed
+  graph-native surface primitives, edit-session semantics, and command UI
+  boundary
 - [`env-vars.md`](./env-vars.md): env-var schema, secret-handle usage, and the
   current secret-write command seam
 - [`workflow.md`](./workflow.md): workflow schema, command envelope, and

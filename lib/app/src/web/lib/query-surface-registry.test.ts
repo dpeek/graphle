@@ -3,18 +3,20 @@ import { describe, expect, it } from "bun:test";
 import { coreBuiltInQuerySurfaceIds } from "@io/graph-module-core";
 
 import {
-  builtInInstalledModuleQuerySurfaceCatalogs,
   createBuiltInInstalledModuleQuerySurfaceRegistry,
   createInstalledModuleQuerySurfaceRegistry,
   createQueryEditorCatalogFromRegistry,
   createQuerySurfaceRendererCompatibility,
+  getBuiltInInstalledModuleQuerySurfaceCatalogs,
+  getInstalledModuleQuerySurfaceRegistry,
   getInstalledModuleQuerySurface,
-  installedModuleQuerySurfaceRegistry,
 } from "./query-surface-registry.js";
 
 describe("query surface registry", () => {
   it("installs the explicit built-in workflow and core catalogs into one shared registry", () => {
     const registry = createBuiltInInstalledModuleQuerySurfaceRegistry();
+    const builtInInstalledModuleQuerySurfaceCatalogs =
+      getBuiltInInstalledModuleQuerySurfaceCatalogs();
     const surface = getInstalledModuleQuerySurface(registry, "workflow:project-branch-board");
     const coreSurface = getInstalledModuleQuerySurface(
       registry,
@@ -120,6 +122,7 @@ describe("query surface registry", () => {
   });
 
   it("projects installed workflow and core surfaces into one editor catalog and renderer views", () => {
+    const installedModuleQuerySurfaceRegistry = getInstalledModuleQuerySurfaceRegistry();
     const catalog = createQueryEditorCatalogFromRegistry(installedModuleQuerySurfaceRegistry);
     const branchBoardSurface = catalog.surfaces.find(
       (surface) => surface.surfaceId === "workflow:project-branch-board",
@@ -222,6 +225,8 @@ describe("query surface registry", () => {
   });
 
   it("rejects duplicate installed surface registrations", () => {
+    const builtInInstalledModuleQuerySurfaceCatalogs =
+      getBuiltInInstalledModuleQuerySurfaceCatalogs();
     expect(() =>
       createInstalledModuleQuerySurfaceRegistry([
         {
@@ -234,6 +239,8 @@ describe("query surface registry", () => {
   });
 
   it("rejects duplicate installed catalog registrations", () => {
+    const builtInInstalledModuleQuerySurfaceCatalogs =
+      getBuiltInInstalledModuleQuerySurfaceCatalogs();
     expect(() =>
       createInstalledModuleQuerySurfaceRegistry([
         builtInInstalledModuleQuerySurfaceCatalogs[0],

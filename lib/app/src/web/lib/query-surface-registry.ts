@@ -141,26 +141,41 @@ export function createQuerySurfaceRendererCompatibility(
 /**
  * Keep the current built-in installation path explicit until manifest-backed
  * activation decides which module catalogs are active at runtime.
+ *
+ * This stays lazy because the Cloudflare dev worker scans entry exports during
+ * startup, and eager catalog materialization can observe partially initialized
+ * workspace modules.
  */
-export const builtInInstalledModuleQuerySurfaceCatalogs = [
-  workflowQuerySurfaceCatalog,
-  coreQuerySurfaceCatalog,
-] as const satisfies readonly ModuleQuerySurfaceCatalog[];
-
-export function createBuiltInInstalledModuleQuerySurfaceRegistry(): InstalledModuleQuerySurfaceRegistry {
-  return createInstalledModuleQuerySurfaceRegistry(builtInInstalledModuleQuerySurfaceCatalogs);
+export function getBuiltInInstalledModuleQuerySurfaceCatalogs(): readonly ModuleQuerySurfaceCatalog[] {
+  return [workflowQuerySurfaceCatalog, coreQuerySurfaceCatalog];
 }
 
-export const installedModuleQuerySurfaceRegistry =
-  createBuiltInInstalledModuleQuerySurfaceRegistry();
+export function createBuiltInInstalledModuleQuerySurfaceRegistry(): InstalledModuleQuerySurfaceRegistry {
+  return createInstalledModuleQuerySurfaceRegistry(getBuiltInInstalledModuleQuerySurfaceCatalogs());
+}
 
-export const installedModuleQueryEditorCatalog = createQueryEditorCatalogFromRegistry(
-  installedModuleQuerySurfaceRegistry,
-);
+let installedModuleQuerySurfaceRegistryCache: InstalledModuleQuerySurfaceRegistry | undefined;
+
+export function getInstalledModuleQuerySurfaceRegistry(): InstalledModuleQuerySurfaceRegistry {
+  installedModuleQuerySurfaceRegistryCache ??= createBuiltInInstalledModuleQuerySurfaceRegistry();
+  return installedModuleQuerySurfaceRegistryCache;
+}
+
+let installedModuleQueryEditorCatalogCache: QueryEditorCatalog | undefined;
+
+export function getInstalledModuleQueryEditorCatalog(): QueryEditorCatalog {
+  installedModuleQueryEditorCatalogCache ??= createQueryEditorCatalogFromRegistry(
+    getInstalledModuleQuerySurfaceRegistry(),
+  );
+  return installedModuleQueryEditorCatalogCache;
+}
 
 export function getInstalledModuleQuerySurfaceRendererCompatibility(
   surfaceId: string,
 ): QuerySurfaceRendererCompatibility | undefined {
-  const surface = getInstalledModuleQuerySurface(installedModuleQuerySurfaceRegistry, surfaceId);
+  const surface = getInstalledModuleQuerySurface(
+    getInstalledModuleQuerySurfaceRegistry(),
+    surfaceId,
+  );
   return surface ? createQuerySurfaceRendererCompatibility(surface) : undefined;
 }

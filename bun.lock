@@ -5,6 +5,7 @@
     "": {
       "name": "@io/root",
       "devDependencies": {
+        "@io/graph-projection": "workspace:*",
         "@op/cli": "workspace:*",
         "@types/node": "^25.3.2",
         "bun": "1.3.10",

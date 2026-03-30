@@ -113,10 +113,10 @@ import { seedExampleGraph } from "./example-data.js";
 import { planRecordedMutation, planRecordedMutationAsync } from "./mutation-planning.js";
 import { webAppPolicyVersion } from "./policy-version.js";
 import {
+  getInstalledModuleQueryEditorCatalog,
   getInstalledModuleQuerySurface,
   getInstalledModuleQuerySurfaceRendererCompatibility,
-  installedModuleQueryEditorCatalog,
-  installedModuleQuerySurfaceRegistry,
+  getInstalledModuleQuerySurfaceRegistry,
 } from "./query-surface-registry.js";
 import {
   resolveSerializedQueryCollectionExecutor,
@@ -4236,6 +4236,7 @@ export async function createWebAppAuthority(
     options: WebAppAuthorityReadOptions,
   ): Promise<SavedQueryRecord> {
     const ownerId = requireSavedQueryOwnerId(options);
+    const installedModuleQueryEditorCatalog = getInstalledModuleQueryEditorCatalog();
     const compatibility = validateSavedQueryCompatibility(
       {
         ...input,
@@ -4248,7 +4249,7 @@ export async function createWebAppAuthority(
       throw createSavedQueryConflict(compatibility.message);
     }
     const installedSurface = getInstalledModuleQuerySurface(
-      installedModuleQuerySurfaceRegistry,
+      getInstalledModuleQuerySurfaceRegistry(),
       input.surfaceId,
     );
     if (!installedSurface?.moduleId) {
@@ -4283,6 +4284,7 @@ export async function createWebAppAuthority(
     options: WebAppAuthorityReadOptions,
   ): Promise<SavedViewRecord> {
     const ownerId = requireSavedQueryOwnerId(options);
+    const installedModuleQueryEditorCatalog = getInstalledModuleQueryEditorCatalog();
     const repository = createSavedQueryRepository(ownerId);
     const query = await repository.getSavedQuery(input.queryId);
     if (!query) {
@@ -4334,6 +4336,7 @@ export async function createWebAppAuthority(
     options: WebAppAuthorityReadOptions,
   ): Promise<SavedQueryResolution> {
     const ownerId = requireSavedQueryOwnerId(options);
+    const installedModuleQueryEditorCatalog = getInstalledModuleQueryEditorCatalog();
     const query = await createSavedQueryRepository(ownerId).getSavedQuery(input.queryId);
     if (!query) {
       throw new WebAppAuthorityReadError(
@@ -4368,6 +4371,7 @@ export async function createWebAppAuthority(
     options: WebAppAuthorityReadOptions,
   ): Promise<SavedViewResolution> {
     const ownerId = requireSavedQueryOwnerId(options);
+    const installedModuleQueryEditorCatalog = getInstalledModuleQueryEditorCatalog();
     const repository = createSavedQueryRepository(ownerId);
     const view = await repository.getSavedView(input.viewId);
     if (!view) {
