@@ -59,11 +59,7 @@ import {
 } from "./authority.js";
 import { webAppPolicyVersion } from "./policy-version.js";
 import { createQueryEditorDraft } from "./query-editor.js";
-import {
-  createSavedQueryMemoryStore,
-  saveSavedQueryDraft,
-  saveSavedViewDraft,
-} from "./saved-query.js";
+import { createSavedQueryRecordInputFromDraft, createSavedViewRecordInput } from "./saved-query.js";
 import { getInstalledModuleQuerySurfaceRendererCompatibility } from "./query-surface-registry.js";
 import {
   handleWebCommandRequest,
@@ -1250,24 +1246,6 @@ describe("web authority", () => {
     const backingStorage = createInMemoryTestWebAppAuthorityStorage();
     let failServerCommandCommit = false;
     const storage = {
-      deleteSavedQuery(ownerId, queryId) {
-        return backingStorage.storage.deleteSavedQuery(ownerId, queryId);
-      },
-      deleteSavedView(ownerId, viewId) {
-        return backingStorage.storage.deleteSavedView(ownerId, viewId);
-      },
-      getSavedQuery(ownerId, queryId) {
-        return backingStorage.storage.getSavedQuery(ownerId, queryId);
-      },
-      getSavedView(ownerId, viewId) {
-        return backingStorage.storage.getSavedView(ownerId, viewId);
-      },
-      listSavedQueries(ownerId) {
-        return backingStorage.storage.listSavedQueries(ownerId);
-      },
-      listSavedViews(ownerId) {
-        return backingStorage.storage.listSavedViews(ownerId);
-      },
       load() {
         return backingStorage.storage.load();
       },
@@ -1288,12 +1266,6 @@ describe("web authority", () => {
       },
       repairSecrets(input) {
         return backingStorage.storage.repairSecrets(input);
-      },
-      saveSavedQuery(ownerId, query) {
-        return backingStorage.storage.saveSavedQuery(ownerId, query);
-      },
-      saveSavedView(ownerId, view) {
-        return backingStorage.storage.saveSavedView(ownerId, view);
       },
       async commit(input, options) {
         if (failServerCommandCommit) {
@@ -5069,44 +5041,38 @@ describe("web authority", () => {
         },
       ],
     };
-    const querySeedStore = createSavedQueryMemoryStore();
-    const querySeed = saveSavedQueryDraft({
-      catalog,
-      draft,
-      name: "Owner board",
-      store: querySeedStore,
-    });
-    const { updatedAt: _queryUpdatedAt, ...queryInput } = querySeed;
-    const savedQuery = await authority.saveSavedQuery(queryInput, { authorization });
-
-    const viewSeedStore = createSavedQueryMemoryStore({
-      queries: [savedQuery],
-    });
-    const viewSeed = saveSavedViewDraft({
-      catalog,
-      draft,
-      queryId: savedQuery.id,
-      queryName: savedQuery.name,
-      rendererCapabilities,
-      spec: {
-        containerId: "saved-view-preview",
-        pagination: {
-          mode: "paged",
-          pageSize: 25,
+    const savedQuery = await authority.saveSavedQuery(
+      createSavedQueryRecordInputFromDraft({
+        catalog,
+        draft,
+        name: "Owner board",
+      }),
+      { authorization },
+    );
+    const savedView = await authority.saveSavedView(
+      createSavedViewRecordInput({
+        name: "Owner board view",
+        query: savedQuery,
+        rendererCapabilities,
+        spec: {
+          containerId: "saved-view-preview",
+          pagination: {
+            mode: "paged",
+            pageSize: 25,
+          },
+          refresh: {
+            mode: "manual",
+          },
+          renderer: {
+            rendererId: "core:list",
+          },
         },
-        refresh: {
-          mode: "manual",
-        },
-        renderer: {
-          rendererId: "core:list",
-        },
-      },
-      store: viewSeedStore,
-      surface: getInstalledModuleQuerySurfaceRendererCompatibility("workflow:project-branch-board"),
-      viewName: "Owner board view",
-    });
-    const { updatedAt: _viewUpdatedAt, ...viewInput } = viewSeed.view;
-    const savedView = await authority.saveSavedView(viewInput, { authorization });
+        surface: getInstalledModuleQuerySurfaceRendererCompatibility(
+          "workflow:project-branch-board",
+        )!,
+      }),
+      { authorization },
+    );
 
     expect((await authority.listSavedQueries({ authorization })).map((query) => query.id)).toEqual([
       savedQuery.id,

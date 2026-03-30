@@ -281,10 +281,10 @@ Current editor interaction model:
   inline drafts aligned with the generic serialized-query contract plus future
   saved-query parameter metadata
 - `../../lib/app/src/web/lib/saved-query.ts`: shared saved-query and saved-view
-  record types, browser-store proof CRUD helpers, draft save helpers, and
-  resolution seams that return validated durable records plus normalized query
-  requests for planner, editor, and container consumers, exported as
-  `@io/app/web/saved-query`
+  graph-backed repository helpers, shared draft-to-record and record-to-definition
+  adapters, and normalized-resolution seams that return validated graph-native
+  definitions plus normalized query requests for planner, editor, and
+  container consumers, exported as `@io/app/web/saved-query`
 - `../../lib/app/src/web/lib/authority.ts`: principal-scoped Durable Object
   saved-query and saved-view CRUD plus normalized-resolution seams that sit
   beside the generic serialized-query executor instead of overloading
@@ -353,8 +353,9 @@ The current Branch 3 browser model stays fail closed.
   installed-catalog validation, and explicit stale-ref recovery are proven in
   `../../lib/app/src/web/lib/authority.test.ts` and
   `../../lib/app/src/web/lib/graph-authority-sql-saved-query.test.ts`; the
-  browser `/views` proof route still uses browser-local persistence until it
-  moves onto that authority seam
+  browser `/views` proof route still keeps a browser-local workbench cache for
+  reopen and route-state testing, but that cache is not the durable
+  graph-backed authority seam
 - `../../lib/app/src/web/lib/authority.ts`: shared web authority behavior, secret-field
   mutation flow, the current web-owned `/api/commands` envelope, the shared
   write/command authorization seam, principal-aware sync filtering that omits

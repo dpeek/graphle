@@ -43,7 +43,7 @@ type WebAppPolicyContractSnapshot = {
 };
 
 const webAppPolicyGraph = { ...core, ...workflow } as const;
-const webAppPolicyVersionBaselineHash = 1914297737;
+const webAppPolicyVersionBaselineHash = 113897635;
 
 function isPolicyFieldDefinition(value: unknown): value is PolicyFieldDefinition {
   if (!value || typeof value !== "object") return false;

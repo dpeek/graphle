@@ -114,7 +114,7 @@ import type {
   SessionPrincipalProjection,
 } from "./auth-bridge.js";
 import { seedExampleGraph } from "./example-data.js";
-import { planRecordedMutation } from "./mutation-planning.js";
+import { planRecordedMutation, planRecordedMutationAsync } from "./mutation-planning.js";
 import { webAppPolicyVersion } from "./policy-version.js";
 import {
   getInstalledModuleQuerySurface,
@@ -123,13 +123,19 @@ import {
   installedModuleQuerySurfaceRegistry,
 } from "./query-surface-registry.js";
 import {
-  createSavedQueryMemoryStore,
-  resolveSavedQueryRecord,
-  resolveSavedViewRecord,
+  createGraphBackedSavedQueryRepository,
+  deriveSavedQueryRecord,
+  deriveSavedViewRecord,
+  resolveSavedQueryDefinition,
+  resolveSavedViewDefinition,
+  toSavedQueryDefinitionInput,
+  toSavedViewDefinitionInput,
   validateSavedQueryCompatibility,
   validateSavedViewCompatibility,
+  type SavedQueryRecordInput,
   type SavedQueryRecord,
   type SavedQueryResolution,
+  type SavedViewRecordInput,
   type SavedViewRecord,
   type SavedViewResolution,
 } from "./saved-query.js";
@@ -380,12 +386,6 @@ type WebAuthorityMutationStageContext = {
  * treated as stable across branches.
  */
 export interface WebAppAuthorityStorage {
-  deleteSavedQuery(ownerId: string, queryId: string): Promise<void>;
-  deleteSavedView(ownerId: string, viewId: string): Promise<void>;
-  getSavedQuery(ownerId: string, queryId: string): Promise<SavedQueryRecord | undefined>;
-  getSavedView(ownerId: string, viewId: string): Promise<SavedViewRecord | undefined>;
-  listSavedQueries(ownerId: string): Promise<readonly SavedQueryRecord[]>;
-  listSavedViews(ownerId: string): Promise<readonly SavedViewRecord[]>;
   load(): Promise<PersistedAuthoritativeGraphStorageLoadResult | null>;
   loadWorkflowProjection(): Promise<RetainedWorkflowProjectionState | null>;
   replaceRetainedDocuments(retainedDocuments: RetainedDocumentState | null): Promise<void>;
@@ -399,8 +399,6 @@ export interface WebAppAuthorityStorage {
     options?: WebAppAuthoritySecretLoadOptions,
   ): Promise<Record<string, WebAppAuthoritySecretRecord>>;
   repairSecrets(input: WebAppAuthoritySecretRepairInput): Promise<void>;
-  saveSavedQuery(ownerId: string, query: SavedQueryRecord): Promise<void>;
-  saveSavedView(ownerId: string, view: SavedViewRecord): Promise<void>;
   commit(
     input: PersistedAuthoritativeGraphStorageCommitInput,
     options?: {
@@ -450,13 +448,9 @@ export type WebAppAuthorityCommandOptions = {
   readonly authorization: AuthorizationContext;
 };
 
-export type WebAppAuthoritySavedQueryUpsertInput = Omit<SavedQueryRecord, "id" | "updatedAt"> & {
-  readonly id?: string;
-};
+export type WebAppAuthoritySavedQueryUpsertInput = SavedQueryRecordInput;
 
-export type WebAppAuthoritySavedViewUpsertInput = Omit<SavedViewRecord, "id" | "updatedAt"> & {
-  readonly id?: string;
-};
+export type WebAppAuthoritySavedViewUpsertInput = SavedViewRecordInput;
 
 export type WebAppAuthoritySavedQueryResolutionInput = {
   readonly executionContext?: QueryIdentityExecutionContext;
@@ -3782,6 +3776,10 @@ export async function createWebAppAuthority(
     };
   }
 
+  function createSavedQueryRepository(ownerId: string, store: GraphStore = authority.store) {
+    return createGraphBackedSavedQueryRepository(createGraphClient(store, graph), ownerId);
+  }
+
   function readPredicateValue(
     subjectId: string,
     predicateId: string,
@@ -4347,18 +4345,38 @@ export async function createWebAppAuthority(
     return new WebAppAuthorityReadError(409, message);
   }
 
+  function coerceSavedQueryConflict(error: unknown): WebAppAuthorityReadError | undefined {
+    if (!(error instanceof Error)) {
+      return undefined;
+    }
+    const name = (error as { name?: string }).name;
+    if (name === "SavedQueryDefinitionError" || name === "SavedQuerySaveError") {
+      return createSavedQueryConflict(error.message);
+    }
+    return undefined;
+  }
+
   async function listSavedQueries(
     options: WebAppAuthorityReadOptions,
   ): Promise<readonly SavedQueryRecord[]> {
     const ownerId = requireSavedQueryOwnerId(options);
-    return storage.listSavedQueries(ownerId);
+    const queries = await createSavedQueryRepository(ownerId).listSavedQueries();
+    return queries.map(deriveSavedQueryRecord);
   }
 
   async function listSavedViews(
     options: WebAppAuthorityReadOptions,
   ): Promise<readonly SavedViewRecord[]> {
     const ownerId = requireSavedQueryOwnerId(options);
-    return storage.listSavedViews(ownerId);
+    const repository = createSavedQueryRepository(ownerId);
+    const views = await repository.listSavedViews();
+    const records = await Promise.all(
+      views.map(async (view) => {
+        const query = await repository.getSavedQuery(view.queryId);
+        return query ? deriveSavedViewRecord({ query, view }) : undefined;
+      }),
+    );
+    return records.filter((record): record is SavedViewRecord => record !== undefined);
   }
 
   async function getSavedQuery(
@@ -4366,7 +4384,8 @@ export async function createWebAppAuthority(
     options: WebAppAuthorityReadOptions,
   ): Promise<SavedQueryRecord | undefined> {
     const ownerId = requireSavedQueryOwnerId(options);
-    return storage.getSavedQuery(ownerId, id);
+    const query = await createSavedQueryRepository(ownerId).getSavedQuery(id);
+    return query ? deriveSavedQueryRecord(query) : undefined;
   }
 
   async function getSavedView(
@@ -4374,17 +4393,47 @@ export async function createWebAppAuthority(
     options: WebAppAuthorityReadOptions,
   ): Promise<SavedViewRecord | undefined> {
     const ownerId = requireSavedQueryOwnerId(options);
-    return storage.getSavedView(ownerId, id);
+    const repository = createSavedQueryRepository(ownerId);
+    const view = await repository.getSavedView(id);
+    if (!view) {
+      return undefined;
+    }
+    const query = await repository.getSavedQuery(view.queryId);
+    return query ? deriveSavedViewRecord({ query, view }) : undefined;
   }
 
   async function deleteSavedQuery(id: string, options: WebAppAuthorityReadOptions): Promise<void> {
     const ownerId = requireSavedQueryOwnerId(options);
-    await storage.deleteSavedQuery(ownerId, id);
+    const planned = await planRecordedMutationAsync(
+      authority.store.snapshot(),
+      graph,
+      `delete:saved-query:${id}:${Date.now()}`,
+      async (mutationGraph) => {
+        await createGraphBackedSavedQueryRepository(mutationGraph, ownerId).deleteSavedQuery(id);
+      },
+    );
+    if (planned.changed) {
+      await authority.applyTransaction(planned.transaction, {
+        writeScope: "authority-only",
+      });
+    }
   }
 
   async function deleteSavedView(id: string, options: WebAppAuthorityReadOptions): Promise<void> {
     const ownerId = requireSavedQueryOwnerId(options);
-    await storage.deleteSavedView(ownerId, id);
+    const planned = await planRecordedMutationAsync(
+      authority.store.snapshot(),
+      graph,
+      `delete:saved-view:${id}:${Date.now()}`,
+      async (mutationGraph) => {
+        await createGraphBackedSavedQueryRepository(mutationGraph, ownerId).deleteSavedView(id);
+      },
+    );
+    if (planned.changed) {
+      await authority.applyTransaction(planned.transaction, {
+        writeScope: "authority-only",
+      });
+    }
   }
 
   async function saveSavedQuery(
@@ -4392,18 +4441,46 @@ export async function createWebAppAuthority(
     options: WebAppAuthorityReadOptions,
   ): Promise<SavedQueryRecord> {
     const ownerId = requireSavedQueryOwnerId(options);
-    const [queries, views] = await Promise.all([
-      storage.listSavedQueries(ownerId),
-      storage.listSavedViews(ownerId),
-    ]);
-    const savedQueryStore = createSavedQueryMemoryStore({ queries, views });
-    const saved = savedQueryStore.saveSavedQuery(input);
-    const compatibility = validateSavedQueryCompatibility(saved, installedModuleQueryEditorCatalog);
+    const compatibility = validateSavedQueryCompatibility(
+      {
+        ...input,
+        id: input.id ?? "pending",
+        updatedAt: new Date(0).toISOString(),
+      },
+      installedModuleQueryEditorCatalog,
+    );
     if (!compatibility.ok) {
       throw createSavedQueryConflict(compatibility.message);
     }
-    await storage.saveSavedQuery(ownerId, saved);
-    return saved;
+    const installedSurface = getInstalledModuleQuerySurface(
+      installedModuleQuerySurfaceRegistry,
+      input.surfaceId,
+    );
+    if (!installedSurface?.moduleId) {
+      throw createSavedQueryConflict(
+        `Saved query "${input.id ?? (input.name.trim() || "Untitled query")}" references removed query surface "${input.surfaceId}".`,
+      );
+    }
+    try {
+      const planned = await planRecordedMutationAsync(
+        authority.store.snapshot(),
+        graph,
+        `save:saved-query:${ownerId}:${Date.now()}`,
+        async (mutationGraph) =>
+          createGraphBackedSavedQueryRepository(mutationGraph, ownerId).saveSavedQuery({
+            ...(input.id ? { id: input.id } : {}),
+            ...toSavedQueryDefinitionInput(input, ownerId, installedSurface.moduleId),
+          }),
+      );
+      if (planned.changed) {
+        await authority.applyTransaction(planned.transaction, {
+          writeScope: "authority-only",
+        });
+      }
+      return deriveSavedQueryRecord(planned.result);
+    } catch (error) {
+      throw coerceSavedQueryConflict(error) ?? error;
+    }
   }
 
   async function saveSavedView(
@@ -4411,30 +4488,50 @@ export async function createWebAppAuthority(
     options: WebAppAuthorityReadOptions,
   ): Promise<SavedViewRecord> {
     const ownerId = requireSavedQueryOwnerId(options);
-    const [queries, views] = await Promise.all([
-      storage.listSavedQueries(ownerId),
-      storage.listSavedViews(ownerId),
-    ]);
-    const savedQueryStore = createSavedQueryMemoryStore({ queries, views });
-    const saved = savedQueryStore.saveSavedView(input);
-    const query = savedQueryStore.getSavedQuery(saved.queryId);
+    const repository = createSavedQueryRepository(ownerId);
+    const query = await repository.getSavedQuery(input.queryId);
     if (!query) {
       throw new WebAppAuthorityReadError(
         404,
-        `Saved view "${saved.id}" references missing saved query "${saved.queryId}".`,
+        `Saved view "${input.id ?? (input.name.trim() || "Untitled view")}" references missing saved query "${input.queryId}".`,
       );
     }
     const compatibility = validateSavedViewCompatibility({
       catalog: installedModuleQueryEditorCatalog,
-      query,
+      query: deriveSavedQueryRecord(query),
       resolveSurfaceCompatibility: getInstalledModuleQuerySurfaceRendererCompatibility,
-      view: saved,
+      view: {
+        ...input,
+        id: input.id ?? "pending",
+        updatedAt: new Date(0).toISOString(),
+      },
     });
     if (!compatibility.ok) {
       throw createSavedQueryConflict(compatibility.message);
     }
-    await storage.saveSavedView(ownerId, saved);
-    return saved;
+    try {
+      const planned = await planRecordedMutationAsync(
+        authority.store.snapshot(),
+        graph,
+        `save:saved-view:${ownerId}:${Date.now()}`,
+        async (mutationGraph) =>
+          createGraphBackedSavedQueryRepository(mutationGraph, ownerId).saveSavedView({
+            ...(input.id ? { id: input.id } : {}),
+            ...toSavedViewDefinitionInput(input, ownerId),
+          }),
+      );
+      if (planned.changed) {
+        await authority.applyTransaction(planned.transaction, {
+          writeScope: "authority-only",
+        });
+      }
+      return deriveSavedViewRecord({
+        query,
+        view: planned.result,
+      });
+    } catch (error) {
+      throw coerceSavedQueryConflict(error) ?? error;
+    }
   }
 
   async function resolveSavedQuery(
@@ -4442,7 +4539,7 @@ export async function createWebAppAuthority(
     options: WebAppAuthorityReadOptions,
   ): Promise<SavedQueryResolution> {
     const ownerId = requireSavedQueryOwnerId(options);
-    const query = await storage.getSavedQuery(ownerId, input.queryId);
+    const query = await createSavedQueryRepository(ownerId).getSavedQuery(input.queryId);
     if (!query) {
       throw new WebAppAuthorityReadError(
         404,
@@ -4450,7 +4547,7 @@ export async function createWebAppAuthority(
       );
     }
     try {
-      return await resolveSavedQueryRecord({
+      return await resolveSavedQueryDefinition({
         catalog: installedModuleQueryEditorCatalog,
         executionContext: createSavedQueryExecutionContext(
           input.executionContext,
@@ -4476,14 +4573,15 @@ export async function createWebAppAuthority(
     options: WebAppAuthorityReadOptions,
   ): Promise<SavedViewResolution> {
     const ownerId = requireSavedQueryOwnerId(options);
-    const view = await storage.getSavedView(ownerId, input.viewId);
+    const repository = createSavedQueryRepository(ownerId);
+    const view = await repository.getSavedView(input.viewId);
     if (!view) {
       throw new WebAppAuthorityReadError(
         404,
         `Saved view "${input.viewId}" is no longer available.`,
       );
     }
-    const query = await storage.getSavedQuery(ownerId, view.queryId);
+    const query = await repository.getSavedQuery(view.queryId);
     if (!query) {
       throw new WebAppAuthorityReadError(
         404,
@@ -4491,7 +4589,7 @@ export async function createWebAppAuthority(
       );
     }
     try {
-      return await resolveSavedViewRecord({
+      return await resolveSavedViewDefinition({
         catalog: installedModuleQueryEditorCatalog,
         executionContext: createSavedQueryExecutionContext(
           input.executionContext,
