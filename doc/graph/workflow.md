@@ -21,7 +21,8 @@ The exported surface is:
 - `type.ts`: owns the entity families, state enums, reference wiring, key
   validators, and default lifecycle values
 - `command.ts`: defines the stable `workflow-mutation` command envelope,
-  summary shapes, and failure codes consumed by the authority layer
+  summary shapes, commit finalization request and acknowledgement types,
+  and failure codes consumed by the authority layer
 - `projection.ts`: defines the canonical workflow review scope descriptor plus
   the first Branch 3 projection ids, `definitionHash` values, dependency-key
   compilation helpers, and conservative invalidation-event builder shared
@@ -112,6 +113,45 @@ The authority implementation keeps the first Branch 6 assumptions explicit:
 - one managed repository branch per workflow branch
 - one repository commit result per workflow commit
 - one active commit per workflow branch
+
+### Commit Finalization Contract
+
+`command.ts` now exports the first explicit workflow commit finalization
+surface:
+
+- `workflowCommitFinalizationOutcomeValues`
+- `WorkflowCommitFinalizationRequest`
+- `WorkflowCommitFinalizationAcknowledgement`
+- `WorkflowCommitFinalizationResult`
+
+`finalizeCommit` is commit-centric rather than repository-commit-centric.
+
+Its contract is:
+
+- `commitId` always identifies the workflow commit being finalized
+- `outcome` is one of `committed`, `blocked`, or `dropped`
+- `committed` requires git result data for `sha`, optional `committedAt`, and
+  optional managed repository/worktree metadata
+- `committed` creates or updates one durable `RepositoryCommit`, resolved by
+  `git.repositoryCommitId`, the one already attached to the workflow commit,
+  or a new managed record when neither exists yet
+- `blocked` and `dropped` do not create or promote a repository commit to
+  `state = "committed"`
+- `blocked` and `dropped` may include optional `git` metadata only to refresh
+  retained repository-branch or worktree fields on an existing
+  `RepositoryCommit`
+- `finalizeCommit` always acknowledges the resulting branch summary, commit
+  summary, outcome, and the related repository-commit summary when one is part
+  of the authoritative write
+
+This keeps the repository-backed commit record boundary explicit:
+
+- `RepositoryCommit` is the durable record of a real git commit only for the
+  `committed` outcome
+- `blocked` and `dropped` finalize the workflow attempt, not a repository
+  commit result
+- worktree cleanup or replay stays outside this contract; callers must request
+  lease changes explicitly when they want them recorded
 
 ## Branch Board Query
 

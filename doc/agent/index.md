@@ -36,7 +36,8 @@ state, and the operator-facing session stream used by the TUI.
   `In Progress`, feature `In Progress`, task `Todo`, and at most one runnable
   task per feature branch.
 - Successful execution lands the task commit onto the feature branch and moves
-  the task to `Done` in the current repo configuration.
+  the task to `Done` in the current repo configuration through the shared
+  workspace finalization coordinator.
 - Feature closure stays human-owned. When a feature moves to `Done`,
   [workspace.ts](../../lib/cli/src/agent/workspace.ts) squashes the feature branch onto
   the stream branch, preserves recoverable state on conflicts, and cleans up the

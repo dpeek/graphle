@@ -44,6 +44,11 @@ export const repositoryCommitLeaseStateValues = [
 
 export type RepositoryCommitLeaseStateValue = (typeof repositoryCommitLeaseStateValues)[number];
 
+export const workflowCommitFinalizationOutcomeValues = ["committed", "blocked", "dropped"] as const;
+
+export type WorkflowCommitFinalizationOutcome =
+  (typeof workflowCommitFinalizationOutcomeValues)[number];
+
 export const workflowMutationFailureCodes = [
   "repository-missing",
   "branch-lock-conflict",
@@ -140,6 +145,43 @@ type WorkflowRepositoryWorktreeInput = {
   readonly leaseState?: RepositoryCommitLeaseStateValue;
   readonly path?: string | null;
 };
+
+type WorkflowCommitFinalizationGitResultBase = {
+  readonly repositoryBranchId?: string | null;
+  readonly repositoryCommitId?: string;
+  readonly title?: string | null;
+  readonly worktree?: WorkflowRepositoryWorktreeInput;
+};
+
+export type WorkflowCommitCommittedGitResult = WorkflowCommitFinalizationGitResultBase & {
+  readonly committedAt?: string;
+  readonly sha: string;
+};
+
+export type WorkflowCommitNonCommittedGitResult = WorkflowCommitFinalizationGitResultBase;
+
+export type WorkflowCommitFinalizationRequest =
+  | {
+      readonly commitId: string;
+      readonly git: WorkflowCommitCommittedGitResult;
+      readonly outcome: "committed";
+    }
+  | {
+      readonly commitId: string;
+      readonly git?: WorkflowCommitNonCommittedGitResult;
+      readonly outcome: Exclude<WorkflowCommitFinalizationOutcome, "committed">;
+    };
+
+export type WorkflowCommitFinalizationAcknowledgement = {
+  readonly branch: WorkflowBranchSummary;
+  readonly commit: WorkflowCommitSummary;
+  readonly outcome: WorkflowCommitFinalizationOutcome;
+  readonly repositoryCommit?: RepositoryCommitSummary;
+};
+
+type WorkflowCommitFinalizationAction = {
+  readonly action: "finalizeCommit";
+} & WorkflowCommitFinalizationRequest;
 
 export type WorkflowMutationAction =
   | {
@@ -243,24 +285,23 @@ export type WorkflowMutationAction =
       readonly commitId?: string;
       readonly worktree?: WorkflowRepositoryWorktreeInput;
     }
-  | {
-      readonly action: "attachCommitResult";
-      readonly committedAt?: string;
-      readonly repositoryBranchId?: string | null;
-      readonly repositoryCommitId: string;
-      readonly sha: string;
-      readonly title?: string | null;
-      readonly commitId?: string;
-      readonly worktree?: WorkflowRepositoryWorktreeInput;
-    };
+  | WorkflowCommitFinalizationAction;
 
-export type WorkflowMutationResult = {
+type WorkflowMutationBaseResult = {
   readonly action: WorkflowMutationAction["action"];
   readonly created: boolean;
   cursor?: string;
   replayed?: boolean;
   readonly summary: WorkflowMutationSummary;
 };
+
+export type WorkflowCommitFinalizationResult = WorkflowMutationBaseResult & {
+  readonly action: "finalizeCommit";
+  readonly finalization: WorkflowCommitFinalizationAcknowledgement;
+  readonly summary: WorkflowCommitSummary;
+};
+
+export type WorkflowMutationResult = WorkflowMutationBaseResult | WorkflowCommitFinalizationResult;
 
 export const workflowMutationCommand = {
   key: "workflow:mutation",

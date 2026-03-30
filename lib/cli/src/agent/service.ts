@@ -25,7 +25,11 @@ import type {
   Workflow,
 } from "./types.js";
 import { loadWorkflowFile, renderPrompt, toWorkspaceKey } from "./workflow.js";
-import { WorkspaceManager, readIssueRuntimeState, type IssueRuntimeState } from "./workspace.js";
+import {
+  WorkspaceManager,
+  type IssueRuntimeState,
+  type WorkspaceCompletionResult,
+} from "./workspace.js";
 
 type IssueRunner = {
   run: (options: {
@@ -1298,8 +1302,9 @@ export class AgentService {
         });
         return result;
       }
+      let completion: WorkspaceCompletionResult;
       try {
-        await workspaceManager.completeReview(workspace, issue);
+        completion = await workspaceManager.completeReview(workspace, issue);
       } catch (error) {
         const reason = error instanceof Error ? error.message : String(error);
         const blockedSession = withSessionRuntime(
@@ -1338,27 +1343,26 @@ export class AgentService {
         workspace.outputPath,
         `${issue.identifier}: review complete; follow-up issue created\n`,
       );
-      await tracker.setIssueState(issue.id, "Done");
-      await workspaceManager.reconcileTerminalIssues(tracker, workflow.tracker.terminalStates);
-      const finalizedIssueState = await readIssueRuntimeState(
-        workflow.workspace.root,
-        issue.identifier,
-      );
-      if (finalizedIssueState?.status === "finalized") {
+      const finalization = await workspaceManager.coordinateWorkflowFinalization(completion, {
+        stateName: "Done",
+        terminalStates: workflow.tracker.terminalStates,
+        tracker,
+      });
+      if (finalization.issueState.status === "finalized") {
         this.#sessionEvents.publish({
           data: {
-            commitSha: finalizedIssueState.landedCommitSha ?? finalizedIssueState.commitSha,
-            linearState: finalizedIssueState.finalizedLinearState,
+            commitSha: finalization.issueState.landedCommitSha ?? finalization.issueState.commitSha,
+            linearState: finalization.issueState.finalizedLinearState,
           },
           phase: "completed",
-          session: createFinalizedSession(session, finalizedIssueState),
+          session: createFinalizedSession(session, finalization.issueState),
           type: "session",
         });
       }
       return result;
     }
 
-    let completion: { commitSha: string };
+    let completion: WorkspaceCompletionResult;
     try {
       completion = await workspaceManager.complete(workspace, issue);
     } catch (error) {
@@ -1451,20 +1455,19 @@ export class AgentService {
       issueIdentifier: issue.identifier,
       workspace: workspace.path,
     });
-    await tracker.setIssueState(issue.id, "Done");
-    await workspaceManager.reconcileTerminalIssues(tracker, workflow.tracker.terminalStates);
-    const finalizedIssueState = await readIssueRuntimeState(
-      workflow.workspace.root,
-      issue.identifier,
-    );
-    if (finalizedIssueState?.status === "finalized") {
+    const finalization = await workspaceManager.coordinateWorkflowFinalization(completion, {
+      stateName: "Done",
+      terminalStates: workflow.tracker.terminalStates,
+      tracker,
+    });
+    if (finalization.issueState.status === "finalized") {
       this.#sessionEvents.publish({
         data: {
-          commitSha: finalizedIssueState.landedCommitSha ?? finalizedIssueState.commitSha,
-          linearState: finalizedIssueState.finalizedLinearState,
+          commitSha: finalization.issueState.landedCommitSha ?? finalization.issueState.commitSha,
+          linearState: finalization.issueState.finalizedLinearState,
         },
         phase: "completed",
-        session: createFinalizedSession(session, finalizedIssueState),
+        session: createFinalizedSession(session, finalization.issueState),
         type: "session",
       });
     }

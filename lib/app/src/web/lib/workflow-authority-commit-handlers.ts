@@ -20,9 +20,11 @@ import {
 } from "./workflow-authority-shared.js";
 import {
   WorkflowMutationError,
+  buildBranchSummary,
   buildCommitSummary,
   buildRepositoryCommitSummary,
   clearSingleValue,
+  decodeRepositoryCommitLeaseState,
   decodeRepositoryCommitState,
   decodeWorkflowBranchState,
   decodeWorkflowCommitState,
@@ -50,7 +52,8 @@ type RepositoryCommitCreateMutation = Extract<
   WorkflowMutationAction,
   { action: "createRepositoryCommit" }
 >;
-type CommitResultMutation = Extract<WorkflowMutationAction, { action: "attachCommitResult" }>;
+type CommitFinalizationMutation = Extract<WorkflowMutationAction, { action: "finalizeCommit" }>;
+type RepositoryCommitRecord = ReturnType<ProductGraphClient["repositoryCommit"]["get"]>;
 
 export function findManagedRepositoryBranchForBranch(graph: ProductGraphClient, branchId: string) {
   return graph.repositoryBranch
@@ -75,6 +78,18 @@ function listBranchCommits(graph: ProductGraphClient, branchId: string) {
   return graph.commit.list().filter((commit) => commit.branch === branchId);
 }
 
+function compareBranchCommitOrder(
+  left: ReturnType<ProductGraphClient["commit"]["get"]>,
+  right: ReturnType<ProductGraphClient["commit"]["get"]>,
+) {
+  return (
+    left.order - right.order ||
+    left.createdAt.getTime() - right.createdAt.getTime() ||
+    left.updatedAt.getTime() - right.updatedAt.getTime() ||
+    left.id.localeCompare(right.id)
+  );
+}
+
 function deriveBranchStateAfterCommitLifecycle(
   graph: ProductGraphClient,
   branchId: string,
@@ -92,6 +107,44 @@ function deriveBranchStateAfterCommitLifecycle(
     : "ready";
 }
 
+function deriveBranchLifecycleAfterFinalization(graph: ProductGraphClient, branchId: string): {
+  readonly activeCommitId?: string;
+  readonly state: WorkflowBranchStateValue;
+} {
+  const commits = listBranchCommits(graph, branchId).sort(compareBranchCommitOrder);
+  const activeCommit = commits.find(
+    (commit) => decodeWorkflowCommitState(commit.state) === "active",
+  );
+  if (activeCommit) {
+    return {
+      activeCommitId: activeCommit.id,
+      state: "active",
+    };
+  }
+
+  const blockedCommit = commits.find(
+    (commit) => decodeWorkflowCommitState(commit.state) === "blocked",
+  );
+  if (blockedCommit) {
+    return {
+      activeCommitId: blockedCommit.id,
+      state: "blocked",
+    };
+  }
+
+  const readyCommit = commits.find((commit) => decodeWorkflowCommitState(commit.state) === "ready");
+  if (readyCommit) {
+    return {
+      activeCommitId: readyCommit.id,
+      state: "ready",
+    };
+  }
+
+  return {
+    state: deriveBranchStateAfterCommitLifecycle(graph, branchId),
+  };
+}
+
 export function requireBranchRepositoryTarget(graph: ProductGraphClient, branchId: string) {
   const repositoryBranch = findManagedRepositoryBranchForBranch(graph, branchId);
   if (!repositoryBranch) {
@@ -102,6 +155,271 @@ export function requireBranchRepositoryTarget(graph: ProductGraphClient, branchI
     );
   }
   return repositoryBranch;
+}
+
+function resolveExistingRepositoryCommitForFinalization(
+  graph: ProductGraphClient,
+  store: GraphStore,
+  commit: ReturnType<ProductGraphClient["commit"]["get"]>,
+  input: CommitFinalizationMutation,
+): RepositoryCommitRecord | undefined {
+  const repositoryCommit =
+    input.git?.repositoryCommitId !== undefined
+      ? requireRepositoryCommit(
+          graph,
+          store,
+          requireString(input.git.repositoryCommitId, "Repository commit id"),
+        )
+      : findRepositoryCommitForWorkflowCommit(graph, commit.id);
+
+  if (!repositoryCommit) {
+    if (input.git && input.outcome !== "committed") {
+      throw new WorkflowMutationError(
+        409,
+        `Workflow commit "${commit.id}" cannot record git finalization metadata without a repository commit record.`,
+        "repository-missing",
+      );
+    }
+    return undefined;
+  }
+
+  if (repositoryCommit.commit && repositoryCommit.commit !== commit.id) {
+    throw new WorkflowMutationError(
+      409,
+      `Repository commit "${repositoryCommit.id}" is already attached to workflow commit "${repositoryCommit.commit}".`,
+      "commit-lock-conflict",
+    );
+  }
+
+  const existingRepositoryCommit = findRepositoryCommitForWorkflowCommit(
+    graph,
+    commit.id,
+    repositoryCommit.id,
+  );
+  if (existingRepositoryCommit) {
+    throw new WorkflowMutationError(
+      409,
+      `Workflow commit "${commit.id}" is already attached to repository commit "${existingRepositoryCommit.id}".`,
+      "commit-lock-conflict",
+    );
+  }
+
+  return repositoryCommit;
+}
+
+function resolveRepositoryCommitTargetForFinalization(
+  graph: ProductGraphClient,
+  store: GraphStore,
+  branch: ReturnType<ProductGraphClient["branch"]["get"]>,
+  repositoryId: string,
+  commitId: string,
+  repositoryBranchId: string | null | undefined,
+) {
+  const repository = requireRepository(graph, store, repositoryId);
+  if (branch.project !== repository.project) {
+    throw new WorkflowMutationError(
+      409,
+      `Workflow commit branch "${branch.id}" does not belong to repository "${repository.id}".`,
+      "invalid-transition",
+    );
+  }
+
+  const managedRepositoryBranch = requireBranchRepositoryTarget(graph, branch.id);
+  const selectedRepositoryBranch =
+    repositoryBranchId !== undefined
+      ? requireRepositoryBranch(
+          graph,
+          store,
+          requireString(repositoryBranchId, "Repository branch id"),
+        )
+      : managedRepositoryBranch;
+
+  if (selectedRepositoryBranch.repository !== repository.id) {
+    throw new WorkflowMutationError(
+      409,
+      `Repository branch "${selectedRepositoryBranch.id}" does not belong to repository "${repository.id}".`,
+      "invalid-transition",
+    );
+  }
+  if (selectedRepositoryBranch.id !== managedRepositoryBranch.id) {
+    throw new WorkflowMutationError(
+      409,
+      `Workflow commit "${commitId}" requires managed repository branch "${managedRepositoryBranch.id}".`,
+      "repository-missing",
+    );
+  }
+
+  return {
+    repository,
+    repositoryBranch: selectedRepositoryBranch,
+  };
+}
+
+function buildRepositoryCommitWorktreeCreateInput(
+  input:
+    | {
+        readonly branchName?: string | null;
+        readonly leaseState?: (typeof repositoryCommitLeaseStateValues)[number];
+        readonly path?: string | null;
+      }
+    | undefined,
+  defaultLeaseState: (typeof repositoryCommitLeaseStateValues)[number],
+) {
+  const leaseState =
+    input?.leaseState === undefined
+      ? defaultLeaseState
+      : requireAllowedValue(
+          input.leaseState,
+          repositoryCommitLeaseStateValues,
+          "Repository commit lease state",
+        );
+  const path = trimOptionalString(input?.path);
+  const branchName = trimOptionalString(input?.branchName);
+
+  return {
+    ...(path ? { path } : {}),
+    ...(branchName ? { branchName } : {}),
+    leaseState: repositoryCommitLeaseStateIds[leaseState],
+  };
+}
+
+function buildRepositoryCommitWorktreePatch(
+  store: GraphStore,
+  repositoryCommit: RepositoryCommitRecord,
+  input:
+    | {
+        readonly branchName?: string | null;
+        readonly leaseState?: (typeof repositoryCommitLeaseStateValues)[number];
+        readonly path?: string | null;
+      }
+    | undefined,
+  defaultLeaseState?: (typeof repositoryCommitLeaseStateValues)[number],
+) {
+  let worktreePatch: Record<string, unknown> | undefined;
+  const nextLeaseState = input?.leaseState === undefined ? defaultLeaseState : input.leaseState;
+  if (nextLeaseState !== undefined) {
+    worktreePatch = {
+      leaseState:
+        repositoryCommitLeaseStateIds[
+          input?.leaseState === undefined
+            ? nextLeaseState
+            : requireAllowedValue(
+                input.leaseState,
+                repositoryCommitLeaseStateValues,
+                "Repository commit lease state",
+              )
+        ],
+    };
+  }
+  if (input?.path !== undefined) {
+    if (input.path === null) {
+      clearSingleValue(
+        store,
+        repositoryCommit.id,
+        edgeId(workflow.repositoryCommit.fields.worktree.path),
+      );
+    } else {
+      worktreePatch = {
+        ...worktreePatch,
+        path: requireString(input.path, "Worktree path"),
+      };
+    }
+  }
+  if (input?.branchName !== undefined) {
+    if (input.branchName === null) {
+      clearSingleValue(
+        store,
+        repositoryCommit.id,
+        edgeId(workflow.repositoryCommit.fields.worktree.branchName),
+      );
+    } else {
+      worktreePatch = {
+        ...worktreePatch,
+        branchName: requireString(input.branchName, "Worktree branch name"),
+      };
+    }
+  }
+  return worktreePatch;
+}
+
+function persistRepositoryCommitFinalization(
+  graph: ProductGraphClient,
+  store: GraphStore,
+  branch: ReturnType<ProductGraphClient["branch"]["get"]>,
+  commit: ReturnType<ProductGraphClient["commit"]["get"]>,
+  input: CommitFinalizationMutation,
+) {
+  const repositoryCommit = resolveExistingRepositoryCommitForFinalization(
+    graph,
+    store,
+    commit,
+    input,
+  );
+
+  if (!repositoryCommit) {
+    if (input.outcome !== "committed") {
+      return undefined;
+    }
+
+    const managedRepositoryBranch = requireBranchRepositoryTarget(graph, branch.id);
+    const { repository, repositoryBranch } = resolveRepositoryCommitTargetForFinalization(
+      graph,
+      store,
+      branch,
+      managedRepositoryBranch.repository,
+      commit.id,
+      input.git.repositoryBranchId,
+    );
+    const repositoryCommitId = graph.repositoryCommit.create({
+      name: trimOptionalString(input.git.title) ?? commit.name,
+      repository: repository.id,
+      repositoryBranch: repositoryBranch.id,
+      commit: commit.id,
+      state: repositoryCommitStateIds.committed,
+      worktree: buildRepositoryCommitWorktreeCreateInput(input.git.worktree, "released"),
+      sha: requireString(input.git.sha, "Commit SHA"),
+      committedAt: parseOptionalDate(input.git.committedAt, "Committed at") ?? new Date(),
+    });
+
+    return buildRepositoryCommitSummary(graph.repositoryCommit.get(repositoryCommitId));
+  }
+
+  const { repositoryBranch } = resolveRepositoryCommitTargetForFinalization(
+    graph,
+    store,
+    branch,
+    repositoryCommit.repository,
+    commit.id,
+    input.git?.repositoryBranchId ?? repositoryCommit.repositoryBranch,
+  );
+  const patch: Record<string, unknown> = {
+    repositoryBranch: repositoryBranch.id,
+    commit: commit.id,
+  };
+
+  if (input.git) {
+    patch.name = trimOptionalString(input.git.title) ?? repositoryCommit.name ?? commit.name;
+    const worktreePatch = buildRepositoryCommitWorktreePatch(
+      store,
+      repositoryCommit,
+      input.git.worktree,
+      input.outcome === "committed"
+        ? "released"
+        : decodeRepositoryCommitLeaseState(repositoryCommit.worktree.leaseState),
+    );
+    if (worktreePatch) {
+      patch.worktree = worktreePatch;
+    }
+  }
+
+  if (input.outcome === "committed") {
+    patch.state = repositoryCommitStateIds.committed;
+    patch.sha = requireString(input.git.sha, "Commit SHA");
+    patch.committedAt = parseOptionalDate(input.git.committedAt, "Committed at") ?? new Date();
+  }
+
+  graph.repositoryCommit.update(repositoryCommit.id, patch);
+  return buildRepositoryCommitSummary(graph.repositoryCommit.get(repositoryCommit.id));
 }
 
 function reconcileBranchAfterCommitChange(
@@ -117,6 +435,29 @@ function reconcileBranchAfterCommitChange(
   const nextState = deriveBranchStateAfterCommitLifecycle(graph, branchId);
   graph.branch.update(branchId, {
     state: branchStateIds[nextState],
+  });
+}
+
+function advanceBranchAfterCommitFinalization(
+  graph: ProductGraphClient,
+  store: GraphStore,
+  branchId: string,
+): void {
+  const nextLifecycle = deriveBranchLifecycleAfterFinalization(graph, branchId);
+
+  if (nextLifecycle.activeCommitId) {
+    setSingleValue(
+      store,
+      branchId,
+      edgeId(workflow.branch.fields.activeCommit),
+      nextLifecycle.activeCommitId,
+    );
+  } else {
+    clearSingleValue(store, branchId, edgeId(workflow.branch.fields.activeCommit));
+  }
+
+  graph.branch.update(branchId, {
+    state: branchStateIds[nextLifecycle.state],
   });
 }
 
@@ -390,7 +731,7 @@ export function createWorkflowRepositoryCommit(
   if (requestedState === "committed") {
     throw new WorkflowMutationError(
       409,
-      'Repository commits must be finalized through "attachCommitResult".',
+      'Repository commits must be finalized through "finalizeCommit".',
       "invalid-transition",
     );
   }
@@ -423,148 +764,48 @@ export function createWorkflowRepositoryCommit(
   };
 }
 
-export function attachWorkflowCommitResult(
+export function finalizeWorkflowCommit(
   graph: ProductGraphClient,
   store: GraphStore,
-  input: CommitResultMutation,
+  input: CommitFinalizationMutation,
 ): WorkflowMutationResult {
-  const repositoryCommit = requireRepositoryCommit(
+  const commit = requireCommit(graph, store, requireString(input.commitId, "Workflow commit id"));
+  const branch = requireBranch(graph, store, commit.branch);
+
+  if (decodeWorkflowCommitState(commit.state) !== "active") {
+    throw new WorkflowMutationError(
+      409,
+      `Workflow commit "${commit.id}" can only be finalized from "active".`,
+      "invalid-transition",
+    );
+  }
+
+  const repositoryCommitSummary = persistRepositoryCommitFinalization(
     graph,
     store,
-    requireString(input.repositoryCommitId, "Repository commit id"),
+    branch,
+    commit,
+    input,
   );
-  const repository = requireRepository(graph, store, repositoryCommit.repository);
 
-  let commitId = repositoryCommit.commit;
-  if (input.commitId) {
-    const commit = requireCommit(graph, store, requireString(input.commitId, "Workflow commit id"));
-    if (commitId && commitId !== commit.id) {
-      throw new WorkflowMutationError(
-        409,
-        `Repository commit "${repositoryCommit.id}" is already attached to workflow commit "${commitId}".`,
-        "commit-lock-conflict",
-      );
-    }
-    commitId = commit.id;
-  }
-  if (!commitId) {
-    throw new WorkflowMutationError(
-      409,
-      `Repository commit "${repositoryCommit.id}" does not have a workflow commit attachment.`,
-      "invalid-transition",
-    );
-  }
-
-  const commit = requireCommit(graph, store, commitId);
-  const branch = requireBranch(graph, store, commit.branch);
-  if (branch.project !== repository.project) {
-    throw new WorkflowMutationError(
-      409,
-      `Workflow commit "${commit.id}" does not belong to repository "${repository.id}".`,
-      "invalid-transition",
-    );
-  }
-
-  const existingRepositoryCommit = findRepositoryCommitForWorkflowCommit(
-    graph,
-    commit.id,
-    repositoryCommit.id,
-  );
-  if (existingRepositoryCommit) {
-    throw new WorkflowMutationError(
-      409,
-      `Workflow commit "${commit.id}" is already attached to repository commit "${existingRepositoryCommit.id}".`,
-      "commit-lock-conflict",
-    );
-  }
-
-  const managedRepositoryBranch = requireBranchRepositoryTarget(graph, branch.id);
-  const selectedRepositoryBranch =
-    input.repositoryBranchId !== undefined
-      ? requireRepositoryBranch(
-          graph,
-          store,
-          requireString(input.repositoryBranchId, "Repository branch id"),
-        )
-      : repositoryCommit.repositoryBranch
-        ? requireRepositoryBranch(graph, store, repositoryCommit.repositoryBranch)
-        : managedRepositoryBranch;
-
-  if (selectedRepositoryBranch.repository !== repository.id) {
-    throw new WorkflowMutationError(
-      409,
-      `Repository branch "${selectedRepositoryBranch.id}" does not belong to repository "${repository.id}".`,
-      "invalid-transition",
-    );
-  }
-  if (selectedRepositoryBranch.id !== managedRepositoryBranch.id) {
-    throw new WorkflowMutationError(
-      409,
-      `Workflow commit "${commit.id}" requires managed repository branch "${managedRepositoryBranch.id}".`,
-      "repository-missing",
-    );
-  }
-
-  const committedAt = parseOptionalDate(input.committedAt, "Committed at");
-  const patch: Record<string, unknown> = {
-    name: trimOptionalString(input.title) ?? repositoryCommit.name ?? commit.name,
-    repositoryBranch: selectedRepositoryBranch.id,
-    commit: commit.id,
-    state: repositoryCommitStateIds.committed,
-    sha: requireString(input.sha, "Commit SHA"),
-    committedAt: committedAt ?? new Date(),
-    worktree: {
-      leaseState:
-        repositoryCommitLeaseStateIds[
-          input.worktree?.leaseState === undefined
-            ? "released"
-            : requireAllowedValue(
-                input.worktree.leaseState,
-                repositoryCommitLeaseStateValues,
-                "Repository commit lease state",
-              )
-        ],
-    },
-  };
-  if (input.worktree?.path !== undefined) {
-    if (input.worktree.path === null) {
-      clearSingleValue(
-        store,
-        repositoryCommit.id,
-        edgeId(workflow.repositoryCommit.fields.worktree.path),
-      );
-    } else {
-      patch.worktree = {
-        ...(patch.worktree as Record<string, unknown>),
-        path: requireString(input.worktree.path, "Worktree path"),
-      };
-    }
-  }
-  if (input.worktree?.branchName !== undefined) {
-    if (input.worktree.branchName === null) {
-      clearSingleValue(
-        store,
-        repositoryCommit.id,
-        edgeId(workflow.repositoryCommit.fields.worktree.branchName),
-      );
-    } else {
-      patch.worktree = {
-        ...(patch.worktree as Record<string, unknown>),
-        branchName: requireString(input.worktree.branchName, "Worktree branch name"),
-      };
-    }
-  }
-
-  graph.repositoryCommit.update(repositoryCommit.id, patch);
   graph.commit.update(commit.id, {
-    state: commitStateIds.committed,
+    state: commitStateIds[input.outcome],
   });
-  reconcileBranchAfterCommitChange(graph, store, branch.id, commit.id);
+  advanceBranchAfterCommitFinalization(graph, store, branch.id);
+
+  const finalizedCommit = graph.commit.get(commit.id);
+  const finalizedBranch = graph.branch.get(branch.id);
 
   return {
     action: input.action,
     created: false,
-    summary: buildRepositoryCommitSummary(graph.repositoryCommit.get(repositoryCommit.id)),
+    finalization: {
+      branch: buildBranchSummary(graph, finalizedBranch),
+      commit: buildCommitSummary(finalizedCommit),
+      outcome: input.outcome,
+      ...(repositoryCommitSummary ? { repositoryCommit: repositoryCommitSummary } : {}),
+    },
+    summary: buildCommitSummary(finalizedCommit),
   };
 }
 

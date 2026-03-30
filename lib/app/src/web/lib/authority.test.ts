@@ -445,12 +445,15 @@ async function seedWorkflowProjectionReadFixture(
   });
 
   await executeWorkflowMutation(authority, authorization, {
-    action: "attachCommitResult",
-    repositoryCommitId: repositoryCommit1.summary.id,
-    repositoryBranchId: fixture.repositoryBranchId,
+    action: "finalizeCommit",
     commitId: commit1.summary.id,
-    sha: "abcdef1234567",
-    committedAt: "2026-01-02T12:00:00.000Z",
+    outcome: "committed",
+    git: {
+      repositoryCommitId: repositoryCommit1.summary.id,
+      repositoryBranchId: fixture.repositoryBranchId,
+      sha: "abcdef1234567",
+      committedAt: "2026-01-02T12:00:00.000Z",
+    },
   });
 
   await executeWorkflowMutation(authority, authorization, {
@@ -2024,20 +2027,40 @@ describe("web authority", () => {
       },
     });
     const finalized = await executeWorkflowMutation(authority, authorization, {
-      action: "attachCommitResult",
-      repositoryCommitId: repositoryCommit.summary.id,
-      sha: "abc1234",
+      action: "finalizeCommit",
+      commitId: commit.summary.id,
+      outcome: "committed",
+      git: {
+        repositoryCommitId: repositoryCommit.summary.id,
+        sha: "abc1234",
+      },
     });
 
     expect(finalized).toMatchObject({
-      action: "attachCommitResult",
+      action: "finalizeCommit",
       created: false,
+      finalization: {
+        outcome: "committed",
+        branch: {
+          id: fixture.branchId,
+          state: "done",
+        },
+        commit: {
+          id: commit.summary.id,
+          state: "committed",
+        },
+        repositoryCommit: {
+          entity: "repository-commit",
+          id: repositoryCommit.summary.id,
+          sha: "abc1234",
+          state: "committed",
+          commitId: commit.summary.id,
+        },
+      },
       summary: {
-        entity: "repository-commit",
-        id: repositoryCommit.summary.id,
-        sha: "abc1234",
+        entity: "commit",
+        id: commit.summary.id,
         state: "committed",
-        commitId: commit.summary.id,
       },
     });
     const persistedGraph = readProductGraph(authority, authorization);
@@ -2055,6 +2078,75 @@ describe("web authority", () => {
     expect(
       persistedGraph.repositoryCommit.get(repositoryCommit.summary.id).worktree.leaseState,
     ).toBe(workflow.repositoryCommitLeaseState.values.released.id);
+  });
+
+  it("reads the next ready commit as the branch active commit after finalization", async () => {
+    const authorization = createAuthorityAuthorizationContext();
+    const { authority, fixture } =
+      await createTestWebAppAuthorityWithWorkflowFixture(authorization);
+    const currentCommit = await executeWorkflowMutation(authority, authorization, {
+      action: "createCommit",
+      branchId: fixture.branchId,
+      title: "Finalize me first",
+      commitKey: "commit:finalize-me-first",
+      order: 0,
+      state: "ready",
+    });
+    const nextCommit = await executeWorkflowMutation(authority, authorization, {
+      action: "createCommit",
+      branchId: fixture.branchId,
+      title: "Finalize me next",
+      commitKey: "commit:finalize-me-next",
+      order: 1,
+      state: "ready",
+    });
+
+    await executeWorkflowMutation(authority, authorization, {
+      action: "setCommitState",
+      commitId: currentCommit.summary.id,
+      state: "active",
+    });
+    const repositoryCommit = await executeWorkflowMutation(authority, authorization, {
+      action: "createRepositoryCommit",
+      repositoryId: fixture.repositoryId,
+      repositoryBranchId: fixture.repositoryBranchId,
+      commitId: currentCommit.summary.id,
+      title: "Finalize me first",
+      state: "attached",
+      worktree: {
+        path: "/tmp/io-worktree",
+        branchName: "workflow-authority",
+      },
+    });
+
+    await executeWorkflowMutation(authority, authorization, {
+      action: "finalizeCommit",
+      commitId: currentCommit.summary.id,
+      outcome: "committed",
+      git: {
+        repositoryCommitId: repositoryCommit.summary.id,
+        sha: "abc1234",
+      },
+    });
+
+    const commitQueue = authority.readCommitQueueScope(
+      {
+        branchId: fixture.branchId,
+      },
+      { authorization },
+    );
+
+    expect(commitQueue.branch.branch).toMatchObject({
+      id: fixture.branchId,
+      state: "ready",
+      activeCommitId: nextCommit.summary.id,
+    });
+    expect(commitQueue.branch.activeCommit).toMatchObject({
+      commit: {
+        id: nextCommit.summary.id,
+        state: "ready",
+      },
+    });
   });
 
   it("reads workflow branch board and commit queue scopes from authoritative graph state", async () => {

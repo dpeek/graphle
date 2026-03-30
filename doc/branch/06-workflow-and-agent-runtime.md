@@ -982,9 +982,71 @@ interface CommitQueueScopeResult {
   - `reorderCommit`
   - `setCommitState`
   - `createRepositoryCommit`
-  - `attachCommitResult`
+  - `finalizeCommit`
+- commit finalization contract:
+
+```ts
+type WorkflowCommitFinalizationOutcome = "committed" | "blocked" | "dropped";
+
+type WorkflowCommitFinalizationRequest =
+  | {
+      action: "finalizeCommit";
+      commitId: string;
+      outcome: "committed";
+      git: {
+        repositoryCommitId?: string;
+        repositoryBranchId?: string;
+        sha: string;
+        committedAt?: string;
+        title?: string | null;
+        worktree?: {
+          path?: string | null;
+          branchName?: string | null;
+          leaseState?: "unassigned" | "reserved" | "attached" | "released";
+        };
+      };
+    }
+  | {
+      action: "finalizeCommit";
+      commitId: string;
+      outcome: "blocked" | "dropped";
+      git?: {
+        repositoryCommitId?: string;
+        repositoryBranchId?: string;
+        title?: string | null;
+        worktree?: {
+          path?: string | null;
+          branchName?: string | null;
+          leaseState?: "unassigned" | "reserved" | "attached" | "released";
+        };
+      };
+    };
+
+interface WorkflowCommitFinalizationAcknowledgement {
+  branch: WorkflowBranchSummary;
+  commit: WorkflowCommitSummary;
+  outcome: WorkflowCommitFinalizationOutcome;
+  repositoryCommit?: RepositoryCommitSummary;
+}
+```
+
+- contract rules:
+  - `finalizeCommit` is commit-centric and only finalizes one `active`
+    workflow commit attempt
+  - `committed` requires git commit result data and persists one
+    repository-backed commit record, resolved either by
+    `git.repositoryCommitId`, the one already attached to the workflow commit,
+    or a new managed record when neither exists yet
+  - `blocked` and `dropped` do not create or promote a `RepositoryCommit` to
+    `committed`; `git` is optional and only refreshes retained
+    repository/worktree metadata when a repository commit record already exists
+  - finalization always clears `activeCommitId` and derives the next branch
+    state from the resulting commit states
+  - worktree cleanup, replay, and later scheduling remain out of scope; the
+    caller must request any lease-state change explicitly
 - outputs:
   - updated project, repository, branch, or commit summary
+  - `WorkflowCommitFinalizationAcknowledgement` for `finalizeCommit`
   - authoritative cursor from Branch 1
 - failure shape:
   - `repository-missing`
@@ -1680,12 +1742,16 @@ state loss.
    - local git commit or branch update
    - authoritative finalization write
 4. authoritative write point:
-   - create or update `RepositoryCommit`
-   - transition commit to `committed`, `blocked`, or `dropped`
+   - `finalizeCommit` transitions the workflow commit to `committed`,
+     `blocked`, or `dropped`
+   - `committed` captures `sha`, `committedAt`, managed repository-branch
+     identity, and worktree metadata on one `RepositoryCommit`
+   - `blocked` and `dropped` may preserve or refresh retained repository
+     metadata, but they do not fabricate a repository-backed commit result
    - update branch state and `activeCommitId`
 5. failure or fallback behavior:
    - if git finalization fails, preserve session history and worktree
-     reservation, and leave the commit `blocked` or `active`
+     reservation, and finalize as `blocked` or leave the commit `active`
    - if graph write fails after a successful git commit, reconcile from git and
      require an explicit repair path rather than fabricating state
 

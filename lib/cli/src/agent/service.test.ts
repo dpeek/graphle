@@ -13,6 +13,11 @@ import { AgentService, pickCandidateIssues } from "./service.js";
 import { LinearTrackerAdapter, normalizeLinearIssue } from "./tracker/linear.js";
 import type { AgentSessionEvent, AgentStatusEvent } from "./tui/index.js";
 import type { AgentIssue, PreparedWorkspace } from "./types.js";
+import type {
+  IssueRuntimeState,
+  WorkspaceCompletionResult,
+  WorkspaceWorkflowFinalizationResult,
+} from "./workspace.js";
 import { renderPrompt } from "./workflow.js";
 
 function createIssue(overrides: Partial<AgentIssue> = {}): AgentIssue {
@@ -63,6 +68,75 @@ function isSupervisorWorkflowDiagnosticEvent(
     event.session.id === "supervisor"
   );
 }
+
+function createIssueRuntimeState(overrides: Partial<IssueRuntimeState> = {}): IssueRuntimeState {
+  return {
+    branchName: "io/ope-167",
+    commitSha: "a".repeat(40),
+    controlPath: "/repo",
+    issueId: "task-1",
+    issueIdentifier: "OPE-172",
+    issueTitle: "Example task",
+    originPath: "/repo",
+    outputPath: "/repo/output.log",
+    parentIssueId: "feature-1",
+    parentIssueIdentifier: "OPE-167",
+    runtimePath: "/repo/runtime/ope-172",
+    sourceRepoPath: "/repo",
+    status: "completed",
+    streamIssueId: "stream-1",
+    streamIssueIdentifier: "OPE-121",
+    streamRuntimePath: "/repo/runtime/stream/ope-167.json",
+    updatedAt: "2026-03-15T12:00:00.000Z",
+    workerId: "worker-1",
+    worktreePath: "/repo/tree/ope-172",
+    ...overrides,
+  };
+}
+
+function createWorkspaceCompletionResult(
+  overrides: Partial<WorkspaceCompletionResult> & {
+    issueState?: Partial<IssueRuntimeState>;
+  } = {},
+): WorkspaceCompletionResult {
+  return {
+    commitSha: overrides.commitSha ?? "a".repeat(40),
+    issueState: createIssueRuntimeState(overrides.issueState),
+  };
+}
+
+function createWorkspaceWorkflowFinalizationResult(
+  overrides: {
+    completion?: WorkspaceCompletionResult;
+    issueState?: Partial<IssueRuntimeState>;
+  } = {},
+): WorkspaceWorkflowFinalizationResult {
+  const completion = overrides.completion ?? createWorkspaceCompletionResult();
+  return {
+    completion,
+    issueState: createIssueRuntimeState({
+      ...completion.issueState,
+      ...overrides.issueState,
+    }),
+  };
+}
+
+function createWorkspaceManagerStub(stub: Record<string, unknown>) {
+  return {
+    coordinateWorkflowFinalization: async (
+      completion: WorkspaceCompletionResult,
+      options: {
+        stateName: string;
+        tracker: { setIssueState: (issueId: string, state: string) => Promise<void> };
+      },
+    ) => {
+      await options.tracker.setIssueState(completion.issueState.issueId, options.stateName);
+      return createWorkspaceWorkflowFinalizationResult({ completion });
+    },
+    ...stub,
+  } as unknown as never;
+}
+
 function buildExpectedPrompt(
   builtinIds: readonly string[],
   promptPath: string,
@@ -683,9 +757,9 @@ test("AgentService does not auto-run task issues while the parent stream is not 
         },
       }),
       workspaceManagerFactory: (_workflow, issueIdentifier) =>
-        ({
+        createWorkspaceManagerStub({
           cleanup: async () => undefined,
-          complete: async () => ({ commitSha: "a".repeat(40) }),
+          complete: async () => createWorkspaceCompletionResult(),
           createIdleWorkspace: () => ({
             branchName: "main",
             controlPath: root,
@@ -705,7 +779,7 @@ test("AgentService does not auto-run task issues while the parent stream is not 
           }),
           listOccupiedStreams: async () => new Map(),
           reconcileTerminalIssues: async () => undefined,
-        }) as unknown as never,
+        }),
     });
 
     await service.start();
@@ -766,9 +840,9 @@ test("AgentService does not auto-run task issues while the stream is not In Prog
         setIssueState: async () => undefined,
       }),
       workspaceManagerFactory: (_workflow, issueIdentifier) =>
-        ({
+        createWorkspaceManagerStub({
           cleanup: async () => undefined,
-          complete: async () => ({ commitSha: "a".repeat(40) }),
+          complete: async () => createWorkspaceCompletionResult(),
           createIdleWorkspace: () => ({
             branchName: "main",
             controlPath: root,
@@ -804,7 +878,7 @@ test("AgentService does not auto-run task issues while the stream is not In Prog
             workerId: "OPE-66",
           }),
           reconcileTerminalIssues: async () => undefined,
-        }) as unknown as never,
+        }),
     });
 
     await service.start();
@@ -961,7 +1035,7 @@ test("AgentService does not auto-run top-level backlog issues", async () => {
         },
       }),
       workspaceManagerFactory: (_workflow, issueIdentifier) =>
-        ({
+        createWorkspaceManagerStub({
           cleanup: async () => undefined,
           createIdleWorkspace: () => ({
             branchName: "main",
@@ -978,7 +1052,7 @@ test("AgentService does not auto-run top-level backlog issues", async () => {
           }),
           listOccupiedStreams: async () => new Map(),
           reconcileTerminalIssues: async () => undefined,
-        }) as unknown as never,
+        }),
     });
 
     await service.start();
@@ -1027,7 +1101,7 @@ test("AgentService does not auto-run standalone issues", async () => {
         },
       }),
       workspaceManagerFactory: (_workflow, issueIdentifier) =>
-        ({
+        createWorkspaceManagerStub({
           cleanup: async () => undefined,
           createIdleWorkspace: () => ({
             branchName: "main",
@@ -1044,7 +1118,7 @@ test("AgentService does not auto-run standalone issues", async () => {
           }),
           listOccupiedStreams: async () => new Map(),
           reconcileTerminalIssues: async () => undefined,
-        }) as unknown as never,
+        }),
     });
 
     await service.start();
@@ -1102,7 +1176,7 @@ test("AgentService does not auto-run released feature leaves without task childr
         },
       }),
       workspaceManagerFactory: (_workflow, issueIdentifier) =>
-        ({
+        createWorkspaceManagerStub({
           cleanup: async () => undefined,
           createIdleWorkspace: () => ({
             branchName: "main",
@@ -1119,7 +1193,7 @@ test("AgentService does not auto-run released feature leaves without task childr
           }),
           listOccupiedStreams: async () => new Map(),
           reconcileTerminalIssues: async () => undefined,
-        }) as unknown as never,
+        }),
     });
 
     await service.start();
@@ -1165,9 +1239,9 @@ test("AgentService moves successful task issues into Done after landing on the f
         },
       }),
       workspaceManagerFactory: (_workflow, issueIdentifier) =>
-        ({
+        createWorkspaceManagerStub({
           cleanup: async () => undefined,
-          complete: async () => ({ commitSha: "a".repeat(40) }),
+          complete: async () => createWorkspaceCompletionResult(),
           createIdleWorkspace: () => ({
             branchName: "main",
             controlPath: root,
@@ -1205,7 +1279,7 @@ test("AgentService moves successful task issues into Done after landing on the f
           reconcileTerminalIssues: async () => undefined,
           runAfterRunHook: async () => undefined,
           runBeforeRunHook: async () => undefined,
-        }) as unknown as never,
+        }),
     });
 
     await service.start();
@@ -1251,7 +1325,7 @@ test("AgentService blocks task issues when execution-owned landing fails", async
         },
       }),
       workspaceManagerFactory: (_workflow, issueIdentifier) =>
-        ({
+        createWorkspaceManagerStub({
           cleanup: async () => undefined,
           complete: async () => {
             throw new Error("task_landing_rebase_failed:OPE-58:io/ope-167:conflict");
@@ -1292,7 +1366,7 @@ test("AgentService blocks task issues when execution-owned landing fails", async
           reconcileTerminalIssues: async () => undefined,
           runAfterRunHook: async () => undefined,
           runBeforeRunHook: async () => undefined,
-        }) as unknown as never,
+        }),
     });
 
     await service.start();
@@ -1402,11 +1476,11 @@ test("AgentService closes review tasks only after the review agent creates a fol
         },
       }),
       workspaceManagerFactory: (_workflow, issueIdentifier) =>
-        ({
+        createWorkspaceManagerStub({
           cleanup: async () => undefined,
           completeReview: async () => {
             completions.push("review");
-            return { commitSha: "a".repeat(40) };
+            return createWorkspaceCompletionResult();
           },
           createIdleWorkspace: () => ({
             branchName: "main",
@@ -1442,7 +1516,7 @@ test("AgentService closes review tasks only after the review agent creates a fol
           reconcileTerminalIssues: async () => undefined,
           runAfterRunHook: async () => undefined,
           runBeforeRunHook: async () => undefined,
-        }) as unknown as never,
+        }),
     });
 
     await service.start();
@@ -1519,9 +1593,9 @@ test("AgentService blocks review tasks that do not create a valid follow-up issu
         },
       }),
       workspaceManagerFactory: (_workflow, issueIdentifier) =>
-        ({
+        createWorkspaceManagerStub({
           cleanup: async () => undefined,
-          completeReview: async () => ({ commitSha: "a".repeat(40) }),
+          completeReview: async () => createWorkspaceCompletionResult(),
           createIdleWorkspace: () => ({
             branchName: "main",
             controlPath: root,
@@ -1562,7 +1636,7 @@ test("AgentService blocks review tasks that do not create a valid follow-up issu
           reconcileTerminalIssues: async () => undefined,
           runAfterRunHook: async () => undefined,
           runBeforeRunHook: async () => undefined,
-        }) as unknown as never,
+        }),
     });
 
     await service.start();
@@ -1645,9 +1719,9 @@ test("AgentService proves the OPE-121 workflow by running only the leaf task", a
         },
       }),
       workspaceManagerFactory: (_workflow, issueIdentifier) =>
-        ({
+        createWorkspaceManagerStub({
           cleanup: async () => undefined,
-          complete: async () => ({ commitSha: "a".repeat(40) }),
+          complete: async () => createWorkspaceCompletionResult(),
           createIdleWorkspace: () => ({
             branchName: "main",
             controlPath: root,
@@ -1685,7 +1759,7 @@ test("AgentService proves the OPE-121 workflow by running only the leaf task", a
           reconcileTerminalIssues: async () => undefined,
           runAfterRunHook: async () => undefined,
           runBeforeRunHook: async () => undefined,
-        }) as unknown as never,
+        }),
     });
 
     await service.start();
@@ -1743,9 +1817,9 @@ test("AgentService does not run OPE-172 until the OPE-121 stream is In Progress"
         },
       }),
       workspaceManagerFactory: (_workflow, issueIdentifier) =>
-        ({
+        createWorkspaceManagerStub({
           cleanup: async () => undefined,
-          complete: async () => ({ commitSha: "a".repeat(40) }),
+          complete: async () => createWorkspaceCompletionResult(),
           createIdleWorkspace: () => ({
             branchName: "main",
             controlPath: root,
@@ -1765,7 +1839,7 @@ test("AgentService does not run OPE-172 until the OPE-121 stream is In Progress"
           }),
           listOccupiedStreams: async () => new Map(),
           reconcileTerminalIssues: async () => undefined,
-        }) as unknown as never,
+        }),
     });
 
     await service.start();
@@ -1825,9 +1899,9 @@ test("AgentService preserves timed out runs as interrupted", async () => {
         setIssueState: async () => undefined,
       }),
       workspaceManagerFactory: (_workflow, issueIdentifier) =>
-        ({
+        createWorkspaceManagerStub({
           cleanup: async () => undefined,
-          complete: async () => ({ commitSha: "a".repeat(40) }),
+          complete: async () => createWorkspaceCompletionResult(),
           createIdleWorkspace: () => ({
             branchName: "main",
             controlPath: root,
@@ -1869,7 +1943,7 @@ test("AgentService preserves timed out runs as interrupted", async () => {
           reconcileTerminalIssues: async () => undefined,
           runAfterRunHook: async () => undefined,
           runBeforeRunHook: async () => undefined,
-        }) as unknown as never,
+        }),
     });
     service.observeSessionEvents((event) => {
       sessionEvents.push(event);
@@ -1951,11 +2025,18 @@ test("AgentService retries timed out runs once per supervisor cycle", async () =
         },
       }),
       workspaceManagerFactory: (_workflow, issueIdentifier) =>
-        ({
+        createWorkspaceManagerStub({
           cleanup: async () => undefined,
           complete: async () => {
             events.push("complete");
-            return { commitSha: "a".repeat(40) };
+            return createWorkspaceCompletionResult({
+              issueState: {
+                issueId: "1",
+                issueIdentifier: "OPE-66",
+                issueTitle: "Resume interrupted task",
+                workerId: "OPE-66",
+              },
+            });
           },
           createIdleWorkspace: () => ({
             branchName: "main",
@@ -2002,7 +2083,7 @@ test("AgentService retries timed out runs once per supervisor cycle", async () =
           runBeforeRunHook: async () => {
             events.push("before");
           },
-        }) as unknown as never,
+        }),
     });
 
     await service.start();
@@ -2066,9 +2147,9 @@ test("AgentService eagerly creates worker checkout on start", async () => {
       once: true,
       repoRoot: root,
       workspaceManagerFactory: (_workflow, issueIdentifier) =>
-        ({
+        createWorkspaceManagerStub({
           cleanup: async () => undefined,
-          complete: async () => ({ commitSha: "a".repeat(40) }),
+          complete: async () => createWorkspaceCompletionResult(),
           createIdleWorkspace: () => ({
             branchName: "main",
             controlPath: root,
@@ -2088,7 +2169,7 @@ test("AgentService eagerly creates worker checkout on start", async () => {
           }),
           listOccupiedStreams: async () => new Map(),
           reconcileTerminalIssues: async () => undefined,
-        }) as unknown as never,
+        }),
     });
 
     await service.start();
@@ -2172,9 +2253,9 @@ test("AgentService does not auto-run parent execute issues that already have chi
         },
       }),
       workspaceManagerFactory: (_workflow, issueIdentifier) =>
-        ({
+        createWorkspaceManagerStub({
           cleanup: async () => undefined,
-          complete: async () => ({ commitSha: "a".repeat(40) }),
+          complete: async () => createWorkspaceCompletionResult(),
           createIdleWorkspace: () => ({
             branchName: "main",
             controlPath: root,
@@ -2194,7 +2275,7 @@ test("AgentService does not auto-run parent execute issues that already have chi
           }),
           listOccupiedStreams: async () => new Map(),
           reconcileTerminalIssues: async () => undefined,
-        }) as unknown as never,
+        }),
     });
 
     await service.start();
@@ -2299,13 +2380,68 @@ test("AgentService publishes supervisor and worker session events", async () => 
           }),
         ],
         fetchIssueStatesByIds: async () => new Map(),
-        setIssueState: async () => undefined,
+        setIssueState: async (_issueId, stateName) => {
+          if (stateName === "Done") {
+            throw new Error("service_should_finalize_through_workspace_coordinator");
+          }
+        },
       }),
       stdoutEvents: false,
       workspaceManagerFactory: (_workflow, issueIdentifier) =>
-        ({
+        createWorkspaceManagerStub({
           cleanup: async () => undefined,
-          complete: async () => ({ commitSha: "a".repeat(40) }),
+          complete: async () =>
+            createWorkspaceCompletionResult({
+              issueState: {
+                branchName: "io/ope-167",
+                controlPath: root,
+                issueId: "1",
+                issueIdentifier: "OPE-54",
+                issueTitle: "Execute agent",
+                originPath: root,
+                outputPath: resolve(issueRuntimePath, "output.log"),
+                parentIssueId: "feature-1",
+                parentIssueIdentifier: "OPE-167",
+                runtimePath: issueRuntimePath,
+                sourceRepoPath: root,
+                streamIssueId: "stream-1",
+                streamIssueIdentifier: "OPE-121",
+                streamRuntimePath: resolve(root, "workspace", "stream", "ope-167.json"),
+                workerId: "OPE-54",
+                worktreePath: workspacePath,
+              },
+            }),
+          coordinateWorkflowFinalization: async (completion, options) => {
+            expect(options.stateName).toBe("Done");
+            return createWorkspaceWorkflowFinalizationResult({
+              completion,
+              issueState: {
+                branchName: "io/ope-167",
+                commitSha: "a".repeat(40),
+                controlPath: root,
+                finalizedAt: "2026-03-15T12:00:01.000Z",
+                finalizedLinearState: "Done",
+                issueId: "1",
+                issueIdentifier: "OPE-54",
+                issueTitle: "Execute agent",
+                landedAt: "2026-03-15T12:00:00.000Z",
+                landedCommitSha: "a".repeat(40),
+                originPath: root,
+                outputPath: resolve(issueRuntimePath, "output.log"),
+                parentIssueId: "feature-1",
+                parentIssueIdentifier: "OPE-167",
+                runtimePath: issueRuntimePath,
+                sourceRepoPath: root,
+                status: "finalized",
+                streamIssueId: "stream-1",
+                streamIssueIdentifier: "OPE-121",
+                streamRuntimePath: resolve(root, "workspace", "stream", "ope-167.json"),
+                updatedAt: "2026-03-15T12:00:01.000Z",
+                workerId: "OPE-54",
+                worktreePath: workspacePath,
+              },
+            });
+          },
           createIdleWorkspace: () => ({
             branchName: "main",
             controlPath: root,
@@ -2341,44 +2477,10 @@ test("AgentService publishes supervisor and worker session events", async () => 
             baseIssueIdentifier: "OPE-121",
             workerId: "OPE-54",
           }),
-          reconcileTerminalIssues: async () => {
-            await mkdir(issueRuntimePath, { recursive: true });
-            await writeFile(
-              resolve(issueRuntimePath, "issue-state.json"),
-              JSON.stringify(
-                {
-                  branchName: "io/ope-167",
-                  commitSha: "a".repeat(40),
-                  controlPath: root,
-                  finalizedAt: "2026-03-15T12:00:01.000Z",
-                  finalizedLinearState: "Done",
-                  issueId: "1",
-                  issueIdentifier: "OPE-54",
-                  issueTitle: "Execute agent",
-                  landedAt: "2026-03-15T12:00:00.000Z",
-                  landedCommitSha: "a".repeat(40),
-                  originPath: root,
-                  outputPath: resolve(issueRuntimePath, "output.log"),
-                  parentIssueId: "feature-1",
-                  parentIssueIdentifier: "OPE-167",
-                  runtimePath: issueRuntimePath,
-                  sourceRepoPath: root,
-                  status: "finalized",
-                  streamIssueId: "stream-1",
-                  streamIssueIdentifier: "OPE-121",
-                  streamRuntimePath: resolve(root, "workspace", "stream", "ope-167.json"),
-                  updatedAt: "2026-03-15T12:00:01.000Z",
-                  workerId: "OPE-54",
-                  worktreePath: workspacePath,
-                },
-                null,
-                2,
-              ),
-            );
-          },
+          reconcileTerminalIssues: async () => undefined,
           runAfterRunHook: async () => undefined,
           runBeforeRunHook: async () => undefined,
-        }) as unknown as never,
+        }),
     });
     service.observeSessionEvents((event) => {
       events.push(event);
@@ -2607,9 +2709,9 @@ test("AgentService surfaces workflow diagnostics for retained and skipped task s
       }),
       stdoutEvents: false,
       workspaceManagerFactory: (_workflow, issueIdentifier) =>
-        ({
+        createWorkspaceManagerStub({
           cleanup: async () => undefined,
-          complete: async () => ({ commitSha: "a".repeat(40) }),
+          complete: async () => createWorkspaceCompletionResult(),
           createIdleWorkspace: () => ({
             branchName: "main",
             controlPath: root,
@@ -2720,7 +2822,7 @@ test("AgentService surfaces workflow diagnostics for retained and skipped task s
           reconcileTerminalIssues: async () => undefined,
           runAfterRunHook: async () => undefined,
           runBeforeRunHook: async () => undefined,
-        }) as unknown as never,
+        }),
     });
     service.observeSessionEvents((event) => {
       events.push(event);
@@ -2912,9 +3014,9 @@ test("AgentService composes execute built-ins with io.md", async () => {
         },
       }),
       workspaceManagerFactory: (_workflow, issueIdentifier) =>
-        ({
+        createWorkspaceManagerStub({
           cleanup: async () => undefined,
-          complete: async () => ({ commitSha: "a".repeat(40) }),
+          complete: async () => createWorkspaceCompletionResult(),
           createIdleWorkspace: () => ({
             branchName: "main",
             controlPath: root,
@@ -2952,7 +3054,7 @@ test("AgentService composes execute built-ins with io.md", async () => {
           reconcileTerminalIssues: async () => undefined,
           runAfterRunHook: async () => undefined,
           runBeforeRunHook: async () => undefined,
-        }) as unknown as never,
+        }),
     });
 
     await service.start();
@@ -3114,9 +3216,9 @@ test("AgentService does not auto-run backlog-routed leaf issues", async () => {
         },
       }),
       workspaceManagerFactory: (_workflow, issueIdentifier) =>
-        ({
+        createWorkspaceManagerStub({
           cleanup: async () => undefined,
-          complete: async () => ({ commitSha: "a".repeat(40) }),
+          complete: async () => createWorkspaceCompletionResult(),
           createIdleWorkspace: () => ({
             branchName: "main",
             controlPath: root,
@@ -3149,7 +3251,7 @@ test("AgentService does not auto-run backlog-routed leaf issues", async () => {
           reconcileTerminalIssues: async () => undefined,
           runAfterRunHook: async () => undefined,
           runBeforeRunHook: async () => undefined,
-        }) as unknown as never,
+        }),
     });
 
     await service.start();
@@ -3260,9 +3362,9 @@ test("AgentService uses review built-ins for review-routed issues", async () => 
         setIssueState: async () => undefined,
       }),
       workspaceManagerFactory: (_workflow, issueIdentifier) =>
-        ({
+        createWorkspaceManagerStub({
           cleanup: async () => undefined,
-          completeReview: async () => ({ commitSha: "a".repeat(40) }),
+          completeReview: async () => createWorkspaceCompletionResult(),
           createIdleWorkspace: () => ({
             branchName: "main",
             controlPath: root,
@@ -3297,7 +3399,7 @@ test("AgentService uses review built-ins for review-routed issues", async () => 
           reconcileTerminalIssues: async () => undefined,
           runAfterRunHook: async () => undefined,
           runBeforeRunHook: async () => undefined,
-        }) as unknown as never,
+        }),
     });
 
     await service.start();
@@ -3444,9 +3546,9 @@ test("AgentService uses builtin override files from io.ts", async () => {
         },
       }),
       workspaceManagerFactory: (_workflow, issueIdentifier) =>
-        ({
+        createWorkspaceManagerStub({
           cleanup: async () => undefined,
-          complete: async () => ({ commitSha: "a".repeat(40) }),
+          complete: async () => createWorkspaceCompletionResult(),
           createIdleWorkspace: () => ({
             branchName: "main",
             controlPath: root,
@@ -3484,7 +3586,7 @@ test("AgentService uses builtin override files from io.ts", async () => {
           reconcileTerminalIssues: async () => undefined,
           runAfterRunHook: async () => undefined,
           runBeforeRunHook: async () => undefined,
-        }) as unknown as never,
+        }),
     });
 
     await service.start();
@@ -3593,9 +3695,9 @@ Refs:
         },
       }),
       workspaceManagerFactory: (_workflow, issueIdentifier) =>
-        ({
+        createWorkspaceManagerStub({
           cleanup: async () => undefined,
-          complete: async () => ({ commitSha: "a".repeat(40) }),
+          complete: async () => createWorkspaceCompletionResult(),
           createIdleWorkspace: () => ({
             branchName: "main",
             controlPath: root,
@@ -3635,7 +3737,7 @@ Refs:
           reconcileTerminalIssues: async () => undefined,
           runAfterRunHook: async () => undefined,
           runBeforeRunHook: async () => undefined,
-        }) as unknown as never,
+        }),
     });
 
     await service.start();

@@ -11,9 +11,9 @@ import type {
 } from "./authority.js";
 import { dispatchWorkflowAggregateMutation } from "./workflow-authority-aggregate-handlers.js";
 import {
-  attachWorkflowCommitResult,
   createWorkflowCommit,
   createWorkflowRepositoryCommit,
+  finalizeWorkflowCommit,
   setWorkflowCommitState,
   updateWorkflowCommit,
 } from "./workflow-authority-commit-handlers.js";
@@ -70,8 +70,8 @@ function mutateWorkflow(
       return setWorkflowCommitState(graph, store, input);
     case "createRepositoryCommit":
       return createWorkflowRepositoryCommit(graph, store, input);
-    case "attachCommitResult":
-      return attachWorkflowCommitResult(graph, store, input);
+    case "finalizeCommit":
+      return finalizeWorkflowCommit(graph, store, input);
     default: {
       throw new WorkflowMutationError(400, "Unsupported workflow mutation action.");
     }

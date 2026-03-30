@@ -79,6 +79,16 @@ export interface IssueRuntimeState {
   worktreePath: string;
 }
 
+export interface WorkspaceCompletionResult {
+  commitSha: string;
+  issueState: IssueRuntimeState;
+}
+
+export interface WorkspaceWorkflowFinalizationResult {
+  completion: WorkspaceCompletionResult;
+  issueState: IssueRuntimeState;
+}
+
 export interface WorkspaceManagerOptions {
   hooks: HookConfig;
   log?: Logger;
@@ -92,6 +102,10 @@ export interface WorkspaceManagerOptions {
 type IssueStateTracker = {
   fetchIssuesByIds?: (issueIds: string[]) => Promise<Map<string, AgentIssue>>;
   fetchIssueStatesByIds: (issueIds: string[]) => Promise<Map<string, string>>;
+};
+
+type IssueFinalizationTracker = IssueStateTracker & {
+  setIssueState: (issueId: string, stateName: string) => Promise<void>;
 };
 
 const defaultRunCommand: CommandRunner = async (command, cwd, timeoutMs = 60_000) => {
@@ -363,12 +377,15 @@ export class CheckoutManager {
     await this.#writeState(workspace, "idle");
   }
 
-  async complete(workspace: PreparedWorkspace, issue: AgentIssue) {
+  async complete(
+    workspace: PreparedWorkspace,
+    issue: AgentIssue,
+  ): Promise<WorkspaceCompletionResult> {
     const taskCommitSha = await this.#commit(workspace, issue);
     const landing = await this.#landTaskCommitOnBranch(workspace, issue, taskCommitSha);
     const landedAt = new Date().toISOString();
 
-    await this.#writeIssueState(workspace, issue, "completed", {
+    const issueState = await this.#writeIssueState(workspace, issue, "completed", {
       commitSha: landing.taskCommitSha,
       landedAt,
       landedCommitSha: landing.landedCommitSha,
@@ -398,10 +415,13 @@ export class CheckoutManager {
       },
     );
     await this.#writeState(workspace, "idle");
-    return { commitSha: landing.landedCommitSha };
+    return { commitSha: landing.landedCommitSha, issueState };
   }
 
-  async completeReview(workspace: PreparedWorkspace, issue: AgentIssue) {
+  async completeReview(
+    workspace: PreparedWorkspace,
+    issue: AgentIssue,
+  ): Promise<WorkspaceCompletionResult> {
     if (await this.#isDirty(workspace.path)) {
       throw new Error(`review_checkout_dirty:${issue.identifier}`);
     }
@@ -410,7 +430,7 @@ export class CheckoutManager {
     if (!commitSha) {
       throw new Error(`review_commit_missing:${issue.identifier}`);
     }
-    await this.#writeIssueState(workspace, issue, "completed");
+    const issueState = await this.#writeIssueState(workspace, issue, "completed");
     await this.#upsertStreamState(
       {
         baseBranchName: workspace.baseBranchName,
@@ -436,7 +456,25 @@ export class CheckoutManager {
       },
     );
     await this.#writeState(workspace, "idle");
-    return { commitSha };
+    return { commitSha, issueState };
+  }
+
+  async coordinateWorkflowFinalization(
+    completion: WorkspaceCompletionResult,
+    options: {
+      stateName: string;
+      terminalStates: string[];
+      tracker: IssueFinalizationTracker;
+    },
+  ): Promise<WorkspaceWorkflowFinalizationResult> {
+    await options.tracker.setIssueState(completion.issueState.issueId, options.stateName);
+    await this.reconcileTerminalIssues(options.tracker, options.terminalStates);
+    return {
+      completion,
+      issueState:
+        (await readIssueRuntimeState(this.#rootDir, completion.issueState.issueIdentifier)) ??
+        completion.issueState,
+    };
   }
 
   async markBlocked(workspace: PreparedWorkspace, issue: AgentIssue, reason?: string) {
@@ -1652,6 +1690,7 @@ export class CheckoutManager {
       worktreePath: workspace.path,
     };
     await this.#writeIssueRuntimeState(state);
+    return state;
   }
 
   async #updateIssueRuntimeState(

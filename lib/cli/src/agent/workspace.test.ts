@@ -195,7 +195,7 @@ test("WorkspaceManager lands detached issue commits onto the local stream branch
   }
 });
 
-test("WorkspaceManager merges a done standalone stream into main and cleans up", async () => {
+test("WorkspaceManager coordinates standalone stream finalization through the shared workflow path", async () => {
   const root = await mkdtemp(resolve(tmpdir(), "agent-workspace-"));
   const runtimeRoot = resolve(root, "runtime");
   try {
@@ -208,20 +208,31 @@ test("WorkspaceManager merges a done standalone stream into main and cleans up",
     });
     const activeIssue = issue("OPE-43", "Add Worker Checkout");
     const workspace = await manager.prepare(activeIssue);
+    const transitions: string[] = [];
 
     await writeFile(join(workspace.path, "README.md"), "merged\n");
-    await manager.complete(workspace, activeIssue);
-    await manager.reconcileTerminalIssues(
-      {
+    const completion = await manager.complete(workspace, activeIssue);
+    const finalization = await manager.coordinateWorkflowFinalization(completion, {
+      stateName: "Done",
+      terminalStates: ["Done"],
+      tracker: {
         fetchIssueStatesByIds: async () => new Map([[activeIssue.id, "Done"]]),
+        setIssueState: async (issueId, stateName) => {
+          transitions.push(`${issueId}:${stateName}`);
+        },
       },
-      ["Done"],
-    );
+    });
 
     expect(await readFile(resolve(repoRoot, "README.md"), "utf8")).toBe("merged\n");
     expect(await run(["git", "branch", "--show-current"], repoRoot)).toBe("main");
     expect(await run(["git", "branch", "--list", "io/ope-43"], repoRoot)).toBe("");
     expect(existsSync(workspace.path)).toBe(false);
+    expect(transitions).toEqual(["OPE-43:Done"]);
+    expect(finalization.issueState).toMatchObject({
+      finalizedLinearState: "Done",
+      issueIdentifier: "OPE-43",
+      status: "finalized",
+    });
     expect(await readIssueRuntimeState(runtimeRoot, "OPE-43")).toMatchObject({
       finalizedLinearState: "Done",
       issueIdentifier: "OPE-43",
@@ -333,7 +344,7 @@ test("WorkspaceManager preserves task worktree state when landing rebase conflic
   }
 });
 
-test("WorkspaceManager squashes a done feature branch onto its stream branch and cleans up", async () => {
+test("WorkspaceManager coordinates feature branch finalization through the shared workflow path", async () => {
   const root = await mkdtemp(resolve(tmpdir(), "agent-workspace-"));
   const runtimeRoot = resolve(root, "runtime");
   const featureStatePath = resolve(runtimeRoot, "stream", "ope-167.json");
@@ -354,11 +365,14 @@ test("WorkspaceManager squashes a done feature branch onto its stream branch and
       streamIssueIdentifier: "OPE-121",
     });
     const workspace = await manager.prepare(task);
+    const transitions: string[] = [];
 
     await writeFile(join(workspace.path, "feature.txt"), "feature change\n");
-    await manager.complete(workspace, task);
-    await manager.reconcileTerminalIssues(
-      {
+    const completion = await manager.complete(workspace, task);
+    const finalization = await manager.coordinateWorkflowFinalization(completion, {
+      stateName: "Done",
+      terminalStates: ["Done"],
+      tracker: {
         fetchIssueStatesByIds: async (issueIds) =>
           new Map(issueIds.map((issueId) => [issueId, "Done"] as const)),
         fetchIssuesByIds: async () =>
@@ -377,13 +391,21 @@ test("WorkspaceManager squashes a done feature branch onto its stream branch and
               }),
             ],
           ]),
+        setIssueState: async (issueId, stateName) => {
+          transitions.push(`${issueId}:${stateName}`);
+        },
       },
-      ["Done"],
-    );
+    });
 
     const streamHead = await run(["git", "rev-parse", "io/ope-121"], repoRoot);
     expect(await run(["git", "show", "io/ope-121:feature.txt"], repoRoot)).toBe("feature change");
     expect(await run(["git", "branch", "--list", "io/ope-167"], repoRoot)).toBe("");
+    expect(transitions).toEqual(["task-171:Done"]);
+    expect(finalization.issueState).toMatchObject({
+      finalizedLinearState: "Done",
+      issueIdentifier: "OPE-171",
+      status: "finalized",
+    });
     expect(await readIssueRuntimeState(runtimeRoot, "OPE-171")).toMatchObject({
       finalizedLinearState: "Done",
       issueIdentifier: "OPE-171",

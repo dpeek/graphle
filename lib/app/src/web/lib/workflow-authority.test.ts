@@ -372,7 +372,7 @@ describe("workflow authority", () => {
   );
 
   it(
-    "finalizes a workflow commit and clears the branch active commit through attachCommitResult",
+    "finalizes a committed workflow outcome by creating its repository commit record",
     async () => {
       const authorization = createTestAuthorizationContext();
       const { authority, fixture } =
@@ -391,34 +391,71 @@ describe("workflow authority", () => {
         commitId: commit.summary.id,
         state: "active",
       });
-      const repositoryCommit = await executeWorkflowMutation(authority, authorization, {
-        action: "createRepositoryCommit",
-        repositoryId: fixture.repositoryId,
-        commitId: commit.summary.id,
-        title: "Finalized commit",
-        state: "attached",
-        worktree: {
-          path: "/tmp/io-worktree",
-          branchName: "workflow-authority",
-        },
-      });
 
       const finalized = await executeWorkflowMutation(authority, authorization, {
-        action: "attachCommitResult",
-        repositoryCommitId: repositoryCommit.summary.id,
-        sha: "abc1234",
+        action: "finalizeCommit",
+        commitId: commit.summary.id,
+        outcome: "committed",
+        git: {
+          sha: "abc1234",
+          committedAt: "2026-03-15T12:00:01.000Z",
+          title: "Finalized commit from git",
+          worktree: {
+            path: "/tmp/io-worktree",
+            branchName: "workflow-authority",
+          },
+        },
       });
 
       expect(finalized).toMatchObject({
-        action: "attachCommitResult",
+        action: "finalizeCommit",
         created: false,
+        finalization: {
+          outcome: "committed",
+          branch: {
+            id: fixture.branchId,
+            state: "done",
+          },
+          commit: {
+            id: commit.summary.id,
+            state: "committed",
+          },
+          repositoryCommit: {
+            entity: "repository-commit",
+            repositoryId: fixture.repositoryId,
+            repositoryBranchId: fixture.repositoryBranchId,
+            state: "committed",
+            title: "Finalized commit from git",
+            commitId: commit.summary.id,
+            sha: "abc1234",
+            committedAt: "2026-03-15T12:00:01.000Z",
+            worktree: {
+              branchName: "workflow-authority",
+              leaseState: "released",
+              path: "/tmp/io-worktree",
+            },
+          },
+        },
         summary: {
-          entity: "repository-commit",
-          id: repositoryCommit.summary.id,
+          entity: "commit",
+          id: commit.summary.id,
           state: "committed",
-          commitId: commit.summary.id,
         },
       });
+      const persistedRepositoryCommit = readProductGraph(
+        authority,
+        authorization,
+      ).repositoryCommit.get(finalized.finalization.repositoryCommit!.id);
+      expect(persistedRepositoryCommit.state).toBe(
+        workflow.repositoryCommitState.values.committed.id,
+      );
+      expect(persistedRepositoryCommit.repository).toBe(fixture.repositoryId);
+      expect(persistedRepositoryCommit.repositoryBranch).toBe(fixture.repositoryBranchId);
+      expect(persistedRepositoryCommit.commit).toBe(commit.summary.id);
+      expect(persistedRepositoryCommit.sha).toBe("abc1234");
+      expect(persistedRepositoryCommit.worktree.leaseState).toBe(
+        workflow.repositoryCommitLeaseState.values.released.id,
+      );
       expect(readProductGraph(authority, authorization).commit.get(commit.summary.id).state).toBe(
         workflow.commitState.values.committed.id,
       );
@@ -427,6 +464,320 @@ describe("workflow authority", () => {
       );
       expect(
         readProductGraph(authority, authorization).branch.get(fixture.branchId).activeCommit,
+      ).toBeUndefined();
+    },
+    workflowAuthorityTimeout,
+  );
+
+  it(
+    "finalizes a committed workflow outcome by promoting a reserved repository commit record",
+    async () => {
+      const authorization = createTestAuthorizationContext();
+      const { authority, fixture } =
+        await createTestWebAppAuthorityWithWorkflowFixture(authorization);
+      const commit = await executeWorkflowMutation(authority, authorization, {
+        action: "createCommit",
+        branchId: fixture.branchId,
+        title: "Reserved finalization",
+        commitKey: "commit:reserved-finalization",
+        order: 0,
+        state: "ready",
+      });
+
+      await executeWorkflowMutation(authority, authorization, {
+        action: "setCommitState",
+        commitId: commit.summary.id,
+        state: "active",
+      });
+      const repositoryCommit = await executeWorkflowMutation(authority, authorization, {
+        action: "createRepositoryCommit",
+        repositoryId: fixture.repositoryId,
+        commitId: commit.summary.id,
+        title: "Reserved finalization",
+        state: "reserved",
+        worktree: {
+          path: "/tmp/io-reserved-worktree",
+          branchName: "workflow-authority-reserved",
+        },
+      });
+
+      const finalized = await executeWorkflowMutation(authority, authorization, {
+        action: "finalizeCommit",
+        commitId: commit.summary.id,
+        outcome: "committed",
+        git: {
+          repositoryCommitId: repositoryCommit.summary.id,
+          sha: "def5678",
+          committedAt: "2026-03-16T08:30:00.000Z",
+        },
+      });
+
+      expect(finalized.finalization.repositoryCommit).toMatchObject({
+        entity: "repository-commit",
+        id: repositoryCommit.summary.id,
+        state: "committed",
+        commitId: commit.summary.id,
+        repositoryId: fixture.repositoryId,
+        repositoryBranchId: fixture.repositoryBranchId,
+        sha: "def5678",
+        committedAt: "2026-03-16T08:30:00.000Z",
+        worktree: {
+          branchName: "workflow-authority-reserved",
+          leaseState: "released",
+          path: "/tmp/io-reserved-worktree",
+        },
+      });
+      expect(
+        readProductGraph(authority, authorization).repositoryCommit.get(
+          repositoryCommit.summary.id,
+        ),
+      ).toMatchObject({
+        state: workflow.repositoryCommitState.values.committed.id,
+        repositoryBranch: fixture.repositoryBranchId,
+        commit: commit.summary.id,
+        sha: "def5678",
+        worktree: {
+          branchName: "workflow-authority-reserved",
+          leaseState: workflow.repositoryCommitLeaseState.values.released.id,
+          path: "/tmp/io-reserved-worktree",
+        },
+      });
+    },
+    workflowAuthorityTimeout,
+  );
+
+  it(
+    "finalizes a committed workflow outcome by advancing the branch to the next ready commit",
+    async () => {
+      const authorization = createTestAuthorizationContext();
+      const { authority, fixture } =
+        await createTestWebAppAuthorityWithWorkflowFixture(authorization);
+      const currentCommit = await executeWorkflowMutation(authority, authorization, {
+        action: "createCommit",
+        branchId: fixture.branchId,
+        title: "Current commit",
+        commitKey: "commit:current-finalization",
+        order: 0,
+        state: "ready",
+      });
+      const nextCommit = await executeWorkflowMutation(authority, authorization, {
+        action: "createCommit",
+        branchId: fixture.branchId,
+        title: "Next ready commit",
+        commitKey: "commit:next-ready-finalization",
+        order: 1,
+        state: "ready",
+      });
+
+      await executeWorkflowMutation(authority, authorization, {
+        action: "setCommitState",
+        commitId: currentCommit.summary.id,
+        state: "active",
+      });
+      const repositoryCommit = await executeWorkflowMutation(authority, authorization, {
+        action: "createRepositoryCommit",
+        repositoryId: fixture.repositoryId,
+        commitId: currentCommit.summary.id,
+        title: "Current commit",
+        state: "attached",
+        worktree: {
+          path: "/tmp/io-worktree-current",
+          branchName: "workflow-authority",
+          leaseState: "attached",
+        },
+      });
+
+      const finalized = await executeWorkflowMutation(authority, authorization, {
+        action: "finalizeCommit",
+        commitId: currentCommit.summary.id,
+        outcome: "committed",
+        git: {
+          repositoryCommitId: repositoryCommit.summary.id,
+          sha: "0123abc",
+        },
+      });
+
+      expect(finalized).toMatchObject({
+        action: "finalizeCommit",
+        finalization: {
+          outcome: "committed",
+          branch: {
+            id: fixture.branchId,
+            state: "ready",
+            activeCommitId: nextCommit.summary.id,
+          },
+          commit: {
+            id: currentCommit.summary.id,
+            state: "committed",
+          },
+        },
+      });
+      expect(readProductGraph(authority, authorization).branch.get(fixture.branchId)).toMatchObject({
+        state: workflow.branchState.values.ready.id,
+        activeCommit: nextCommit.summary.id,
+      });
+      expect(readProductGraph(authority, authorization).commit.get(nextCommit.summary.id).state).toBe(
+        workflow.commitState.values.ready.id,
+      );
+    },
+    workflowAuthorityTimeout,
+  );
+
+  it(
+    "finalizes a blocked workflow outcome without promoting the repository commit record",
+    async () => {
+      const authorization = createTestAuthorizationContext();
+      const { authority, fixture } =
+        await createTestWebAppAuthorityWithWorkflowFixture(authorization);
+      const commit = await executeWorkflowMutation(authority, authorization, {
+        action: "createCommit",
+        branchId: fixture.branchId,
+        title: "Blocked commit",
+        commitKey: "commit:blocked-finalization",
+        order: 0,
+        state: "ready",
+      });
+
+      await executeWorkflowMutation(authority, authorization, {
+        action: "setCommitState",
+        commitId: commit.summary.id,
+        state: "active",
+      });
+      const repositoryCommit = await executeWorkflowMutation(authority, authorization, {
+        action: "createRepositoryCommit",
+        repositoryId: fixture.repositoryId,
+        commitId: commit.summary.id,
+        title: "Blocked commit",
+        state: "attached",
+        worktree: {
+          path: "/tmp/io-worktree",
+          branchName: "workflow-authority",
+          leaseState: "attached",
+        },
+      });
+
+      const finalized = await executeWorkflowMutation(authority, authorization, {
+        action: "finalizeCommit",
+        commitId: commit.summary.id,
+        outcome: "blocked",
+        git: {
+          repositoryCommitId: repositoryCommit.summary.id,
+          worktree: {
+            path: "/tmp/io-worktree-blocked",
+            branchName: "workflow-authority-blocked",
+          },
+        },
+      });
+
+      expect(finalized).toMatchObject({
+        action: "finalizeCommit",
+        created: false,
+        finalization: {
+          outcome: "blocked",
+          branch: {
+            id: fixture.branchId,
+            state: "blocked",
+            activeCommitId: commit.summary.id,
+          },
+          commit: {
+            id: commit.summary.id,
+            state: "blocked",
+          },
+          repositoryCommit: {
+            entity: "repository-commit",
+            id: repositoryCommit.summary.id,
+            state: "attached",
+            commitId: commit.summary.id,
+            worktree: {
+              branchName: "workflow-authority-blocked",
+              leaseState: "attached",
+              path: "/tmp/io-worktree-blocked",
+            },
+          },
+        },
+        summary: {
+          entity: "commit",
+          id: commit.summary.id,
+          state: "blocked",
+        },
+      });
+      expect(readProductGraph(authority, authorization).commit.get(commit.summary.id).state).toBe(
+        workflow.commitState.values.blocked.id,
+      );
+      expect(readProductGraph(authority, authorization).branch.get(fixture.branchId).state).toBe(
+        workflow.branchState.values.blocked.id,
+      );
+      expect(
+        readProductGraph(authority, authorization).branch.get(fixture.branchId).activeCommit,
+      ).toBe(commit.summary.id);
+      expect(
+        readProductGraph(authority, authorization).repositoryCommit.get(repositoryCommit.summary.id)
+          .state,
+      ).toBe(workflow.repositoryCommitState.values.attached.id);
+    },
+    workflowAuthorityTimeout,
+  );
+
+  it(
+    "finalizes a dropped workflow outcome without requiring a repository commit record",
+    async () => {
+      const authorization = createTestAuthorizationContext();
+      const { authority, fixture } =
+        await createTestWebAppAuthorityWithWorkflowFixture(authorization);
+      const commit = await executeWorkflowMutation(authority, authorization, {
+        action: "createCommit",
+        branchId: fixture.branchId,
+        title: "Dropped commit",
+        commitKey: "commit:dropped-finalization",
+        order: 0,
+        state: "ready",
+      });
+
+      await executeWorkflowMutation(authority, authorization, {
+        action: "setCommitState",
+        commitId: commit.summary.id,
+        state: "active",
+      });
+
+      const finalized = await executeWorkflowMutation(authority, authorization, {
+        action: "finalizeCommit",
+        commitId: commit.summary.id,
+        outcome: "dropped",
+      });
+
+      expect(finalized).toMatchObject({
+        action: "finalizeCommit",
+        created: false,
+        finalization: {
+          outcome: "dropped",
+          branch: {
+            id: fixture.branchId,
+            state: "done",
+          },
+          commit: {
+            id: commit.summary.id,
+            state: "dropped",
+          },
+        },
+        summary: {
+          entity: "commit",
+          id: commit.summary.id,
+          state: "dropped",
+        },
+      });
+      expect(readProductGraph(authority, authorization).commit.get(commit.summary.id).state).toBe(
+        workflow.commitState.values.dropped.id,
+      );
+      expect(readProductGraph(authority, authorization).branch.get(fixture.branchId).state).toBe(
+        workflow.branchState.values.done.id,
+      );
+      expect(
+        readProductGraph(authority, authorization).branch.get(fixture.branchId).activeCommit,
+      ).toBeUndefined();
+      expect(
+        readProductGraph(authority, authorization)
+          .repositoryCommit.list()
+          .find((repositoryCommit) => repositoryCommit.commit === commit.summary.id),
       ).toBeUndefined();
     },
     workflowAuthorityTimeout,
