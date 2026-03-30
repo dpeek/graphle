@@ -3,10 +3,6 @@ import type { GraphCommandSpec } from "@io/graph-module";
 
 import { decision, decisionKind } from "./type.js";
 
-function hasNonBlankString(value: string | undefined): value is string {
-  return typeof value === "string" && value.trim().length > 0;
-}
-
 export const decisionWriteFailureCodes = ["details-missing", "summary-missing"] as const;
 
 export type DecisionWriteFailureCode = (typeof decisionWriteFailureCodes)[number];

@@ -9,6 +9,8 @@ import {
   type GraphWriteScope,
 } from "@io/graph-kernel";
 
+import { readPersistedRetainedRecordsFromSql } from "./graph-authority-sql-retained-records.js";
+
 type SqlRow = Record<string, unknown>;
 
 export type SqlCursorLike<T extends SqlRow = SqlRow> = Iterable<T> & {
@@ -404,19 +406,38 @@ export function loadPersistedAuthorityState(
     expectedSchemaVersion: number;
   },
 ): PersistedAuthoritativeGraphStorageLoadResult | null {
+  const hydratedSnapshot = buildSnapshotFromSql(sql);
+  const retainedRecords = readPersistedRetainedRecordsFromSql(sql);
   const meta = readGraphMetaRow(sql, options.defaultRetainedHistoryPolicy);
-  if (!meta) return null;
+  if (!meta) {
+    if (
+      hydratedSnapshot.snapshot.edges.length === 0 &&
+      hydratedSnapshot.snapshot.retracted.length === 0 &&
+      retainedRecords.length === 0
+    ) {
+      return null;
+    }
+
+    return {
+      snapshot: hydratedSnapshot.snapshot,
+      ...(retainedRecords.length > 0 ? { retainedRecords } : {}),
+      recovery: "reset-baseline",
+      startupDiagnostics: createStartupDiagnostics("reset-baseline", {
+        resetReasons: ["missing-write-history"],
+      }),
+    };
+  }
   if (meta.schemaVersion !== options.expectedSchemaVersion) {
     throw new Error(
       `Unsupported durable graph schema version ${meta.schemaVersion}. Expected ${options.expectedSchemaVersion}.`,
     );
   }
-  const hydratedSnapshot = buildSnapshotFromSql(sql);
   const hydratedHistory = buildWriteHistoryFromSql(sql, meta, hydratedSnapshot.headSequence);
 
   return {
     snapshot: hydratedSnapshot.snapshot,
     writeHistory: hydratedHistory.writeHistory,
+    ...(retainedRecords.length > 0 ? { retainedRecords } : {}),
     recovery: hydratedHistory.recovery,
     startupDiagnostics: hydratedHistory.startupDiagnostics,
   };

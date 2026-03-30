@@ -1,4 +1,5 @@
 import {
+  type PersistedAuthoritativeGraphRetainedRecord,
   persistedAuthoritativeGraphStateVersion,
   type PersistedAuthoritativeGraphState,
   type PersistedAuthoritativeGraphStorageLoadResult,
@@ -15,7 +16,12 @@ import type {
   WebAppAuthorityStorage,
 } from "./authority.js";
 import { collectLiveSecretIds } from "./authority.js";
-import type { LoadedRetainedDocumentState, RetainedDocumentState } from "./retained-documents.js";
+import {
+  createPersistedRetainedDocumentRecords,
+  loadRetainedDocumentStateFromPersistedRecords,
+  retainedDocumentRecordKinds,
+  type RetainedDocumentState,
+} from "./retained-documents.js";
 import type { SavedQueryRecord, SavedViewRecord } from "./saved-query.js";
 
 export type PersistedTestWebAppAuthorityState = PersistedAuthoritativeGraphState & {
@@ -157,7 +163,17 @@ function getSavedViewBucket(
   viewsByOwner.set(ownerId, created);
   return created;
 }
+const retainedDocumentRecordKindSet = new Set<string>(retainedDocumentRecordKinds);
 
+function filterNonDocumentRetainedRecords(
+  retainedRecords: readonly PersistedAuthoritativeGraphRetainedRecord[] | undefined,
+): readonly PersistedAuthoritativeGraphRetainedRecord[] {
+  if (!retainedRecords || retainedRecords.length === 0) {
+    return [];
+  }
+
+  return retainedRecords.filter((record) => !retainedDocumentRecordKindSet.has(record.recordKind));
+}
 function pruneSecretRecordMap(
   secrets: Map<string, WebAppAuthoritySecretRecord>,
   input: WebAppAuthoritySecretRepairInput,
@@ -172,29 +188,47 @@ export function createInMemoryTestWebAppAuthorityStorage(
   readonly storage: WebAppAuthorityStorage;
   read(): PersistedTestWebAppAuthorityState | null;
 } {
+  const initialRetainedRecords =
+    initialState?.retainedRecords ??
+    (initialState?.retainedDocuments
+      ? createPersistedRetainedDocumentRecords(initialState.retainedDocuments)
+      : undefined);
+
   let persistedState = initialState
     ? clonePersistedValue({
         version: initialState.version,
         snapshot: initialState.snapshot,
         writeHistory: initialState.writeHistory,
+        retainedRecords: initialRetainedRecords,
       })
     : null;
   let persistedSecrets = createSecretRecordMap(initialState?.secrets);
   let persistedRetainedDocuments = initialState?.retainedDocuments
     ? clonePersistedValue(initialState.retainedDocuments)
-    : null;
+    : readRetainedDocuments(initialRetainedRecords);
   let persistedWorkflowProjection = initialState?.projection
     ? clonePersistedValue(initialState.projection)
     : null;
   let persistedSavedQueries = createSavedQueryOwnerMap(initialState?.savedQueries);
   let persistedSavedViews = createSavedViewOwnerMap(initialState?.savedViews);
 
+  function readRetainedDocuments(
+    retainedRecords: readonly PersistedAuthoritativeGraphRetainedRecord[] | undefined,
+  ): RetainedDocumentState | null {
+    const loaded = retainedRecords
+      ? loadRetainedDocumentStateFromPersistedRecords(retainedRecords)
+      : null;
+    return loaded ? clonePersistedValue(loaded.state) : null;
+  }
+
   function writeState(input: PersistedAuthoritativeGraphStoragePersistInput): void {
     persistedState = clonePersistedValue({
       version: persistedAuthoritativeGraphStateVersion,
       snapshot: input.snapshot,
       writeHistory: input.writeHistory,
+      retainedRecords: input.retainedRecords,
     });
+    persistedRetainedDocuments = readRetainedDocuments(input.retainedRecords);
   }
 
   return {
@@ -231,6 +265,9 @@ export function createInMemoryTestWebAppAuthorityStorage(
         return {
           snapshot: clonePersistedValue(persistedState.snapshot),
           writeHistory: clonePersistedValue(persistedState.writeHistory),
+          retainedRecords: persistedState.retainedRecords
+            ? clonePersistedValue(persistedState.retainedRecords)
+            : undefined,
           recovery: "none",
           startupDiagnostics: {
             recovery: "none",
@@ -238,14 +275,6 @@ export function createInMemoryTestWebAppAuthorityStorage(
             resetReasons: [],
           },
         };
-      },
-      async loadRetainedDocuments(): Promise<LoadedRetainedDocumentState | null> {
-        return persistedRetainedDocuments
-          ? {
-              repairReasons: [],
-              state: clonePersistedValue(persistedRetainedDocuments),
-            }
-          : null;
       },
       async loadWorkflowProjection(): Promise<RetainedWorkflowProjectionState | null> {
         return persistedWorkflowProjection
@@ -258,6 +287,16 @@ export function createInMemoryTestWebAppAuthorityStorage(
         persistedRetainedDocuments = retainedDocuments
           ? clonePersistedValue(retainedDocuments)
           : null;
+        const retainedRecords = [
+          ...filterNonDocumentRetainedRecords(persistedState?.retainedRecords),
+          ...(retainedDocuments ? createPersistedRetainedDocumentRecords(retainedDocuments) : []),
+        ];
+        if (persistedState) {
+          persistedState = clonePersistedValue({
+            ...persistedState,
+            retainedRecords: retainedRecords.length > 0 ? retainedRecords : undefined,
+          });
+        }
       },
       async replaceWorkflowProjection(
         projection: RetainedWorkflowProjectionState | null,
@@ -286,9 +325,6 @@ export function createInMemoryTestWebAppAuthorityStorage(
       },
       async commit(input, options): Promise<void> {
         writeState(input);
-        persistedRetainedDocuments = options?.retainedDocuments
-          ? clonePersistedValue(options.retainedDocuments)
-          : null;
         persistedWorkflowProjection = options?.projection
           ? clonePersistedValue(options.projection)
           : null;
@@ -301,9 +337,6 @@ export function createInMemoryTestWebAppAuthorityStorage(
       },
       async persist(input, options): Promise<void> {
         writeState(input);
-        persistedRetainedDocuments = options?.retainedDocuments
-          ? clonePersistedValue(options.retainedDocuments)
-          : null;
         persistedWorkflowProjection = options?.projection
           ? clonePersistedValue(options.projection)
           : null;

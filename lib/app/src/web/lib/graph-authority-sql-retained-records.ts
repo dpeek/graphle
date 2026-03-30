@@ -1,5 +1,8 @@
+import type { PersistedAuthoritativeGraphRetainedRecord } from "@io/graph-authority";
+
 import {
-  materializeRetainedDocumentRecord,
+  createPersistedRetainedDocumentRecords,
+  loadRetainedDocumentStateFromPersistedRecords,
   retainedDocumentRecordKinds,
   type LoadedRetainedDocumentState,
   type RetainedDocumentState,
@@ -37,12 +40,6 @@ function requireString(value: unknown, label: string): string {
   return value;
 }
 
-function retainedRecords(
-  state: RetainedDocumentState,
-): Array<RetainedDocumentState["documents"][number] | RetainedDocumentState["blocks"][number]> {
-  return [...state.documents, ...state.blocks];
-}
-
 export function bootstrapRetainedRecordTables(sql: DurableObjectSqlStorageLike): void {
   sql.exec(
     `CREATE TABLE IF NOT EXISTS io_retained_record (
@@ -63,9 +60,25 @@ export function bootstrapRetainedRecordTables(sql: DurableObjectSqlStorageLike):
   );
 }
 
-export function readRetainedDocumentStateFromSql(
+export function readPersistedRetainedRecordsFromSql(
   sql: DurableObjectSqlStorageLike,
-): LoadedRetainedDocumentState | null {
+  options: {
+    readonly includeDeleted?: boolean;
+    readonly recordKinds?: readonly string[];
+  } = {},
+): readonly PersistedAuthoritativeGraphRetainedRecord[] {
+  const filters: string[] = [];
+  const bindings: unknown[] = [];
+
+  if (options.recordKinds && options.recordKinds.length > 0) {
+    filters.push(`record_kind IN (${options.recordKinds.map(() => "?").join(", ")})`);
+    bindings.push(...options.recordKinds);
+  }
+  if (options.includeDeleted !== true) {
+    filters.push("deleted_at IS NULL");
+  }
+
+  const whereClause = filters.length > 0 ? `WHERE ${filters.join(" AND ")}` : "";
   const rows = readAllRows<RetainedRecordRow>(
     sql.exec(
       `SELECT
@@ -78,65 +91,53 @@ export function readRetainedDocumentStateFromSql(
         deleted_at,
         materialized_at_cursor
       FROM io_retained_record
-      WHERE record_kind IN (?, ?)
-        AND deleted_at IS NULL
+      ${whereClause}
       ORDER BY record_kind ASC, record_id ASC`,
-      ...retainedDocumentRecordKinds,
+      ...bindings,
     ),
   );
-  if (rows.length === 0) {
-    return null;
-  }
 
-  const repairReasons = new Set<LoadedRetainedDocumentState["repairReasons"][number]>();
-  const documents: RetainedDocumentState["documents"][number][] = [];
-  const blocks: RetainedDocumentState["blocks"][number][] = [];
-
-  for (const row of rows) {
-    const materialized = materializeRetainedDocumentRecord({
-      payload: JSON.parse(requireString(row.payload_json, "io_retained_record.payload_json")),
-      recordId: requireString(row.record_id, "io_retained_record.record_id"),
-      recordKind: requireString(row.record_kind, "io_retained_record.record_kind"),
-      version: requireInteger(row.version, "io_retained_record.version"),
-    });
-    if (!materialized) {
-      continue;
-    }
-    if (materialized.repairReason) {
-      repairReasons.add(materialized.repairReason);
-    }
-    if (materialized.record.recordKind === "document") {
-      documents.push(materialized.record);
-      continue;
-    }
-    blocks.push(materialized.record);
-  }
-
-  return {
-    repairReasons: [...repairReasons].sort(),
-    state: {
-      documents,
-      blocks,
-    },
-  };
+  return rows.map((row) => ({
+    recordKind: requireString(row.record_kind, "io_retained_record.record_kind"),
+    recordId: requireString(row.record_id, "io_retained_record.record_id"),
+    version: requireInteger(row.version, "io_retained_record.version"),
+    payload: JSON.parse(requireString(row.payload_json, "io_retained_record.payload_json")),
+  }));
 }
 
-export function replaceRetainedDocumentRows(
+export function readRetainedDocumentStateFromSql(
   sql: DurableObjectSqlStorageLike,
-  retained?: RetainedDocumentState | null,
-  materializedAtCursor?: string,
-): void {
-  sql.exec(
-    `DELETE FROM io_retained_record
-    WHERE record_kind IN (?, ?)`,
-    ...retainedDocumentRecordKinds,
+): LoadedRetainedDocumentState | null {
+  return loadRetainedDocumentStateFromPersistedRecords(
+    readPersistedRetainedRecordsFromSql(sql, {
+      recordKinds: retainedDocumentRecordKinds,
+    }),
   );
-  if (!retained) {
+}
+
+function replaceRetainedRecordRows(
+  sql: DurableObjectSqlStorageLike,
+  input: {
+    readonly materializedAtCursor?: string;
+    readonly recordKinds?: readonly string[];
+    readonly records: readonly PersistedAuthoritativeGraphRetainedRecord[];
+  },
+): void {
+  if (input.recordKinds && input.recordKinds.length > 0) {
+    sql.exec(
+      `DELETE FROM io_retained_record
+      WHERE record_kind IN (${input.recordKinds.map(() => "?").join(", ")})`,
+      ...input.recordKinds,
+    );
+  } else {
+    sql.exec("DELETE FROM io_retained_record");
+  }
+  if (input.records.length === 0) {
     return;
   }
 
   const now = new Date().toISOString();
-  for (const record of retainedRecords(retained)) {
+  for (const record of input.records) {
     sql.exec(
       `INSERT INTO io_retained_record (
         record_kind,
@@ -154,7 +155,30 @@ export function replaceRetainedDocumentRows(
       JSON.stringify(record.payload),
       now,
       now,
-      materializedAtCursor ?? null,
+      input.materializedAtCursor ?? null,
     );
   }
+}
+
+export function replacePersistedRetainedRecordRows(
+  sql: DurableObjectSqlStorageLike,
+  records: readonly PersistedAuthoritativeGraphRetainedRecord[],
+  materializedAtCursor?: string,
+): void {
+  replaceRetainedRecordRows(sql, {
+    records,
+    materializedAtCursor,
+  });
+}
+
+export function replaceRetainedDocumentRows(
+  sql: DurableObjectSqlStorageLike,
+  retained?: RetainedDocumentState | null,
+  materializedAtCursor?: string,
+): void {
+  replaceRetainedRecordRows(sql, {
+    recordKinds: retainedDocumentRecordKinds,
+    records: retained ? createPersistedRetainedDocumentRecords(retained) : [],
+    materializedAtCursor,
+  });
 }

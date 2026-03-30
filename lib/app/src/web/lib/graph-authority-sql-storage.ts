@@ -46,7 +46,7 @@ import {
 } from "./graph-authority-sql-startup.js";
 import {
   bootstrapRetainedRecordTables,
-  readRetainedDocumentStateFromSql,
+  replacePersistedRetainedRecordRows,
   replaceRetainedDocumentRows,
 } from "./graph-authority-sql-retained-records.js";
 import {
@@ -54,7 +54,7 @@ import {
   readWorkflowProjectionFromSql,
   replaceWorkflowProjectionRows,
 } from "./graph-authority-sql-workflow-projection.js";
-import type { LoadedRetainedDocumentState, RetainedDocumentState } from "./retained-documents.js";
+import type { RetainedDocumentState } from "./retained-documents.js";
 
 export type DurableObjectStorageLike = {
   sql: DurableObjectSqlStorageLike;
@@ -296,7 +296,6 @@ function pruneRetainedTransactionRows(
 function rewritePersistedState(
   sql: DurableObjectSqlStorageLike,
   input: DurableAuthorityPersistInput,
-  retainedDocuments?: RetainedDocumentState | null,
   projection?: RetainedWorkflowProjectionState,
 ): void {
   const now = new Date().toISOString();
@@ -307,7 +306,11 @@ function rewritePersistedState(
   sql.exec("DELETE FROM io_graph_edge");
   insertTransactionHistoryRows(sql, input.writeHistory, now);
   insertSnapshotEdges(sql, input.snapshot, input.writeHistory);
-  replaceRetainedDocumentRows(sql, retainedDocuments, headCursor(input.writeHistory));
+  replacePersistedRetainedRecordRows(
+    sql,
+    input.retainedRecords ?? [],
+    headCursor(input.writeHistory),
+  );
   replaceWorkflowProjectionRows(sql, projection);
   pruneOrphanedSecretValues(sql, input.snapshot);
   writeGraphMetaRow(sql, {
@@ -325,7 +328,6 @@ function applyCommittedTransaction(
   sql: DurableObjectSqlStorageLike,
   input: DurableAuthorityCommitInput,
   secretWrite?: WebAppAuthoritySecretWrite,
-  retainedDocuments?: RetainedDocumentState | null,
   projection?: RetainedWorkflowProjectionState,
 ): void {
   if (input.result.replayed) return;
@@ -400,7 +402,7 @@ function applyCommittedTransaction(
   if (secretWrite) {
     upsertSecretValue(sql, secretWrite, now);
   }
-  replaceRetainedDocumentRows(sql, retainedDocuments, input.result.cursor);
+  replacePersistedRetainedRecordRows(sql, input.retainedRecords ?? [], input.result.cursor);
   replaceWorkflowProjectionRows(sql, projection);
   pruneOrphanedSecretValues(sql, input.snapshot);
   if ((existingMeta?.historyRetainedFromSeq ?? 0) < input.writeHistory.baseSequence) {
@@ -462,9 +464,6 @@ export function createSqliteDurableObjectAuthorityStorage(
         expectedSchemaVersion: durableObjectAuthoritySchemaVersion,
       });
     },
-    async loadRetainedDocuments(): Promise<LoadedRetainedDocumentState | null> {
-      return readRetainedDocumentStateFromSql(state.storage.sql);
-    },
     async loadWorkflowProjection(): Promise<RetainedWorkflowProjectionState | null> {
       const meta = readGraphMetaRow(state.storage.sql, defaultRetainedHistoryPolicy);
       if (!meta) {
@@ -514,19 +513,13 @@ export function createSqliteDurableObjectAuthorityStorage(
           state.storage.sql,
           input,
           options?.secretWrite,
-          options?.retainedDocuments,
           options?.projection,
         );
       });
     },
     async persist(input, options): Promise<void> {
       await runStorageTransaction(state.storage, () => {
-        rewritePersistedState(
-          state.storage.sql,
-          input,
-          options?.retainedDocuments,
-          options?.projection,
-        );
+        rewritePersistedState(state.storage.sql, input, options?.projection);
       });
     },
   };

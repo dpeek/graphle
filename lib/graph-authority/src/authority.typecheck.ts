@@ -4,6 +4,7 @@ import type {
   JsonPersistedAuthoritativeGraphOptions,
   PersistedAuthoritativeGraphCursorPrefixFactory,
   PersistedAuthoritativeGraphOptions,
+  PersistedAuthoritativeGraphRetainedRecord,
   PersistedAuthoritativeGraphSeed,
   PersistedAuthoritativeGraphState,
   PersistedAuthoritativeGraphStorage,
@@ -34,6 +35,16 @@ const loadResult = {
     edges: [],
     retracted: [],
   },
+  retainedRecords: [
+    {
+      recordKind: "probe-record",
+      recordId: "probe-record:1",
+      version: 1,
+      payload: {
+        title: "Probe retained record",
+      },
+    },
+  ] satisfies readonly PersistedAuthoritativeGraphRetainedRecord[],
   recovery: "none",
   startupDiagnostics: {
     recovery: "none",
@@ -53,6 +64,7 @@ const durableState = {
     baseSequence: 0,
     results: [],
   },
+  retainedRecords: loadResult.retainedRecords,
 } satisfies PersistedAuthoritativeGraphState;
 
 const storage = {
@@ -62,10 +74,12 @@ const storage = {
   async commit(input) {
     void (input.snapshot satisfies PersistedAuthoritativeGraphState["snapshot"]);
     void (input.writeHistory satisfies PersistedAuthoritativeGraphState["writeHistory"]);
+    void (input.retainedRecords satisfies PersistedAuthoritativeGraphState["retainedRecords"]);
   },
   async persist(input) {
     void (input.snapshot satisfies PersistedAuthoritativeGraphState["snapshot"]);
     void (input.writeHistory satisfies PersistedAuthoritativeGraphState["writeHistory"]);
+    void (input.retainedRecords satisfies PersistedAuthoritativeGraphState["retainedRecords"]);
   },
 } satisfies PersistedAuthoritativeGraphStorage;
 

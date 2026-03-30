@@ -26,16 +26,32 @@ export type PersistedAuthoritativeGraphStateVersion =
   typeof persistedAuthoritativeGraphStateVersion;
 
 /**
+ * Semantic retained record committed atomically beside authoritative graph
+ * state.
+ *
+ * The shared authority runtime treats these records as opaque payloads. Host
+ * runtimes own record-family-specific migration, materialization, and repair
+ * logic.
+ */
+export type PersistedAuthoritativeGraphRetainedRecord = {
+  readonly recordKind: string;
+  readonly recordId: string;
+  readonly version: number;
+  readonly payload: unknown;
+};
+
+/**
  * Shared durable authority state published by the graph runtime.
  *
  * Storage adapters may persist this shape directly or reconstruct it from a
  * different on-disk layout, but downstream branches should only depend on this
- * snapshot-plus-history contract.
+ * snapshot-plus-history-plus-retained-records contract.
  */
 export type PersistedAuthoritativeGraphState = {
   readonly version: PersistedAuthoritativeGraphStateVersion;
   readonly snapshot: GraphStoreSnapshot;
   readonly writeHistory: AuthoritativeGraphWriteHistory;
+  readonly retainedRecords?: readonly PersistedAuthoritativeGraphRetainedRecord[];
 };
 
 /**
@@ -74,6 +90,7 @@ export type PersistedAuthoritativeGraphStartupDiagnostics = {
 export type PersistedAuthoritativeGraphStorageLoadResult = {
   readonly snapshot: GraphStoreSnapshot;
   readonly writeHistory?: AuthoritativeGraphWriteHistory;
+  readonly retainedRecords?: readonly PersistedAuthoritativeGraphRetainedRecord[];
   readonly recovery: PersistedAuthoritativeGraphStorageRecovery;
   readonly startupDiagnostics: PersistedAuthoritativeGraphStartupDiagnostics;
 };
@@ -89,6 +106,7 @@ export type PersistedAuthoritativeGraphStorageCommitInput = {
   readonly transaction: GraphWriteTransaction;
   readonly result: AuthoritativeGraphWriteResult;
   readonly writeHistory: AuthoritativeGraphWriteHistory;
+  readonly retainedRecords?: readonly PersistedAuthoritativeGraphRetainedRecord[];
 };
 
 /**
@@ -97,6 +115,7 @@ export type PersistedAuthoritativeGraphStorageCommitInput = {
 export type PersistedAuthoritativeGraphStoragePersistInput = {
   readonly snapshot: GraphStoreSnapshot;
   readonly writeHistory: AuthoritativeGraphWriteHistory;
+  readonly retainedRecords?: readonly PersistedAuthoritativeGraphRetainedRecord[];
 };
 
 /**

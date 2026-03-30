@@ -1,4 +1,5 @@
 import { createStore, edgeId, type GraphStore, type GraphStoreSnapshot } from "@io/app/graph";
+import type { PersistedAuthoritativeGraphRetainedRecord } from "@io/graph-authority";
 import { createEntityWithId, createGraphClient, type GraphClient } from "@io/graph-client";
 import { type GraphWriteTransaction } from "@io/graph-kernel";
 import { core } from "@io/graph-module-core";
@@ -277,6 +278,17 @@ export function hasRetainedDocumentState(state: RetainedDocumentState): boolean 
   return state.documents.length > 0 || state.blocks.length > 0;
 }
 
+export function createPersistedRetainedDocumentRecords(
+  state: RetainedDocumentState,
+): readonly PersistedAuthoritativeGraphRetainedRecord[] {
+  return [...state.documents, ...state.blocks].map((record) => ({
+    recordKind: record.recordKind,
+    recordId: record.recordId,
+    version: record.version,
+    payload: structuredClone(record.payload),
+  }));
+}
+
 export function sameRetainedDocumentState(
   left: RetainedDocumentState,
   right: RetainedDocumentState,
@@ -406,6 +418,45 @@ export function materializeRetainedDocumentRecord(input: {
   }
 
   return null;
+}
+
+export function loadRetainedDocumentStateFromPersistedRecords(
+  records: readonly PersistedAuthoritativeGraphRetainedRecord[],
+): LoadedRetainedDocumentState | null {
+  if (records.length === 0) {
+    return null;
+  }
+
+  const repairReasons = new Set<LoadedRetainedDocumentState["repairReasons"][number]>();
+  const documents: RetainedDocumentState["documents"][number][] = [];
+  const blocks: RetainedDocumentState["blocks"][number][] = [];
+
+  for (const record of records) {
+    const materialized = materializeRetainedDocumentRecord(record);
+    if (!materialized) {
+      continue;
+    }
+    if (materialized.repairReason) {
+      repairReasons.add(materialized.repairReason);
+    }
+    if (materialized.record.recordKind === "document") {
+      documents.push(materialized.record);
+      continue;
+    }
+    blocks.push(materialized.record);
+  }
+
+  if (documents.length === 0 && blocks.length === 0) {
+    return null;
+  }
+
+  return {
+    repairReasons: [...repairReasons].sort(),
+    state: {
+      documents,
+      blocks,
+    },
+  };
 }
 
 export function planRetainedDocumentRecovery(

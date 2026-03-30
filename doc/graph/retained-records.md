@@ -21,6 +21,9 @@ document-oriented workspace memory:
 
 - authoritative writes persist canonical retained `document` and
   `document-block` rows beside the live graph
+- startup can load those retained rows even when the current live-graph
+  metadata or retained-history baseline is missing, then carry them through
+  the reset-baseline rewrite until re-materialization completes
 - durable restart reloads those retained rows and keeps restored workflow
   document memory readable through the live graph and workflow scopes
 - retained rows can re-materialize `Document` and `DocumentBlock` facts when
@@ -381,6 +384,10 @@ inventing workspace memory.
 
 - if retained sync history is pruned or unusable, the first restore target
   still restores from retained rows
+- if startup loses `io_graph_meta` or other live-baseline metadata but
+  retained rows remain, load those rows directly, classify the startup as a
+  `reset-baseline`, and rewrite a fresh live baseline without dropping the
+  retained rows before re-materialization runs
 - if projections are lost or incompatible, rebuild them from restored graph
   facts or directly from retained records
 - if the live graph baseline must be rewritten, re-materialize restored records

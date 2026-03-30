@@ -38,6 +38,25 @@ function createRegistration(): WorkflowReviewLiveRegistration {
   };
 }
 
+async function waitForCondition(
+  predicate: () => boolean,
+  options: {
+    readonly timeoutMs?: number;
+    readonly intervalMs?: number;
+  } = {},
+): Promise<void> {
+  const timeoutMs = options.timeoutMs ?? 250;
+  const intervalMs = options.intervalMs ?? 1;
+  const deadline = Date.now() + timeoutMs;
+
+  while (!predicate()) {
+    if (Date.now() >= deadline) {
+      throw new Error("Timed out waiting for workflow review refresh condition.");
+    }
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+  }
+}
+
 function createLiveSync(
   actions: WorkflowReviewLiveSyncPollResult["action"][],
   overrides: Partial<WorkflowReviewRefreshLoopOptions> = {},
@@ -92,7 +111,7 @@ describe("workflow review refresh loop", () => {
       pollIntervalMs: 1,
     });
 
-    await new Promise((resolve) => setTimeout(resolve, 12));
+    await waitForCondition(() => harness.refreshes === 2);
     await loop.stop();
 
     expect(harness.calls[0]).toBe("register");
@@ -139,7 +158,7 @@ describe("workflow review refresh loop", () => {
       pollIntervalMs: 1,
     });
 
-    await new Promise((resolve) => setTimeout(resolve, 12));
+    await waitForCondition(() => pollCount > 1);
     await loop.stop();
 
     expect(errors).toHaveLength(1);

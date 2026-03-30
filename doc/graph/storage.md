@@ -65,6 +65,10 @@ Current behavior:
   upserts, and orphan pruning now live behind
   `../../lib/app/src/web/lib/graph-authority-sql-secrets.ts` instead of staying
   interleaved with graph-row persistence helpers
+- retained document-row bootstrap, durable reads, and replacement writes now
+  live behind
+  `../../lib/app/src/web/lib/graph-authority-sql-retained-records.ts` instead
+  of staying inline in the main adapter storage file
 - retained workflow projection checkpoint bootstrap, durable reads, and
   replacement writes now live behind
   `../../lib/app/src/web/lib/graph-authority-sql-workflow-projection.ts` instead of
@@ -91,9 +95,10 @@ Current behavior:
   `history_retained_from_seq` as rows are pruned, and forces old cursors onto
   total-sync fallback
 - accepted graph transactions commit through one Durable Object storage
-  transaction that writes `io_graph_tx`, `io_graph_tx_op`, `io_graph_edge`, and
-  `io_secret_value`, then prunes orphaned secret rows from the post-commit live
-  graph state
+  transaction that writes `io_graph_tx`, `io_graph_tx_op`, `io_graph_edge`,
+  `io_retained_record`, retained workflow projection rows, and
+  `io_secret_value`, then prunes orphaned secret rows from the post-commit
+  live graph state
 - accepted authoritative results now carry `writeScope`, so durable state keeps
   `client-tx` versus `server-command` origin across commit, restart, and
   baseline rewrites for data written after `writeScope` existed
@@ -330,6 +335,32 @@ Purpose:
 The graph should continue to store only `secretHandle` identity and safe
 metadata. This table owns the actual secret value lifecycle.
 
+#### `io_retained_record`
+
+One row per retained semantic record head.
+
+Columns:
+
+- `record_kind TEXT NOT NULL`
+- `record_id TEXT NOT NULL`
+- `version INTEGER NOT NULL`
+- `payload_json TEXT NOT NULL`
+- `created_at TEXT NOT NULL`
+- `updated_at TEXT NOT NULL`
+- `deleted_at TEXT`
+- `materialized_at_cursor TEXT`
+- `PRIMARY KEY (record_kind, record_id)`
+
+Purpose:
+
+- canonical retained storage for semantic workspace-memory records such as the
+  first `document` and `document-block` family
+- versioned JSON payload durability independent of the current graph edge shape
+- binding retained rows to the authoritative cursor they were last
+  materialized into
+- restart-safe recovery and live-graph rematerialization for durable workflow
+  document memory
+
 ### Derived Workflow Projection Tables
 
 #### `io_workflow_projection_checkpoint`
@@ -407,6 +438,8 @@ The current adapter uses a very small set of explicit indexes:
 - `io_graph_tx(cursor)` unique
 - `io_graph_tx(tx_id)` unique
 - `io_graph_tx_op(tx_seq, op_index)` primary key
+- `io_retained_record(record_kind, materialized_at_cursor)` for retained-record
+  family scans and rematerialization bookkeeping
 - `io_workflow_projection_checkpoint(source_cursor)` for retained checkpoint
   validation against the current authoritative head
 - `io_workflow_projection_row(projection_id, definition_hash, row_kind, sort_key)`
@@ -444,8 +477,16 @@ On startup:
      side-table versions abort startup instead of silently continuing
 8. It loads only the remaining live `io_secret_value` rows into the
    authority-owned secret map.
-9. It loads retained workflow projection checkpoints and rows only when their
+9. It loads retained document rows from `io_retained_record` so the web
+   authority can recover or rematerialize durable workflow document memory.
+10. It loads retained workflow projection checkpoints and rows only when their
    `source_cursor` still matches the current authoritative head cursor.
+
+If `io_graph_meta` or retained transaction rows are missing but
+`io_retained_record` or `io_graph_edge` still carries durable state, startup
+hydrates what remains, reports `recovery: "reset-baseline"` with
+`resetReasons: ["missing-write-history"]`, and rewrites a fresh baseline
+without dropping the retained rows before retained-record recovery runs.
 
 This avoids replaying the entire historical log just to rebuild the current
 graph.
@@ -464,12 +505,14 @@ For every accepted mutation:
    - insert one `io_graph_tx_op` row
    - update `io_graph_edge.retracted_tx_seq`
 6. It writes any secret side-data updates in the same transaction.
-7. It replaces retained workflow projection checkpoints and rows with the newly
+7. It replaces retained `io_retained_record` rows with the semantic retained
+   payloads derived from the post-commit authority snapshot.
+8. It replaces retained workflow projection checkpoints and rows with the newly
    derived versioned payload for the current authority head.
-8. It prunes `io_secret_value` rows whose `secret_id` is no longer reachable
+9. It prunes `io_secret_value` rows whose `secret_id` is no longer reachable
    from the post-commit live graph state.
-9. It updates `io_graph_meta.head_seq`, `head_cursor`, and `updated_at`.
-10. It commits.
+10. It updates `io_graph_meta.head_seq`, `head_cursor`, and `updated_at`.
+11. It commits.
 
 If the SQL transaction fails, the in-memory authority should roll back to the
 previous snapshot exactly as it does today.

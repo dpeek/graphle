@@ -13,6 +13,7 @@ export {
   type PersistedAuthoritativeGraph,
   type PersistedAuthoritativeGraphCursorPrefixFactory,
   type PersistedAuthoritativeGraphOptions,
+  type PersistedAuthoritativeGraphRetainedRecord,
   type PersistedAuthoritativeGraphSeed,
   type PersistedAuthoritativeGraphStartupDiagnostics,
   type PersistedAuthoritativeGraphStartupRepairReason,

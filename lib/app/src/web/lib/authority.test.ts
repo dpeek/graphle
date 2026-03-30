@@ -1023,9 +1023,6 @@ describe("web authority", () => {
       load() {
         return backingStorage.storage.load();
       },
-      loadRetainedDocuments() {
-        return backingStorage.storage.loadRetainedDocuments();
-      },
       loadWorkflowProjection() {
         return backingStorage.storage.loadWorkflowProjection();
       },
@@ -1273,9 +1270,6 @@ describe("web authority", () => {
       },
       load() {
         return backingStorage.storage.load();
-      },
-      loadRetainedDocuments() {
-        return backingStorage.storage.loadRetainedDocuments();
       },
       loadWorkflowProjection() {
         return backingStorage.storage.loadWorkflowProjection();

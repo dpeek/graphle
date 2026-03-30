@@ -2247,6 +2247,147 @@ describe("web graph authority durable object", () => {
     });
   });
 
+  it("loads retained document rows when startup loses the live graph baseline metadata", async () => {
+    const { db, state } = createSqliteDurableObjectState();
+    const durableObject = createTestDurableObject(state);
+    const initialSync = await readSyncPayload(durableObject);
+    const createdDocument = buildTransactionFromSnapshot(
+      initialSync.snapshot ?? { edges: [], retracted: [] },
+      "tx:create-retained-document-without-baseline",
+      (graph) => {
+        const documentId = graph.document.create({
+          description: "Recover durable workflow document memory after a baseline reset.",
+          isArchived: false,
+          name: "Retained Workflow Goal",
+          slug: "retained-workflow-goal",
+        });
+        const blockId = graph.documentBlock.create({
+          content: "Retained markdown block body.",
+          description: "Restored into the live graph after baseline loss.",
+          document: documentId,
+          kind: workflow.documentBlockKind.values.markdown.id,
+          name: "Overview",
+          order: 0,
+        });
+
+        return {
+          blockId,
+          documentId,
+        };
+      },
+    );
+
+    await postTransaction(durableObject, createdDocument.transaction);
+
+    const retainedRowsBeforeRestart = queryAll<RetainedRecordRow>(
+      db,
+      `SELECT record_kind, record_id, version, payload_json, materialized_at_cursor
+      FROM io_retained_record
+      WHERE record_kind IN ('document', 'document-block')
+      ORDER BY record_kind ASC, record_id ASC`,
+    );
+
+    db.query("DELETE FROM io_graph_meta").run();
+    db.query("DELETE FROM io_graph_tx_op").run();
+    db.query("DELETE FROM io_graph_tx").run();
+    db.query("DELETE FROM io_graph_edge").run();
+    clearWorkflowProjectionRows(db);
+
+    const restarted = createTestDurableObject(state);
+    const restartedAuthority = await getDurableAuthority<WebAppAuthority>(restarted);
+    const restartedGraph = readProductGraph(restartedAuthority, testAuthorityAuthorization);
+    const retainedRowsAfterRestart = queryAll<RetainedRecordRow>(
+      db,
+      `SELECT record_kind, record_id, version, payload_json, materialized_at_cursor
+      FROM io_retained_record
+      WHERE record_kind IN ('document', 'document-block')
+      ORDER BY record_kind ASC, record_id ASC`,
+    );
+    const txRows = queryAll<GraphTxRow>(
+      db,
+      `SELECT seq, tx_id, cursor, write_scope
+      FROM io_graph_tx
+      ORDER BY seq ASC`,
+    );
+    const metaRows = queryAll<{
+      head_cursor: string;
+      head_seq: number;
+      history_retained_from_seq: number;
+    }>(
+      db,
+      `SELECT head_seq, head_cursor, history_retained_from_seq
+      FROM io_graph_meta
+      WHERE id = 1`,
+    );
+
+    expect(restartedAuthority.startupDiagnostics).toEqual({
+      recovery: "reset-baseline",
+      repairReasons: [],
+      resetReasons: ["missing-write-history"],
+    });
+    expect(restartedGraph.document.get(createdDocument.result.documentId)).toMatchObject({
+      id: createdDocument.result.documentId,
+      name: "Retained Workflow Goal",
+      description: "Recover durable workflow document memory after a baseline reset.",
+      slug: "retained-workflow-goal",
+      isArchived: false,
+    });
+    expect(restartedGraph.documentBlock.get(createdDocument.result.blockId)).toMatchObject({
+      id: createdDocument.result.blockId,
+      document: createdDocument.result.documentId,
+      order: 0,
+      content: "Retained markdown block body.",
+    });
+    expect(retainedRowsBeforeRestart.map(parseRetainedRecordPayload)).toEqual([
+      {
+        title: "Retained Workflow Goal",
+        description: "Recover durable workflow document memory after a baseline reset.",
+        slug: "retained-workflow-goal",
+        isArchived: false,
+        tagIds: [],
+      },
+      {
+        title: "Overview",
+        description: "Restored into the live graph after baseline loss.",
+        documentId: createdDocument.result.documentId,
+        order: 0,
+        kind: "markdown",
+        content: "Retained markdown block body.",
+      },
+    ]);
+    expect(retainedRowsAfterRestart).toMatchObject([
+      {
+        record_kind: "document",
+        record_id: createdDocument.result.documentId,
+        version: 1,
+        materialized_at_cursor: expect.any(String),
+      },
+      {
+        record_kind: "document-block",
+        record_id: createdDocument.result.blockId,
+        version: 1,
+        materialized_at_cursor: expect.any(String),
+      },
+    ]);
+    expect(retainedRowsAfterRestart.map(parseRetainedRecordPayload)).toEqual(
+      retainedRowsBeforeRestart.map(parseRetainedRecordPayload),
+    );
+    expect(txRows).toEqual([
+      expect.objectContaining({
+        seq: 1,
+        tx_id: expect.stringContaining("recover:retained-documents:"),
+        write_scope: "authority-only",
+      }),
+    ]);
+    expect(metaRows).toEqual([
+      {
+        head_seq: 1,
+        head_cursor: txRows[0]?.cursor ?? "",
+        history_retained_from_seq: 0,
+      },
+    ]);
+  });
+
   it("upgrades legacy retained document payload rows and rematerializes workflow documents after restart", async () => {
     const { db, state } = createSqliteDurableObjectState();
     const durableObject = createTestDurableObject(state);
@@ -4852,9 +4993,6 @@ describe("web graph authority durable object", () => {
               load() {
                 return storage.load();
               },
-              loadRetainedDocuments() {
-                return storage.loadRetainedDocuments();
-              },
               loadWorkflowProjection() {
                 return storage.loadWorkflowProjection();
               },
@@ -5151,6 +5289,89 @@ describe("web graph authority durable object", () => {
     expect(afterFailureSync.snapshot?.edges.some((edge) => edge.s === createdEnvVar.result)).toBe(
       false,
     );
+  });
+
+  it("rolls back retained document rows when a SQL commit fails during retained-record writes", async () => {
+    const { db, setExecHook, state } = createSqliteDurableObjectState();
+    const durableObject = createTestDurableObject(state);
+    const initialSync = await readSyncPayload(durableObject);
+    const createdDocument = buildTransactionFromSnapshot(
+      initialSync.snapshot ?? { edges: [], retracted: [] },
+      "tx:create-retained-document",
+      (graph) => {
+        const documentId = graph.document.create({
+          description: "Recover durable workflow document memory after restart.",
+          isArchived: false,
+          name: "Retained Workflow Goal",
+          slug: "retained-workflow-goal",
+        });
+        const blockId = graph.documentBlock.create({
+          content: "Retained markdown block body.",
+          description: "Restored into the live graph from retained rows.",
+          document: documentId,
+          kind: workflow.documentBlockKind.values.markdown.id,
+          name: "Overview",
+          order: 0,
+        });
+
+        return {
+          blockId,
+          documentId,
+        };
+      },
+    );
+
+    let retainedInsertCount = 0;
+    setExecHook((query) => {
+      if (query.includes("INSERT INTO io_retained_record")) {
+        retainedInsertCount += 1;
+        if (retainedInsertCount === 2) {
+          throw new Error("forced retained-record failure");
+        }
+      }
+    });
+
+    await expect(postTransaction(durableObject, createdDocument.transaction)).rejects.toThrow(
+      "forced retained-record failure",
+    );
+
+    setExecHook(null);
+
+    const txRows = queryAll<GraphTxRow>(
+      db,
+      `SELECT seq, tx_id, cursor
+      FROM io_graph_tx
+      ORDER BY seq ASC`,
+    );
+    const createdEntityRows = queryAll<GraphEdgeRow>(
+      db,
+      `SELECT edge_id, s, p, o, retracted_tx_seq
+      FROM io_graph_edge
+      WHERE s IN (?, ?)`,
+      createdDocument.result.documentId,
+      createdDocument.result.blockId,
+    );
+    const retainedRows = queryAll<RetainedRecordRow>(
+      db,
+      `SELECT record_kind, record_id, version, payload_json, materialized_at_cursor
+      FROM io_retained_record
+      WHERE record_id IN (?, ?)
+      ORDER BY record_kind ASC`,
+      createdDocument.result.documentId,
+      createdDocument.result.blockId,
+    );
+    const afterFailureSync = await readSyncPayload(durableObject);
+
+    expect(retainedInsertCount).toBe(2);
+    expect(txRows).toEqual([]);
+    expect(createdEntityRows).toEqual([]);
+    expect(retainedRows).toEqual([]);
+    expect(
+      afterFailureSync.snapshot?.edges.some(
+        (edge) =>
+          edge.s === createdDocument.result.documentId || edge.s === createdDocument.result.blockId,
+      ),
+    ).toBe(false);
   });
 
   it("hydrates retracted edge order from SQL rows after restart", async () => {

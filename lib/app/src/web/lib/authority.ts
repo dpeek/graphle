@@ -9,6 +9,7 @@ import {
   createPersistedAuthoritativeGraph,
   type GraphCommandPolicy,
   type PersistedAuthoritativeGraph,
+  type PersistedAuthoritativeGraphRetainedRecord,
   type PersistedAuthoritativeGraphStorage,
   type PersistedAuthoritativeGraphStorageCommitInput,
   type PersistedAuthoritativeGraphStorageLoadResult,
@@ -141,11 +142,13 @@ import {
   type WriteSecretFieldResult,
 } from "./secret-fields.js";
 import {
+  createPersistedRetainedDocumentRecords,
   createRetainedDocumentState,
   hasRetainedDocumentState,
+  loadRetainedDocumentStateFromPersistedRecords,
   planRetainedDocumentRecovery,
+  retainedDocumentRecordKinds,
   sameRetainedDocumentState,
-  type LoadedRetainedDocumentState,
   type RetainedDocumentState,
 } from "./retained-documents.js";
 import { runWorkflowArtifactWriteCommand } from "./workflow-artifact.js";
@@ -384,7 +387,6 @@ export interface WebAppAuthorityStorage {
   listSavedQueries(ownerId: string): Promise<readonly SavedQueryRecord[]>;
   listSavedViews(ownerId: string): Promise<readonly SavedViewRecord[]>;
   load(): Promise<PersistedAuthoritativeGraphStorageLoadResult | null>;
-  loadRetainedDocuments(): Promise<LoadedRetainedDocumentState | null>;
   loadWorkflowProjection(): Promise<RetainedWorkflowProjectionState | null>;
   replaceRetainedDocuments(retainedDocuments: RetainedDocumentState | null): Promise<void>;
   replaceWorkflowProjection(projection: RetainedWorkflowProjectionState | null): Promise<void>;
@@ -402,7 +404,6 @@ export interface WebAppAuthorityStorage {
   commit(
     input: PersistedAuthoritativeGraphStorageCommitInput,
     options?: {
-      readonly retainedDocuments?: RetainedDocumentState | null;
       readonly secretWrite?: WebAppAuthoritySecretWrite;
       readonly projection?: RetainedWorkflowProjectionState;
     },
@@ -410,7 +411,6 @@ export interface WebAppAuthorityStorage {
   persist(
     input: PersistedAuthoritativeGraphStoragePersistInput,
     options?: {
-      readonly retainedDocuments?: RetainedDocumentState | null;
       readonly projection?: RetainedWorkflowProjectionState;
     },
   ): Promise<void>;
@@ -801,6 +801,37 @@ function buildRetainedWorkflowProjectionState(
 
 function buildRetainedDocumentState(snapshot: GraphStoreSnapshot): RetainedDocumentState {
   return createRetainedDocumentState(snapshot);
+}
+
+const retainedDocumentRecordKindSet = new Set<string>(retainedDocumentRecordKinds);
+
+function filterNonDocumentRetainedRecords(
+  records: readonly PersistedAuthoritativeGraphRetainedRecord[] | null | undefined,
+): readonly PersistedAuthoritativeGraphRetainedRecord[] {
+  if (!records || records.length === 0) {
+    return [];
+  }
+
+  return records.filter((record) => !retainedDocumentRecordKindSet.has(record.recordKind));
+}
+
+function mergeSnapshotWithBootstrappedSchema(
+  bootstrappedSnapshot: GraphStoreSnapshot,
+  persistedSnapshot: GraphStoreSnapshot,
+): GraphStoreSnapshot {
+  const edgesById = new Map(
+    bootstrappedSnapshot.edges.map((edge) => [edge.id, clonePersistedValue(edge)] as const),
+  );
+  for (const edge of persistedSnapshot.edges) {
+    edgesById.set(edge.id, clonePersistedValue(edge));
+  }
+
+  const retracted = new Set([...bootstrappedSnapshot.retracted, ...persistedSnapshot.retracted]);
+
+  return {
+    edges: [...edgesById.values()],
+    retracted: [...retracted],
+  };
 }
 
 function sameRetainedWorkflowProjectionState(
@@ -3422,10 +3453,59 @@ function createAuthorityStorage(
   pendingSecretWriteRef: { current: WebAppAuthoritySecretWrite | null },
   retainedWorkflowProjectionRef: { current: RetainedWorkflowProjectionState | null },
   preloadedPersistedState: PersistedAuthoritativeGraphStorageLoadResult | null,
+  preloadedRetainedDocuments: RetainedDocumentState | null,
 ): PersistedAuthoritativeGraphStorage {
   // This adapter is the explicit boundary between the stable graph/runtime
   // persisted-authority contract and web-only secret side storage.
   let preloadedLoadUsed = false;
+  const carriedRetainedRecordsRef = {
+    current: (() => {
+      const nextRecords = [
+        ...filterNonDocumentRetainedRecords(preloadedPersistedState?.retainedRecords),
+        ...(preloadedRetainedDocuments
+          ? createPersistedRetainedDocumentRecords(preloadedRetainedDocuments)
+          : []),
+      ];
+
+      return nextRecords.length > 0 ? clonePersistedValue(nextRecords) : null;
+    })() as readonly PersistedAuthoritativeGraphRetainedRecord[] | null,
+  };
+  const preservePreloadedRetainedDocumentsRef = {
+    current: preloadedRetainedDocuments !== null,
+  };
+
+  function buildPersistedRetainedRecords(
+    snapshot: GraphStoreSnapshot,
+  ): readonly PersistedAuthoritativeGraphRetainedRecord[] | undefined {
+    const snapshotRetainedDocuments = buildRetainedDocumentState(snapshot);
+    const carriedRetainedRecords = carriedRetainedRecordsRef.current;
+
+    if (
+      preservePreloadedRetainedDocumentsRef.current &&
+      preloadedRetainedDocuments &&
+      !sameRetainedDocumentState(snapshotRetainedDocuments, preloadedRetainedDocuments)
+    ) {
+      return carriedRetainedRecords ? clonePersistedValue(carriedRetainedRecords) : undefined;
+    }
+
+    preservePreloadedRetainedDocumentsRef.current = false;
+
+    const nextRecords = [
+      ...filterNonDocumentRetainedRecords(carriedRetainedRecords),
+      ...createPersistedRetainedDocumentRecords(
+        hasRetainedDocumentState(snapshotRetainedDocuments)
+          ? snapshotRetainedDocuments
+          : {
+              documents: [],
+              blocks: [],
+            },
+      ),
+    ];
+
+    carriedRetainedRecordsRef.current =
+      nextRecords.length > 0 ? clonePersistedValue(nextRecords) : null;
+    return nextRecords.length > 0 ? nextRecords : undefined;
+  }
 
   return {
     async load(): Promise<PersistedAuthoritativeGraphStorageLoadResult | null> {
@@ -3438,6 +3518,9 @@ function createAuthorityStorage(
           snapshot: clonePersistedValue(persistedState.snapshot),
           writeHistory: persistedState.writeHistory
             ? clonePersistedValue(persistedState.writeHistory)
+            : undefined,
+          retainedRecords: carriedRetainedRecordsRef.current
+            ? clonePersistedValue(carriedRetainedRecordsRef.current)
             : undefined,
           recovery: persistedState.recovery,
           startupDiagnostics: clonePersistedValue(persistedState.startupDiagnostics),
@@ -3452,6 +3535,9 @@ function createAuthorityStorage(
         writeHistory: persistedState.writeHistory
           ? clonePersistedValue(persistedState.writeHistory)
           : undefined,
+        retainedRecords: persistedState.retainedRecords
+          ? clonePersistedValue(persistedState.retainedRecords)
+          : undefined,
         recovery: persistedState.recovery,
         startupDiagnostics: clonePersistedValue(persistedState.startupDiagnostics),
       };
@@ -3460,33 +3546,43 @@ function createAuthorityStorage(
       const secretWrite = pendingSecretWriteRef.current
         ? clonePersistedValue(pendingSecretWriteRef.current)
         : undefined;
-      const retainedDocuments = buildRetainedDocumentState(input.snapshot);
+      const retainedRecords = buildPersistedRetainedRecords(input.snapshot);
       const projection = buildRetainedWorkflowProjectionState(
         input.snapshot,
         headCursor(input.writeHistory),
       );
 
       try {
-        await storage.commit(clonePersistedValue(input), {
-          retainedDocuments: hasRetainedDocumentState(retainedDocuments) ? retainedDocuments : null,
-          ...(secretWrite ? { secretWrite } : {}),
-          projection,
-        });
+        await storage.commit(
+          clonePersistedValue({
+            ...input,
+            ...(retainedRecords ? { retainedRecords } : {}),
+          }),
+          {
+            ...(secretWrite ? { secretWrite } : {}),
+            projection,
+          },
+        );
         retainedWorkflowProjectionRef.current = clonePersistedValue(projection);
       } finally {
         pendingSecretWriteRef.current = null;
       }
     },
     async persist(input): Promise<void> {
-      const retainedDocuments = buildRetainedDocumentState(input.snapshot);
+      const retainedRecords = buildPersistedRetainedRecords(input.snapshot);
       const projection = buildRetainedWorkflowProjectionState(
         input.snapshot,
         headCursor(input.writeHistory),
       );
-      await storage.persist(clonePersistedValue(input), {
-        retainedDocuments: hasRetainedDocumentState(retainedDocuments) ? retainedDocuments : null,
-        projection,
-      });
+      await storage.persist(
+        clonePersistedValue({
+          ...input,
+          ...(retainedRecords ? { retainedRecords } : {}),
+        }),
+        {
+          projection,
+        },
+      );
       retainedWorkflowProjectionRef.current = clonePersistedValue(projection);
     },
   };
@@ -3498,13 +3594,25 @@ export async function createWebAppAuthority(
 ): Promise<WebAppAuthority> {
   const authorityPolicyVersion = options.policyVersion ?? webAppPolicyVersion;
   const graph = options.graph ?? webAppGraph;
-  const persistedState = await storage.load();
-  const persistedRetainedDocuments = persistedState ? await storage.loadRetainedDocuments() : null;
+  const { bootstrappedSnapshot, compiledFieldIndex, scalarByKey, typeByKey } =
+    getCompiledGraphArtifacts(graph);
+  const loadedPersistedState = await storage.load();
+  const persistedState = loadedPersistedState
+    ? {
+        ...loadedPersistedState,
+        snapshot: mergeSnapshotWithBootstrappedSchema(
+          bootstrappedSnapshot,
+          loadedPersistedState.snapshot,
+        ),
+      }
+    : null;
+  const persistedRetainedDocuments =
+    persistedState?.retainedRecords && persistedState.retainedRecords.length > 0
+      ? loadRetainedDocumentStateFromPersistedRecords(persistedState.retainedRecords)
+      : null;
   const persistedWorkflowProjection = persistedState
     ? await storage.loadWorkflowProjection()
     : null;
-  const { bootstrappedSnapshot, compiledFieldIndex, scalarByKey, typeByKey } =
-    getCompiledGraphArtifacts(graph);
   const store = createStore(bootstrappedSnapshot);
   let persistedSecrets: Record<string, WebAppAuthoritySecretRecord> = {};
   if (persistedState) {
@@ -3554,6 +3662,7 @@ export async function createWebAppAuthority(
       pendingSecretWriteRef,
       retainedWorkflowProjectionRef,
       persistedState,
+      persistedRetainedDocuments?.state ?? null,
     ),
     seed() {
       if (options.seedExampleGraph !== false) {

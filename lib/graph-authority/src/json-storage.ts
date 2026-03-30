@@ -19,6 +19,7 @@ import {
   persistedAuthoritativeGraphStateVersion,
   type JsonPersistedAuthoritativeGraphOptions,
   type PersistedAuthoritativeGraph,
+  type PersistedAuthoritativeGraphRetainedRecord,
   type PersistedAuthoritativeGraphStartupDiagnostics,
   type PersistedAuthoritativeGraphStorageCommitInput,
   type PersistedAuthoritativeGraphStoragePersistInput,
@@ -139,14 +140,65 @@ function readPersistedWriteHistory(rawHistory: unknown): {
   };
 }
 
+function readPersistedRetainedRecords(
+  rawRecords: unknown,
+  source: string,
+): readonly PersistedAuthoritativeGraphRetainedRecord[] | undefined {
+  if (rawRecords === undefined) {
+    return undefined;
+  }
+  if (!Array.isArray(rawRecords)) {
+    throw new Error(`Invalid persisted retained records in "${source}": expected an array.`);
+  }
+
+  return rawRecords.map((rawRecord, index) => {
+    if (!isObjectRecord(rawRecord)) {
+      throw new Error(
+        `Invalid persisted retained records in "${source}": expected entry ${index} to be an object.`,
+      );
+    }
+    if (typeof rawRecord.recordKind !== "string") {
+      throw new Error(
+        `Invalid persisted retained records in "${source}": expected entry ${index}.recordKind to be a string.`,
+      );
+    }
+    if (typeof rawRecord.recordId !== "string") {
+      throw new Error(
+        `Invalid persisted retained records in "${source}": expected entry ${index}.recordId to be a string.`,
+      );
+    }
+    if (
+      typeof rawRecord.version !== "number" ||
+      !Number.isInteger(rawRecord.version) ||
+      rawRecord.version < 0
+    ) {
+      throw new Error(
+        `Invalid persisted retained records in "${source}": expected entry ${index}.version to be a non-negative integer.`,
+      );
+    }
+    if (!("payload" in rawRecord)) {
+      throw new Error(
+        `Invalid persisted retained records in "${source}": expected entry ${index}.payload to be present.`,
+      );
+    }
+
+    return {
+      recordKind: rawRecord.recordKind,
+      recordId: rawRecord.recordId,
+      version: rawRecord.version,
+      payload: rawRecord.payload,
+    };
+  });
+}
+
 /**
  * Creates the shipped file-backed JSON storage adapter for shared persisted
  * authorities.
  *
- * The adapter persists only the versioned snapshot-plus-history contract owned
- * by this package. It validates snapshots on load, rewrites through a temp
- * file, and normalizes legacy write history that predates stored `writeScope`
- * metadata.
+ * The adapter persists only the versioned graph snapshot, retained write
+ * history, and optional semantic retained records owned by this package. It
+ * validates snapshots on load, rewrites through a temp file, and normalizes
+ * legacy write history that predates stored `writeScope` metadata.
  */
 export function createJsonPersistedAuthoritativeGraphStorage<
   const TDefinitions extends Record<string, AnyTypeOutput>,
@@ -166,10 +218,12 @@ export function createJsonPersistedAuthoritativeGraphStorage<
           path,
           definitions,
         );
+        const retainedRecords = readPersistedRetainedRecords(parsed.retainedRecords, path);
         const persistedWriteHistory = readPersistedWriteHistory(parsed.writeHistory);
         return {
           snapshot,
           writeHistory: persistedWriteHistory.writeHistory,
+          retainedRecords,
           recovery:
             persistedWriteHistory.writeHistory === undefined
               ? "reset-baseline"
@@ -203,6 +257,7 @@ export function createJsonPersistedAuthoritativeGraphStorage<
   async function writeState({
     snapshot,
     writeHistory,
+    retainedRecords,
   }: PersistedAuthoritativeGraphStoragePersistInput): Promise<void> {
     await mkdir(dirname(path), { recursive: true });
 
@@ -211,6 +266,7 @@ export function createJsonPersistedAuthoritativeGraphStorage<
       version: persistedAuthoritativeGraphStateVersion,
       snapshot,
       writeHistory,
+      ...(retainedRecords ? { retainedRecords } : {}),
     };
 
     try {

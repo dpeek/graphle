@@ -448,8 +448,10 @@ Secret-backed fields:
 - Callee: storage adapter implementations
 - Inputs: `load()`, per-tx `commit(...)`, and full `persist(...)`
 - Outputs: hydrated snapshot and retained history, or committed durable state
-- Contract note: the shared boundary is snapshot-plus-history only; SQL rows,
-  Durable Object transactions, and secret side-storage remain adapter details
+- Contract note: the shared boundary is graph snapshot plus retained write
+  history, with optional opaque semantic retained records committed in the same
+  durable operation; SQL rows, Durable Object transactions, and secret
+  side-storage remain adapter details
 - Failure shape: storage exceptions trigger in-memory rollback or full rewrite
   on next persist
 - Stability: `stable`
@@ -496,11 +498,12 @@ Secret-backed fields:
 ### Durable Object SQL schema
 
 - Name: `io_graph_meta`, `io_graph_tx`, `io_graph_tx_op`, `io_graph_edge`,
-  `io_secret_value`
+  `io_secret_value`, `io_retained_record`
 - Purpose: current durable storage model for the single-graph authority proof
 - Caller: Durable Object authority storage adapter only
 - Callee: SQLite-backed Durable Object storage
-- Inputs: graph commits, persistence rewrites, secret side writes
+- Inputs: graph commits, retained-record writes, persistence rewrites, secret
+  side writes
 - Outputs: restartable authoritative state
 - Failure shape: transaction abort on constraint error or unknown durable edge
   retraction
@@ -584,6 +587,16 @@ This branch owns persistent state.
   `provider`, `fingerprint`, or `external_key_id`; they remain adapter-owned
   placeholders for later provider and KMS work
 
+`io_retained_record`
+
+- adapter-owned semantic retained-record table keyed by
+  `(record_kind, record_id)`
+- stores versioned JSON payloads plus created, updated, deleted, and
+  `materialized_at_cursor` metadata
+- current Durable Object proof uses it for the first retained `document` and
+  `document-block` family while keeping those semantic rows in the same durable
+  commit as accepted authoritative graph writes
+
 ### Current authoritative state rules
 
 - current graph state is the set of `io_graph_edge` rows interpreted with
@@ -592,6 +605,10 @@ This branch owns persistent state.
   `history_retained_from_seq`
 - secret plaintext is authoritative only in `io_secret_value`; it is never
   rebuilt from graph facts
+- adapter-owned retained workspace-memory rows such as `document` and
+  `document-block` live in `io_retained_record` and may re-materialize graph
+  facts during recovery without becoming part of the public graph sync or SQL
+  row contract
 
 ### Retained history versus current state
 
@@ -601,7 +618,8 @@ This branch owns persistent state.
 
 ### Derived versus authoritative state
 
-- authoritative: graph rows, tx rows, secret rows
+- authoritative: graph rows, tx rows, secret rows, and adapter-owned retained
+  rows
 - derived: SQL indexes on `(s, p)`, `(p, o)`, and `retracted_tx_seq`, plus any
   in-memory maps reconstructed at runtime
 
@@ -707,7 +725,8 @@ This branch owns persistent state.
 2. Components involved: transport adapter, authoritative write session,
    validation, persisted authority storage
 3. Contract boundaries crossed: caller tx -> authority validation -> durable
-   commit -> authoritative write result
+   commit of graph rows plus any adapter-owned retained rows -> authoritative
+   write result
 4. Authoritative write point: successful `storage.commit(...)`
 5. Failure or fallback behavior: invalid tx is rejected with validation errors;
    durable commit failure rolls back store snapshot and retained history
@@ -739,9 +758,9 @@ This branch owns persistent state.
 2. Components involved: consumer-owned web authority command adapter, graph
    mutation planner, authoritative tx apply, `io_secret_value` side write
 3. Contract boundaries crossed: consumer-owned command envelope -> Branch 1
-   graph tx plus secret side storage
+   graph tx plus secret and retained side storage
 4. Authoritative write point: same durable storage transaction that writes the
-   graph commit and secret plaintext
+   graph commit, retained semantic rows, and secret plaintext
 5. Failure or fallback behavior: invalid entity/predicate/plaintext rejects the
    command; storage failure restores prior graph and in-memory secret state
 
