@@ -10,11 +10,11 @@ import { unknownIconSeed } from "../icon/seed.js";
  * The concrete core icon catalog stays with the core module tree and plugs into
  * `@io/graph-bootstrap` through its public icon contracts.
  */
-export const coreGraphBootstrapOptions = Object.freeze({
+export const coreGraphBootstrapOptions: GraphBootstrapOptions = Object.freeze({
   availableDefinitions: core,
   cacheKey: core,
   coreSchema: core,
   iconSeeds: [unknownIconSeed],
   resolvePredicateIconId: resolvePredicateDefinitionIconId,
   resolveTypeIconId: resolveTypeDefinitionIconId,
-}) satisfies GraphBootstrapOptions;
+});

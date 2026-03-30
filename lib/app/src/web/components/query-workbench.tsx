@@ -277,7 +277,7 @@ export function QueryWorkbench({
     <div className="grid gap-4">
       <QueryEditor
         catalog={catalog}
-        description="Author inline queries, preview them through the shared query container, and persist saved queries or saved views through the current browser-backed proof store."
+        description="Author inline queries, preview them through the shared query container, and save local workbench copies of saved queries or saved views for reopen and route-state testing."
         draft={draft}
         footer={
           <div className="grid gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">

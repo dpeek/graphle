@@ -1,7 +1,12 @@
 import { createStore } from "@io/app/graph";
 import { bootstrap } from "@io/graph-bootstrap";
 import { createGraphClient } from "@io/graph-client";
-import { core, coreGraphBootstrapOptions } from "@io/graph-module-core";
+import {
+  core,
+  coreGraphBootstrapOptions,
+  readSavedQueryDefinition,
+  readSavedViewDefinition,
+} from "@io/graph-module-core";
 
 import { testDefs, testNamespace } from "./test-graph.js";
 
@@ -177,3 +182,65 @@ void graph.record
     // @ts-expect-error list queries still omit unselected fields
     void records[0]!.id;
   });
+
+void coreGraph.savedQuery
+  .query({
+    where: { id: "saved-query-1" },
+    select: {
+      id: true,
+      queryKind: true,
+      surface: {
+        moduleId: true,
+        surfaceId: true,
+      },
+    },
+  })
+  .then((query) => {
+    if (!query) return;
+
+    const id: string = query.id;
+    const kind: string = query.queryKind;
+    const moduleId: string = query.surface.moduleId;
+    const surfaceId: string = query.surface.surfaceId;
+
+    void id;
+    void kind;
+    void moduleId;
+    void surfaceId;
+  });
+
+void coreGraph.savedView
+  .query({
+    where: { id: "saved-view-1" },
+    select: {
+      rendererId: true,
+      query: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
+    },
+  })
+  .then((view) => {
+    if (!view) return;
+
+    const rendererId: string = view.rendererId;
+    const queryId: string = view.query.id;
+    const queryName: string = view.query.name;
+
+    void rendererId;
+    void queryId;
+    void queryName;
+  });
+
+void readSavedQueryDefinition(coreGraph, "saved-query-1").then((query) => {
+  const definitionHash: string = query.definitionHash;
+  const queryKind: "collection" | "entity" | "neighborhood" | "scope" = query.kind;
+  void definitionHash;
+  void queryKind;
+});
+
+const savedView = readSavedViewDefinition(coreGraph, "saved-view-1");
+const savedViewQueryId: string = savedView.queryId;
+void savedViewQueryId;

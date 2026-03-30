@@ -49,11 +49,15 @@ What exists today:
 - authority-owned workflow reads rebuild from authoritative graph state and
   expose `projectionCursor`, `projectedAt`, pagination, and fail-closed
   `projection-stale` semantics
+- `@io/graph-module-core` now ships the built-in `core:savedQuery`,
+  `core:savedQueryParameter`, and `core:savedView` object types plus typed
+  helpers for creating, updating, and traversing those graph-native records
 
 What does not exist yet:
 
 - one reusable serialized query contract across graph, web, MCP, and modules
-- durable graph-owned saved-query entities
+- persistence and web-editor cutover onto the built-in graph-owned saved-query
+  objects
 - a full productized generic query container runtime and editor UI
 - a web query editor that can build, preview, save, and embed queries
 
@@ -454,22 +458,41 @@ The durable model should separate:
 - `QueryContainer`: one placement of a query inside a route, dashboard, or
   module surface
 
-Conceptually:
+The shipped built-in core schema now uses three object types:
 
 ```ts
 type SavedQuery = {
   id: string;
   name: string;
   description?: string;
+  ownerId: string;
   queryKind: ReadQuery["kind"];
-  sourceRefIds: readonly string[];
-  fieldRefIds: readonly string[];
-  parameterDefs: readonly QueryParameterDefinition[];
+  surface?: {
+    moduleId: string;
+    catalogId: string;
+    catalogVersion: string;
+    surfaceId: string;
+    surfaceVersion: string;
+  };
+  request: SerializedQueryRequest;
   definitionHash: string;
 };
 
-type SavedView = {
+type SavedQueryParameter = {
   id: string;
+  queryId: string;
+  order: number;
+  name: string;
+  label: string;
+  type: QueryParameterType;
+  required?: boolean;
+  defaultValue?: QueryLiteral;
+};
+
+type SavedView = {
+  containerId: string;
+  id: string;
+  ownerId: string;
   queryId: string;
   rendererId: string;
   rendererDefinition?:
@@ -477,17 +500,21 @@ type SavedView = {
     | { kind: "table"; columns: readonly QueryTableRendererColumnDefinition[] }
     | { kind: "card-grid"; card: QueryCardRendererDefinition };
   containerDefaults?: QueryContainerDefaults;
+  queryParams?: Record<string, QueryLiteral>;
 };
 ```
 
-The exact entity family can change, but the ownership rules should not:
+The exact field list may still grow, but the ownership rules should not:
 
-- graph-owned references such as scope, index, field, module, and renderer are
-  durable refs, not only inline strings in a JSON blob
-- parameter defaults and UI chrome preferences may still be stored as
-  structured scalar payloads
-- the platform may derive a normalized JSON form and hash for execution and
-  caching, but that derived form is not the only durable representation
+- `SavedQuery` owns the durable query identity, normalized hash boundary, and
+  module-surface compatibility metadata
+- `SavedQueryParameter` keeps reusable parameter definitions as ordinary graph
+  records linked back to one saved query instead of burying them in one opaque
+  JSON blob
+- `SavedView` owns the saved-query binding, renderer selection, parameter
+  overrides, container identity, and container defaults
+- the platform may still derive a normalized JSON form and hash for execution
+  and caching, but that derived form is not the only durable representation
 
 ### Why durable queries should use graph refs
 
@@ -803,17 +830,21 @@ Current proof status:
 - `../../lib/app/src/web/lib/query-editor.ts` now defines the shared form-first draft,
   query surface catalog, validation rules, and serialization bridge into the
   generic `SerializedQueryRequest` plus `QueryParameterDefinition[]`
+- `../../lib/graph-module-core/src/core/saved-query.ts` now defines the
+  built-in graph-native `SavedQuery`, `SavedQueryParameter`, and `SavedView`
+  schema plus typed helper functions for durable graph reads and writes
 - `../../lib/app/src/web/lib/saved-query.ts` now defines the reusable saved-query
-  and saved-view CRUD plus resolution seams used by planner, editor, and
-  container code, including browser-store proof persistence and normalized
-  saved-record resolution against the installed query catalog
+  and saved-view graph-backed repository plus normalized-derivation seams used
+  by planner, editor, and container code, including graph-native definition
+  reads/writes and normalized saved-record resolution against the installed
+  query catalog
 - `../../lib/app/src/web/components/query-editor.tsx` now mounts that draft model
   through typed source, filter, sort, pagination, and parameter sections
 - `../../lib/app/src/web/lib/query-workbench.ts` now adds shared route-state parsing,
-  draft preview serialization, browser-persisted proof saved-query/view
-  storage, editor hydration for reopen flows, saved-source resolution with
-  parameter overrides, and a bounded collection preview executor for the
-  current proof route
+  draft preview serialization, a workbench-local saved-query/view cache that
+  reuses the shared saved-query record model for reopen flows, shared
+  saved-source resolution with parameter overrides, and a bounded collection
+  preview executor for the current proof route
 - the current `/views` proof route now uses that shared workbench path to:
   preview inline drafts in a real query container, reopen saved queries or
   saved views from route state, rehydrate the form editor from those saved
@@ -823,14 +854,16 @@ Current proof status:
   including current-catalog hydration failures when a previously saved surface
   definition, catalog version, or saved-view/query binding no longer matches
   the installed contracts
-- `../../lib/app/src/web/lib/authority.ts` and the Durable Object storage adapters
-  now expose the principal-scoped durable saved-query/view persistence path for
-  non-route consumers, with proof coverage in
+- `../../lib/app/src/web/lib/authority.ts` now routes the principal-scoped
+  only durable saved-query/view persistence path through graph-native
+  saved-query and saved-view objects for non-route consumers, with proof
+  coverage in
   `../../lib/app/src/web/lib/authority.test.ts` and
   `../../lib/app/src/web/lib/graph-authority-sql-saved-query.test.ts` for
-  persistence, normalized re-derivation, installed-catalog validation, and
-  stale-ref recovery; the current `/views` proof route still uses browser-local
-  persistence until the editor UI moves onto that authority seam
+  restart persistence, normalized re-derivation, installed-catalog validation,
+  and stale-ref recovery; the current `/views` proof route still keeps a
+  browser-local workbench cache for reopen flows, but that cache is not the
+  durable persistence path
 
 Current consumption seams:
 

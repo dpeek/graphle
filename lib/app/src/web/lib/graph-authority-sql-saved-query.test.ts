@@ -2,6 +2,8 @@ import { Database } from "bun:sqlite";
 import { describe, expect, it } from "bun:test";
 
 import type { AuthorizationContext } from "@io/graph-authority";
+import { edgeId } from "@io/graph-kernel";
+import { core } from "@io/graph-module-core";
 
 import { createInstalledQueryEditorCatalog } from "../components/query-editor.js";
 import {
@@ -19,14 +21,17 @@ import { webAppPolicyVersion } from "./policy-version.js";
 import { createQueryEditorDraft } from "./query-editor.js";
 import { getInstalledModuleQuerySurfaceRendererCompatibility } from "./query-surface-registry.js";
 import {
-  createSavedQueryMemoryStore,
-  saveSavedQueryDraft,
-  saveSavedViewDraft,
+  createSavedQueryRecordInputFromDraft,
+  createSavedViewRecordInput,
   type SavedQueryRecord,
   type SavedViewRecord,
 } from "./saved-query.js";
 
 const workflowProjectBranchBoardSurfaceId = "workflow:project-branch-board";
+const savedQueryCatalogVersionPredicateId = edgeId(core.savedQuery.fields.surface.catalogVersion);
+const savedQueryDefinitionHashPredicateId = edgeId(core.savedQuery.fields.definitionHash);
+const savedQueryModuleIdPredicateId = edgeId(core.savedQuery.fields.surface.moduleId);
+const savedQueryParameterQueryPredicateId = edgeId(core.savedQueryParameter.fields.query);
 
 function createSqlStorage(): {
   readonly db: Database;
@@ -69,6 +74,58 @@ function queryAll<T extends Record<string, unknown>>(
 ): T[] {
   const statement = db.query(query);
   return statement.all(...(bindings as never as Parameters<typeof statement.all>)) as T[];
+}
+
+function queryOne<T extends Record<string, unknown>>(
+  db: Database,
+  query: string,
+  ...bindings: unknown[]
+): T | undefined {
+  return queryAll<T>(db, query, ...bindings)[0];
+}
+
+function canonicalizeValue(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map((entry) => canonicalizeValue(entry));
+  }
+  if (
+    typeof value !== "object" ||
+    value === null ||
+    Array.isArray(value) ||
+    Object.getPrototypeOf(value) !== Object.prototype
+  ) {
+    return value;
+  }
+  return Object.fromEntries(
+    Object.keys(value)
+      .sort((left, right) => left.localeCompare(right))
+      .map((key) => [key, canonicalizeValue((value as Record<string, unknown>)[key])]),
+  );
+}
+
+async function hashSavedQueryRecord(input: {
+  readonly moduleId: string;
+  readonly query: SavedQueryRecord;
+}): Promise<string> {
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(
+      JSON.stringify(
+        canonicalizeValue({
+          parameterDefinitions: input.query.parameterDefinitions,
+          request: input.query.request,
+          surface: {
+            catalogId: input.query.catalogId,
+            catalogVersion: input.query.catalogVersion,
+            moduleId: input.moduleId,
+            surfaceId: input.query.surfaceId,
+            surfaceVersion: input.query.surfaceVersion,
+          },
+        }),
+      ),
+    ),
+  );
+  return `sha256:${Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("")}`;
 }
 
 function createAuthorityAuthorizationContext(
@@ -119,48 +176,43 @@ async function saveSavedQueryFixture(input: {
     ],
   };
 
-  const querySeed = saveSavedQueryDraft({
-    catalog,
-    draft,
-    name: "Owner board",
-    store: createSavedQueryMemoryStore(),
-  });
-  const { updatedAt: _queryUpdatedAt, ...queryInput } = querySeed;
-  const query = await authority.saveSavedQuery(queryInput, {
-    authorization: input.authorization,
-  });
-
-  const viewSeed = saveSavedViewDraft({
-    catalog,
-    draft,
-    queryId: query.id,
-    queryName: query.name,
-    rendererCapabilities,
-    spec: {
-      containerId: "saved-view-preview",
-      pagination: {
-        mode: "paged",
-        pageSize: 25,
-      },
-      refresh: {
-        mode: "manual",
-      },
-      renderer: {
-        rendererId: "core:list",
-      },
-    },
-    store: createSavedQueryMemoryStore({
-      queries: [query],
+  const query = await authority.saveSavedQuery(
+    createSavedQueryRecordInputFromDraft({
+      catalog,
+      draft,
+      name: "Owner board",
     }),
-    surface: getInstalledModuleQuerySurfaceRendererCompatibility(
-      workflowProjectBranchBoardSurfaceId,
-    ),
-    viewName: "Owner board view",
-  });
-  const { updatedAt: _viewUpdatedAt, ...viewInput } = viewSeed.view;
-  const view = await authority.saveSavedView(viewInput, {
-    authorization: input.authorization,
-  });
+    {
+      authorization: input.authorization,
+    },
+  );
+
+  const view = await authority.saveSavedView(
+    createSavedViewRecordInput({
+      name: "Owner board view",
+      query,
+      rendererCapabilities,
+      spec: {
+        containerId: "saved-view-preview",
+        pagination: {
+          mode: "paged",
+          pageSize: 25,
+        },
+        refresh: {
+          mode: "manual",
+        },
+        renderer: {
+          rendererId: "core:list",
+        },
+      },
+      surface: getInstalledModuleQuerySurfaceRendererCompatibility(
+        workflowProjectBranchBoardSurfaceId,
+      )!,
+    }),
+    {
+      authorization: input.authorization,
+    },
+  );
 
   return {
     query,
@@ -172,8 +224,8 @@ describe("graph-authority-sql-saved-query", () => {
   it("persists saved queries and views through sqlite durable-object storage and re-derives normalized records after restart", async () => {
     const { db, storage } = createSqlStorage();
     const authorization = createAuthorityAuthorizationContext();
-    const initialAuthority = await createTestWebAppAuthority(storage);
     const saved = await saveSavedQueryFixture({ authorization, storage });
+    const initialAuthority = await createTestWebAppAuthority(storage);
 
     const resolvedQuery = await initialAuthority.resolveSavedQuery(
       {
@@ -184,29 +236,24 @@ describe("graph-authority-sql-saved-query", () => {
     );
 
     expect(
-      queryAll<{
-        catalog_version: string;
-        owner_id: string;
-        query_id: string;
-      }>(db, "SELECT owner_id, query_id, catalog_version FROM io_saved_query ORDER BY query_id"),
-    ).toEqual([
-      {
-        catalog_version: saved.query.catalogVersion,
-        owner_id: authorization.principalId ?? "",
-        query_id: saved.query.id,
-      },
-    ]);
+      queryAll<{ name: string }>(
+        db,
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('io_saved_query', 'io_saved_view') ORDER BY name",
+      ),
+    ).toEqual([]);
     expect(
-      queryAll<{
-        owner_id: string;
-        query_id: string;
-        view_id: string;
-      }>(db, "SELECT owner_id, query_id, view_id FROM io_saved_view ORDER BY view_id"),
+      queryAll<{ subject: string }>(
+        db,
+        "SELECT DISTINCT s AS subject FROM io_graph_edge WHERE s IN (?, ?) ORDER BY subject",
+        saved.query.id,
+        saved.view.id,
+      ),
     ).toEqual([
       {
-        owner_id: authorization.principalId ?? "",
-        query_id: saved.query.id,
-        view_id: saved.view.id,
+        subject: saved.query.id,
+      },
+      {
+        subject: saved.view.id,
       },
     ]);
     expect(resolvedQuery.request.params?.state).toBe("ready");
@@ -243,10 +290,36 @@ describe("graph-authority-sql-saved-query", () => {
     const { db, storage } = createSqlStorage();
     const authorization = createAuthorityAuthorizationContext();
     const saved = await saveSavedQueryFixture({ authorization, storage });
+    const moduleId = queryOne<{ moduleId: string }>(
+      db,
+      "SELECT o AS moduleId FROM io_graph_edge WHERE s = ? AND p = ?",
+      saved.query.id,
+      savedQueryModuleIdPredicateId,
+    )?.moduleId;
 
-    db.query(
-      "UPDATE io_saved_query SET catalog_version = ? WHERE owner_id = ? AND query_id = ?",
-    ).run("query-catalog:workflow:v0", authorization.principalId, saved.query.id);
+    if (!moduleId) {
+      throw new Error("Expected persisted saved query surface module id.");
+    }
+
+    const staleQuery = {
+      ...saved.query,
+      catalogVersion: "query-catalog:workflow:v0",
+    } satisfies SavedQueryRecord;
+    const staleDefinitionHash = await hashSavedQueryRecord({
+      moduleId,
+      query: staleQuery,
+    });
+
+    db.query("UPDATE io_graph_edge SET o = ? WHERE s = ? AND p = ?").run(
+      staleQuery.catalogVersion,
+      saved.query.id,
+      savedQueryCatalogVersionPredicateId,
+    );
+    db.query("UPDATE io_graph_edge SET o = ? WHERE s = ? AND p = ?").run(
+      staleDefinitionHash,
+      saved.query.id,
+      savedQueryDefinitionHashPredicateId,
+    );
 
     const restartedAuthority = await createTestWebAppAuthority(storage);
 
@@ -265,15 +338,21 @@ describe("graph-authority-sql-saved-query", () => {
     });
   });
 
-  it("fails closed after restart when a persisted saved view points at a removed saved query and can be explicitly recovered", async () => {
+  it("fails closed after restart when a persisted saved view points at a removed saved query and can be explicitly row-cleaned", async () => {
     const { db, storage } = createSqlStorage();
     const authorization = createAuthorityAuthorizationContext();
     const saved = await saveSavedQueryFixture({ authorization, storage });
-
-    db.query("DELETE FROM io_saved_query WHERE owner_id = ? AND query_id = ?").run(
-      authorization.principalId,
+    const parameterSubjects = queryAll<{ subject: string }>(
+      db,
+      "SELECT DISTINCT s AS subject FROM io_graph_edge WHERE p = ? AND o = ? ORDER BY subject",
+      savedQueryParameterQueryPredicateId,
       saved.query.id,
     );
+
+    db.query("DELETE FROM io_graph_edge WHERE s = ?").run(saved.query.id);
+    for (const parameter of parameterSubjects) {
+      db.query("DELETE FROM io_graph_edge WHERE s = ?").run(parameter.subject);
+    }
 
     const restartedAuthority = await createTestWebAppAuthority(storage);
 
@@ -289,9 +368,16 @@ describe("graph-authority-sql-saved-query", () => {
       status: 404,
     });
 
-    await restartedAuthority.deleteSavedView(saved.view.id, { authorization });
+    db.query("DELETE FROM io_graph_edge WHERE s = ?").run(saved.view.id);
 
-    expect(await restartedAuthority.getSavedView(saved.view.id, { authorization })).toBeUndefined();
-    expect(queryAll<{ view_id: string }>(db, "SELECT view_id FROM io_saved_view")).toEqual([]);
+    const recoveredAuthority = await createTestWebAppAuthority(storage);
+    expect(await recoveredAuthority.getSavedView(saved.view.id, { authorization })).toBeUndefined();
+    expect(
+      queryAll<{ subject: string }>(
+        db,
+        "SELECT DISTINCT s AS subject FROM io_graph_edge WHERE s = ?",
+        saved.view.id,
+      ),
+    ).toEqual([]);
   });
 });

@@ -12,6 +12,8 @@
 - SVG sanitization for the built-in icon and SVG contracts
 - structured-value parsing, normalization, and formatting helpers
 - core-owned identity, admission, share, locale, country, and currency schema
+- core-owned saved-query, saved-query-parameter, and saved-view schema plus
+  typed durable-query helpers
 - core-specific browser defaults from `@io/graph-module-core/react-dom`
 
 ## What It Depends On

@@ -29,6 +29,14 @@ import { predicate } from "./core/predicate.js";
 import { quantityTypeModule } from "./core/quantity.js";
 import { rangeTypeModule } from "./core/range.js";
 import { rateTypeModule } from "./core/rate.js";
+import {
+  createSavedQueryDefinition,
+  createSavedViewDefinition,
+  readSavedQueryDefinition,
+  savedQuery,
+  savedQueryParameter,
+  savedView,
+} from "./core/saved-query.js";
 import { secretHandle } from "./core/secret.js";
 import { stringTypeModule } from "./core/string.js";
 import { svgTypeModule } from "./core/svg.js";
@@ -55,11 +63,15 @@ const requiredExports = [
   "moneyTypeModule",
   "normalizeMoneyInput",
   "principal",
+  "readSavedQueryDefinition",
   "rangeTypeModule",
   "rateTypeModule",
   "resolveDefinitionIconId",
   "resolvePredicateDefinitionIconId",
   "resolveTypeDefinitionIconId",
+  "savedQuery",
+  "savedQueryParameter",
+  "savedView",
   "secretHandle",
   "sanitizeSvgMarkup",
   "stringTypeModule",
@@ -145,6 +157,9 @@ describe("@io/graph-module-core", () => {
     expect(authSubjectProjection.values.key).toBe("core:authSubjectProjection");
     expect(principalRoleBinding.values.key).toBe("core:principalRoleBinding");
     expect(admissionPolicy.values.key).toBe("core:admissionPolicy");
+    expect(savedQuery.values.key).toBe("core:savedQuery");
+    expect(savedQueryParameter.values.key).toBe("core:savedQueryParameter");
+    expect(savedView.values.key).toBe("core:savedView");
     expect(resolveDefinitionIconId(stringTypeModule.type.values.icon)).toBe("seed:icon:string");
     expect(resolveTypeDefinitionIconId(cardinality)).toBe(resolveDefinitionIconId(tag.values.icon));
     expect(resolvePredicateDefinitionIconId(node.fields.type, coreType)).toBe(
@@ -166,6 +181,9 @@ describe("@io/graph-module-core", () => {
     expect(canonicalCore.quantity.values.key).toBe(quantityTypeModule.type.values.key);
     expect(canonicalCore.range.values.key).toBe(rangeTypeModule.type.values.key);
     expect(canonicalCore.rate.values.key).toBe(rateTypeModule.type.values.key);
+    expect(canonicalCore.savedQuery.values.key).toBe(savedQuery.values.key);
+    expect(canonicalCore.savedQueryParameter.values.key).toBe(savedQueryParameter.values.key);
+    expect(canonicalCore.savedView.values.key).toBe(savedView.values.key);
     expect(canonicalCore.icon.values.key).toBe(icon.values.key);
     expect(canonicalCore.tag.values.key).toBe(tag.values.key);
     expect(canonicalCore.secretHandle.values.key).toBe(secretHandle.values.key);
@@ -262,6 +280,14 @@ describe("@io/graph-module-core", () => {
     expect(moduleExports.icon.values.key).toBe(canonicalCore.icon.values.key);
     expect(moduleExports.iconReferenceField).toBe(iconReferenceField);
     expect(moduleExports.secretHandle.values.key).toBe(canonicalCore.secretHandle.values.key);
+    expect(moduleExports.savedQuery.values.key).toBe(canonicalCore.savedQuery.values.key);
+    expect(moduleExports.savedQueryParameter.values.key).toBe(
+      canonicalCore.savedQueryParameter.values.key,
+    );
+    expect(moduleExports.savedView.values.key).toBe(canonicalCore.savedView.values.key);
+    expect(moduleExports.createSavedQueryDefinition).toBe(createSavedQueryDefinition);
+    expect(moduleExports.createSavedViewDefinition).toBe(createSavedViewDefinition);
+    expect(moduleExports.readSavedQueryDefinition).toBe(readSavedQueryDefinition);
     expect(moduleExports.principal.values.key).toBe(canonicalCore.principal.values.key);
     expect(moduleExports.authSubjectProjection.values.key).toBe(
       canonicalCore.authSubjectProjection.values.key,

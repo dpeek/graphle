@@ -120,3 +120,28 @@ export function planRecordedMutation<const TGraph extends Record<string, AnyType
     transaction,
   };
 }
+
+export async function planRecordedMutationAsync<
+  const TGraph extends Record<string, AnyTypeOutput>,
+  TResult,
+>(
+  snapshot: GraphStoreSnapshot,
+  graph: TGraph,
+  txId: string,
+  mutate: (graph: GraphClient<TGraph>, store: GraphStore) => Promise<TResult>,
+): Promise<{
+  readonly changed: boolean;
+  readonly result: TResult;
+  readonly transaction: GraphWriteTransaction;
+}> {
+  const { buildTransaction, store } = createRecordingStore(snapshot);
+  const mutationGraph = createGraphClient(store, graph);
+  const result = await mutate(mutationGraph, store);
+  const transaction = buildTransaction(txId);
+
+  return {
+    changed: transaction.ops.length > 0,
+    result,
+    transaction,
+  };
+}

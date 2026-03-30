@@ -39,6 +39,7 @@ import { predicate } from "./core/predicate.js";
 import { quantityTypeModule } from "./core/quantity.js";
 import { rangeTypeModule } from "./core/range.js";
 import { rateTypeModule } from "./core/rate.js";
+import { savedQuery, savedQueryParameter, savedView } from "./core/saved-query.js";
 import { secretHandle } from "./core/secret.js";
 import { slugTypeModule } from "./core/slug.js";
 import { stringTypeModule } from "./core/string.js";
@@ -99,6 +100,9 @@ export const core = applyGraphIdMap(coreIdMap, {
   quantity,
   range,
   rate,
+  savedQuery,
+  savedQueryParameter,
+  savedView,
   icon,
   tag,
   type: coreType,

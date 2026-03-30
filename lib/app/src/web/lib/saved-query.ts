@@ -4,9 +4,22 @@ import {
   type NormalizedQueryRequest,
   type QueryIdentityExecutionContext,
   type QueryLiteral,
-  type QueryParameterDefinition,
   type SerializedQueryRequest,
 } from "@io/graph-client";
+import {
+  createSavedQueryDefinition,
+  createSavedViewDefinition,
+  readSavedQueryDefinition,
+  readSavedViewDefinition,
+  updateSavedQueryDefinition,
+  updateSavedViewDefinition,
+  type SavedQueryDefinition,
+  type SavedQueryDefinitionInput,
+  type SavedQueryGraphClient,
+  type SavedQuerySurfaceBinding,
+  type SavedViewDefinition,
+  type SavedViewDefinitionInput,
+} from "@io/graph-module-core";
 
 import {
   validateQueryContainerSpec,
@@ -29,8 +42,8 @@ export type SavedQueryRecord = {
   readonly catalogVersion: string;
   readonly id: string;
   readonly name: string;
-  readonly parameterDefinitions: readonly QueryParameterDefinition[];
-  readonly request: SerializedQueryRequest;
+  readonly parameterDefinitions: SavedQueryDefinition["parameterDefinitions"];
+  readonly request: SavedQueryDefinition["request"];
   readonly surfaceId: string;
   readonly surfaceVersion: string;
   readonly updatedAt: string;
@@ -54,36 +67,48 @@ export type SavedViewRecord = {
   readonly updatedAt: string;
 };
 
-export type SavedQueryStore = {
-  deleteSavedQuery(id: string): void;
-  deleteSavedView(id: string): void;
-  getSavedQuery(id: string): SavedQueryRecord | undefined;
-  getSavedView(id: string): SavedViewRecord | undefined;
-  listSavedQueries(): readonly SavedQueryRecord[];
-  listSavedViews(): readonly SavedViewRecord[];
-  saveSavedQuery(
-    input: Omit<SavedQueryRecord, "id" | "updatedAt"> & {
-      readonly id?: string;
-    },
-  ): SavedQueryRecord;
-  saveSavedView(
-    input: Omit<SavedViewRecord, "id" | "updatedAt"> & {
-      readonly id?: string;
-    },
-  ): SavedViewRecord;
+export type SavedQueryRecordInput = Omit<SavedQueryRecord, "id" | "updatedAt"> & {
+  readonly id?: string;
 };
 
-export type SavedQueryStorage = Pick<Storage, "getItem" | "removeItem" | "setItem">;
+export type SavedViewRecordInput = Omit<SavedViewRecord, "id" | "updatedAt"> & {
+  readonly id?: string;
+};
+
+export type SavedQueryUpsertInput = Omit<SavedQueryDefinitionInput, "ownerId"> & {
+  readonly id?: string;
+  readonly ownerId?: string;
+};
+
+export type SavedViewUpsertInput = Omit<SavedViewDefinitionInput, "ownerId"> & {
+  readonly id?: string;
+  readonly ownerId?: string;
+};
+
+export type SavedQueryRecordLookup = {
+  getSavedQuery(id: string): SavedQueryRecord | Promise<SavedQueryRecord | undefined> | undefined;
+};
+
+export type SavedQueryRepository = {
+  deleteSavedQuery(id: string): Promise<void>;
+  deleteSavedView(id: string): Promise<void>;
+  getSavedQuery(id: string): Promise<SavedQueryDefinition | undefined>;
+  getSavedView(id: string): Promise<SavedViewDefinition | undefined>;
+  listSavedQueries(): Promise<readonly SavedQueryDefinition[]>;
+  listSavedViews(): Promise<readonly SavedViewDefinition[]>;
+  saveSavedQuery(input: SavedQueryUpsertInput): Promise<SavedQueryDefinition>;
+  saveSavedView(input: SavedViewUpsertInput): Promise<SavedViewDefinition>;
+};
 
 export type SavedQueryResolution = {
   readonly normalizedRequest: NormalizedQueryRequest;
-  readonly query: SavedQueryRecord;
+  readonly query: SavedQueryDefinition;
   readonly request: SerializedQueryRequest;
   readonly surface: QueryEditorSurfaceSpec;
 };
 
 export type SavedViewResolution = SavedQueryResolution & {
-  readonly view: SavedViewRecord;
+  readonly view: SavedViewDefinition;
 };
 
 export type SavedQueryCompatibilityResult =
@@ -134,144 +159,122 @@ export class SavedQuerySaveError extends Error {
   }
 }
 
-const savedQueryStoreVersion = 3;
-const defaultSavedQueryStorageKey = "io.web.query-workbench";
-const savedQueryIdPrefix = "saved-query:";
-const savedViewIdPrefix = "saved-view:";
-
-type SavedQuerySurfaceRef = {
-  readonly catalogId: string;
-  readonly catalogVersion: string;
-  readonly surfaceId: string;
-  readonly surfaceVersion: string;
-};
-
-export function createSavedQueryMemoryStore(
-  seed: {
-    readonly queries?: readonly SavedQueryRecord[];
-    readonly views?: readonly SavedViewRecord[];
-  } = {},
-): SavedQueryStore {
-  const queries = new Map(seed.queries?.map((entry) => [entry.id, entry]));
-  const views = new Map(seed.views?.map((entry) => [entry.id, entry]));
-  let nextQuerySequence = readNextSavedEntrySequence(queries.keys(), savedQueryIdPrefix);
-  let nextViewSequence = readNextSavedEntrySequence(views.keys(), savedViewIdPrefix);
+export function createGraphBackedSavedQueryRepository(
+  graph: SavedQueryGraphClient,
+  options:
+    | {
+        readonly ownerId?: string;
+      }
+    | string = {},
+): SavedQueryRepository {
+  const ownerId = typeof options === "string" ? options : options.ownerId;
 
   return {
-    deleteSavedQuery(id) {
-      queries.delete(id);
-      for (const [viewId, view] of views.entries()) {
-        if (view.queryId === id) {
-          views.delete(viewId);
+    async deleteSavedQuery(id) {
+      const query = await readOwnedSavedQuery(graph, id, ownerId);
+      if (!query) return;
+      for (const view of graph.savedView.list()) {
+        if (view.query === id) {
+          graph.savedView.delete(view.id);
         }
       }
+      for (const parameter of graph.savedQueryParameter.list()) {
+        if (parameter.query === id) {
+          graph.savedQueryParameter.delete(parameter.id);
+        }
+      }
+      graph.savedQuery.delete(id);
     },
-    deleteSavedView(id) {
-      views.delete(id);
+    async deleteSavedView(id) {
+      const view = await readOwnedSavedView(graph, id, ownerId);
+      if (!view) return;
+      graph.savedView.delete(view.id);
     },
-    getSavedQuery(id) {
-      return queries.get(id);
+    async getSavedQuery(id) {
+      return readOwnedSavedQuery(graph, id, ownerId);
     },
-    getSavedView(id) {
-      return views.get(id);
+    async getSavedView(id) {
+      return readOwnedSavedView(graph, id, ownerId);
     },
-    listSavedQueries() {
-      return [...queries.values()].sort(compareSavedEntries);
+    async listSavedQueries() {
+      const queries = await Promise.all(
+        graph.savedQuery.list().map((entry) => readSavedQueryDefinition(graph, entry.id)),
+      );
+      return queries
+        .filter((query) => matchesOwner(query.ownerId, ownerId))
+        .sort(compareSavedEntries);
     },
-    listSavedViews() {
-      return [...views.values()].sort(compareSavedEntries);
+    async listSavedViews() {
+      return graph.savedView
+        .list()
+        .map((entry) => readSavedViewDefinition(graph, entry.id))
+        .filter((view) => matchesOwner(view.ownerId, ownerId))
+        .sort(compareSavedEntries);
     },
-    saveSavedQuery(input) {
-      const id = input.id ?? `${savedQueryIdPrefix}${nextQuerySequence++}`;
-      const saved = Object.freeze({
-        catalogId: input.catalogId,
-        catalogVersion: input.catalogVersion,
-        id,
-        name: input.name,
-        parameterDefinitions: [...input.parameterDefinitions],
-        request: input.request,
-        surfaceId: input.surfaceId,
-        surfaceVersion: input.surfaceVersion,
-        updatedAt: new Date().toISOString(),
-      } satisfies SavedQueryRecord);
-      queries.set(id, saved);
-      return saved;
+    async saveSavedQuery(input) {
+      const resolvedOwnerId = resolveOwnerId("Saved query", input.ownerId, ownerId);
+      const existing = input.id ? await readRawSavedQuery(graph, input.id) : undefined;
+      if (existing && !matchesOwner(existing.ownerId, ownerId)) {
+        throw new SavedQuerySaveError(
+          "saved-query-owner-mismatch",
+          `Saved query "${input.id}" belongs to another owner.`,
+        );
+      }
+      if (existing) {
+        return updateSavedQueryDefinition(graph, existing.id, {
+          ...input,
+          ownerId: resolvedOwnerId,
+        });
+      }
+      const { id: _ignoredId, ownerId: _ignoredOwnerId, ...createInput } = input;
+      return createSavedQueryDefinition(graph, {
+        ...createInput,
+        ownerId: resolvedOwnerId,
+      });
     },
-    saveSavedView(input) {
-      const id = input.id ?? `${savedViewIdPrefix}${nextViewSequence++}`;
-      const saved = Object.freeze({
-        catalogId: input.catalogId,
-        catalogVersion: input.catalogVersion,
-        id,
-        name: input.name,
-        queryId: input.queryId,
-        spec: input.spec,
-        surfaceId: input.surfaceId,
-        surfaceVersion: input.surfaceVersion,
-        updatedAt: new Date().toISOString(),
-      } satisfies SavedViewRecord);
-      views.set(id, saved);
-      return saved;
-    },
-  };
-}
-
-export function createSavedQueryBrowserStore(
-  options: {
-    readonly key?: string;
-    readonly storage?: SavedQueryStorage;
-  } = {},
-): SavedQueryStore {
-  const storage =
-    options.storage ?? (typeof window !== "undefined" ? window.localStorage : undefined);
-  if (!storage) {
-    return createSavedQueryMemoryStore();
-  }
-
-  const key = options.key ?? defaultSavedQueryStorageKey;
-  const persisted = readPersistedSavedQueryStore(storage, key);
-  const store = createSavedQueryMemoryStore(persisted);
-  return {
-    deleteSavedQuery(id) {
-      store.deleteSavedQuery(id);
-      writePersistedSavedQueryStore(storage, key, store);
-    },
-    deleteSavedView(id) {
-      store.deleteSavedView(id);
-      writePersistedSavedQueryStore(storage, key, store);
-    },
-    getSavedQuery(id) {
-      return store.getSavedQuery(id);
-    },
-    getSavedView(id) {
-      return store.getSavedView(id);
-    },
-    listSavedQueries() {
-      return store.listSavedQueries();
-    },
-    listSavedViews() {
-      return store.listSavedViews();
-    },
-    saveSavedQuery(input) {
-      const saved = store.saveSavedQuery(input);
-      writePersistedSavedQueryStore(storage, key, store);
-      return saved;
-    },
-    saveSavedView(input) {
-      const saved = store.saveSavedView(input);
-      writePersistedSavedQueryStore(storage, key, store);
-      return saved;
+    async saveSavedView(input) {
+      const resolvedOwnerId = resolveOwnerId("Saved view", input.ownerId, ownerId);
+      const existing = input.id ? await readRawSavedView(graph, input.id) : undefined;
+      if (existing && !matchesOwner(existing.ownerId, ownerId)) {
+        throw new SavedQuerySaveError(
+          "saved-view-owner-mismatch",
+          `Saved view "${input.id}" belongs to another owner.`,
+        );
+      }
+      const query = await readOwnedSavedQuery(graph, input.queryId, resolvedOwnerId);
+      if (!query) {
+        throw new SavedQuerySaveError(
+          "missing-query",
+          `Saved view "${input.id ?? (input.name.trim() || "Untitled view")}" references missing saved query "${input.queryId}".`,
+        );
+      }
+      if (query.ownerId !== resolvedOwnerId) {
+        throw new SavedQuerySaveError(
+          "saved-view-owner-mismatch",
+          `Saved view owner "${resolvedOwnerId}" does not match saved query owner "${query.ownerId}".`,
+        );
+      }
+      if (existing) {
+        return updateSavedViewDefinition(graph, existing.id, {
+          ...input,
+          ownerId: resolvedOwnerId,
+        });
+      }
+      const { id: _ignoredId, ownerId: _ignoredOwnerId, ...createInput } = input;
+      return createSavedViewDefinition(graph, {
+        ...createInput,
+        ownerId: resolvedOwnerId,
+      });
     },
   };
 }
 
-export function saveSavedQueryDraft(input: {
+export function createSavedQueryDefinitionInputFromDraft(input: {
   readonly catalog: QueryEditorCatalog;
   readonly draft: QueryEditorDraft;
-  readonly id?: string;
   readonly name: string;
-  readonly store: SavedQueryStore;
-}): SavedQueryRecord {
+  readonly ownerId?: string;
+}): SavedQueryUpsertInput {
   const validation = validateQueryEditorDraft(input.draft, input.catalog);
   if (!validation.ok) {
     throw new SavedQuerySaveError(
@@ -284,8 +287,33 @@ export function saveSavedQueryDraft(input: {
   }
   const serialized = serializeQueryEditorDraft(input.draft, input.catalog);
   const surfaceRef = requireInstalledSurfaceRef(serialized.surface);
-  return input.store.saveSavedQuery({
-    ...(input.id ? { id: input.id } : {}),
+  return {
+    name: input.name.trim() || "Untitled query",
+    ownerId: input.ownerId,
+    parameterDefinitions: serialized.parameterDefinitions,
+    request: serialized.request,
+    surface: surfaceRef,
+  };
+}
+
+export function createSavedQueryRecordInputFromDraft(input: {
+  readonly catalog: QueryEditorCatalog;
+  readonly draft: QueryEditorDraft;
+  readonly name: string;
+}): SavedQueryRecordInput {
+  const validation = validateQueryEditorDraft(input.draft, input.catalog);
+  if (!validation.ok) {
+    throw new SavedQuerySaveError(
+      validation.issues[0]?.code ?? "invalid-draft",
+      validation.issues[0]?.message ?? "Query draft is invalid.",
+      {
+        issues: validation.issues,
+      },
+    );
+  }
+  const serialized = serializeQueryEditorDraft(input.draft, input.catalog);
+  const surfaceRef = requireInstalledSurfaceRef(serialized.surface);
+  return {
     catalogId: surfaceRef.catalogId,
     catalogVersion: surfaceRef.catalogVersion,
     name: input.name.trim() || "Untitled query",
@@ -293,99 +321,212 @@ export function saveSavedQueryDraft(input: {
     request: serialized.request,
     surfaceId: surfaceRef.surfaceId,
     surfaceVersion: surfaceRef.surfaceVersion,
-  });
+  };
 }
 
-export function saveSavedViewDraft(input: {
-  readonly catalog: QueryEditorCatalog;
-  readonly draft: QueryEditorDraft;
-  readonly queryId?: string;
-  readonly queryName: string;
+export function createSavedViewDefinitionInput(input: {
+  readonly name: string;
+  readonly ownerId?: string;
+  readonly queryId: string;
   readonly rendererCapabilities: Readonly<Record<string, QueryRendererCapability>>;
-  readonly viewId?: string;
-  readonly viewName: string;
   readonly spec: Omit<QueryContainerSpec, "query">;
-  readonly store: SavedQueryStore;
-  readonly surface?: QuerySurfaceRendererCompatibility;
-}): {
-  readonly query: SavedQueryRecord;
-  readonly view: SavedViewRecord;
-} {
-  const validation = validateQueryEditorDraft(input.draft, input.catalog);
+  readonly surface: QuerySurfaceRendererCompatibility;
+}): SavedViewUpsertInput {
+  const validation = validateQueryContainerSpec(
+    {
+      ...input.spec,
+      query: {
+        kind: "saved",
+        queryId: input.queryId,
+      },
+    },
+    {
+      rendererCapabilities: input.rendererCapabilities,
+      surface: input.surface,
+    },
+  );
   if (!validation.ok) {
+    const issue = validation.issues[0];
     throw new SavedQuerySaveError(
-      validation.issues[0]?.code ?? "invalid-draft",
-      validation.issues[0]?.message ?? "Query draft is invalid.",
+      issue?.code ?? "invalid-view",
+      issue ? formatValidationIssue(issue) : "Saved view is invalid.",
       {
         issues: validation.issues,
       },
     );
   }
-  const serialized = serializeQueryEditorDraft(input.draft, input.catalog);
-  const surfaceRef = requireInstalledSurfaceRef(serialized.surface);
-  if (!input.surface) {
-    throw new SavedQuerySaveError(
-      "missing-surface-contract",
-      `Saved view "${input.viewName.trim() || "Untitled view"}" does not have a current renderer compatibility contract.`,
-    );
-  }
-  const spec = {
-    ...input.spec,
-    query: {
-      kind: "saved",
-      queryId: "pending",
-    },
-  } satisfies SavedViewRecord["spec"];
-  const containerValidation = validateQueryContainerSpec(spec, {
-    rendererCapabilities: input.rendererCapabilities,
-    surface: input.surface,
-  });
-  if (!containerValidation.ok) {
-    const issue = containerValidation.issues[0];
-    throw new SavedQuerySaveError(
-      issue?.code ?? "invalid-view",
-      issue ? formatValidationIssue(issue) : "Saved view is invalid.",
-      {
-        issues: containerValidation.issues,
-      },
-    );
-  }
-  const query = input.store.saveSavedQuery({
-    ...(input.queryId ? { id: input.queryId } : {}),
-    catalogId: surfaceRef.catalogId,
-    catalogVersion: surfaceRef.catalogVersion,
-    name: input.queryName.trim() || "Untitled query",
-    parameterDefinitions: serialized.parameterDefinitions,
-    request: serialized.request,
-    surfaceId: surfaceRef.surfaceId,
-    surfaceVersion: surfaceRef.surfaceVersion,
-  });
-  const view = input.store.saveSavedView({
-    ...(input.viewId ? { id: input.viewId } : {}),
-    catalogId: surfaceRef.catalogId,
-    catalogVersion: surfaceRef.catalogVersion,
-    name: input.viewName.trim() || "Untitled view",
-    queryId: query.id,
-    spec: {
-      ...spec,
-      query: {
-        ...spec.query,
-        queryId: query.id,
-      },
-    },
-    surfaceId: surfaceRef.surfaceId,
-    surfaceVersion: surfaceRef.surfaceVersion,
-  });
-  return { query, view };
+  return {
+    containerId: input.spec.containerId,
+    ...(input.spec.pagination || input.spec.refresh
+      ? {
+          containerDefaults: {
+            ...(input.spec.pagination ? { pagination: input.spec.pagination } : {}),
+            ...(input.spec.refresh ? { refresh: input.spec.refresh } : {}),
+          },
+        }
+      : {}),
+    name: input.name.trim() || "Untitled view",
+    ownerId: input.ownerId,
+    queryId: input.queryId,
+    ...(input.spec.renderer.definition
+      ? { rendererDefinition: input.spec.renderer.definition }
+      : {}),
+    rendererId: input.spec.renderer.rendererId,
+  };
 }
 
-export async function resolveSavedQueryRecord(input: {
+export function createSavedViewRecordInput(input: {
+  readonly name: string;
+  readonly query: SavedQueryRecord;
+  readonly rendererCapabilities: Readonly<Record<string, QueryRendererCapability>>;
+  readonly spec: Omit<QueryContainerSpec, "query">;
+  readonly surface: QuerySurfaceRendererCompatibility;
+}): SavedViewRecordInput {
+  const definition = createSavedViewDefinitionInput({
+    name: input.name,
+    queryId: input.query.id,
+    rendererCapabilities: input.rendererCapabilities,
+    spec: input.spec,
+    surface: input.surface,
+  });
+  return {
+    catalogId: input.query.catalogId,
+    catalogVersion: input.query.catalogVersion,
+    name: definition.name,
+    queryId: input.query.id,
+    spec: {
+      containerId: definition.containerId,
+      ...(definition.containerDefaults?.pagination
+        ? { pagination: definition.containerDefaults.pagination }
+        : {}),
+      query: {
+        kind: "saved",
+        ...(definition.queryParams ? { params: definition.queryParams } : {}),
+        queryId: input.query.id,
+      },
+      ...(definition.containerDefaults?.refresh
+        ? { refresh: definition.containerDefaults.refresh }
+        : {}),
+      renderer: {
+        ...(definition.rendererDefinition ? { definition: definition.rendererDefinition } : {}),
+        rendererId: definition.rendererId,
+      },
+    },
+    surfaceId: input.query.surfaceId,
+    surfaceVersion: input.query.surfaceVersion,
+  };
+}
+
+export function deriveSavedQueryRecord(query: SavedQueryDefinition): SavedQueryRecord {
+  if (!query.surface) {
+    throw new SavedQuerySaveError(
+      "missing-surface",
+      `Saved query "${query.id}" does not include surface compatibility metadata.`,
+    );
+  }
+  return {
+    catalogId: query.surface.catalogId,
+    catalogVersion: query.surface.catalogVersion,
+    id: query.id,
+    name: query.name,
+    parameterDefinitions: query.parameterDefinitions,
+    request: query.request,
+    surfaceId: query.surface.surfaceId,
+    surfaceVersion: query.surface.surfaceVersion,
+    updatedAt: query.updatedAt.toISOString(),
+  };
+}
+
+export function deriveSavedViewRecord(input: {
+  readonly query: SavedQueryDefinition;
+  readonly view: SavedViewDefinition;
+}): SavedViewRecord {
+  const query = deriveSavedQueryRecord(input.query);
+  return {
+    catalogId: query.catalogId,
+    catalogVersion: query.catalogVersion,
+    id: input.view.id,
+    name: input.view.name,
+    queryId: input.view.queryId,
+    spec: {
+      containerId: input.view.containerId,
+      ...(input.view.containerDefaults?.pagination
+        ? { pagination: input.view.containerDefaults.pagination }
+        : {}),
+      query: {
+        kind: "saved",
+        ...(input.view.queryParams ? { params: input.view.queryParams } : {}),
+        queryId: input.view.queryId,
+      },
+      ...(input.view.containerDefaults?.refresh
+        ? { refresh: input.view.containerDefaults.refresh }
+        : {}),
+      renderer: {
+        ...(input.view.rendererDefinition ? { definition: input.view.rendererDefinition } : {}),
+        rendererId: input.view.rendererId,
+      },
+    },
+    surfaceId: query.surfaceId,
+    surfaceVersion: query.surfaceVersion,
+    updatedAt: input.view.updatedAt.toISOString(),
+  };
+}
+
+export function toSavedQueryDefinitionInput(
+  input: SavedQueryRecordInput,
+  ownerId: string,
+  moduleId: string,
+): SavedQueryDefinitionInput {
+  return {
+    name: input.name,
+    ownerId,
+    parameterDefinitions: input.parameterDefinitions,
+    request: input.request,
+    surface: {
+      moduleId,
+      catalogId: input.catalogId,
+      catalogVersion: input.catalogVersion,
+      surfaceId: input.surfaceId,
+      surfaceVersion: input.surfaceVersion,
+    },
+  };
+}
+
+export function toSavedViewDefinitionInput(
+  input: SavedViewRecordInput,
+  ownerId: string,
+): SavedViewDefinitionInput {
+  return {
+    containerId: input.spec.containerId,
+    ...(input.spec.pagination || input.spec.refresh
+      ? {
+          containerDefaults: {
+            ...(input.spec.pagination ? { pagination: input.spec.pagination } : {}),
+            ...(input.spec.refresh ? { refresh: input.spec.refresh } : {}),
+          },
+        }
+      : {}),
+    name: input.name,
+    ownerId,
+    queryId: input.queryId,
+    ...(input.spec.query.params ? { queryParams: input.spec.query.params } : {}),
+    ...(input.spec.renderer.definition
+      ? { rendererDefinition: input.spec.renderer.definition }
+      : {}),
+    rendererId: input.spec.renderer.rendererId,
+  };
+}
+
+export async function resolveSavedQueryDefinition(input: {
   readonly catalog: QueryEditorCatalog;
   readonly executionContext?: QueryIdentityExecutionContext;
   readonly params?: Readonly<Record<string, QueryLiteral>>;
-  readonly query: SavedQueryRecord;
+  readonly query: SavedQueryDefinition;
 }): Promise<SavedQueryResolution> {
-  const compatibility = validateSavedQueryCompatibility(input.query, input.catalog);
+  const compatibility = validateSavedQueryCompatibility(
+    deriveSavedQueryRecord(input.query),
+    input.catalog,
+  );
   if (!compatibility.ok) {
     const error = new Error(compatibility.message);
     (error as Error & { code: string }).code = compatibility.code;
@@ -407,6 +548,44 @@ export async function resolveSavedQueryRecord(input: {
   };
 }
 
+export async function resolveSavedViewDefinition(input: {
+  readonly catalog: QueryEditorCatalog;
+  readonly executionContext?: QueryIdentityExecutionContext;
+  readonly params?: Readonly<Record<string, QueryLiteral>>;
+  readonly query: SavedQueryDefinition;
+  readonly rendererCapabilities?: Readonly<Record<string, QueryRendererCapability>>;
+  readonly resolveSurfaceCompatibility?: (
+    surfaceId: string,
+  ) => QuerySurfaceRendererCompatibility | undefined;
+  readonly view: SavedViewDefinition;
+}): Promise<SavedViewResolution> {
+  const compatibility = validateSavedViewCompatibility({
+    catalog: input.catalog,
+    query: deriveSavedQueryRecord(input.query),
+    rendererCapabilities: input.rendererCapabilities,
+    resolveSurfaceCompatibility: input.resolveSurfaceCompatibility,
+    view: deriveSavedViewRecord({
+      query: input.query,
+      view: input.view,
+    }),
+  });
+  if (!compatibility.ok) {
+    const error = new Error(compatibility.message);
+    (error as Error & { code: string }).code = compatibility.code;
+    throw error;
+  }
+  const resolvedQuery = await resolveSavedQueryDefinition({
+    catalog: input.catalog,
+    executionContext: input.executionContext,
+    params: input.params ?? input.view.queryParams,
+    query: input.query,
+  });
+  return {
+    ...resolvedQuery,
+    view: input.view,
+  };
+}
+
 export async function resolveSavedViewRecord(input: {
   readonly catalog: QueryEditorCatalog;
   readonly executionContext?: QueryIdentityExecutionContext;
@@ -418,32 +597,19 @@ export async function resolveSavedViewRecord(input: {
   ) => QuerySurfaceRendererCompatibility | undefined;
   readonly view: SavedViewRecord;
 }): Promise<SavedViewResolution> {
-  const compatibility = validateSavedViewCompatibility({
-    catalog: input.catalog,
-    query: input.query,
-    rendererCapabilities: input.rendererCapabilities,
-    resolveSurfaceCompatibility: input.resolveSurfaceCompatibility,
-    view: input.view,
-  });
-  if (!compatibility.ok) {
-    const error = new Error(compatibility.message);
-    (error as Error & { code: string }).code = compatibility.code;
-    throw error;
-  }
-  const resolvedQuery = await resolveSavedQueryRecord({
+  return resolveSavedViewDefinition({
     catalog: input.catalog,
     executionContext: input.executionContext,
-    params: input.params ?? input.view.spec.query.params,
-    query: input.query,
+    params: input.params,
+    query: createDerivedSavedQueryDefinition(input.query),
+    rendererCapabilities: input.rendererCapabilities,
+    resolveSurfaceCompatibility: input.resolveSurfaceCompatibility,
+    view: createDerivedSavedViewDefinition(input.view),
   });
-  return {
-    ...resolvedQuery,
-    view: input.view,
-  };
 }
 
-export function createSavedQuerySourceResolver(
-  store: Pick<SavedQueryStore, "getSavedQuery">,
+export function createSavedQueryRecordSourceResolver(
+  store: SavedQueryRecordLookup,
   options: {
     readonly catalog?: QueryEditorCatalog;
   } = {},
@@ -452,7 +618,7 @@ export function createSavedQuerySourceResolver(
     if (source.kind === "inline") {
       return { request: source.request };
     }
-    const saved = store.getSavedQuery(source.queryId);
+    const saved = await store.getSavedQuery(source.queryId);
     if (!saved) {
       const error = new Error(`Saved query "${source.queryId}" is no longer available.`);
       (error as Error & { code: string }).code = "saved-query-stale";
@@ -520,8 +686,7 @@ export function validateSavedQueryCompatibility(
   if (currentRef.catalogId !== query.catalogId) {
     return {
       code: "stale-query",
-      message:
-        `Saved query "${query.id}" references removed query catalog ` + `"${query.catalogId}".`,
+      message: `Saved query "${query.id}" references removed query catalog "${query.catalogId}".`,
       ok: false,
     };
   }
@@ -617,7 +782,7 @@ export function validateSavedViewCompatibility(input: {
     };
   }
   if (surfaceCompatibility && rendererCapabilities) {
-    const containerValidation = validateQueryContainerSpec(view.spec, {
+    const containerValidation = validateQueryContainerSpec(createSavedViewContainerSpec(view), {
       rendererCapabilities,
       surface: surfaceCompatibility,
     });
@@ -637,7 +802,127 @@ export function validateSavedViewCompatibility(input: {
   };
 }
 
-function requireInstalledSurfaceRef(surface: QueryEditorSurfaceSpec): SavedQuerySurfaceRef {
+function createSavedViewContainerSpec(view: SavedViewRecord): QueryContainerSpec {
+  return {
+    containerId: view.spec.containerId,
+    ...(view.spec.pagination ? { pagination: view.spec.pagination } : {}),
+    query: {
+      kind: "saved",
+      ...(view.spec.query.params ? { params: view.spec.query.params } : {}),
+      queryId: view.queryId,
+    },
+    ...(view.spec.refresh ? { refresh: view.spec.refresh } : {}),
+    renderer: {
+      ...(view.spec.renderer.definition ? { definition: view.spec.renderer.definition } : {}),
+      rendererId: view.spec.renderer.rendererId,
+    },
+  };
+}
+
+function createDerivedSavedQueryDefinition(record: SavedQueryRecord): SavedQueryDefinition {
+  return {
+    createdAt: new Date(record.updatedAt),
+    definitionHash: `derived:${record.id}`,
+    id: record.id,
+    kind: record.request.query.kind,
+    name: record.name,
+    ownerId: "derived-owner",
+    parameterDefinitions: record.parameterDefinitions,
+    request: record.request,
+    surface: {
+      catalogId: record.catalogId,
+      catalogVersion: record.catalogVersion,
+      moduleId: "derived-module",
+      surfaceId: record.surfaceId,
+      surfaceVersion: record.surfaceVersion,
+    },
+    updatedAt: new Date(record.updatedAt),
+  };
+}
+
+function createDerivedSavedViewDefinition(record: SavedViewRecord): SavedViewDefinition {
+  return {
+    containerId: record.spec.containerId,
+    ...(record.spec.pagination || record.spec.refresh
+      ? {
+          containerDefaults: {
+            ...(record.spec.pagination ? { pagination: record.spec.pagination } : {}),
+            ...(record.spec.refresh ? { refresh: record.spec.refresh } : {}),
+          },
+        }
+      : {}),
+    createdAt: new Date(record.updatedAt),
+    id: record.id,
+    name: record.name,
+    ownerId: "derived-owner",
+    queryId: record.queryId,
+    ...(record.spec.query.params ? { queryParams: record.spec.query.params } : {}),
+    ...(record.spec.renderer.definition
+      ? { rendererDefinition: record.spec.renderer.definition }
+      : {}),
+    rendererId: record.spec.renderer.rendererId,
+    updatedAt: new Date(record.updatedAt),
+  };
+}
+
+function resolveOwnerId(
+  label: string,
+  inputOwnerId: string | undefined,
+  defaultOwnerId?: string,
+): string {
+  const ownerId = inputOwnerId?.trim() || defaultOwnerId?.trim();
+  if (!ownerId) {
+    throw new SavedQuerySaveError(
+      "missing-owner-id",
+      `${label} writes require a non-empty owner id.`,
+    );
+  }
+  return ownerId;
+}
+
+function matchesOwner(recordOwnerId: string, ownerId?: string): boolean {
+  return ownerId ? recordOwnerId === ownerId : true;
+}
+
+async function readRawSavedQuery(
+  graph: SavedQueryGraphClient,
+  id: string,
+): Promise<SavedQueryDefinition | undefined> {
+  if (!graph.savedQuery.list().some((entry) => entry.id === id)) {
+    return undefined;
+  }
+  return readSavedQueryDefinition(graph, id);
+}
+
+async function readOwnedSavedQuery(
+  graph: SavedQueryGraphClient,
+  id: string,
+  ownerId?: string,
+): Promise<SavedQueryDefinition | undefined> {
+  const query = await readRawSavedQuery(graph, id);
+  return query && matchesOwner(query.ownerId, ownerId) ? query : undefined;
+}
+
+async function readRawSavedView(
+  graph: SavedQueryGraphClient,
+  id: string,
+): Promise<SavedViewDefinition | undefined> {
+  if (!graph.savedView.list().some((entry) => entry.id === id)) {
+    return undefined;
+  }
+  return readSavedViewDefinition(graph, id);
+}
+
+async function readOwnedSavedView(
+  graph: SavedQueryGraphClient,
+  id: string,
+  ownerId?: string,
+): Promise<SavedViewDefinition | undefined> {
+  const view = await readRawSavedView(graph, id);
+  return view && matchesOwner(view.ownerId, ownerId) ? view : undefined;
+}
+
+function requireInstalledSurfaceRef(surface: QueryEditorSurfaceSpec): SavedQuerySurfaceBinding {
   const ref = readInstalledSurfaceRef(surface);
   if (!ref) {
     throw new SavedQuerySaveError(
@@ -650,13 +935,15 @@ function requireInstalledSurfaceRef(surface: QueryEditorSurfaceSpec): SavedQuery
 
 function readInstalledSurfaceRef(
   surface: QueryEditorSurfaceSpec,
-): SavedQuerySurfaceRef | undefined {
+): SavedQuerySurfaceBinding | undefined {
+  const moduleId = readTrimmedString(surface.moduleId);
   const catalogId = readTrimmedString(surface.catalogId);
   const catalogVersion = readTrimmedString(surface.catalogVersion);
-  if (!catalogId || !catalogVersion) {
+  if (!moduleId || !catalogId || !catalogVersion) {
     return undefined;
   }
   return {
+    moduleId,
     catalogId,
     catalogVersion,
     surfaceId: surface.surfaceId,
@@ -664,57 +951,13 @@ function readInstalledSurfaceRef(
   };
 }
 
-function readPersistedSavedQueryStore(
-  storage: SavedQueryStorage,
-  key: string,
-): {
-  readonly queries?: readonly SavedQueryRecord[];
-  readonly views?: readonly SavedViewRecord[];
-} {
-  const raw = storage.getItem(key);
-  if (!raw) {
-    return {};
-  }
-  try {
-    const parsed = JSON.parse(raw) as {
-      readonly queries?: readonly SavedQueryRecord[];
-      readonly version?: number;
-      readonly views?: readonly SavedViewRecord[];
-    };
-    if (parsed.version !== savedQueryStoreVersion) {
-      storage.removeItem(key);
-      return {};
-    }
-    return {
-      queries: parsed.queries?.filter(isSavedQueryRecord) ?? [],
-      views: parsed.views?.filter(isSavedViewRecord) ?? [],
-    };
-  } catch {
-    storage.removeItem(key);
-    return {};
-  }
-}
-
-function writePersistedSavedQueryStore(
-  storage: SavedQueryStorage,
-  key: string,
-  store: Pick<SavedQueryStore, "listSavedQueries" | "listSavedViews">,
-): void {
-  storage.setItem(
-    key,
-    JSON.stringify({
-      queries: store.listSavedQueries(),
-      version: savedQueryStoreVersion,
-      views: store.listSavedViews(),
-    }),
-  );
-}
-
 function compareSavedEntries(
-  left: { readonly name: string; readonly updatedAt: string },
-  right: { readonly name: string; readonly updatedAt: string },
+  left: { readonly name: string; readonly updatedAt: Date },
+  right: { readonly name: string; readonly updatedAt: Date },
 ): number {
-  return right.updatedAt.localeCompare(left.updatedAt) || left.name.localeCompare(right.name);
+  return (
+    right.updatedAt.getTime() - left.updatedAt.getTime() || left.name.localeCompare(right.name)
+  );
 }
 
 function readTrimmedString(value: unknown): string | undefined {
@@ -760,69 +1003,4 @@ function formatValidationIssue(
     | undefined,
 ): string {
   return issue ? `${issue.path} ${issue.message}` : "Unknown validation issue.";
-}
-
-function isSavedQueryRecord(value: unknown): value is SavedQueryRecord {
-  if (!value || typeof value !== "object") {
-    return false;
-  }
-  const candidate = value as Partial<SavedQueryRecord>;
-  return (
-    typeof candidate.catalogId === "string" &&
-    typeof candidate.catalogVersion === "string" &&
-    typeof candidate.id === "string" &&
-    typeof candidate.name === "string" &&
-    typeof candidate.surfaceId === "string" &&
-    typeof candidate.surfaceVersion === "string" &&
-    typeof candidate.updatedAt === "string" &&
-    Array.isArray(candidate.parameterDefinitions) &&
-    Boolean(candidate.request)
-  );
-}
-
-function isSavedViewRecord(value: unknown): value is SavedViewRecord {
-  if (!value || typeof value !== "object") {
-    return false;
-  }
-  const candidate = value as Partial<SavedViewRecord>;
-  return (
-    typeof candidate.catalogId === "string" &&
-    typeof candidate.catalogVersion === "string" &&
-    typeof candidate.id === "string" &&
-    typeof candidate.name === "string" &&
-    typeof candidate.queryId === "string" &&
-    typeof candidate.surfaceId === "string" &&
-    typeof candidate.surfaceVersion === "string" &&
-    typeof candidate.updatedAt === "string" &&
-    Boolean(candidate.spec)
-  );
-}
-
-function readNextSavedEntrySequence(
-  ids: IterableIterator<string>,
-  prefix: typeof savedQueryIdPrefix | typeof savedViewIdPrefix,
-): number {
-  let max = 0;
-  for (const id of ids) {
-    const sequence = readSavedEntrySequence(id, prefix);
-    if (sequence !== undefined && sequence > max) {
-      max = sequence;
-    }
-  }
-  return max + 1;
-}
-
-function readSavedEntrySequence(
-  id: string,
-  prefix: typeof savedQueryIdPrefix | typeof savedViewIdPrefix,
-): number | undefined {
-  if (!id.startsWith(prefix)) {
-    return undefined;
-  }
-  const suffix = id.slice(prefix.length);
-  const sequence = Number.parseInt(suffix, 10);
-  if (!Number.isInteger(sequence) || sequence <= 0 || `${sequence}` !== suffix) {
-    return undefined;
-  }
-  return sequence;
 }
