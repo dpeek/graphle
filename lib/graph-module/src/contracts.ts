@@ -1,4 +1,5 @@
 import type { GraphCommandPolicy } from "@io/graph-authority";
+import type { DefinitionIconRef } from "@io/graph-kernel";
 
 /**
  * One field row inside an authored object-view section.
@@ -42,6 +43,188 @@ export type ObjectViewSpec = {
   readonly sections: readonly ObjectViewSectionSpec[];
   readonly related?: readonly ObjectViewRelatedSpec[];
   readonly commands?: readonly string[];
+};
+
+/**
+ * One reusable field binding inside an authored record surface. This stays
+ * structurally aligned with `ObjectViewFieldSpec` so existing field rows can
+ * migrate without reshaping authored layout data.
+ */
+export type RecordSurfaceFieldSpec = ObjectViewFieldSpec;
+
+/**
+ * One section inside an authored record surface. This stays structurally
+ * aligned with `ObjectViewSectionSpec` so current object-view section data has
+ * a direct compatibility path into the newer record-surface model.
+ */
+export type RecordSurfaceSectionSpec = ObjectViewSectionSpec;
+
+/**
+ * Related content attached to a record surface. The authored record surface
+ * references a reusable collection-surface key rather than owning route or
+ * renderer composition directly.
+ */
+export type RecordSurfaceRelatedContentSpec = {
+  readonly key: string;
+  readonly title: string;
+  readonly description?: string;
+  readonly collection: string;
+};
+
+/**
+ * Pure, host-neutral record presentation contract authored beside one type or
+ * small module slice.
+ */
+export type RecordSurfaceSpec = {
+  readonly key: string;
+  readonly subject: string;
+  readonly titleField?: string;
+  readonly subtitleField?: string;
+  readonly sections: readonly RecordSurfaceSectionSpec[];
+  readonly related?: readonly RecordSurfaceRelatedContentSpec[];
+  readonly commandSurfaces?: readonly string[];
+};
+
+/**
+ * High-level collection renderer shapes supported by authored surface specs.
+ */
+export type CollectionSurfacePresentationKind = "list" | "table" | "board" | "cardGrid";
+
+/**
+ * Pure data hints that let a host choose a collection presentation without
+ * embedding layout or component ownership into the authored contract.
+ */
+export type CollectionSurfacePresentationHints = {
+  readonly kind: CollectionSurfacePresentationKind;
+  readonly fields?: readonly string[];
+  readonly recordSurface?: string;
+};
+
+/**
+ * One durable collection source for an authored collection surface.
+ */
+export type CollectionSurfaceSourceSpec =
+  | {
+      readonly kind: "entityType";
+      readonly entity: string;
+    }
+  | {
+      readonly kind: "relation";
+      readonly subject: string;
+      readonly relationPath: string;
+    }
+  | {
+      readonly kind: "query";
+      readonly query: string;
+      readonly savedView?: string;
+    };
+
+/**
+ * Pure, host-neutral collection presentation contract authored beside schema
+ * and command metadata.
+ */
+export type CollectionSurfaceSpec = {
+  readonly key: string;
+  readonly title: string;
+  readonly description?: string;
+  readonly source: CollectionSurfaceSourceSpec;
+  readonly presentation: CollectionSurfacePresentationHints;
+  readonly commandSurfaces?: readonly string[];
+};
+
+/**
+ * Host scopes that may provide context for a command surface without turning
+ * route or shell composition into part of the authored command contract.
+ */
+export type GraphCommandSurfaceScope = "route" | "record" | "collection" | "workflow";
+
+/**
+ * Subject models supported by the authored command-surface layer.
+ */
+export type GraphCommandSurfaceSubjectModel =
+  | {
+      readonly kind: "none";
+    }
+  | {
+      readonly kind: "entity";
+      readonly entity: string;
+    }
+  | {
+      readonly kind: "selection";
+      readonly entity: string;
+    }
+  | {
+      readonly kind: "scope";
+      readonly scope: GraphCommandSurfaceScope;
+    };
+
+/**
+ * Host-neutral input presentation hints for one authored command surface.
+ */
+export type GraphCommandSurfaceInputPresentation =
+  | {
+      readonly kind: "inline";
+    }
+  | {
+      readonly kind: "dialog";
+    }
+  | {
+      readonly kind: "sheet";
+    }
+  | {
+      readonly kind: "dedicatedForm";
+    };
+
+/**
+ * How the host should stage submit semantics for one command invocation.
+ */
+export type GraphCommandSurfaceSubmitBehavior =
+  | {
+      readonly kind: "optimistic";
+    }
+  | {
+      readonly kind: "blocking";
+    }
+  | {
+      readonly kind: "confirm";
+      readonly title?: string;
+      readonly message?: string;
+      readonly confirmLabel?: string;
+    };
+
+/**
+ * Declarative follow-up behaviors after a command completes successfully.
+ */
+export type GraphCommandSurfacePostSuccessBehavior =
+  | {
+      readonly kind: "refresh";
+    }
+  | {
+      readonly kind: "close";
+    }
+  | {
+      readonly kind: "navigate";
+      readonly target: string;
+    }
+  | {
+      readonly kind: "openCreatedEntity";
+      readonly entity?: string;
+    };
+
+/**
+ * UI-facing authored contract that describes how a human invokes a graph
+ * command without taking execution or policy ownership away from
+ * `GraphCommandSpec`.
+ */
+export type GraphCommandSurfaceSpec = {
+  readonly key: string;
+  readonly command: string;
+  readonly label?: string;
+  readonly icon?: DefinitionIconRef;
+  readonly subject: GraphCommandSurfaceSubjectModel;
+  readonly inputPresentation: GraphCommandSurfaceInputPresentation;
+  readonly submitBehavior: GraphCommandSurfaceSubmitBehavior;
+  readonly postSuccess: readonly GraphCommandSurfacePostSuccessBehavior[];
 };
 
 /**

@@ -63,8 +63,9 @@ above `@io/graph-kernel`:
 
 - type-module authoring helpers
 - existing-entity reference authoring policy
-- pure definition-time contracts such as `ObjectViewSpec`, `WorkflowSpec`, and
-  `GraphCommandSpec`
+- pure definition-time contracts such as `ObjectViewSpec`,
+  `RecordSurfaceSpec`, `CollectionSurfaceSpec`, `WorkflowSpec`,
+  `GraphCommandSurfaceSpec`, and `GraphCommandSpec`
 
 Naming note:
 
@@ -76,9 +77,9 @@ Naming note:
 Key source files:
 
 - `../../lib/graph-module/src/index.ts`
-- `../../lib/graph-module/src/type-module.ts`
-- `../../lib/graph-module/src/reference-policy.ts`
-- `../../lib/graph-module/src/definition-contracts.ts`
+- `../../lib/graph-module/src/type.ts`
+- `../../lib/graph-module/src/reference.ts`
+- `../../lib/graph-module/src/contracts.ts`
 
 ### `@io/graph-module-core` Package
 

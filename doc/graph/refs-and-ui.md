@@ -45,19 +45,21 @@ Relevant source:
 
 ## UI-Adjacent Contracts
 
-Across `@io/graph-client` and the root `@io/app/graph` surface, the engine
-exposes enough surface for higher-level UI work:
+Across `@io/graph-client` and `@io/graph-module`, the engine exposes enough
+surface for higher-level UI work:
 
 - field metadata and filter contracts from type modules
 - predicate-local subscriptions
 - structured validation results suitable for inline field errors
-- host-independent `ObjectViewSpec`, `WorkflowSpec`, and `GraphCommandSpec`
-  contracts for schema-adjacent layout, workflow, and command metadata
-- root-exported reference-policy helpers such as
+- host-independent `ObjectViewSpec`, `RecordSurfaceSpec`,
+  `CollectionSurfaceSpec`, `WorkflowSpec`, `GraphCommandSurfaceSpec`, and
+  `GraphCommandSpec` contracts for schema-adjacent layout, workflow, and
+  command metadata
+- module-exported reference-policy helpers such as
   `existingEntityReferenceField(...)` and
   `existingEntityReferenceFieldMeta(...)`
 
-What the root engine entry does not ship:
+What those package surfaces do not ship:
 
 - React hooks or components
 - host capability registries or default DOM widgets
@@ -106,8 +108,9 @@ the same host-neutral runtime provider and query hooks directly from
 
 ## Boundary Rules
 
-- `ObjectViewSpec`, `WorkflowSpec`, and `GraphCommandSpec` stay on the root
-  `@io/app/graph` surface as pure data contracts
+- `ObjectViewSpec`, `RecordSurfaceSpec`, `CollectionSurfaceSpec`,
+  `WorkflowSpec`, `GraphCommandSurfaceSpec`, and `GraphCommandSpec` stay on
+  `@io/graph-module` as pure data contracts
 - `@io/graph-react` may read those root-safe contracts and
   type-module metadata, but it should not introduce DOM tags, route
   registration, or authoritative command execution
@@ -157,12 +160,15 @@ code.
 - predicate-local invalidation
 - cardinality-aware field mutation
 - metadata/filter authoring primitives
-- root-safe object-view, workflow, and command contracts
+- root-safe object-view, record-surface, collection-surface, workflow, and
+  command contracts
 - narrow reference-policy helpers for entity-reference fields
 
 ### In Adapters Or App
 
-- generic object or workflow renderers over `ObjectViewSpec` and `WorkflowSpec`
+- generic object, record, collection, workflow, or command-surface renderers
+  over `ObjectViewSpec`, `RecordSurfaceSpec`, `CollectionSurfaceSpec`,
+  `WorkflowSpec`, and `GraphCommandSurfaceSpec`
 - schema-driven form composition
 - richer relationship policies beyond existing-only selection
 - full collection UX conventions for every `many` field shape

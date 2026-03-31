@@ -23,15 +23,16 @@ The current stack has strong low-level primitives:
 - field metadata and reference policy on type modules
 - host-neutral predicate refs and field resolvers
 - browser field editors and views in the default DOM adapter
-- root-safe `ObjectViewSpec`, `WorkflowSpec`, and `GraphCommandSpec`
+- root-safe `ObjectViewSpec`, `RecordSurfaceSpec`, `CollectionSurfaceSpec`,
+  `WorkflowSpec`, `GraphCommandSurfaceSpec`, and `GraphCommandSpec`
 
 That is enough to render individual predicates well, but it is not yet enough
 to describe most product surfaces coherently.
 
-The missing pieces are:
+The remaining missing pieces are:
 
-- a first-class collection surface contract
-- a UI-facing command boundary
+- browser and route-level composition over the authored collection and command
+  surfaces
 - an explicit edit-session model for draft handling and commit timing
 - one validation model that spans field parsing, predicate validation, form
   composition, command validation, and authoritative failures
@@ -96,6 +97,25 @@ need:
 - one command surface for business actions
 - one future route spec that points at those surfaces
 
+### Current Exported Contract Guidance
+
+The current root-safe authored surface exports on `@io/graph-module` should be
+treated as:
+
+- `ObjectViewSpec`: the compatibility-oriented current record-view descriptor
+  for callers that already key authored layout by object view
+- `RecordSurfaceSpec`: the preferred authored record-surface contract for new
+  work, with field and section shapes intentionally aligned with
+  `ObjectViewSpec`
+- `CollectionSurfaceSpec`: the authored collection export; "collection view"
+  in this doc refers to the product concept rather than a second root contract
+- `WorkflowSpec`: the stable authored flow descriptor that still references
+  `ObjectViewSpec` and `GraphCommandSpec` keys while record-surface and
+  command-surface host composition settles
+- `GraphCommandSpec`: execution, policy, and I/O shape only
+- `GraphCommandSurfaceSpec`: the human-invocation layer for dialog, sheet,
+  confirmation, and post-success behavior
+
 ### Edit-Session Layer
 
 An edit session is the missing abstraction between predicate renderers and
@@ -127,6 +147,9 @@ stable.
 ### Record View
 
 The current `ObjectViewSpec` is the seed of a record view contract.
+The first explicitly named authored export for that direction is
+`RecordSurfaceSpec`, which intentionally stays structurally aligned with the
+current object-view field and section shapes.
 
 That contract should describe:
 
@@ -143,6 +166,9 @@ rather than a generic "object" abstraction.
 
 `entity-type-browser` is really a collection-detail surface, not a reference
 editor.
+The current authored export name for this layer is `CollectionSurfaceSpec`;
+`CollectionView` here refers to the broader product concept rather than a
+separate root-safe type.
 
 A collection view should describe:
 
@@ -209,6 +235,12 @@ the higher-level collection surface focus on actions and editing semantics.
 
 `GraphCommandSpec` should stay focused on execution, policy, touched
 predicates, and I/O shape.
+
+The first authored UI-facing command layer should live beside it as
+`GraphCommandSurfaceSpec`.
+That split is intentional: record and collection surfaces should reference
+command-surface keys for human invocation metadata, while raw command keys stay
+the execution and workflow compatibility seam.
 
 Most UIs still need an adjacent contract describing how a human invokes that
 command:
@@ -441,9 +473,9 @@ Owns:
 2. Evolve predicate field capabilities so they render against field
    controllers and issue sets instead of deciding persistence timing
    internally.
-3. Introduce a collection-view contract beside the existing record and
-   workflow contracts.
-4. Introduce a UI-facing command-surface contract adjacent to
+3. Extend and stabilize the collection-view contract beside the existing
+   record and workflow contracts.
+4. Extend and stabilize the UI-facing command-surface contract adjacent to
    `GraphCommandSpec`.
 5. Build one generic browser surface in `app/web` that can render record,
    collection, and command surfaces from those contracts.

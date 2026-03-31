@@ -3,15 +3,17 @@
 ## Purpose
 
 This document is the entry point for scalar and enum families, field metadata
-and filter contracts, and the pure object-view, workflow, and command
-contracts that live beside graph-owned types.
+and filter contracts, plus the pure object-view, record-surface,
+collection-surface, workflow, command-surface, and command contracts that live
+beside graph-owned types.
 
 ## Package Surfaces
 
-`../../lib/graph-module/src/type-module.ts` defines the module-authoring
+`../../lib/graph-module/src/type.ts` defines the module-authoring
 surface. `../../lib/graph-module/src/index.ts` re-exports the curated authoring
-subset, and `../../lib/graph-module/src/definition-contracts.ts` holds the pure
-shared contracts for object views, workflows, and command descriptors.
+subset, and `../../lib/graph-module/src/contracts.ts` holds the pure shared
+contracts for object views, record surfaces, collection surfaces, workflows,
+command surfaces, and command descriptors.
 
 Naming:
 
@@ -26,7 +28,8 @@ Canonical imports:
 
 - `@io/graph-module`: focused schema and type-module authoring helpers from
   `../../lib/graph-module/src/index.ts`, including `TypeModule`,
-  `ObjectViewSpec`, `WorkflowSpec`, and `GraphCommandSpec`
+  `ObjectViewSpec`, `RecordSurfaceSpec`, `CollectionSurfaceSpec`,
+  `WorkflowSpec`, `GraphCommandSurfaceSpec`, and `GraphCommandSpec`
 - `@io/app/graph`: small root helper surface for curated kernel aliases,
   and icon helpers
 - `@io/graph-module-core`: canonical built-in `core:` namespace plus the
@@ -35,7 +38,7 @@ Canonical imports:
 - `@io/graph-authority`: authority-owned permission/admission/share contracts
   such as `ModulePermissionRequest` and `ModulePermissionApprovalRecord`
 
-Exported building blocks in `../../lib/graph-module/src/type-module.ts`
+Exported building blocks in `../../lib/graph-module/src/type.ts`
 include:
 
 - `defineScalarModule(...)`
@@ -73,10 +76,29 @@ The frozen contract is:
 - provider metadata semantics and external KMS bindings are outside this helper
   and remain provisional
 
+## Authored Surface Naming And Compatibility
+
+- `ObjectViewSpec` remains the compatibility-oriented current record-view
+  descriptor for callers that already traffic in object-view keys.
+- `RecordSurfaceSpec` is the preferred authored record-surface name for new
+  work. It intentionally reuses the object-view field and section shapes so
+  authored layout data can migrate without reshaping.
+- `CollectionSurfaceSpec` is the current authored collection export. This doc
+  may still use "collection view" as the product concept, but downstream
+  callers should not invent a second root `CollectionView` contract.
+- `WorkflowSpec` remains the stable authored flow descriptor and still
+  references `objectView` and raw `command` keys as the current compatibility
+  seam while record-surface and command-surface composition stabilizes.
+- `GraphCommandSpec` owns execution mode, I/O, and policy only. Dialog,
+  sheet, confirmation, and post-success UI behavior belong on
+  `GraphCommandSurfaceSpec`.
+
 ## `ObjectViewSpec`
 
 Use `ObjectViewSpec` for reusable, host-independent object presentation
 metadata that belongs with one type or a very small slice of related types.
+It remains the current compatibility-oriented seed for the broader
+record-surface model.
 
 Current fields:
 
@@ -85,10 +107,49 @@ Current fields:
 - `sections` groups reusable field layout metadata
 - `related` lists reusable related-entity presentations such as `list`,
   `table`, or `board`
-- `commands` advertises command keys the view can surface
+- `commands` advertises direct command keys the compatibility view can surface
 
 This contract stays pure data. React composition, DOM layout, route ownership,
 and browser event handling stay out of it.
+
+## `RecordSurfaceSpec`
+
+Use `RecordSurfaceSpec` for the first explicitly named record-surface contract
+that sits between schema metadata and route-local UI composition.
+
+Current fields:
+
+- `key` and `subject` identify the record surface and its subject type
+- `titleField` and `subtitleField` preserve the current summary-field affordance
+- `sections` reuses the object-view field and section shape for a direct
+  migration path
+- `related` references reusable collection-surface keys instead of embedding
+  route or host ownership
+- `commandSurfaces` lists referenced command-surface keys the host may surface
+  for the record
+
+This keeps the authored contract pure data while creating a durable bridge
+from today's object-view layout metadata to broader record-surface work.
+
+## `CollectionSurfaceSpec`
+
+Use `CollectionSurfaceSpec` for the first authored collection-surface contract
+that can describe durable list, table, board, or card-grid surfaces without
+pulling in route, transport, or React ownership.
+
+Current fields:
+
+- `key`, `title`, and optional `description`
+- `source`, where the first authored kinds are `entityType`, `relation`, and
+  `query`
+- `presentation.kind` for the high-level renderer hint
+- `presentation.fields` and optional `presentation.recordSurface` for basic
+  column or card binding hints
+- `commandSurfaces` for referenced command-surface keys the host may surface
+  at the collection level
+
+This stays intentionally narrow. Query execution, selection state, create
+flows, and authoritative command wiring still belong to later layers.
 
 ## `WorkflowSpec`
 
@@ -106,6 +167,9 @@ Current fields:
 
 Type-local workflows can live beside a type. Cross-type workflows can live in a
 small graph-owned workflow module, but the contract itself stays root-safe.
+That compatibility seam is intentional: keep workflow steps keyed to
+`ObjectViewSpec` and `GraphCommandSpec` until the broader record-surface and
+command-surface host composition is proven end to end.
 
 ## `GraphCommandSpec`
 
@@ -123,6 +187,33 @@ Current fields:
 
 The descriptor belongs in `@io/graph-module`. The authoritative
 implementation, transport wiring, and route ownership still belong in `app`.
+Do not move human-invocation details such as sheets, dialogs, confirmation, or
+post-success navigation onto this type; those stay on
+`GraphCommandSurfaceSpec`.
+
+## `GraphCommandSurfaceSpec`
+
+Use `GraphCommandSurfaceSpec` for the authored UI-facing layer that describes
+how a human invokes one `GraphCommandSpec` without moving execution or policy
+ownership out of the command descriptor.
+
+Current fields:
+
+- `key` and `command`, where `command` references the durable
+  `GraphCommandSpec.key`
+- optional `label` and `icon` overrides for the invocation affordance
+- `subject`, where the first authored models are `none`, `entity`,
+  `selection`, and `scope`
+- `inputPresentation`, where the first authored kinds are `inline`, `dialog`,
+  `sheet`, and `dedicatedForm`
+- `submitBehavior`, where the first authored kinds are `optimistic`,
+  `blocking`, and `confirm`
+- `postSuccess` for follow-up behaviors such as `refresh`, `close`,
+  `navigate`, and `openCreatedEntity`
+
+Record and collection surfaces now reference command-surface keys rather than
+raw command keys so the UI-facing invocation layer stays explicit in authored
+surface composition.
 
 ## `ModulePermissionRequest`
 
@@ -184,8 +275,8 @@ Examples:
 - `../../lib/graph-module-core/src/app/string.ts`
 - `../../lib/graph-module-core/src/app/number.ts`
 - `../../lib/graph-module-core/src/app/boolean.ts`
-- `../../lib/graph-module/src/enum-module.ts`
-- `../../lib/graph-module/src/validated-string.ts`
+- `../../lib/graph-module/src/enum.ts`
+- `../../lib/graph-module/src/string.ts`
 
 ## Per-Type Authoring Layout
 

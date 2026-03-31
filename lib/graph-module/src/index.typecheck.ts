@@ -1,6 +1,10 @@
 import { isSecretBackedField } from "@io/graph-kernel";
 
 import {
+  type CollectionSurfaceSpec,
+  type CollectionSurfacePresentationHints,
+  type CollectionSurfacePresentationKind,
+  type CollectionSurfaceSourceSpec,
   defineDefaultEnumTypeModule,
   defineEnum,
   defineReferenceField,
@@ -10,10 +14,25 @@ import {
   defineType,
   defineValidatedStringTypeModule,
   existingEntityReferenceField,
+  type GraphCommandExecution,
   type GraphCommandSpec,
+  type GraphCommandSurfaceSpec,
+  type GraphCommandSurfaceInputPresentation,
+  type GraphCommandSurfacePostSuccessBehavior,
+  type GraphCommandSurfaceScope,
+  type GraphCommandSurfaceSubjectModel,
+  type GraphCommandSurfaceSubmitBehavior,
   type GraphSecretFieldAuthority,
+  type ObjectViewFieldSpec,
+  type ObjectViewRelatedSpec,
+  type ObjectViewSectionSpec,
   type ObjectViewSpec,
+  type RecordSurfaceFieldSpec,
+  type RecordSurfaceRelatedContentSpec,
+  type RecordSurfaceSectionSpec,
+  type RecordSurfaceSpec,
   type TypeModule,
+  type WorkflowStepSpec,
   type WorkflowSpec,
 } from "./index.js";
 
@@ -246,6 +265,110 @@ void defineScalarModule({
   },
 });
 
+const probeObjectFields = [
+  { path: "name", label: "Name", span: 2 },
+] satisfies readonly ObjectViewFieldSpec[];
+void (probeObjectFields satisfies readonly RecordSurfaceFieldSpec[]);
+
+const probeObjectSections = [
+  {
+    key: "summary",
+    title: "Summary",
+    fields: probeObjectFields,
+  },
+] satisfies readonly ObjectViewSectionSpec[];
+void (probeObjectSections satisfies readonly RecordSurfaceSectionSpec[]);
+
+void ([
+  {
+    key: "relatedItems",
+    title: "Related items",
+    relationPath: "relatedItems",
+    presentation: "table",
+  },
+] satisfies readonly ObjectViewRelatedSpec[]);
+
+void ([
+  {
+    key: "relatedItems",
+    title: "Related items",
+    collection: "probe:relatedItems",
+  },
+] satisfies readonly RecordSurfaceRelatedContentSpec[]);
+
+const probeCollectionPresentationKind: CollectionSurfacePresentationKind = "cardGrid";
+void probeCollectionPresentationKind;
+
+void ({
+  kind: "table",
+  fields: ["name", "status"],
+  recordSurface: "probe:record",
+} satisfies CollectionSurfacePresentationHints);
+
+void ({
+  kind: "query",
+  query: "probe:savedQuery",
+  savedView: "probe:savedView",
+} satisfies CollectionSurfaceSourceSpec);
+
+const probeCommandSurfaceScope: GraphCommandSurfaceScope = "collection";
+void probeCommandSurfaceScope;
+
+void ({
+  kind: "scope",
+  scope: probeCommandSurfaceScope,
+} satisfies GraphCommandSurfaceSubjectModel);
+
+void ({
+  kind: "dedicatedForm",
+} satisfies GraphCommandSurfaceInputPresentation);
+
+void ({
+  kind: "confirm",
+  title: "Save probe",
+  confirmLabel: "Save",
+} satisfies GraphCommandSurfaceSubmitBehavior);
+
+void ([
+  { kind: "navigate", target: "/probes" },
+  { kind: "openCreatedEntity", entity: probeEntityType.values.key },
+] satisfies readonly GraphCommandSurfacePostSuccessBehavior[]);
+
+const probeCommandExecution: GraphCommandExecution = "serverOnly";
+void probeCommandExecution;
+
+void ([
+  {
+    key: "review",
+    title: "Review",
+    objectView: "probe:view",
+  },
+  {
+    key: "save",
+    title: "Save",
+    command: "probe:save",
+  },
+] satisfies readonly WorkflowStepSpec[]);
+
+void ({
+  key: "probe:workflow-step",
+  title: "Review",
+  // @ts-expect-error workflow steps stay keyed to object-view compatibility ids for now
+  recordSurface: "probe:record",
+} satisfies WorkflowStepSpec);
+
+void ({
+  key: "probe:save",
+  label: "Save probe",
+  execution: "serverOnly",
+  input: undefined,
+  output: undefined,
+  // @ts-expect-error UI invocation metadata belongs on GraphCommandSurfaceSpec
+  inputPresentation: {
+    kind: "dialog",
+  },
+} satisfies GraphCommandSpec);
+
 void ({
   key: "probe:view",
   entity: probeEntityType.values.key,
@@ -259,6 +382,84 @@ void ({
   ],
   commands: ["probe:save"],
 } satisfies ObjectViewSpec);
+
+void ({
+  key: "probe:record",
+  subject: probeEntityType.values.key,
+  titleField: "name",
+  subtitleField: "status",
+  sections: [
+    {
+      key: "summary",
+      title: "Summary",
+      description: "Probe record surface sections stay aligned with object-view fields.",
+      fields: [
+        { path: "name", label: "Name", span: 2 },
+        { path: "status", label: "Status" },
+      ],
+    },
+  ],
+  related: [
+    {
+      key: "relatedItems",
+      title: "Related items",
+      collection: "probe:relatedItems",
+    },
+  ],
+  commandSurfaces: ["probe:saveRecord"],
+} satisfies RecordSurfaceSpec);
+
+void ({
+  key: "probe:relatedItems",
+  title: "Related items",
+  description: "Show probe entities related to the current record subject.",
+  source: {
+    kind: "relation",
+    subject: probeEntityType.values.key,
+    relationPath: "relatedItems",
+  },
+  presentation: {
+    kind: "table",
+    fields: ["name", "status"],
+    recordSurface: "probe:record",
+  },
+  commandSurfaces: ["probe:saveSelection"],
+} satisfies CollectionSurfaceSpec);
+
+void ({
+  key: "probe:saveRecord",
+  command: "probe:save",
+  label: "Save probe",
+  subject: {
+    kind: "entity",
+    entity: probeEntityType.values.key,
+  },
+  inputPresentation: {
+    kind: "sheet",
+  },
+  submitBehavior: {
+    kind: "blocking",
+  },
+  postSuccess: [{ kind: "refresh" }, { kind: "close" }],
+} satisfies GraphCommandSurfaceSpec);
+
+void ({
+  key: "probe:saveSelection",
+  command: "probe:save",
+  subject: {
+    kind: "selection",
+    entity: probeEntityType.values.key,
+  },
+  inputPresentation: {
+    kind: "dialog",
+  },
+  submitBehavior: {
+    kind: "confirm",
+    title: "Save selected probes",
+    confirmLabel: "Save",
+  },
+  postSuccess: [{ kind: "refresh" }],
+} satisfies GraphCommandSurfaceSpec);
 
 void ({
   key: "probe:save",

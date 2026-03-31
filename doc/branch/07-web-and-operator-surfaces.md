@@ -355,9 +355,13 @@ Responsibilities:
 
 Relationships:
 
-- `objectViewKey` references Branch 1 root-safe `ObjectViewSpec`
+- `objectViewKey` references the current compatibility-oriented
+  `ObjectViewSpec` path into authored record composition
+- `collectionKey` should resolve one authored `CollectionSurfaceSpec`
 - `workflowKey` references Branch 6 or Branch 4 workflow declarations
-- `commands` reference Branch 1 `GraphCommandSpec` keys
+- `commands` are the current compatibility seam over raw `GraphCommandSpec`
+  keys; new surface composition should prefer `GraphCommandSurfaceSpec` keys
+  so human invocation metadata stays explicit
 
 ### Surface guard result
 
@@ -507,9 +511,14 @@ Contract rules:
   explicit host override policy
 - host-visible contributions must reference already-installed module versions;
   dangling references are registration errors, not lazy warnings
-- object and workflow surfaces may reference root-safe `ObjectViewSpec`,
-  `WorkflowSpec`, and `GraphCommandSpec` contracts, but they do not own those
-  schemas
+- object, collection, and workflow surfaces should resolve the root-safe
+  authored contracts from `@io/graph-module` rather than inventing a
+  browser-only parallel schema
+- `ObjectViewSpec` remains the current compatibility record-view key, while
+  `RecordSurfaceSpec` is the preferred authored record-surface contract for new
+  host composition work
+- `GraphCommandSpec` remains the execution and policy layer; any human
+  invocation metadata belongs on `GraphCommandSurfaceSpec`
 
 ### `SurfaceHostContext`
 
@@ -681,7 +690,9 @@ Rules:
 - dependency direction: Branch 7 imports Branch 1
 - imported contracts:
   - sync payloads and transaction push
-  - typed graph runtime and root-safe `ObjectViewSpec` or `GraphCommandSpec`
+  - typed graph runtime and root-safe authored surface contracts such as
+    `ObjectViewSpec`, `RecordSurfaceSpec`, `CollectionSurfaceSpec`,
+    `GraphCommandSurfaceSpec`, and `GraphCommandSpec`
   - secret-field mutation paths for authority-only values
 - exported contracts:
   - explicit browser bootstrap and retry expectations
@@ -968,7 +979,8 @@ Rules:
 - goal: mount one installed or built-in module route through a host registry
   instead of bespoke route wiring
 - prerequisite contracts: Branch 4 surface declaration shape and stable
-  `ObjectViewSpec` or `GraphCommandSpec` keys
+  authored surface keys such as `ObjectViewSpec`, `RecordSurfaceSpec`,
+  `CollectionSurfaceSpec`, `GraphCommandSurfaceSpec`, or `GraphCommandSpec`
 - what it proves: one module can add a route and object surface without manual
   shell edits
 - what it postpones: multi-module install UX and remote bundles

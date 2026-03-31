@@ -6,11 +6,11 @@ schemas.
 ## Read This First
 
 - Start with `./src/index.ts` for the curated public entrypoint.
-- Read `./src/type-module.ts` for the `TypeModule` contract and the scalar/enum
+- Read `./src/type.ts` for the `TypeModule` contract and the scalar/enum
   field-authoring helpers.
-- Read `./src/reference-policy.ts` for existing-entity relationship helpers.
-- Read `./src/definition-contracts.ts` for pure command, object-view, and
-  workflow descriptors.
+- Read `./src/reference.ts` for existing-entity relationship helpers.
+- Read `./src/contracts.ts` for pure command, command-surface, object-view,
+  record-surface, collection-surface, and workflow descriptors.
 
 ## Naming
 
@@ -23,14 +23,33 @@ schemas.
   `defineDefaultEnumTypeModule(...)`, and
   `defineValidatedStringTypeModule(...)`.
 
+## Surface Contract Guidance
+
+- `ObjectViewSpec` remains the compatibility-oriented current record-view
+  descriptor for callers that already key authored layouts by object view.
+- `RecordSurfaceSpec` is the preferred authored record-surface name for new
+  work. Its field and section shapes intentionally stay aligned with
+  `ObjectViewSpec` so existing authored layout data can migrate without
+  reshaping.
+- `CollectionSurfaceSpec` is the authored collection contract. Use that export
+  for reusable list, table, board, or card-grid metadata rather than inventing
+  a parallel `CollectionView` root type.
+- `WorkflowSpec` remains the stable authored flow contract. It still references
+  `ObjectViewSpec` and `GraphCommandSpec` keys as the current compatibility
+  seam while record-surface and command-surface composition settles.
+- `GraphCommandSpec` owns execution mode, policy, and I/O shape only. Human
+  invocation metadata such as dialog or sheet presentation belongs on
+  `GraphCommandSurfaceSpec`.
+
 ## What It Owns
 
 - schema-authoring primitives re-exported from `@io/graph-kernel`
 - type-module helpers layered above those kernel primitives
 - reference-field authoring policy helpers
 - secret-field authoring helpers
-- pure authored contracts such as `GraphCommandSpec`, `ObjectViewSpec`, and
-  `WorkflowSpec`
+- pure authored contracts such as `GraphCommandSpec`,
+  `GraphCommandSurfaceSpec`, `ObjectViewSpec`, `RecordSurfaceSpec`,
+  `CollectionSurfaceSpec`, and `WorkflowSpec`
 - generic packaged defaults such as `defineDefaultEnumTypeModule(...)` and
   `defineValidatedStringTypeModule(...)`
 
@@ -50,8 +69,8 @@ schemas.
   `defineScalarModule(...)` or `defineEnumModule(...)`
 - freeze reference or secret-backed fields with `defineReferenceField(...)`,
   `existingEntityReferenceField(...)`, or `defineSecretField(...)`
-- attach pure object-view, workflow, and command descriptors beside authored
-  module slices
+- attach pure object-view, record-surface, collection-surface, command-surface,
+  workflow, and command descriptors beside authored module slices
 
 ## Layering
 
@@ -73,7 +92,8 @@ Everything intended for consumers is re-exported from the package root.
   `defineDefaultEnumTypeModule`, and `defineValidatedStringTypeModule`
 - reference helpers: `defineReferenceField`, `existingEntityReferenceField`,
   `existingEntityReferenceFieldMeta`, and `defineSecretField`
-- pure authored contracts: `GraphCommandSpec`, `ObjectViewSpec`, and
+- pure authored contracts: `GraphCommandSpec`, `GraphCommandSurfaceSpec`,
+  `ObjectViewSpec`, `RecordSurfaceSpec`, `CollectionSurfaceSpec`, and
   `WorkflowSpec`
 
 This package intentionally stops at definition-time authoring. Runtime module

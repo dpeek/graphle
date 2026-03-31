@@ -3,7 +3,8 @@
  *
  * `@io/graph-module` owns authored type-module helpers, reference-field policy,
  * secret-field helpers layered over kernel primitives, and pure module-facing
- * contracts such as command, object-view, and workflow specs.
+ * contracts such as command, command-surface, object-view, record-surface,
+ * collection-surface, and workflow specs.
  *
  * In this repo, "graph module" refers to concrete namespace slices such as
  * `core` and `workflow`, while "type module" refers to the reusable

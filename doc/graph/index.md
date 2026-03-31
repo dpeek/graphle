@@ -142,7 +142,8 @@ Workflow-owned contracts now live on `@io/graph-module-workflow`.
   helpers, stable-id reconciliation, and authoritative write envelopes
 - `../../lib/graph-module/src/`: module-definition authoring helpers,
   reference-field policy, secret-field helpers, and pure authored
-  command/view/workflow contracts
+  command/command-surface/object-view/record-surface/collection-surface/workflow
+  contracts
 - `../../lib/graph-module-core/src/`: canonical `core:` namespace assembly,
   built-in scalar/entity/enum families, bootstrap inputs, colocated icon
   seeds, and structured-value helpers
