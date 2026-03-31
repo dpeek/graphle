@@ -4,6 +4,7 @@ import {
   validateSerializedQueryRequest,
   type QueryIdentityExecutionContext,
   type QueryLiteral,
+  type QueryParameterDefinition,
   type QueryResultPage,
   type ReadQuery,
   type SerializedQueryRequest,
@@ -281,6 +282,7 @@ export type QueryContainerState =
     };
 
 export type QueryContainerResolvedSource = {
+  readonly parameterDefinitions?: readonly QueryParameterDefinition[];
   readonly request: SerializedQueryRequest;
   readonly sourceCacheKey?: string;
 };
@@ -473,12 +475,14 @@ export async function createQueryContainerCacheKey(
   request: SerializedQueryRequest,
   options: {
     readonly executionContext?: QueryIdentityExecutionContext;
+    readonly parameterDefinitions?: readonly QueryParameterDefinition[];
     readonly sourceCacheKey?: string;
   } = {},
 ): Promise<string> {
   const firstPageRequest = applyQueryContainerPagination(request, spec.pagination);
   const normalized = await normalizeSerializedQueryRequest(firstPageRequest, {
     executionContext: options.executionContext,
+    parameterDefinitions: options.parameterDefinitions,
   });
   const sourceCacheKey =
     options.sourceCacheKey ??
@@ -566,6 +570,7 @@ export function createQueryContainerRuntime(input: {
     const resolvedSource = toResolvedSource(await resolveSource(spec.query, options));
     const cacheKey = await createQueryContainerCacheKey(spec, resolvedSource.request, {
       executionContext: options.executionContext,
+      parameterDefinitions: resolvedSource.parameterDefinitions,
       sourceCacheKey: resolvedSource.sourceCacheKey,
     });
     return {

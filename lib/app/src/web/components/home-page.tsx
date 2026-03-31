@@ -78,19 +78,22 @@ export function HomePageStateView({
           </div>
 
           <p className="text-muted-foreground text-sm">
-            Role bindings and authorization remain graph-owned. This shell only consumes the
-            request-bound summary that the worker returns.
+            Role bindings and authorization remain graph-owned. Use Query to author or reopen saved
+            queries and views; `/views` stays focused on proof-only renderer review.
           </p>
 
           <div className="flex flex-wrap gap-2">
-            <Button nativeButton={false} render={<Link to="/workflow" />}>
+            <Button nativeButton={false} render={<Link to="/query" />}>
+              Open query
+            </Button>
+            <Button nativeButton={false} render={<Link to="/workflow" />} variant="outline">
               Open workflow
             </Button>
-            <Button nativeButton={false} render={<Link to="/graph" />}>
+            <Button nativeButton={false} render={<Link to="/graph" />} variant="outline">
               Open graph
             </Button>
             <Button nativeButton={false} render={<Link to="/views" />} variant="outline">
-              Review views
+              Review view proofs
             </Button>
             <Button
               nativeButton={false}

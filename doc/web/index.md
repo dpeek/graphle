@@ -200,19 +200,21 @@ Current shared query-authoring coverage:
 ## Layout
 
 - `../../lib/app/src/web/router.tsx`, `../../lib/app/src/web/routeTree.gen.ts`: router assembly
-  and generated route tree for the SPA routes, including `/workflow` and
-  `/graph`
+  and generated route tree for the SPA routes, including `/query`,
+  `/workflow`, and `/graph`
 - `../../lib/app/auth.ts`: Better Auth CLI config entrypoint that keeps schema
   generation on a dedicated auth-store path without coupling it to the Worker's
   runtime bindings
 - `../../lib/app/vite.config.ts`, `../../lib/app/wrangler.jsonc`,
   `../../lib/app/index.html`: app-local Vite, Worker, and SPA entry config for
   the shipped web runtime
-- `../../lib/app/src/web/routes/`: top-level pages including `workflow`, `sync`,
-  `views`, and the graph explorer routes
+- `../../lib/app/src/web/routes/`: top-level pages including the primary
+  query-authoring route at `/query`, the proof-only review route at `/views`,
+  `workflow`, `sync`, and the graph explorer routes
 - `../../lib/app/src/web/components/home-page.tsx`: session-aware landing page that
   keeps the signed-out auth entry flow and the signed-in bootstrap summary in
-  one place
+  one place while promoting `/query` as the primary signed-in authoring entry
+  point and demoting `/views` to an explicit proof-review destination
 - `../../lib/app/src/web/components/auth-shell.tsx`: principal-bootstrap consumer
   hook, signed-out localhost onboarding entrypoint, sign-in/sign-out chrome,
   provisional create-account form, and the gate that keeps graph surfaces from
@@ -235,6 +237,14 @@ Current shared query-authoring coverage:
 - `../../lib/app/src/web/components/query-container-surface.tsx`: shared query
   container mount that validates renderer bindings, executes query pages, and
   renders the common loading, error, empty, stale, and pagination chrome
+- `../../lib/app/src/web/components/query-page.tsx`: `/query` route composition
+  that gates graph access, boots the synced graph runtime, binds the
+  principal-scoped graph-backed saved-query/view library into the shared
+  workbench, and keeps the dedicated query-authoring surface plus side-by-side
+  live results panel separate from the lower-level editor helpers
+- `../../lib/app/src/web/components/views-page.tsx`: `/views` proof-only review
+  surface that keeps the disposable predicate/editor coverage fixture plus the
+  reusable query renderer proof explicit after the `/query` authoring cutover
 - `../../lib/app/src/web/components/query-route-mount.tsx`: shared route composition
   seam that lets routes mount one query container through common page chrome
   instead of route-local wiring
@@ -308,6 +318,9 @@ Current shared query-authoring coverage:
   surface; the current proof is intentionally limited to that hard-wired
   built-in list and does not yet cover manifest-backed activation, runtime
   module toggling, or arbitrary third-party module mixes
+- `../../lib/app/src/web/lib/query-route-state.ts`: explicit `/query` route-state
+  contract covering draft previews, saved query or view reopen selection,
+  parameter overrides, and route-addressable preview renderer/page-size state
 - `../../lib/graph-module-core/src/react-dom/query-editor.ts`: shared
   query-editor draft, query surface catalog, field-aware validation, and
   serialization helpers that keep inline drafts aligned with the generic
@@ -401,7 +414,9 @@ The current Branch 3 browser model stays fail closed.
 - the current proof anchors for those guarantees live in
   `../../lib/graph-module-core/src/react-dom/query-editor-authoring-coverage.test.ts`,
   `../../lib/app/src/web/lib/query-surface-registry.test.ts`,
+  `../../lib/app/src/web/lib/query-route-state.test.ts`,
   `../../lib/app/src/web/components/query-editor.test.tsx`,
+  `../../lib/app/src/web/components/query-page.test.tsx`,
   `../../lib/app/src/web/lib/saved-query.test.ts`,
   `../../lib/app/src/web/lib/query-container.test.ts`,
   `../../lib/app/src/web/lib/query-workbench.test.ts`, and
@@ -410,9 +425,11 @@ The current Branch 3 browser model stays fail closed.
   installed-catalog validation, and explicit stale-ref recovery are proven in
   `../../lib/app/src/web/lib/authority.test.ts` and
   `../../lib/app/src/web/lib/graph-authority-sql-saved-query.test.ts`; the
-  browser `/views` proof route still keeps a browser-local workbench cache for
-  reopen and route-state testing, but that cache is not the durable
-  graph-backed authority seam
+  browser `/query` route now reopens and saves through the synced graph-backed
+  saved-query/view records themselves, while page-level authoring, list-pane
+  reopen, saved-id route state, and results-panel preview are proven together
+  in `../../lib/app/src/web/components/query-page.test.tsx` instead of relying
+  on a browser-local proof store
 - `../../lib/app/src/web/lib/authority.ts`: shared web authority behavior, secret-field
   mutation flow, the current web-owned `/api/commands` envelope, the shared
   write/command authorization seam, principal-aware sync filtering that omits

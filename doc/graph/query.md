@@ -1012,20 +1012,30 @@ Current proof status:
 - `../../lib/app/src/web/lib/query-surface-registry.ts` now keeps the
   built-in workflow-plus-core installation seam and publishes
   `installedModuleQueryEditorCatalog` for app/web consumers
-- `../../lib/app/src/web/lib/query-workbench.ts` now adds shared route-state parsing,
-  draft preview serialization, a workbench-local saved-query/view cache that
-  reuses the shared saved-query record model for reopen flows, shared
-  saved-source resolution with parameter overrides, and a bounded collection
-  preview executor for the current proof route
-- the current `/views` proof route now uses that shared workbench path to:
-  preview inline drafts in a real query container, reopen saved queries or
-  saved views from route state, rehydrate the form editor from those saved
-  definitions, update the active saved ids without losing query identity,
-  apply parameter overrides, and fail closed when a saved query, saved view,
-  route draft, or saved-route parameter override becomes invalid or stale,
-  including current-catalog hydration failures when a previously saved surface
-  definition, catalog version, or saved-view/query binding no longer matches
-  the installed contracts
+- `../../lib/app/src/web/lib/query-route-state.ts` now defines the explicit
+  `/query` route-search contract for draft previews, saved query or view
+  reopen selection, parameter overrides, and route-addressable preview
+  renderer/page-size state
+- `../../lib/app/src/web/lib/query-workbench.ts` now focuses on draft preview
+  serialization, shared saved-source resolution with parameter overrides, and
+  the shared preview-runtime helper that resolves saved queries before
+  executing through `/api/query`
+- the current `/query` route now uses that shared workbench path to:
+  preview inline drafts in a real query container, mount a dedicated results
+  panel beside the editor, reopen saved queries or saved views from route
+  state, rehydrate the form editor from those saved definitions, update the
+  active saved ids without losing query identity, carry preview
+  renderer/page-size state through the route, apply parameter overrides, and
+  fail closed when a saved query, saved view, route draft, or saved-route
+  parameter override becomes invalid or stale, including current-catalog
+  hydration failures when a previously saved surface definition, catalog
+  version, or saved-view/query binding no longer matches the installed
+  contracts
+- `../../lib/app/src/web/components/query-page.tsx` now keeps `/query` behind
+  the same graph-access gate and synced-runtime bootstrap model as the other
+  graph-backed web routes, then binds the principal-scoped graph-backed
+  saved-query/view library into the shared workbench so list-pane reopen and
+  save flows no longer depend on a browser-local cache
 - `../../lib/app/src/web/lib/authority.ts` now routes the principal-scoped
   only durable saved-query/view persistence path through graph-native
   saved-query and saved-view objects for non-route consumers, with proof
@@ -1033,9 +1043,10 @@ Current proof status:
   `../../lib/app/src/web/lib/authority.test.ts` and
   `../../lib/app/src/web/lib/graph-authority-sql-saved-query.test.ts` for
   restart persistence, normalized re-derivation, installed-catalog validation,
-  and stale-ref recovery; the current `/views` proof route still keeps a
-  browser-local workbench cache for reopen flows, but that cache is not the
-  durable persistence path
+  and stale-ref recovery, while
+  `../../lib/app/src/web/components/query-page.test.tsx` now proves the `/query`
+  route itself can list, save, remount, reopen, and update those graph-backed
+  saved-query/view records end to end
 
 Current consumption seams:
 

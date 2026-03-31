@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as WorkflowRouteImport } from './routes/workflow'
 import { Route as ViewsRouteImport } from './routes/views'
 import { Route as SyncRouteImport } from './routes/sync'
+import { Route as QueryRouteImport } from './routes/query'
 import { Route as GraphRouteImport } from './routes/graph'
 import { Route as IndexRouteImport } from './routes/index'
 
@@ -30,6 +31,11 @@ const SyncRoute = SyncRouteImport.update({
   path: '/sync',
   getParentRoute: () => rootRouteImport,
 } as any)
+const QueryRoute = QueryRouteImport.update({
+  id: '/query',
+  path: '/query',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const GraphRoute = GraphRouteImport.update({
   id: '/graph',
   path: '/graph',
@@ -44,6 +50,7 @@ const IndexRoute = IndexRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/graph': typeof GraphRoute
+  '/query': typeof QueryRoute
   '/sync': typeof SyncRoute
   '/views': typeof ViewsRoute
   '/workflow': typeof WorkflowRoute
@@ -51,6 +58,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/graph': typeof GraphRoute
+  '/query': typeof QueryRoute
   '/sync': typeof SyncRoute
   '/views': typeof ViewsRoute
   '/workflow': typeof WorkflowRoute
@@ -59,21 +67,23 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/graph': typeof GraphRoute
+  '/query': typeof QueryRoute
   '/sync': typeof SyncRoute
   '/views': typeof ViewsRoute
   '/workflow': typeof WorkflowRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/graph' | '/sync' | '/views' | '/workflow'
+  fullPaths: '/' | '/graph' | '/query' | '/sync' | '/views' | '/workflow'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/graph' | '/sync' | '/views' | '/workflow'
-  id: '__root__' | '/' | '/graph' | '/sync' | '/views' | '/workflow'
+  to: '/' | '/graph' | '/query' | '/sync' | '/views' | '/workflow'
+  id: '__root__' | '/' | '/graph' | '/query' | '/sync' | '/views' | '/workflow'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   GraphRoute: typeof GraphRoute
+  QueryRoute: typeof QueryRoute
   SyncRoute: typeof SyncRoute
   ViewsRoute: typeof ViewsRoute
   WorkflowRoute: typeof WorkflowRoute
@@ -102,6 +112,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SyncRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/query': {
+      id: '/query'
+      path: '/query'
+      fullPath: '/query'
+      preLoaderRoute: typeof QueryRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/graph': {
       id: '/graph'
       path: '/graph'
@@ -122,6 +139,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   GraphRoute: GraphRoute,
+  QueryRoute: QueryRoute,
   SyncRoute: SyncRoute,
   ViewsRoute: ViewsRoute,
   WorkflowRoute: WorkflowRoute,

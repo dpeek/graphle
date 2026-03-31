@@ -8,25 +8,26 @@ import {
   builtInQueryRendererRegistry,
   createQueryRendererCapabilityMap,
 } from "../components/query-renderers.js";
+import { mountInlineQueryRenderer, mountSavedQueryRenderer } from "./query-container.js";
 import { createQueryEditorCatalog, createQueryEditorDraft } from "./query-editor.js";
 import { getInstalledModuleQuerySurfaceRendererCompatibility } from "./query-surface-registry.js";
 import {
   QueryWorkbenchSaveError,
   createQueryWorkbenchBrowserStore,
   createQueryWorkbenchMemoryStore,
+  createQueryWorkbenchPreviewRuntime,
   createQueryWorkbenchSourceResolver,
   decodeQueryWorkbenchParamOverrides,
   decodeQueryWorkbenchDraft,
   encodeQueryWorkbenchDraft,
   encodeQueryWorkbenchParamOverrides,
-  executeQueryWorkbenchPreviewRequest,
   hydrateQueryWorkbenchDraft,
   resolveQueryWorkbenchRouteTarget,
   resolveQueryWorkbenchState,
   saveQueryWorkbenchQuery,
   saveQueryWorkbenchView,
-  validateQueryWorkbenchRouteSearch,
 } from "./query-workbench.js";
+import { validateQueryRouteSearch } from "./query-route-state.js";
 
 const workflowBoardSurfaceVersion = "query-surface:workflow:project-branch-board:v1";
 const workflowCatalogId = "workflow:query-surfaces";
@@ -43,7 +44,7 @@ function readResolvedRequest(
 }
 
 describe("query workbench route state", () => {
-  it("round-trips draft preview requests through route state", () => {
+  it("round-trips draft preview requests and parameter definitions through route state", () => {
     const request = {
       query: {
         indexId: "workflow:project-branch-board",
@@ -52,14 +53,29 @@ describe("query workbench route state", () => {
       },
       version: serializedQueryVersion,
     } as const;
+    const parameterDefinitions = [
+      {
+        defaultValue: "workflow-project:io",
+        label: "Project",
+        name: "project",
+        required: false,
+        type: "string",
+      },
+    ] as const;
 
-    const encoded = encodeQueryWorkbenchDraft(request);
-    expect(validateQueryWorkbenchRouteSearch({ draft: encoded })).toEqual({ draft: encoded });
-    expect(decodeQueryWorkbenchDraft(encoded)).toEqual(request);
+    const encoded = encodeQueryWorkbenchDraft({
+      parameterDefinitions,
+      request,
+    });
+    expect(validateQueryRouteSearch({ draft: encoded })).toEqual({ draft: encoded });
+    expect(decodeQueryWorkbenchDraft(encoded)).toEqual({
+      parameterDefinitions,
+      request,
+    });
   });
 
   it("preserves invalid route state so previews fail closed instead of falling back", () => {
-    const search = validateQueryWorkbenchRouteSearch({
+    const search = validateQueryRouteSearch({
       draft: "not-a-valid-draft",
       params: "not-valid-params",
       queryId: "saved-query:1",
@@ -140,9 +156,26 @@ describe("query workbench route state", () => {
   });
 });
 
-describe("query workbench preview execution", () => {
-  it("executes preview requests with filters, params, and pagination", async () => {
-    const result = await executeQueryWorkbenchPreviewRequest({
+describe("query workbench preview runtime", () => {
+  it("executes inline draft previews through the shared runtime path", async () => {
+    const executedRequests: SerializedQueryRequest[] = [];
+    const parameterDefinitions = [
+      {
+        defaultValue: "workflow-project:io",
+        label: "Project",
+        name: "project",
+        required: false,
+        type: "string",
+      },
+    ] as const;
+    const runtime = createQueryWorkbenchPreviewRuntime(createQueryWorkbenchMemoryStore(), {
+      inlineParameterDefinitions: parameterDefinitions,
+      executePage: async (request) => {
+        executedRequests.push(request);
+        return createRuntimeResultPage();
+      },
+    });
+    const request = {
       params: {
         project: "workflow-project:io",
       },
@@ -159,15 +192,196 @@ describe("query workbench preview execution", () => {
         kind: "collection",
         order: [{ direction: "desc", fieldId: "updated-at" }],
         window: {
-          limit: 1,
+          limit: 25,
         },
       },
       version: serializedQueryVersion,
+    } as const;
+
+    const value = await runtime.load(
+      mountInlineQueryRenderer(request, {
+        containerId: "draft-preview",
+        pagination: {
+          mode: "paged",
+          pageSize: 1,
+        },
+        refresh: {
+          mode: "manual",
+        },
+        renderer: {
+          rendererId: "core:list",
+        },
+      }),
+    );
+
+    expect(executedRequests).toEqual([
+      {
+        ...request,
+        query: {
+          ...request.query,
+          window: {
+            limit: 1,
+          },
+        },
+      },
+    ]);
+    expect(value.state).toMatchObject({
+      kind: "ready",
+    });
+  });
+
+  it("routes workflow and core saved-query previews through the same shared runtime", async () => {
+    const catalog = createInstalledQueryEditorCatalog();
+    const store = createQueryWorkbenchMemoryStore();
+    const workflowQuery = saveQueryWorkbenchQuery({
+      catalog,
+      draft: {
+        ...createQueryEditorDraft(catalog, "workflow:project-branch-board"),
+        filters: [
+          {
+            fieldId: "state",
+            id: "filter:state",
+            operator: "eq",
+            value: { kind: "param", name: "state" },
+          },
+        ],
+        parameters: [
+          {
+            defaultValue: "active",
+            id: "param:state",
+            label: "State",
+            name: "state",
+            required: false,
+            type: "enum",
+          },
+        ],
+      },
+      name: "Owner board",
+      store,
+    });
+    const coreQuery = saveQueryWorkbenchQuery({
+      catalog,
+      draft: {
+        ...createQueryEditorDraft(catalog, coreBuiltInQuerySurfaceIds.savedQueryLibrary),
+        filters: [
+          {
+            fieldId: "surfaceModuleId",
+            id: "filter:surface-module-id",
+            operator: "eq",
+            value: { kind: "param", name: "surface-module-id" },
+          },
+        ],
+        parameters: [
+          {
+            defaultValue: "core",
+            id: "param:surface-module-id",
+            label: "Surface Module",
+            name: "surface-module-id",
+            required: false,
+            type: "string",
+          },
+        ],
+      },
+      name: "Saved query library",
+      store,
     });
 
-    expect(result.items).toHaveLength(1);
-    expect(result.items[0]?.payload.title).toBe("Workflow shell");
-    expect(result.nextCursor).toBe("cursor:1");
+    const executedRequests: SerializedQueryRequest[] = [];
+    const runtime = createQueryWorkbenchPreviewRuntime(store, {
+      catalog,
+      executePage: async (request) => {
+        executedRequests.push(request);
+        return createRuntimeResultPage();
+      },
+    });
+
+    await runtime.load(
+      mountSavedQueryRenderer(
+        {
+          params: { state: "ready" },
+          queryId: workflowQuery.id,
+        },
+        {
+          containerId: `saved-query:${workflowQuery.id}`,
+          pagination: {
+            mode: "paged",
+            pageSize: 25,
+          },
+          refresh: {
+            mode: "manual",
+          },
+          renderer: {
+            rendererId: "core:list",
+          },
+        },
+      ),
+    );
+    await runtime.load(
+      mountSavedQueryRenderer(
+        {
+          params: { "surface-module-id": "workflow" },
+          queryId: coreQuery.id,
+        },
+        {
+          containerId: `saved-query:${coreQuery.id}`,
+          pagination: {
+            mode: "paged",
+            pageSize: 25,
+          },
+          refresh: {
+            mode: "manual",
+          },
+          renderer: {
+            rendererId: "core:table",
+          },
+        },
+      ),
+    );
+
+    expect(executedRequests).toEqual([
+      {
+        params: {
+          state: "ready",
+        },
+        query: {
+          filter: {
+            fieldId: "state",
+            op: "eq",
+            value: {
+              kind: "param",
+              name: "state",
+            },
+          },
+          indexId: "workflow:project-branch-board",
+          kind: "collection",
+          window: {
+            limit: 25,
+          },
+        },
+        version: serializedQueryVersion,
+      },
+      {
+        params: {
+          "surface-module-id": "workflow",
+        },
+        query: {
+          filter: {
+            fieldId: "surfaceModuleId",
+            op: "eq",
+            value: {
+              kind: "param",
+              name: "surface-module-id",
+            },
+          },
+          indexId: coreBuiltInQuerySurfaceIds.savedQueryLibrary,
+          kind: "collection",
+          window: {
+            limit: 25,
+          },
+        },
+        version: serializedQueryVersion,
+      },
+    ]);
   });
 });
 
@@ -447,15 +661,49 @@ describe("query workbench saves", () => {
       {},
     );
     const resolvedSavedView = await resolver(savedView.view.spec.query, {});
-    const savedQueryPreview = await executeQueryWorkbenchPreviewRequest(
-      readResolvedRequest(resolvedSavedQuery),
-    );
-    const savedViewPreview = await executeQueryWorkbenchPreviewRequest(
-      readResolvedRequest(resolvedSavedView),
-    );
 
-    expect(savedQueryPreview.items.map((item) => item.payload.title)).toEqual(["Query cards"]);
-    expect(savedViewPreview.items.map((item) => item.payload.title)).toEqual(["Workflow shell"]);
+    expect(readResolvedRequest(resolvedSavedQuery)).toEqual({
+      params: {
+        state: "ready",
+      },
+      query: {
+        filter: {
+          fieldId: "state",
+          op: "eq",
+          value: {
+            kind: "param",
+            name: "state",
+          },
+        },
+        indexId: "workflow:project-branch-board",
+        kind: "collection",
+        window: {
+          limit: 25,
+        },
+      },
+      version: serializedQueryVersion,
+    });
+    expect(readResolvedRequest(resolvedSavedView)).toEqual({
+      params: {
+        state: "active",
+      },
+      query: {
+        filter: {
+          fieldId: "state",
+          op: "eq",
+          value: {
+            kind: "param",
+            name: "state",
+          },
+        },
+        indexId: "workflow:project-branch-board",
+        kind: "collection",
+        window: {
+          limit: 25,
+        },
+      },
+      version: serializedQueryVersion,
+    });
   });
 
   it("reopens core saved-query-library queries and views through the same shared helpers", async () => {
@@ -568,20 +816,49 @@ describe("query workbench saves", () => {
       {},
     );
     const resolvedSavedView = await resolver(savedView.view.spec.query, {});
-    const savedQueryPreview = await executeQueryWorkbenchPreviewRequest(
-      readResolvedRequest(resolvedSavedQuery),
-    );
-    const savedViewPreview = await executeQueryWorkbenchPreviewRequest(
-      readResolvedRequest(resolvedSavedView),
-    );
 
-    expect(savedQueryPreview.items.map((item) => item.payload.name)).toEqual([
-      "Workflow review board",
-    ]);
-    expect(savedViewPreview.items.map((item) => item.payload.name)).toEqual([
-      "Catalog bootstrap scope",
-      "Saved query library browser",
-    ]);
+    expect(readResolvedRequest(resolvedSavedQuery)).toEqual({
+      params: {
+        "surface-module-id": "workflow",
+      },
+      query: {
+        filter: {
+          fieldId: "surfaceModuleId",
+          op: "eq",
+          value: {
+            kind: "param",
+            name: "surface-module-id",
+          },
+        },
+        indexId: coreBuiltInQuerySurfaceIds.savedQueryLibrary,
+        kind: "collection",
+        window: {
+          limit: 25,
+        },
+      },
+      version: serializedQueryVersion,
+    });
+    expect(readResolvedRequest(resolvedSavedView)).toEqual({
+      params: {
+        "surface-module-id": "core",
+      },
+      query: {
+        filter: {
+          fieldId: "surfaceModuleId",
+          op: "eq",
+          value: {
+            kind: "param",
+            name: "surface-module-id",
+          },
+        },
+        indexId: coreBuiltInQuerySurfaceIds.savedQueryLibrary,
+        kind: "collection",
+        window: {
+          limit: 25,
+        },
+      },
+      version: serializedQueryVersion,
+    });
   });
 });
 
@@ -990,6 +1267,24 @@ describe("query workbench saved-source resolution", () => {
     });
   });
 });
+
+function createRuntimeResultPage() {
+  return {
+    freshness: {
+      completeness: "complete" as const,
+      freshness: "current" as const,
+    },
+    items: [
+      {
+        key: "row:1",
+        payload: {
+          title: "Runtime preview",
+        },
+      },
+    ],
+    kind: "collection" as const,
+  };
+}
 
 function createMemoryStorage(): {
   getItem(key: string): string | null;

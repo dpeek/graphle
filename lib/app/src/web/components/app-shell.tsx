@@ -21,10 +21,11 @@ import { AppShellAuthStatus } from "./auth-shell.js";
 
 const navigationItems = [
   { to: "/", label: "Home", exact: true },
+  { to: "/query", label: "Query", exact: false },
   { to: "/workflow", label: "Workflow", exact: false },
-  { to: "/views", label: "Views", exact: false },
   { to: "/graph", label: "Graph", exact: false },
   { to: "/sync", label: "Sync", exact: false },
+  { to: "/views", label: "View Proofs", exact: false },
 ] as const;
 
 function isItemActive(pathname: string, item: (typeof navigationItems)[number]): boolean {

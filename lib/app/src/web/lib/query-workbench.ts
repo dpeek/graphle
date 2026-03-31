@@ -1,4 +1,3 @@
-import { coreBuiltInQuerySurfaceIds } from "@io/graph-module-core";
 import {
   createQueryEditorDraft,
   hydrateQueryEditorDraft,
@@ -9,19 +8,21 @@ import {
 } from "@io/graph-module-core/react-dom/query-editor";
 import {
   validateSerializedQueryRequest,
-  type QueryFilter,
   type QueryLiteral,
-  type QueryResultItem,
-  type QueryResultPage,
+  type QueryParameterDefinition,
   type SerializedQueryRequest,
 } from "@io/graph-client";
 
 import {
+  createQueryContainerRuntime,
+  type QueryContainerPageExecutor,
+  type QueryContainerRuntimeController,
   type QueryContainerSourceResolver,
   type QueryContainerSpec,
   type QuerySurfaceRendererCompatibility,
 } from "./query-container.js";
 import type { QueryRendererCapability } from "./query-container.js";
+import { requestSerializedQuery } from "./query-transport.js";
 import {
   createSavedQueryRecordInputFromDraft,
   createSavedQueryRecordSourceResolver,
@@ -32,13 +33,7 @@ import {
   type SavedQueryRecord,
   type SavedViewRecord,
 } from "./saved-query.js";
-
-export type QueryWorkbenchRouteSearch = {
-  readonly draft?: string;
-  readonly params?: string;
-  readonly queryId?: string;
-  readonly viewId?: string;
-};
+import type { QueryRouteSearch } from "./query-route-state.js";
 
 export type QueryWorkbenchSavedQuery = SavedQueryRecord;
 export type QueryWorkbenchSavedView = SavedViewRecord;
@@ -65,6 +60,7 @@ export type QueryWorkbenchStore = {
 export type QueryWorkbenchRouteTarget =
   | {
       readonly kind: "draft";
+      readonly parameterDefinitions?: readonly QueryParameterDefinition[];
       readonly request: SerializedQueryRequest;
     }
   | {
@@ -118,14 +114,6 @@ export class QueryWorkbenchSaveError extends Error {
   }
 }
 
-type PreviewRow = {
-  readonly entityId?: string;
-  readonly key: string;
-  readonly payload: Readonly<Record<string, unknown>>;
-};
-
-type PreviewDataset = Readonly<Record<string, readonly PreviewRow[]>>;
-
 export type QueryWorkbenchStorage = Pick<Storage, "getItem" | "removeItem" | "setItem">;
 
 export type HydratedQueryWorkbenchDraft = {
@@ -141,139 +129,36 @@ export type ResolvedQueryWorkbenchState = {
   readonly target: QueryWorkbenchRouteTarget;
 };
 
-const defaultPreviewDataset = Object.freeze({
-  [coreBuiltInQuerySurfaceIds.savedQueryLibrary]: [
-    {
-      entityId: "saved-query:workflow-review",
-      key: "row:saved-query-workflow-review",
-      payload: {
-        createdAt: "2026-03-18",
-        name: "Workflow review board",
-        queryKind: "collection",
-        surfaceId: "workflow:project-branch-board",
-        surfaceModuleId: "workflow",
-        updatedAt: "2026-03-26",
-      },
-    },
-    {
-      entityId: "saved-query:catalog-bootstrap",
-      key: "row:saved-query-catalog-bootstrap",
-      payload: {
-        createdAt: "2026-03-17",
-        name: "Catalog bootstrap scope",
-        queryKind: "scope",
-        surfaceId: coreBuiltInQuerySurfaceIds.catalogScope,
-        surfaceModuleId: "core",
-        updatedAt: "2026-03-25",
-      },
-    },
-    {
-      entityId: "saved-query:core-library",
-      key: "row:saved-query-core-library",
-      payload: {
-        createdAt: "2026-03-16",
-        name: "Saved query library browser",
-        queryKind: "collection",
-        surfaceId: coreBuiltInQuerySurfaceIds.savedQueryLibrary,
-        surfaceModuleId: "core",
-        updatedAt: "2026-03-24",
-      },
-    },
-  ],
-  "workflow:project-branch-board": [
-    {
-      entityId: "workflow-branch:1",
-      key: "row:branch-1",
-      payload: {
-        "created-at": "2026-03-20",
-        "queue-rank": 1,
-        "updated-at": "2026-03-26",
-        hasActiveCommit: true,
-        projectId: "workflow-project:io",
-        queueRank: 1,
-        repositoryFreshness: "fresh",
-        showUnmanagedRepositoryBranches: false,
-        state: "active",
-        title: "Workflow shell",
-        updatedAt: "2026-03-26",
-      },
-    },
-    {
-      entityId: "workflow-branch:2",
-      key: "row:branch-2",
-      payload: {
-        "created-at": "2026-03-18",
-        "queue-rank": 2,
-        "updated-at": "2026-03-25",
-        hasActiveCommit: false,
-        projectId: "workflow-project:io",
-        queueRank: 2,
-        repositoryFreshness: "stale",
-        showUnmanagedRepositoryBranches: false,
-        state: "ready",
-        title: "Query cards",
-        updatedAt: "2026-03-25",
-      },
-    },
-    {
-      entityId: "workflow-branch:3",
-      key: "row:branch-3",
-      payload: {
-        "created-at": "2026-03-16",
-        "queue-rank": 3,
-        "updated-at": "2026-03-24",
-        hasActiveCommit: true,
-        projectId: "workflow-project:io",
-        queueRank: 3,
-        repositoryFreshness: "missing",
-        showUnmanagedRepositoryBranches: true,
-        state: "blocked",
-        title: "Saved view refresh",
-        updatedAt: "2026-03-24",
-      },
-    },
-  ],
-  "workflow:branch-commit-queue": [
-    {
-      entityId: "queue-row:1",
-      key: "row:queue-1",
-      payload: {
-        branchId: "workflow-branch:1",
-        order: 1,
-        state: "planned",
-        title: "Define workflow query surface registry",
-        updatedAt: "2026-03-26",
-      },
-    },
-    {
-      entityId: "queue-row:2",
-      key: "row:queue-2",
-      payload: {
-        branchId: "workflow-branch:1",
-        order: 2,
-        state: "active",
-        title: "Register catalog with authority planner",
-        updatedAt: "2026-03-27",
-      },
-    },
-  ],
-}) as PreviewDataset;
-
 const queryWorkbenchStoreVersion = 3;
 const defaultQueryWorkbenchStorageKey = "io.web.query-workbench";
 
-export function encodeQueryWorkbenchDraft(request: SerializedQueryRequest): string {
-  return encodeWorkbenchValue(request);
+type QueryWorkbenchDraftRouteState = {
+  readonly parameterDefinitions?: readonly QueryParameterDefinition[];
+  readonly request: SerializedQueryRequest;
+};
+
+export function encodeQueryWorkbenchDraft(
+  input: QueryWorkbenchDraftRouteState | SerializedQueryRequest,
+): string {
+  return encodeWorkbenchValue("request" in input ? input : { request: input });
 }
 
-export function decodeQueryWorkbenchDraft(value: string): SerializedQueryRequest | undefined {
+export function decodeQueryWorkbenchDraft(
+  value: string,
+): QueryWorkbenchDraftRouteState | undefined {
   const parsed = decodeWorkbenchValue(value);
   if (!parsed || typeof parsed !== "object") {
     return undefined;
   }
+  const candidate = readQueryWorkbenchDraftRouteState(parsed);
+  if (!candidate) {
+    return undefined;
+  }
   try {
-    validateSerializedQueryRequest(parsed as SerializedQueryRequest);
-    return parsed as SerializedQueryRequest;
+    validateSerializedQueryRequest(candidate.request, {
+      parameterDefinitions: candidate.parameterDefinitions,
+    });
+    return candidate;
   } catch {
     return undefined;
   }
@@ -301,19 +186,8 @@ export function decodeQueryWorkbenchParamOverrides(
   return Object.freeze(Object.fromEntries(entries)) as Readonly<Record<string, QueryLiteral>>;
 }
 
-export function validateQueryWorkbenchRouteSearch(
-  search: Record<string, unknown>,
-): QueryWorkbenchRouteSearch {
-  return {
-    ...(readTrimmedString(search.queryId) ? { queryId: readTrimmedString(search.queryId) } : {}),
-    ...(readTrimmedString(search.viewId) ? { viewId: readTrimmedString(search.viewId) } : {}),
-    ...(readTrimmedString(search.draft) ? { draft: readTrimmedString(search.draft) } : {}),
-    ...(readTrimmedString(search.params) ? { params: readTrimmedString(search.params) } : {}),
-  };
-}
-
 export function resolveQueryWorkbenchRouteTarget(
-  search: QueryWorkbenchRouteSearch,
+  search: QueryRouteSearch,
   store: Pick<QueryWorkbenchStore, "getQuery" | "getView">,
   catalog: QueryEditorCatalog,
 ): QueryWorkbenchRouteTarget {
@@ -366,8 +240,8 @@ export function resolveQueryWorkbenchRouteTarget(
     };
   }
   if (search.draft) {
-    const request = decodeQueryWorkbenchDraft(search.draft);
-    if (!request) {
+    const draft = decodeQueryWorkbenchDraft(search.draft);
+    if (!draft) {
       return {
         code: "invalid-draft",
         kind: "invalid",
@@ -376,7 +250,8 @@ export function resolveQueryWorkbenchRouteTarget(
     }
     return {
       kind: "draft",
-      request,
+      ...(draft.parameterDefinitions ? { parameterDefinitions: draft.parameterDefinitions } : {}),
+      request: draft.request,
     };
   }
   return {
@@ -397,6 +272,7 @@ export function hydrateQueryWorkbenchDraft(input: {
     return {
       draft: hydrateQueryEditorDraft({
         catalog,
+        parameterDefinitions: target.parameterDefinitions,
         request: target.request,
       }),
     };
@@ -701,43 +577,32 @@ export function createQueryWorkbenchSourceResolver(
   );
 }
 
-export async function executeQueryWorkbenchPreviewRequest(
-  request: SerializedQueryRequest,
+export function createQueryWorkbenchPreviewRuntime(
+  store: Pick<QueryWorkbenchStore, "getQuery">,
   options: {
-    readonly dataset?: PreviewDataset;
+    readonly catalog?: QueryEditorCatalog;
+    readonly executePage?: QueryContainerPageExecutor;
+    readonly inlineParameterDefinitions?: readonly QueryParameterDefinition[];
   } = {},
-): Promise<QueryResultPage> {
-  validateSerializedQueryRequest(request);
-  if (request.query.kind !== "collection") {
-    const error = new Error(
-      `Preview only supports collection queries, received "${request.query.kind}".`,
-    );
-    (error as Error & { code: string }).code = "unsupported-query";
-    throw error;
-  }
-  const query = request.query;
-  const rows =
-    options.dataset?.[query.indexId] ??
-    (defaultPreviewDataset as Readonly<Record<string, readonly PreviewRow[]>>)[query.indexId];
-  if (!rows) {
-    const error = new Error(`Preview surface "${request.query.indexId}" is not registered.`);
-    (error as Error & { code: string }).code = "unsupported-query";
-    throw error;
-  }
-  const resolved = rows.filter((row: PreviewRow) =>
-    matchesQueryFilter(row.payload, query.filter, request.params),
-  );
-  const ordered = applyQueryOrder(resolved, query.order);
-  const limited = applyQueryWindow(ordered, query.window);
-  return {
-    freshness: {
-      completeness: "complete",
-      freshness: "current",
+): QueryContainerRuntimeController {
+  const resolveSavedSource = createQueryWorkbenchSourceResolver(store, options);
+  return createQueryContainerRuntime({
+    executePage:
+      options.executePage ??
+      ((request, runtimeOptions) =>
+        requestSerializedQuery(request, { signal: runtimeOptions.signal })),
+    resolveSource: async (source, runtimeOptions) => {
+      if (source.kind === "inline") {
+        return {
+          ...(options.inlineParameterDefinitions
+            ? { parameterDefinitions: options.inlineParameterDefinitions }
+            : {}),
+          request: source.request,
+        };
+      }
+      return resolveSavedSource(source, runtimeOptions);
     },
-    items: limited.items,
-    kind: "collection",
-    ...(limited.nextCursor ? { nextCursor: limited.nextCursor } : {}),
-  };
+  });
 }
 
 export function createQueryWorkbenchInitialDraft(catalog: QueryEditorCatalog): QueryEditorDraft {
@@ -801,14 +666,6 @@ function compareSavedEntries(
   return right.updatedAt.localeCompare(left.updatedAt) || left.name.localeCompare(right.name);
 }
 
-function readTrimmedString(value: unknown): string | undefined {
-  if (typeof value !== "string") {
-    return undefined;
-  }
-  const normalized = value.trim();
-  return normalized.length > 0 ? normalized : undefined;
-}
-
 function encodeWorkbenchValue(value: unknown): string {
   return Buffer.from(JSON.stringify(value), "utf8").toString("base64url");
 }
@@ -819,6 +676,28 @@ function decodeWorkbenchValue(value: string): unknown {
   } catch {
     return undefined;
   }
+}
+
+function readQueryWorkbenchDraftRouteState(
+  value: unknown,
+): QueryWorkbenchDraftRouteState | undefined {
+  if (!value || typeof value !== "object") {
+    return undefined;
+  }
+  const candidate = value as Partial<QueryWorkbenchDraftRouteState> & {
+    readonly request?: unknown;
+  };
+  if (candidate.request) {
+    return {
+      ...(Array.isArray(candidate.parameterDefinitions)
+        ? { parameterDefinitions: candidate.parameterDefinitions }
+        : {}),
+      request: candidate.request as SerializedQueryRequest,
+    };
+  }
+  return {
+    request: value as SerializedQueryRequest,
+  };
 }
 
 function isQueryLiteralValue(value: unknown): value is QueryLiteral {
@@ -885,136 +764,4 @@ function coerceQueryWorkbenchSaveError(error: unknown): QueryWorkbenchSaveError 
     });
   }
   return undefined;
-}
-
-function resolveQueryValue(
-  value:
-    | { readonly kind: "literal"; readonly value: QueryLiteral }
-    | { readonly kind: "param"; readonly name: string },
-  params: SerializedQueryRequest["params"],
-): QueryLiteral | undefined {
-  return value.kind === "literal" ? value.value : params?.[value.name];
-}
-
-function matchesQueryFilter(
-  payload: Readonly<Record<string, unknown>>,
-  filter: QueryFilter | undefined,
-  params: SerializedQueryRequest["params"],
-): boolean {
-  if (!filter) {
-    return true;
-  }
-  switch (filter.op) {
-    case "and":
-      return filter.clauses.every((clause) => matchesQueryFilter(payload, clause, params));
-    case "or":
-      return filter.clauses.some((clause) => matchesQueryFilter(payload, clause, params));
-    case "not":
-      return !matchesQueryFilter(payload, filter.clause, params);
-    case "exists":
-      return (payload[filter.fieldId] !== undefined) === filter.value;
-    case "in": {
-      const candidate = payload[filter.fieldId];
-      const values = filter.values
-        .map((value) => resolveQueryValue(value, params))
-        .filter((value): value is QueryLiteral => value !== undefined);
-      return values.some((value) => value === candidate);
-    }
-    case "contains":
-    case "starts-with":
-    case "eq":
-    case "neq":
-    case "gt":
-    case "gte":
-    case "lt":
-    case "lte":
-      return compareFieldValue(
-        payload[filter.fieldId],
-        filter.op,
-        resolveQueryValue(filter.value, params),
-      );
-  }
-}
-
-function compareFieldValue(
-  current: unknown,
-  operator: "contains" | "starts-with" | "eq" | "neq" | "gt" | "gte" | "lt" | "lte",
-  expected: QueryLiteral | undefined,
-): boolean {
-  if (expected === undefined) {
-    return false;
-  }
-  switch (operator) {
-    case "eq":
-      return current === expected;
-    case "neq":
-      return current !== expected;
-    case "contains":
-      return typeof current === "string" && typeof expected === "string"
-        ? current.includes(expected)
-        : false;
-    case "starts-with":
-      return typeof current === "string" && typeof expected === "string"
-        ? current.startsWith(expected)
-        : false;
-    case "gt":
-      return compareComparable(current, expected) > 0;
-    case "gte":
-      return compareComparable(current, expected) >= 0;
-    case "lt":
-      return compareComparable(current, expected) < 0;
-    case "lte":
-      return compareComparable(current, expected) <= 0;
-  }
-}
-
-function compareComparable(left: unknown, right: QueryLiteral): number {
-  if (typeof left === "number" && typeof right === "number") {
-    return left - right;
-  }
-  if (typeof left === "string" && typeof right === "string") {
-    return left.localeCompare(right);
-  }
-  return Number.NaN;
-}
-
-function applyQueryOrder(
-  rows: readonly PreviewRow[],
-  order: readonly { readonly direction: "asc" | "desc"; readonly fieldId: string }[] | undefined,
-): readonly PreviewRow[] {
-  if (!order || order.length === 0) {
-    return rows;
-  }
-  return [...rows].sort((left, right) => {
-    for (const clause of order) {
-      const leftValue = left.payload[clause.fieldId];
-      const rightValue = right.payload[clause.fieldId];
-      const comparison =
-        typeof leftValue === "number" && typeof rightValue === "number"
-          ? leftValue - rightValue
-          : String(leftValue ?? "").localeCompare(String(rightValue ?? ""));
-      if (comparison !== 0) {
-        return clause.direction === "asc" ? comparison : -comparison;
-      }
-    }
-    return left.key.localeCompare(right.key);
-  });
-}
-
-function applyQueryWindow(
-  rows: readonly QueryResultItem[],
-  window: { readonly after?: string; readonly limit: number } | undefined,
-): {
-  readonly items: readonly QueryResultItem[];
-  readonly nextCursor?: string;
-} {
-  const limit = window?.limit ?? rows.length;
-  const offset =
-    window?.after !== undefined ? Number.parseInt(window.after.replace("cursor:", ""), 10) || 0 : 0;
-  const items = rows.slice(offset, offset + limit);
-  const nextOffset = offset + limit;
-  return {
-    items,
-    ...(nextOffset < rows.length ? { nextCursor: `cursor:${nextOffset}` } : {}),
-  };
 }

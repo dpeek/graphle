@@ -24,6 +24,7 @@ import {
 import { Badge } from "@io/web/badge";
 import { Button } from "@io/web/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@io/web/card";
+import { Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 
 import { kitchenSink } from "../../graph/testing/kitchen-sink.js";
@@ -32,14 +33,12 @@ import type {
   QueryContainerRuntimeValue,
   QuerySurfaceRendererCompatibility,
 } from "../lib/query-container.js";
-import type { QueryWorkbenchRouteSearch } from "../lib/query-workbench.js";
 import {
   createCardGridRendererBinding,
   createListRendererBinding,
   createTableRendererBinding,
 } from "./query-renderers.js";
 import { QueryRouteMountView } from "./query-route-mount.js";
-import { QueryWorkbench } from "./query-workbench.js";
 
 type AnyPredicateRef = PredicateRef<any, any>;
 
@@ -408,10 +407,10 @@ function QueryRendererPreviewGallery() {
     <div className="grid gap-4">
       <Card className="border-border/70 bg-card/95 border shadow-sm">
         <CardHeader>
-          <CardTitle className="text-base">Query Renderer Preview</CardTitle>
+          <CardTitle className="text-base">Query Renderer Proof</CardTitle>
           <CardDescription>
-            The same query container binding can now mount through a shared route helper and switch
-            layouts by stable renderer id instead of route-local rendering code.
+            Proof that one shared query container binding can mount through common route chrome and
+            swap layouts by stable renderer id. Author actual queries and saved views on `/query`.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-wrap gap-2">
@@ -574,7 +573,7 @@ function ViewsPageCatalog() {
       <div className="grid gap-4 xl:grid-cols-3">
         <Card className="border-border/70 bg-card/95 border shadow-sm xl:col-span-1">
           <CardHeader>
-            <CardTitle className="text-base">Fixture</CardTitle>
+            <CardTitle className="text-base">Proof Fixture</CardTitle>
             <CardDescription>
               This page uses a local in-memory graph fixture. Every edit is live, but none of it is
               persisted.
@@ -613,13 +612,7 @@ function ViewsPageCatalog() {
   );
 }
 
-export function ViewsPage({
-  onSearchChange,
-  search = {},
-}: {
-  readonly onSearchChange?: (search: QueryWorkbenchRouteSearch) => void | Promise<void>;
-  readonly search?: QueryWorkbenchRouteSearch;
-}) {
+export function ViewsPage() {
   const [fixtureVersion, setFixtureVersion] = useState(0);
 
   return (
@@ -627,29 +620,34 @@ export function ViewsPage({
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="space-y-2">
           <div className="text-xs font-medium tracking-[0.18em] text-sky-700 uppercase">
-            Predicate Renderer Review
+            Proof-only review surface
           </div>
           <div className="space-y-1">
-            <h1 className="text-3xl font-semibold tracking-tight">Views</h1>
+            <h1 className="text-3xl font-semibold tracking-tight">View Proofs</h1>
             <p className="text-muted-foreground max-w-3xl text-sm leading-6">
-              Review every shared predicate display and editor capability from one page, including
-              text, markdown, date, ranges, structured values, enums, URLs, and entity references.
+              Use `/query` to author, reopen, and save queries or views. `/views` remains a
+              disposable proof route for shared predicate renderers, editors, and reusable query
+              container layouts.
             </p>
           </div>
         </div>
-        <Button
-          onClick={() => {
-            setFixtureVersion((current) => current + 1);
-          }}
-          type="button"
-          variant="outline"
-        >
-          Reset fixture
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button nativeButton={false} render={<Link to="/query" />}>
+            Open query authoring
+          </Button>
+          <Button
+            onClick={() => {
+              setFixtureVersion((current) => current + 1);
+            }}
+            type="button"
+            variant="outline"
+          >
+            Reset proof fixture
+          </Button>
+        </div>
       </div>
 
       <QueryRendererPreviewGallery />
-      <QueryWorkbench onSearchChange={onSearchChange} search={search} />
       <ViewsPageCatalog key={fixtureVersion} />
     </div>
   );

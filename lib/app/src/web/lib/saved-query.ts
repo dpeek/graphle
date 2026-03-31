@@ -639,6 +639,7 @@ export function createSavedQueryRecordSourceResolver(
       parameterDefinitions: saved.parameterDefinitions,
     });
     return {
+      parameterDefinitions: saved.parameterDefinitions,
       request,
       sourceCacheKey: `saved:${saved.id}`,
     };

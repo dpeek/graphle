@@ -7,6 +7,7 @@ import {
   createQueryWorkbenchMemoryStore,
   encodeQueryWorkbenchParamOverrides,
 } from "../lib/query-workbench.js";
+import { createQueryRouteSearch } from "../lib/query-route-state.js";
 import { QueryWorkbench } from "./query-workbench.js";
 
 const workflowBoardSurfaceVersion = "query-surface:workflow:project-branch-board:v1";
@@ -14,11 +15,11 @@ const workflowCatalogId = "workflow:query-surfaces";
 const workflowCatalogVersion = "query-catalog:workflow:v1";
 
 describe("query workbench component", () => {
-  it("renders preview and save flows around the shared editor", () => {
+  it("renders the authoring and results split around the shared editor", () => {
     const html = renderToStaticMarkup(<QueryWorkbench />);
 
-    expect(html).toContain('data-query-editor-section="footer"');
-    expect(html).toContain("Preview draft");
+    expect(html).toContain('data-query-workbench-results=""');
+    expect(html).toContain("Results Panel");
     expect(html).toContain("Save query");
     expect(html).toContain("Save view");
     expect(html).toContain('data-query-route-mount="draft-preview"');
@@ -238,5 +239,68 @@ describe("query workbench component", () => {
     expect(html).toContain('data-query-route-mount="saved-view-preview"');
     expect(html).toContain('data-query-container-state="loading"');
     expect(html).toContain("Update view");
+  });
+
+  it("hydrates saved-view preview controls from explicit query route state", () => {
+    const store = createQueryWorkbenchMemoryStore();
+    store.saveQuery({
+      catalogId: workflowCatalogId,
+      catalogVersion: workflowCatalogVersion,
+      id: "saved-query:owner-board",
+      name: "Owner board",
+      parameterDefinitions: [],
+      request: {
+        query: {
+          indexId: "workflow:project-branch-board",
+          kind: "collection",
+          window: {
+            limit: 1,
+          },
+        },
+        version: serializedQueryVersion,
+      },
+      surfaceId: "workflow:project-branch-board",
+      surfaceVersion: workflowBoardSurfaceVersion,
+    });
+    store.saveView({
+      catalogId: workflowCatalogId,
+      catalogVersion: workflowCatalogVersion,
+      id: "saved-view:owner-board",
+      name: "Owner board view",
+      queryId: "saved-query:owner-board",
+      spec: {
+        containerId: "saved-view-preview",
+        pagination: {
+          mode: "paged",
+          pageSize: 1,
+        },
+        query: {
+          kind: "saved",
+          queryId: "saved-query:owner-board",
+        },
+        refresh: {
+          mode: "manual",
+        },
+        renderer: {
+          rendererId: "core:card-grid",
+        },
+      },
+      surfaceId: "workflow:project-branch-board",
+      surfaceVersion: workflowBoardSurfaceVersion,
+    });
+
+    const html = renderToStaticMarkup(
+      <QueryWorkbench
+        search={createQueryRouteSearch({
+          pageSize: 3,
+          rendererId: "core:table",
+          viewId: "saved-view:owner-board",
+        })}
+        store={store}
+      />,
+    );
+
+    expect(html).toContain('value="3"');
+    expect(html).toContain('<option value="core:table" selected="">');
   });
 });

@@ -5,6 +5,7 @@ import {
   getQueryEditorSurface,
   serializeQueryEditorDraft,
   validateQueryEditorDraft,
+  type QueryEditorCatalog,
   type QueryEditorDraft,
 } from "@io/graph-module-core/react-dom";
 import type { QueryLiteral } from "@io/graph-client";
@@ -18,25 +19,36 @@ import { useEffect, useMemo, useState } from "react";
 import {
   mountInlineQueryRenderer,
   mountSavedQueryRenderer,
-  createQueryContainerRuntime,
+  type QueryContainerPageExecutor,
   type QueryContainerSpec,
+  type QueryRendererCapability,
+  type QuerySurfaceRendererCompatibility,
 } from "../lib/query-container.js";
 import {
   QueryWorkbenchSaveError,
   createQueryWorkbenchBrowserStore,
   createQueryWorkbenchInitialDraft,
-  createQueryWorkbenchSourceResolver,
+  createQueryWorkbenchMemoryStore,
+  createQueryWorkbenchPreviewRuntime,
   decodeQueryWorkbenchParamOverrides,
   encodeQueryWorkbenchDraft,
   encodeQueryWorkbenchParamOverrides,
-  executeQueryWorkbenchPreviewRequest,
   resolveQueryWorkbenchState,
   resolveQueryWorkbenchRouteTarget,
   saveQueryWorkbenchQuery,
   saveQueryWorkbenchView,
+  type QueryWorkbenchSavedQuery,
+  type QueryWorkbenchSavedView,
   type QueryWorkbenchStore,
-  type QueryWorkbenchRouteSearch,
 } from "../lib/query-workbench.js";
+import {
+  createQueryRouteSearch,
+  isQueryRoutePreviewRendererId,
+  queryRoutePreviewRendererIds,
+  resolveQueryRoutePreviewState,
+  type QueryRoutePreviewRendererId,
+  type QueryRouteSearch,
+} from "../lib/query-route-state.js";
 import {
   getInstalledModuleQuerySurfaceRegistry,
   getInstalledModuleQuerySurface,
@@ -54,22 +66,49 @@ import { QueryRouteMount } from "./query-route-mount.js";
 
 const catalog = installedModuleQueryEditorCatalog;
 const rendererCapabilities = createQueryRendererCapabilityMap(builtInQueryRendererRegistry);
-const rendererIds = ["core:list", "core:table", "core:card-grid"] as const;
+
+export type QueryWorkbenchSavedState = {
+  readonly message?: string;
+  readonly status: "error" | "loading" | "ready";
+};
+
+export type QueryWorkbenchSaveQueryInput = {
+  readonly catalog: QueryEditorCatalog;
+  readonly draft: QueryEditorDraft;
+  readonly id?: string;
+  readonly name: string;
+};
+
+export type QueryWorkbenchSaveViewInput = {
+  readonly catalog: QueryEditorCatalog;
+  readonly draft: QueryEditorDraft;
+  readonly queryId?: string;
+  readonly queryName: string;
+  readonly rendererCapabilities: Readonly<Record<string, QueryRendererCapability>>;
+  readonly spec: Omit<QueryContainerSpec, "query">;
+  readonly surface?: QuerySurfaceRendererCompatibility;
+  readonly viewId?: string;
+  readonly viewName: string;
+};
 
 type QueryWorkbenchProps = {
-  readonly onSearchChange?: (search: QueryWorkbenchRouteSearch) => void | Promise<void>;
-  readonly search?: QueryWorkbenchRouteSearch;
+  readonly executePreviewPage?: QueryContainerPageExecutor;
+  readonly onSearchChange?: (search: QueryRouteSearch) => void | Promise<void>;
+  readonly onSaveQuery?: (input: QueryWorkbenchSaveQueryInput) => Promise<QueryWorkbenchSavedQuery>;
+  readonly onSaveView?: (input: QueryWorkbenchSaveViewInput) => Promise<{
+    readonly query: QueryWorkbenchSavedQuery;
+    readonly view: QueryWorkbenchSavedView;
+  }>;
+  readonly savedQueries?: readonly QueryWorkbenchSavedQuery[];
+  readonly savedState?: QueryWorkbenchSavedState;
+  readonly savedViews?: readonly QueryWorkbenchSavedView[];
+  readonly search?: QueryRouteSearch;
   readonly store?: QueryWorkbenchStore;
 };
 
 type PreviewControls = {
   readonly pageSize: number;
-  readonly rendererId: (typeof rendererIds)[number];
-};
-
-const defaultPreviewControls: PreviewControls = {
-  pageSize: 25,
-  rendererId: "core:list",
+  readonly rendererId: QueryRoutePreviewRendererId;
 };
 
 function createPreviewRendererBinding(_rendererId: PreviewControls["rendererId"]) {
@@ -133,12 +172,58 @@ function createPreviewRendererBindingForSurface(
   return createPreviewRendererBinding(rendererId);
 }
 
+function readPreviewModeLabel(
+  routeTarget: ReturnType<typeof resolveQueryWorkbenchState>["target"],
+): string {
+  switch (routeTarget.kind) {
+    case "draft":
+      return "live draft";
+    case "saved-query":
+      return "saved query";
+    case "saved-view":
+      return "saved view";
+    case "invalid":
+      return "unavailable";
+  }
+}
+
+function readPreviewSelectionLabel(
+  routeTarget: ReturnType<typeof resolveQueryWorkbenchState>["target"],
+): string {
+  switch (routeTarget.kind) {
+    case "draft":
+      return "Current editor draft";
+    case "saved-query":
+      return routeTarget.query.name;
+    case "saved-view":
+      return routeTarget.view.name;
+    case "invalid":
+      return routeTarget.message;
+  }
+}
+
 export function QueryWorkbench({
+  executePreviewPage,
   onSearchChange,
+  onSaveQuery,
+  onSaveView,
+  savedQueries = [],
+  savedState,
+  savedViews = [],
   search = {},
   store: providedStore,
 }: QueryWorkbenchProps) {
-  const [store] = useState(() => providedStore ?? createQueryWorkbenchBrowserStore());
+  const store = useMemo(
+    () =>
+      providedStore ??
+      (savedState
+        ? createQueryWorkbenchMemoryStore({
+            queries: savedQueries,
+            views: savedViews,
+          })
+        : createQueryWorkbenchBrowserStore()),
+    [providedStore, savedQueries, savedState, savedViews],
+  );
   const initialState = resolveQueryWorkbenchState({
     catalog,
     rendererCapabilities,
@@ -154,7 +239,7 @@ export function QueryWorkbench({
   const [viewName, setViewName] = useState(() => {
     return initialState.hydrated?.viewName ?? "Branch board view";
   });
-  const [previewControls, setPreviewControls] = useState(defaultPreviewControls);
+  const [savePending, setSavePending] = useState<"query" | "view" | undefined>();
   const [saveError, setSaveError] = useState<string | undefined>();
 
   const resolvedState = useMemo(
@@ -171,6 +256,22 @@ export function QueryWorkbench({
   const hydratedState = resolvedState.hydrated;
   const validation = validateQueryEditorDraft(draft, catalog);
   const serialized = validation.ok ? serializeQueryEditorDraft(draft, catalog) : undefined;
+  const previewControls = useMemo(
+    () =>
+      resolveQueryRoutePreviewState({
+        fallback:
+          routeTarget.kind === "saved-view"
+            ? {
+                pageSize: routeTarget.view.spec.pagination?.pageSize,
+                ...(isQueryRoutePreviewRendererId(routeTarget.view.spec.renderer.rendererId)
+                  ? { rendererId: routeTarget.view.spec.renderer.rendererId }
+                  : {}),
+              }
+            : undefined,
+        search,
+      }),
+    [routeTarget, search],
+  );
   const activeSurface = getQueryEditorSurface(catalog, draft.surfaceId);
   const activeSurfaceId =
     routeTarget.kind === "saved-view"
@@ -183,29 +284,64 @@ export function QueryWorkbench({
     [activeSurfaceId],
   );
   const routeParams = search.params ? decodeQueryWorkbenchParamOverrides(search.params) : undefined;
-  const runtime = useMemo(
+  const previewRuntime = useMemo(
     () =>
-      createQueryContainerRuntime({
-        executePage: (request) => executeQueryWorkbenchPreviewRequest(request),
-        resolveSource: createQueryWorkbenchSourceResolver(store, { catalog }),
+      createQueryWorkbenchPreviewRuntime(store, {
+        catalog,
+        executePage: executePreviewPage,
+        inlineParameterDefinitions:
+          routeTarget.kind === "draft" ? routeTarget.parameterDefinitions : undefined,
       }),
-    [store],
+    [executePreviewPage, routeTarget, store],
   );
+
+  function buildRouteSearch(
+    next: Omit<QueryRouteSearch, "pageSize" | "rendererId">,
+    previewState: PreviewControls = previewControls,
+  ): QueryRouteSearch {
+    return createQueryRouteSearch({
+      ...next,
+      pageSize: previewState.pageSize,
+      rendererId: previewState.rendererId,
+    });
+  }
+
+  function buildSearchFromCurrentRoute(
+    previewState: PreviewControls = previewControls,
+  ): QueryRouteSearch {
+    return buildRouteSearch(
+      {
+        draft: search.draft,
+        params: search.params,
+        queryId: search.queryId,
+        viewId: search.viewId,
+      },
+      previewState,
+    );
+  }
 
   const previewSpec = useMemo(() => {
     if (routeTarget.kind === "invalid") {
       return undefined;
     }
     if (routeTarget.kind === "saved-view") {
-      return routeParams
-        ? {
-            ...routeTarget.view.spec,
-            query: {
+      return {
+        ...routeTarget.view.spec,
+        pagination: {
+          ...(routeTarget.view.spec.pagination ?? { mode: "paged" as const }),
+          pageSize: previewControls.pageSize,
+        },
+        query: routeParams
+          ? {
               ...routeTarget.view.spec.query,
               params: routeParams,
-            },
-          }
-        : routeTarget.view.spec;
+            }
+          : routeTarget.view.spec.query,
+        renderer: {
+          ...routeTarget.view.spec.renderer,
+          rendererId: previewControls.rendererId,
+        },
+      } satisfies QueryContainerSpec;
     }
     const source =
       routeTarget.kind === "saved-query"
@@ -251,6 +387,11 @@ export function QueryWorkbench({
       : routeTarget.kind === "saved-view"
         ? routeTarget.query.parameterDefinitions
         : [];
+  const previewModeLabel = readPreviewModeLabel(routeTarget);
+  const previewSelectionLabel = readPreviewSelectionLabel(routeTarget);
+  const previewDraftNotice = !validation.ok
+    ? "Current editor draft is invalid. Results stay pinned to the last valid route state until the draft validates again."
+    : undefined;
 
   useEffect(() => {
     if (!hydratedState) {
@@ -259,7 +400,14 @@ export function QueryWorkbench({
     if (
       routeTarget.kind === "draft" &&
       serialized &&
-      JSON.stringify(serialized.request) === JSON.stringify(routeTarget.request)
+      JSON.stringify({
+        parameterDefinitions: serialized.parameterDefinitions,
+        request: serialized.request,
+      }) ===
+        JSON.stringify({
+          parameterDefinitions: routeTarget.parameterDefinitions,
+          request: routeTarget.request,
+        })
     ) {
       return;
     }
@@ -276,271 +424,403 @@ export function QueryWorkbench({
         ? routeTarget.query.id
         : undefined;
   const editingSavedViewId = routeTarget.kind === "saved-view" ? routeTarget.view.id : undefined;
+  const listedQueries = store.listQueries();
+  const listedViews = store.listViews();
+  const isSaving = savePending !== undefined;
+  const savedLibraryMessage =
+    savedState?.status === "loading"
+      ? "Loading graph-backed saved queries and views from the synced graph runtime."
+      : savedState?.status === "error"
+        ? savedState.message
+        : undefined;
+
+  async function handleSaveQuery(): Promise<void> {
+    try {
+      setSavePending("query");
+      const saved = await Promise.resolve(
+        onSaveQuery
+          ? onSaveQuery({
+              catalog,
+              draft,
+              id: editingSavedQueryId,
+              name: queryName,
+            })
+          : saveQueryWorkbenchQuery({
+              catalog,
+              draft,
+              id: editingSavedQueryId,
+              name: queryName,
+              store,
+            }),
+      );
+      setSaveError(undefined);
+      await onSearchChange?.(
+        buildRouteSearch({
+          ...(search.params ? { params: search.params } : {}),
+          queryId: saved.id,
+        }),
+      );
+    } catch (error) {
+      setSaveError(readSaveError(error));
+    } finally {
+      setSavePending(undefined);
+    }
+  }
+
+  async function handleSaveView(): Promise<void> {
+    try {
+      setSavePending("view");
+      const saved = await Promise.resolve(
+        onSaveView
+          ? onSaveView({
+              catalog,
+              draft,
+              queryId: editingSavedQueryId,
+              queryName,
+              rendererCapabilities,
+              spec: {
+                containerId: "saved-view-preview",
+                pagination: {
+                  mode: "paged",
+                  pageSize: previewControls.pageSize,
+                },
+                refresh: {
+                  mode: "manual",
+                },
+                renderer: {
+                  rendererId: previewControls.rendererId,
+                },
+              },
+              surface,
+              viewId: editingSavedViewId,
+              viewName,
+            })
+          : saveQueryWorkbenchView({
+              catalog,
+              draft,
+              queryId: editingSavedQueryId,
+              queryName,
+              rendererCapabilities,
+              spec: {
+                containerId: "saved-view-preview",
+                pagination: {
+                  mode: "paged",
+                  pageSize: previewControls.pageSize,
+                },
+                refresh: {
+                  mode: "manual",
+                },
+                renderer: {
+                  rendererId: previewControls.rendererId,
+                },
+              },
+              store,
+              surface,
+              viewId: editingSavedViewId,
+              viewName,
+            }),
+      );
+      setSaveError(undefined);
+      await onSearchChange?.(
+        buildRouteSearch({
+          ...(search.params ? { params: search.params } : {}),
+          viewId: saved.view.id,
+        }),
+      );
+    } catch (error) {
+      setSaveError(readSaveError(error));
+    } finally {
+      setSavePending(undefined);
+    }
+  }
 
   return (
-    <div className="grid gap-4">
-      <QueryEditor
-        catalog={catalog}
-        description="Author inline queries, preview them through the shared query container, and save local workbench copies of saved queries or saved views for reopen and route-state testing."
-        draft={draft}
-        footer={
-          <div className="grid gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
-            <Card className="border-border/70 border">
-              <CardHeader>
-                <CardTitle className="text-base">Preview Route State</CardTitle>
-                <CardDescription>
-                  Draft previews sync to route state, while saved queries and views can be reopened
-                  by stable ids with optional parameter overrides.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="grid gap-4">
-                <FieldGroup>
-                  <Field>
-                    <FieldLabel htmlFor="query-preview-name">Save query as</FieldLabel>
-                    <FieldContent>
-                      <Input
-                        id="query-preview-name"
-                        onChange={(event) => setQueryName(event.target.value)}
-                        value={queryName}
-                      />
-                    </FieldContent>
-                  </Field>
-                  <Field>
-                    <FieldLabel htmlFor="view-preview-name">Save view as</FieldLabel>
-                    <FieldContent>
-                      <Input
-                        id="view-preview-name"
-                        onChange={(event) => setViewName(event.target.value)}
-                        value={viewName}
-                      />
-                    </FieldContent>
-                  </Field>
-                </FieldGroup>
-                <div className="flex flex-wrap gap-2">
-                  <Button
-                    onClick={() => {
-                      if (!serialized) {
-                        return;
-                      }
-                      setSaveError(undefined);
-                      void onSearchChange?.({
-                        draft: encodeQueryWorkbenchDraft(serialized.request),
-                      });
-                    }}
-                    type="button"
-                    variant="outline"
-                  >
-                    Preview draft
-                  </Button>
-                  <Button
-                    onClick={() => {
-                      try {
-                        const saved = saveQueryWorkbenchQuery({
-                          catalog,
-                          draft,
-                          id: editingSavedQueryId,
-                          name: queryName,
-                          store,
-                        });
-                        setSaveError(undefined);
-                        void onSearchChange?.({ queryId: saved.id });
-                      } catch (error) {
-                        setSaveError(readSaveError(error));
-                      }
-                    }}
-                    type="button"
-                    variant="outline"
-                  >
-                    {editingSavedQueryId ? "Update query" : "Save query"}
-                  </Button>
-                  <Button
-                    onClick={() => {
-                      try {
-                        const saved = saveQueryWorkbenchView({
-                          catalog,
-                          draft,
-                          queryId: editingSavedQueryId,
-                          queryName,
-                          rendererCapabilities,
-                          spec: {
-                            containerId: "saved-view-preview",
-                            pagination: {
-                              mode: "paged",
-                              pageSize: previewControls.pageSize,
-                            },
-                            refresh: {
-                              mode: "manual",
-                            },
-                            renderer: {
-                              rendererId: previewControls.rendererId,
-                            },
-                          },
-                          store,
-                          surface,
-                          viewId: editingSavedViewId,
-                          viewName,
-                        });
-                        setSaveError(undefined);
-                        void onSearchChange?.({ viewId: saved.view.id });
-                      } catch (error) {
-                        setSaveError(readSaveError(error));
-                      }
-                    }}
-                    type="button"
-                  >
-                    {editingSavedViewId ? "Update view" : "Save view"}
-                  </Button>
-                </div>
-                {saveError ? (
-                  <div className="rounded-xl border border-amber-400/40 bg-amber-50/60 px-3 py-2 text-xs">
-                    {saveError}
-                  </div>
-                ) : null}
-              </CardContent>
-            </Card>
+    <div
+      className="grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(20rem,0.8fr)]"
+      data-query-workbench=""
+    >
+      <div className="grid min-w-0 content-start gap-4" data-query-workbench-authoring="">
+        <QueryEditor
+          catalog={catalog}
+          description="Author core and workflow queries from one installed catalog. Valid draft edits sync straight into route state while results run beside the editor through the shared query-container runtime and `/api/query` transport."
+          draft={draft}
+          onDraftChange={(nextDraft) => {
+            setDraft(nextDraft);
+            const nextValidation = validateQueryEditorDraft(nextDraft, catalog);
+            if (!nextValidation.ok) {
+              return;
+            }
+            const nextSerialized = serializeQueryEditorDraft(nextDraft, catalog);
+            void onSearchChange?.(
+              buildRouteSearch({
+                draft: encodeQueryWorkbenchDraft({
+                  parameterDefinitions: nextSerialized.parameterDefinitions,
+                  request: nextSerialized.request,
+                }),
+              }),
+            );
+          }}
+          title="Query Draft"
+        />
 
-            <Card className="border-border/70 border">
-              <CardHeader>
-                <CardTitle className="text-base">Preview Binding</CardTitle>
-                <CardDescription>
-                  Shared container chrome drives inline previews and saved-view reopens through one
-                  runtime path.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="grid gap-4">
-                <FieldGroup>
-                  <Field>
-                    <FieldLabel htmlFor="query-preview-renderer">Renderer</FieldLabel>
-                    <FieldContent>
-                      <select
-                        className="border-input bg-background h-10 w-full rounded-md border px-3 text-sm"
-                        id="query-preview-renderer"
-                        onChange={(event) =>
-                          setPreviewControls((current) => ({
-                            ...current,
-                            rendererId: event.target.value as PreviewControls["rendererId"],
-                          }))
-                        }
-                        value={previewControls.rendererId}
-                      >
-                        {rendererIds.map((rendererId) => (
-                          <option key={rendererId} value={rendererId}>
-                            {rendererId}
-                          </option>
-                        ))}
-                      </select>
-                    </FieldContent>
-                  </Field>
-                  <Field>
-                    <FieldLabel htmlFor="query-preview-page-size">Page size</FieldLabel>
-                    <FieldContent>
-                      <Input
-                        id="query-preview-page-size"
-                        min={1}
-                        onChange={(event) =>
-                          setPreviewControls((current) => ({
-                            ...current,
-                            pageSize: Math.max(1, Number(event.target.value) || 1),
-                          }))
-                        }
-                        type="number"
-                        value={String(previewControls.pageSize)}
-                      />
-                    </FieldContent>
-                  </Field>
-                </FieldGroup>
-                {activeParameters.length > 0 ? (
-                  <ParameterOverrideEditor
-                    parameterNames={activeParameters.map((parameter) => parameter.name)}
-                    search={search}
-                    onSearchChange={onSearchChange}
-                  />
-                ) : (
-                  <div className="text-muted-foreground text-xs">
-                    Open a saved query or saved view with parameters to test route-state overrides.
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </div>
-        }
-        onDraftChange={(nextDraft) => {
-          setDraft(nextDraft);
-          const nextValidation = validateQueryEditorDraft(nextDraft, catalog);
-          if (!nextValidation.ok) {
-            return;
-          }
-          const nextSerialized = serializeQueryEditorDraft(nextDraft, catalog);
-          void onSearchChange?.({
-            draft: encodeQueryWorkbenchDraft(nextSerialized.request),
-          });
-        }}
-        title="Query Authoring"
-      />
-
-      <Card className="border-border/70 bg-card/95 border shadow-sm">
-        <CardHeader>
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <CardTitle className="text-base">Saved State</CardTitle>
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,0.95fr)]">
+          <Card
+            className="border-border/70 bg-card/95 border shadow-sm"
+            data-query-workbench-save=""
+          >
+            <CardHeader>
+              <CardTitle className="text-base">Save And Reopen</CardTitle>
               <CardDescription>
-                Query ids and view ids reopen through route state. Missing saved entries fail closed
-                instead of silently falling back.
+                Saved queries and saved views keep the current route-addressable selection explicit.
+                Draft edits update the active preview automatically whenever the request remains
+                valid.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-4">
+              <FieldGroup>
+                <Field>
+                  <FieldLabel htmlFor="query-preview-name">Save query as</FieldLabel>
+                  <FieldContent>
+                    <Input
+                      id="query-preview-name"
+                      onChange={(event) => setQueryName(event.target.value)}
+                      value={queryName}
+                    />
+                  </FieldContent>
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="view-preview-name">Save view as</FieldLabel>
+                  <FieldContent>
+                    <Input
+                      id="view-preview-name"
+                      onChange={(event) => setViewName(event.target.value)}
+                      value={viewName}
+                    />
+                  </FieldContent>
+                </Field>
+              </FieldGroup>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  disabled={isSaving}
+                  onClick={() => {
+                    void handleSaveQuery();
+                  }}
+                  type="button"
+                  variant="outline"
+                >
+                  {editingSavedQueryId ? "Update query" : "Save query"}
+                </Button>
+                <Button
+                  disabled={isSaving}
+                  onClick={() => {
+                    void handleSaveView();
+                  }}
+                  type="button"
+                >
+                  {editingSavedViewId ? "Update view" : "Save view"}
+                </Button>
+              </div>
+              {saveError ? (
+                <div className="rounded-xl border border-amber-400/40 bg-amber-50/60 px-3 py-2 text-xs">
+                  {saveError}
+                </div>
+              ) : null}
+            </CardContent>
+          </Card>
+
+          <Card
+            className="border-border/70 bg-card/95 border shadow-sm"
+            data-query-workbench-library=""
+          >
+            <CardHeader>
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <CardTitle className="text-base">Saved Queries And Views</CardTitle>
+                  <CardDescription>
+                    Query ids and view ids reopen through route state. Missing saved entries stay
+                    explicit instead of silently falling back.
+                  </CardDescription>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Badge variant="outline">{listedQueries.length} queries</Badge>
+                  <Badge variant="outline">{listedViews.length} views</Badge>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="grid gap-3 lg:grid-cols-2">
+              {savedLibraryMessage ? (
+                <div
+                  className={
+                    savedState?.status === "error"
+                      ? "rounded-xl border border-amber-400/40 bg-amber-50/60 px-3 py-2 text-xs lg:col-span-2"
+                      : "text-muted-foreground text-sm lg:col-span-2"
+                  }
+                >
+                  {savedLibraryMessage}
+                </div>
+              ) : null}
+              {listedQueries.map((query) => (
+                <Button
+                  key={query.id}
+                  onClick={() =>
+                    void onSearchChange?.(
+                      buildRouteSearch({
+                        queryId: query.id,
+                      }),
+                    )
+                  }
+                  type="button"
+                  variant="outline"
+                >
+                  Open query: {query.name}
+                </Button>
+              ))}
+              {listedViews.map((view) => (
+                <Button
+                  key={view.id}
+                  onClick={() =>
+                    void onSearchChange?.(
+                      buildRouteSearch({
+                        viewId: view.id,
+                      }),
+                    )
+                  }
+                  type="button"
+                  variant="outline"
+                >
+                  Open view: {view.name}
+                </Button>
+              ))}
+              {listedQueries.length === 0 &&
+              listedViews.length === 0 &&
+              savedState?.status !== "loading" ? (
+                <div className="text-muted-foreground text-sm">
+                  Save a query or view to populate the route-addressable catalog.
+                </div>
+              ) : null}
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+
+      <div className="grid content-start gap-4 xl:sticky xl:top-4" data-query-workbench-results="">
+        <Card
+          className="border-border/70 bg-card/95 border shadow-sm"
+          data-query-workbench-preview-controls=""
+        >
+          <CardHeader className="gap-3">
+            <div className="space-y-1">
+              <CardTitle className="text-base">Results Panel</CardTitle>
+              <CardDescription>
+                The active selection resolves through the shared query-container runtime and
+                executes over the reusable `/api/query` transport.
               </CardDescription>
             </div>
             <div className="flex flex-wrap gap-2">
-              <Badge variant="outline">{store.listQueries().length} queries</Badge>
-              <Badge variant="outline">{store.listViews().length} views</Badge>
+              <Badge variant="outline">{previewModeLabel}</Badge>
+              <Badge variant="outline">{activeSurfaceId}</Badge>
             </div>
-          </div>
-        </CardHeader>
-        <CardContent className="grid gap-3 lg:grid-cols-2">
-          {store.listQueries().map((query) => (
-            <Button
-              key={query.id}
-              onClick={() => void onSearchChange?.({ queryId: query.id })}
-              type="button"
-              variant="outline"
-            >
-              Open query: {query.name}
-            </Button>
-          ))}
-          {store.listViews().map((view) => (
-            <Button
-              key={view.id}
-              onClick={() => void onSearchChange?.({ viewId: view.id })}
-              type="button"
-              variant="outline"
-            >
-              Open view: {view.name}
-            </Button>
-          ))}
-          {store.listQueries().length === 0 && store.listViews().length === 0 ? (
-            <div className="text-muted-foreground text-sm">
-              Save a query or view to populate the route-addressable catalog.
-            </div>
-          ) : null}
-        </CardContent>
-      </Card>
-
-      {routeTarget.kind === "invalid" ? (
-        <Card className="border-destructive/30 bg-card/95 border shadow-sm">
-          <CardHeader>
-            <CardTitle className="text-base">Preview unavailable</CardTitle>
-            <CardDescription>{routeTarget.message}</CardDescription>
           </CardHeader>
+          <CardContent className="grid gap-4">
+            <div
+              className="rounded-xl border border-dashed px-3 py-3 text-sm"
+              data-query-workbench-preview-selection=""
+            >
+              <div className="text-muted-foreground text-xs font-medium tracking-[0.18em] uppercase">
+                Active selection
+              </div>
+              <div className="mt-2 font-medium">{previewSelectionLabel}</div>
+              {routeTarget.kind === "saved-query" ? (
+                <div className="text-muted-foreground text-xs">{routeTarget.query.id}</div>
+              ) : routeTarget.kind === "saved-view" ? (
+                <div className="text-muted-foreground text-xs">{routeTarget.view.id}</div>
+              ) : null}
+            </div>
+            {previewDraftNotice ? (
+              <div
+                className="rounded-xl border border-amber-400/40 bg-amber-50/60 px-3 py-2 text-xs"
+                data-query-workbench-preview-note="draft-invalid"
+              >
+                {previewDraftNotice}
+              </div>
+            ) : null}
+            <FieldGroup>
+              <Field>
+                <FieldLabel htmlFor="query-preview-renderer">Renderer</FieldLabel>
+                <FieldContent>
+                  <select
+                    className="border-input bg-background h-10 w-full rounded-md border px-3 text-sm"
+                    id="query-preview-renderer"
+                    onChange={(event) =>
+                      void onSearchChange?.(
+                        buildSearchFromCurrentRoute({
+                          ...previewControls,
+                          rendererId: event.target.value as PreviewControls["rendererId"],
+                        }),
+                      )
+                    }
+                    value={previewControls.rendererId}
+                  >
+                    {queryRoutePreviewRendererIds.map((rendererId) => (
+                      <option key={rendererId} value={rendererId}>
+                        {rendererId}
+                      </option>
+                    ))}
+                  </select>
+                </FieldContent>
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="query-preview-page-size">Page size</FieldLabel>
+                <FieldContent>
+                  <Input
+                    id="query-preview-page-size"
+                    min={1}
+                    onChange={(event) =>
+                      void onSearchChange?.(
+                        buildSearchFromCurrentRoute({
+                          ...previewControls,
+                          pageSize: Math.max(1, Number(event.target.value) || 1),
+                        }),
+                      )
+                    }
+                    type="number"
+                    value={String(previewControls.pageSize)}
+                  />
+                </FieldContent>
+              </Field>
+            </FieldGroup>
+            {activeParameters.length > 0 ? (
+              <ParameterOverrideEditor
+                parameterNames={activeParameters.map((parameter) => parameter.name)}
+                previewControls={previewControls}
+                search={search}
+                onSearchChange={onSearchChange}
+              />
+            ) : (
+              <div className="text-muted-foreground text-xs">
+                The current selection does not define any route-level parameter overrides.
+              </div>
+            )}
+          </CardContent>
         </Card>
-      ) : previewSpec ? (
-        <QueryRouteMount
-          description="Shared query container preview path for inline drafts, saved queries, and saved views."
-          executePage={(request) => executeQueryWorkbenchPreviewRequest(request)}
-          resolveSource={createQueryWorkbenchSourceResolver(store, { catalog })}
-          runtime={runtime}
-          spec={previewSpec}
-          surface={surface}
-          title="Query Preview"
-        />
-      ) : null}
+
+        {routeTarget.kind === "invalid" ? (
+          <Card className="border-destructive/30 bg-card/95 border shadow-sm">
+            <CardHeader>
+              <CardTitle className="text-base">Preview unavailable</CardTitle>
+              <CardDescription>{routeTarget.message}</CardDescription>
+            </CardHeader>
+          </Card>
+        ) : previewSpec ? (
+          <QueryRouteMount
+            description="Loading, empty, error, pagination, and stale-result states all render through the shared query-container shell."
+            runtime={previewRuntime}
+            spec={previewSpec}
+            surface={surface}
+            title="Live Results"
+          />
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -548,11 +828,13 @@ export function QueryWorkbench({
 function ParameterOverrideEditor({
   onSearchChange,
   parameterNames,
+  previewControls,
   search,
 }: {
-  readonly onSearchChange?: (search: QueryWorkbenchRouteSearch) => void | Promise<void>;
+  readonly onSearchChange?: (search: QueryRouteSearch) => void | Promise<void>;
   readonly parameterNames: readonly string[];
-  readonly search: QueryWorkbenchRouteSearch;
+  readonly previewControls: PreviewControls;
+  readonly search: QueryRouteSearch;
 }) {
   const overrides = search.params ? (decodeQueryWorkbenchParamOverrides(search.params) ?? {}) : {};
 
@@ -576,12 +858,16 @@ function ParameterOverrideEditor({
                   Object.keys(nextOverrides).length > 0
                     ? encodeQueryWorkbenchParamOverrides(nextOverrides)
                     : undefined;
-                void onSearchChange?.({
-                  ...(search.queryId ? { queryId: search.queryId } : {}),
-                  ...(search.viewId ? { viewId: search.viewId } : {}),
-                  ...(search.draft ? { draft: search.draft } : {}),
-                  ...(nextParams ? { params: nextParams } : {}),
-                });
+                void onSearchChange?.(
+                  createQueryRouteSearch({
+                    ...(search.queryId ? { queryId: search.queryId } : {}),
+                    ...(search.viewId ? { viewId: search.viewId } : {}),
+                    ...(search.draft ? { draft: search.draft } : {}),
+                    ...(nextParams ? { params: nextParams } : {}),
+                    pageSize: previewControls.pageSize,
+                    rendererId: previewControls.rendererId,
+                  }),
+                );
               }}
               value={typeof overrides[name] === "string" ? overrides[name] : ""}
             />
