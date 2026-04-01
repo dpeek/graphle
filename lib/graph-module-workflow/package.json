@@ -10,6 +10,14 @@
     ".": {
       "types": "./src/index.ts",
       "default": "./out/index.js"
+    },
+    "./client": {
+      "types": "./src/client/index.ts",
+      "default": "./out/client/index.js"
+    },
+    "./server": {
+      "types": "./src/server/index.ts",
+      "default": "./out/server/index.js"
     }
   },
   "scripts": {
@@ -20,6 +28,7 @@
   "dependencies": {
     "@io/graph-client": "workspace:*",
     "@io/graph-kernel": "workspace:*",
+    "@io/graph-live": "workspace:*",
     "@io/graph-module": "workspace:*",
     "@io/graph-module-core": "workspace:*",
     "@io/graph-projection": "workspace:*"

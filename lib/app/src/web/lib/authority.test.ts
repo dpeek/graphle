@@ -27,6 +27,15 @@ import {
   workflowReviewSyncScopeRequest,
 } from "@io/graph-module-workflow";
 import { type InvalidationEvent } from "@io/graph-projection";
+import {
+  createQueryEditorDraft,
+  createSavedQueryRecordInputFromDraft,
+  createSavedViewRecordInput,
+} from "@io/graph-query";
+import {
+  builtInQueryRendererRegistry,
+  createQueryRendererCapabilityMap,
+} from "@io/graph-query/react-dom";
 
 import {
   createBearerShareAuthorizationContext,
@@ -42,11 +51,6 @@ import {
   type WorkflowFixture,
 } from "./authority-test-helpers.js";
 import { createInMemoryTestWebAppAuthorityStorage } from "./authority-test-storage.js";
-import { createInstalledQueryEditorCatalog } from "../components/query-editor.js";
-import {
-  builtInQueryRendererRegistry,
-  createQueryRendererCapabilityMap,
-} from "../components/query-renderers.js";
 import {
   applyStagedWebAuthorityMutation,
   type WebAppAuthority,
@@ -58,9 +62,10 @@ import {
   type WebAppAuthorityTransactionOptions,
 } from "./authority.js";
 import { webAppPolicyVersion } from "./policy-version.js";
-import { createQueryEditorDraft } from "./query-editor.js";
-import { createSavedQueryRecordInputFromDraft, createSavedViewRecordInput } from "./saved-query.js";
-import { getInstalledModuleQuerySurfaceRendererCompatibility } from "./query-surface-registry.js";
+import {
+  getInstalledModuleQueryEditorCatalog,
+  getInstalledModuleQuerySurfaceRendererCompatibility,
+} from "./query-surface-registry.js";
 import {
   handleWebCommandRequest,
   handleSyncRequest,
@@ -69,6 +74,7 @@ import {
 
 const productGraph = { ...core, ...workflow } as const;
 const browserGraph = { ...workflow } as const;
+const createInstalledQueryEditorCatalog = getInstalledModuleQueryEditorCatalog;
 const envVarDescriptionPredicateId = edgeId(workflow.envVar.fields.description);
 const envVarSecretPredicateId = edgeId(workflow.envVar.fields.secret);
 const principalHomeGraphIdPredicateId = edgeId(core.principal.fields.homeGraphId);
@@ -5226,7 +5232,7 @@ describe("web authority", () => {
             mode: "manual",
           },
           renderer: {
-            rendererId: "core:list",
+            rendererId: "default:list",
           },
         },
         surface: getInstalledModuleQuerySurfaceRendererCompatibility(

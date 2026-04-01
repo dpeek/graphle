@@ -6,7 +6,7 @@ import { XIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { flattenPredicateRefs } from "./catalog.js";
-import { createDraftController } from "./create-draft-controller.js";
+import { createEntityDraftController } from "./create-draft-controller.js";
 import { buildCreateDefaults, buildCreatePlan } from "./create-draft-plan.js";
 import { InspectorFieldSection } from "./inspector.js";
 import { explorerNamespace } from "./model.js";
@@ -45,7 +45,7 @@ export function GenericCreateInspector({
   const createPlan = useMemo(() => buildCreatePlan(entityEntry), [entityEntry.id]);
   const controller = useMemo(
     () =>
-      createDraftController({
+      createEntityDraftController({
         entry: entityEntry,
         entityEntryByIdRef,
         initialInput: buildCreateDefaults(entityEntry, typeById),

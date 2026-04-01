@@ -2,27 +2,24 @@
 
 import type { QueryResultItem } from "@io/graph-client";
 import type { CollectionSurfaceSpec } from "@io/graph-module";
-import { ScrollArea } from "@io/web/scroll-area";
-import { useEffect, useMemo, useState } from "react";
-
-import { CollectionCommandActionButtons } from "./collection-command-actions.js";
-import type { CollectionSurfaceRecordLookup } from "../lib/collection-surface.js";
-import type {
-  CollectionCommandExecutionResult,
-  CollectionCommandSurfaceBinding,
-  ResolvedCollectionCommandBinding,
-} from "../lib/collection-command-surface.js";
+import { CollectionCommandButtons, CollectionSurfaceMount } from "@io/graph-surface/react-dom";
+import type { CollectionSurfaceRecordLookup } from "@io/graph-surface";
 import {
-  createEntityCommandSubject,
-  createSelectionCommandSubject,
+  createEntityCollectionCommandSubject,
+  createSelectionCollectionCommandSubject,
   resolveCollectionCommandBindings,
-} from "../lib/collection-command-surface.js";
+  type CollectionCommandBinding,
+  type CollectionCommandExecutionResult,
+  type ResolvedCollectionCommandBinding,
+} from "@io/graph-surface";
 import type {
   QueryContainerPageExecutor,
   QueryContainerRuntimeController,
   QueryContainerRuntimeValue,
-} from "../lib/query-container.js";
-import { CollectionSurfaceMount } from "./collection-surface-mount.js";
+} from "@io/graph-query";
+import { ScrollArea } from "@io/web/scroll-area";
+import { useEffect, useMemo, useState } from "react";
+
 import { EntityCreateButton, EntityCreateRuntimeProvider } from "./entity-create-button.js";
 import { buildEntityCatalog } from "./explorer/catalog.js";
 import { EntityInspector } from "./explorer/entities.js";
@@ -34,6 +31,10 @@ import type {
 } from "./explorer/model.js";
 import { ExplorerSyncContext, useExplorerSyncSnapshot } from "./explorer/sync.js";
 import { EmptyState, Section } from "./explorer/ui.js";
+import {
+  getInstalledModuleQueryEditorCatalog,
+  getInstalledModuleQuerySurfaceRegistry,
+} from "../lib/query-surface-registry.js";
 
 function resolveEntityTypeEntry(
   entityEntryById: ReadonlyMap<string, EntityCatalogEntry>,
@@ -75,7 +76,7 @@ function readActiveItemKey(
 
 export type CollectionBrowserSurfaceProps = {
   readonly collection: CollectionSurfaceSpec;
-  readonly commandBindings?: Readonly<Record<string, CollectionCommandSurfaceBinding>>;
+  readonly commandBindings?: Readonly<Record<string, CollectionCommandBinding>>;
   readonly executePage?: QueryContainerPageExecutor;
   readonly initialValue?: QueryContainerRuntimeValue;
   readonly lookup: CollectionSurfaceRecordLookup;
@@ -153,7 +154,7 @@ export function CollectionBrowserSurface({
   async function handleCommandExecuted(
     binding: ResolvedCollectionCommandBinding,
     result: CollectionCommandExecutionResult | void,
-    subject: ReturnType<typeof createEntityCommandSubject>,
+    subject: ReturnType<typeof createEntityCollectionCommandSubject>,
   ): Promise<void> {
     if (subject?.kind === "entity") {
       setSelectedEntityId(subject.entityId);
@@ -175,12 +176,12 @@ export function CollectionBrowserSurface({
           ...(resolvedCommandBindings.entityCommands.length > 0
             ? {
                 renderRowActions: (item: QueryResultItem) => (
-                  <CollectionCommandActionButtons
+                  <CollectionCommandButtons
                     commands={resolvedCommandBindings.entityCommands}
                     onExecuted={handleCommandExecuted}
                     scope="entity"
                     size="xs"
-                    subject={createEntityCommandSubject(item)}
+                    subject={createEntityCollectionCommandSubject(item)}
                     variant="ghost"
                   />
                 ),
@@ -192,12 +193,12 @@ export function CollectionBrowserSurface({
                   readonly items: readonly QueryResultItem[];
                   readonly keys: readonly string[];
                 }) => (
-                  <CollectionCommandActionButtons
+                  <CollectionCommandButtons
                     commands={resolvedCommandBindings.selectionCommands}
                     onExecuted={handleCommandExecuted}
                     scope="selection"
                     size="sm"
-                    subject={createSelectionCommandSubject(selection.items)}
+                    subject={createSelectionCollectionCommandSubject(selection.items)}
                     variant="outline"
                   />
                 ),
@@ -226,6 +227,7 @@ export function CollectionBrowserSurface({
             <CollectionSurfaceMount
               activeItemKey={activeItemKey}
               affordances={affordances}
+              catalog={getInstalledModuleQueryEditorCatalog()}
               collection={collection}
               executePage={executePage}
               initialValue={initialValue}
@@ -239,6 +241,7 @@ export function CollectionBrowserSurface({
               }}
               onValueChange={setCollectionValue}
               runtime={queryRuntime}
+              surfaceRegistry={getInstalledModuleQuerySurfaceRegistry()}
             />
           </div>
 

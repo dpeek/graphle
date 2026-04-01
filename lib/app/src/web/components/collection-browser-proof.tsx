@@ -6,14 +6,12 @@ import { createGraphClient, serializedQueryVersion } from "@io/graph-client";
 import type { CollectionSurfaceSpec, GraphCommandSurfaceSpec } from "@io/graph-module";
 import { core, coreGraphBootstrapOptions } from "@io/graph-module-core";
 import { workflow } from "@io/graph-module-workflow";
+import type { QueryContainerPageExecutor, SavedQueryRecord } from "@io/graph-query";
+import type { CollectionCommandBinding, CollectionSurfaceRecordLookup } from "@io/graph-surface";
 import { Badge } from "@io/web/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@io/web/card";
 import { useState } from "react";
 
-import type { CollectionSurfaceRecordLookup } from "../lib/collection-surface.js";
-import type { CollectionCommandSurfaceBinding } from "../lib/collection-command-surface.js";
-import type { QueryContainerPageExecutor } from "../lib/query-container.js";
-import type { SavedQueryRecord } from "../lib/saved-query.js";
 import type { ExplorerRuntime } from "./explorer/model.js";
 import { typePredicateId } from "./explorer/model.js";
 import { type GraphRuntime } from "./graph-runtime-bootstrap.js";
@@ -108,7 +106,7 @@ const archiveSelectionCommandSurface = {
 
 type CollectionBrowserProofFixture = {
   readonly collection: CollectionSurfaceSpec;
-  readonly commandBindings: Readonly<Record<string, CollectionCommandSurfaceBinding>>;
+  readonly commandBindings: Readonly<Record<string, CollectionCommandBinding>>;
   readonly executePage: QueryContainerPageExecutor;
   readonly lookup: CollectionSurfaceRecordLookup;
   readonly runtime: ExplorerRuntime;
@@ -209,7 +207,7 @@ function createCollectionBrowserProofFixture(): CollectionBrowserProofFixture {
         });
       },
     },
-  } as const satisfies Readonly<Record<string, CollectionCommandSurfaceBinding>>;
+  } as const satisfies Readonly<Record<string, CollectionCommandBinding>>;
 
   return {
     collection: branchBoardCollection,

@@ -1,4 +1,7 @@
+import { defaultHttpSerializedQueryPath } from "@io/graph-client";
 import { type AuthoritativeGraphRetainedHistoryPolicy } from "@io/graph-kernel";
+import { createLiveScopeRouter } from "@io/graph-live/server";
+import { webWorkflowReadPath } from "@io/graph-module-workflow/client";
 
 import type { WebAppAuthority, WebAppAuthorityOptions } from "./authority.js";
 import { createWebAppAuthority } from "./authority.js";
@@ -17,7 +20,6 @@ import {
   type DurableObjectEnvLike,
   type DurableObjectStateLike as SqlDurableObjectStateLike,
 } from "./graph-authority-sql-storage.js";
-import { webSerializedQueryPath } from "./query-transport.js";
 import {
   handleSerializedQueryRequest,
   handleWorkflowLiveRequest,
@@ -28,9 +30,9 @@ import {
   handleTransactionRequest,
   readRequestAuthorizationContext,
 } from "./server-routes.js";
-import { createWorkflowReviewLiveScopeRouter } from "./workflow-live-scope-router.js";
 import { webWorkflowLivePath } from "./workflow-live-transport.js";
-import { webWorkflowReadPath } from "./workflow-transport.js";
+
+const webSerializedQueryPath = defaultHttpSerializedQueryPath;
 
 type DurableObjectStateLike = SqlDurableObjectStateLike & {
   blockConcurrencyWhile<T>(callback: () => Promise<T>): Promise<T>;
@@ -51,7 +53,7 @@ export class WebGraphAuthorityDurableObject {
   private readonly state: DurableObjectStateLike;
   private readonly retainedHistoryPolicy: AuthoritativeGraphRetainedHistoryPolicy;
   private readonly createAuthority: WebGraphAuthorityFactory;
-  private readonly workflowReviewLiveScopeRouter = createWorkflowReviewLiveScopeRouter();
+  private readonly workflowReviewLiveScopeRouter = createLiveScopeRouter();
   private authorityPromise: Promise<WebAppAuthority> | null = null;
 
   constructor(

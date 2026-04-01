@@ -1,4 +1,12 @@
-import { type DependencyKey, type InvalidationEvent } from "@io/graph-projection";
+import {
+  LiveScopeClientError,
+  requestLiveScope,
+  type LiveScopeInvalidation,
+  type LiveScopePullResult,
+  type LiveScopeRegistration,
+  type LiveScopeRegistrationTarget,
+  type LiveScopeResponse,
+} from "@io/graph-live";
 
 export const webWorkflowLivePath = "/api/workflow-live";
 
@@ -10,30 +18,10 @@ export const workflowLiveRequestKinds = [
 
 export type WorkflowLiveRequestKind = (typeof workflowLiveRequestKinds)[number];
 
-export type WorkflowReviewLiveRegistration = {
-  readonly registrationId: string;
-  readonly sessionId: string;
-  readonly principalId: string;
-  readonly scopeId: string;
-  readonly definitionHash: string;
-  readonly policyFilterVersion: string;
-  readonly dependencyKeys: readonly DependencyKey[];
-  readonly expiresAt: string;
-};
-
-export type WorkflowReviewLiveRegistrationTarget = Omit<
-  WorkflowReviewLiveRegistration,
-  "expiresAt" | "registrationId"
->;
-
-export type WorkflowReviewLiveInvalidation = InvalidationEvent;
-
-export type WorkflowReviewPullLiveResult = {
-  readonly active: boolean;
-  readonly invalidations: readonly WorkflowReviewLiveInvalidation[];
-  readonly scopeId: string;
-  readonly sessionId: string;
-};
+export type WorkflowReviewLiveRegistration = LiveScopeRegistration;
+export type WorkflowReviewLiveRegistrationTarget = LiveScopeRegistrationTarget;
+export type WorkflowReviewLiveInvalidation = LiveScopeInvalidation;
+export type WorkflowReviewPullLiveResult = LiveScopePullResult;
 
 export type WorkflowReviewRegisterLiveRequest = {
   readonly kind: "workflow-review-register";
@@ -88,88 +76,82 @@ type WorkflowLiveResponseFor<TRequest extends WorkflowLiveRequest> =
         ? WorkflowReviewRemoveLiveResponse
         : never;
 
-type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
-
 export type WorkflowLiveClientOptions = {
-  readonly fetch?: FetchLike;
+  readonly fetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
   readonly path?: string;
   readonly signal?: AbortSignal;
   readonly url?: string;
 };
 
-export class WorkflowLiveClientError extends Error {
-  readonly status: number;
-  readonly code?: string;
+export { LiveScopeClientError as WorkflowLiveClientError };
 
-  constructor(message: string, status: number, code?: string) {
-    super(message);
-    this.name = "WorkflowLiveClientError";
-    this.status = status;
-    this.code = code;
+function wrapWorkflowLiveResponse(
+  response: LiveScopeResponse | WorkflowLiveResponse,
+): WorkflowLiveResponse {
+  if (response.kind === "workflow-review-register") {
+    return response;
   }
-}
-
-function readErrorMessage(
-  status: number,
-  statusText: string,
-  payload: unknown,
-  fallback: string,
-): string {
-  if (
-    typeof payload === "object" &&
-    payload !== null &&
-    "error" in payload &&
-    typeof (payload as { error?: unknown }).error === "string"
-  ) {
-    return (payload as { error: string }).error;
+  if (response.kind === "workflow-review-pull") {
+    return response;
   }
-
-  return `${fallback} with ${status} ${statusText}.`;
-}
-
-function readErrorCode(payload: unknown): string | undefined {
-  return typeof (payload as { code?: unknown })?.code === "string"
-    ? (payload as { code: string }).code
-    : undefined;
-}
-
-function resolveWorkflowLiveUrl(options: WorkflowLiveClientOptions): string {
-  const path = options.path ?? webWorkflowLivePath;
-  return options.url ? new URL(path, options.url).toString() : path;
+  if (response.kind === "workflow-review-remove") {
+    return response;
+  }
+  if (response.kind === "register") {
+    return {
+      kind: "workflow-review-register",
+      result: response.result,
+    };
+  }
+  if (response.kind === "pull") {
+    return {
+      kind: "workflow-review-pull",
+      result: response.result,
+    };
+  }
+  return {
+    kind: "workflow-review-remove",
+    result: response.result,
+  };
 }
 
 export async function requestWorkflowLive<TRequest extends WorkflowLiveRequest>(
   request: TRequest,
   options: WorkflowLiveClientOptions = {},
 ): Promise<WorkflowLiveResponseFor<TRequest>> {
-  const fetchImpl = options.fetch ?? fetch;
-  const response = await fetchImpl(resolveWorkflowLiveUrl(options), {
-    method: "POST",
-    headers: {
-      accept: "application/json",
-      "content-type": "application/json",
-    },
-    body: JSON.stringify(request),
-    signal: options.signal,
-  });
+  const response =
+    request.kind === "workflow-review-register"
+      ? await requestLiveScope(
+          {
+            kind: "register",
+            cursor: request.cursor,
+          },
+          {
+            ...options,
+            path: options.path ?? webWorkflowLivePath,
+          },
+        )
+      : request.kind === "workflow-review-pull"
+        ? await requestLiveScope(
+            {
+              kind: "pull",
+              scopeId: request.scopeId,
+            },
+            {
+              ...options,
+              path: options.path ?? webWorkflowLivePath,
+            },
+          )
+        : await requestLiveScope(
+            {
+              kind: "remove",
+              scopeId: request.scopeId,
+            },
+            {
+              ...options,
+              path: options.path ?? webWorkflowLivePath,
+            },
+          );
 
-  const payload = (await response.json().catch(() => undefined)) as
-    | WorkflowLiveResponseFor<TRequest>
-    | { readonly code?: string; readonly error?: string }
-    | undefined;
-
-  if (!response.ok) {
-    throw new WorkflowLiveClientError(
-      readErrorMessage(
-        response.status,
-        response.statusText,
-        payload,
-        "Workflow live request failed",
-      ),
-      response.status,
-      readErrorCode(payload),
-    );
-  }
-
-  return payload as WorkflowLiveResponseFor<TRequest>;
+  return wrapWorkflowLiveResponse(response) as WorkflowLiveResponseFor<TRequest>;
 }

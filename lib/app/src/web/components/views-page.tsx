@@ -21,6 +21,17 @@ import {
   getPredicateEditorKind,
   usePredicateField,
 } from "@io/graph-react";
+import type {
+  QueryContainerSpec,
+  QueryContainerRuntimeValue,
+  QuerySurfaceRendererCompatibility,
+} from "@io/graph-query";
+import {
+  QueryContainerMountView as QueryRouteMountView,
+  createDefaultCardGridRendererBinding,
+  createDefaultListRendererBinding,
+  createDefaultTableRendererBinding,
+} from "@io/graph-query/react-dom";
 import { Badge } from "@io/web/badge";
 import { Button } from "@io/web/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@io/web/card";
@@ -28,18 +39,7 @@ import { Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 
 import { kitchenSink } from "../../graph/testing/kitchen-sink.js";
-import type {
-  QueryContainerSpec,
-  QueryContainerRuntimeValue,
-  QuerySurfaceRendererCompatibility,
-} from "../lib/query-container.js";
-import {
-  createCardGridRendererBinding,
-  createListRendererBinding,
-  createTableRendererBinding,
-} from "./query-renderers.js";
 import { CollectionBrowserProof } from "./collection-browser-proof.js";
-import { QueryRouteMountView } from "./query-route-mount.js";
 
 type AnyPredicateRef = PredicateRef<any, any>;
 
@@ -55,7 +55,7 @@ type ViewsPageFixture = {
 };
 
 const queryRendererPreviewSurface = {
-  compatibleRendererIds: ["core:list", "core:table", "core:card-grid"],
+  compatibleRendererIds: ["default:list", "default:table", "default:card-grid"],
   itemEntityIds: "optional",
   queryKind: "collection",
   resultKind: "collection",
@@ -81,7 +81,7 @@ const queryRendererPreviewSpec = {
     },
   },
   renderer: {
-    ...createListRendererBinding({
+    ...createDefaultListRendererBinding({
       descriptionField: "summary",
       metaFields: [
         { fieldId: "status", label: "Status" },
@@ -415,15 +415,15 @@ function QueryRendererPreviewGallery() {
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-wrap gap-2">
-          <Badge variant="outline">core:list</Badge>
-          <Badge variant="outline">core:table</Badge>
-          <Badge variant="outline">core:card-grid</Badge>
+          <Badge variant="outline">default:list</Badge>
+          <Badge variant="outline">default:table</Badge>
+          <Badge variant="outline">default:card-grid</Badge>
           <Badge variant="outline">route helper</Badge>
         </CardContent>
       </Card>
 
       <div className="grid gap-4 2xl:grid-cols-3">
-        {(["core:list", "core:table", "core:card-grid"] as const).map((rendererId) => (
+        {(["default:list", "default:table", "default:card-grid"] as const).map((rendererId) => (
           <QueryRouteMountView
             description="Shared route-mount chrome for reusable query container renderers."
             initialValue={previewValue}
@@ -432,15 +432,15 @@ function QueryRendererPreviewGallery() {
               ...queryRendererPreviewSpec,
               containerId: `views-query-renderer-preview:${rendererId}`,
               renderer:
-                rendererId === "core:list"
+                rendererId === "default:list"
                   ? queryRendererPreviewSpec.renderer
-                  : rendererId === "core:table"
-                    ? createTableRendererBinding([
+                  : rendererId === "default:table"
+                    ? createDefaultTableRendererBinding([
                         { fieldId: "title", label: "Title" },
                         { fieldId: "status", label: "Status" },
                         { fieldId: "owner", label: "Owner" },
                       ])
-                    : createCardGridRendererBinding({
+                    : createDefaultCardGridRendererBinding({
                         badgeField: "status",
                         descriptionField: "summary",
                         fields: [

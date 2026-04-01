@@ -88,7 +88,7 @@ export type RecordSurfaceSpec = {
 /**
  * High-level collection renderer shapes supported by authored surface specs.
  */
-export type CollectionSurfacePresentationKind = "list" | "table" | "board" | "cardGrid";
+export type CollectionSurfacePresentationKind = "list" | "table" | "board" | "card-grid";
 
 /**
  * Pure data hints that let a host choose a collection presentation without
@@ -105,7 +105,7 @@ export type CollectionSurfacePresentationHints = {
  */
 export type CollectionSurfaceSourceSpec =
   | {
-      readonly kind: "entityType";
+      readonly kind: "entity-type";
       readonly entity: string;
     }
   | {

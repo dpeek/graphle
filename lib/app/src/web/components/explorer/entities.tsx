@@ -3,7 +3,7 @@ import { usePredicateField } from "@io/graph-react";
 import { useMemo } from "react";
 
 import { asNodeMetadataFields, flattenPredicateRefs } from "./catalog.js";
-import { useStoreSlotValue } from "./field-editor.js";
+import { usePredicateSlotValue } from "./field-editor.js";
 import { formatEntityHeaderDate, getEntityLabel, getUntitledEntityLabel } from "./helpers.js";
 import { InspectorFieldSection, InspectorShell, type InspectorFieldRow } from "./inspector.js";
 import {
@@ -46,7 +46,7 @@ export function EntityListItem({
   store: ExplorerRuntime["store"];
   typeEntry: EntityCatalogEntry;
 }) {
-  const iconSlotValue = useStoreSlotValue(
+  const iconSlotValue = usePredicateSlotValue(
     store,
     entity.id,
     typeEntry.iconPredicateId ?? typePredicateId,
@@ -89,7 +89,7 @@ export function EntityInspector({
   const fields = asNodeMetadataFields(entity.fields);
   const { value: createdAt } = usePredicateField(fields.createdAt);
   const { value: updatedAt } = usePredicateField(fields.updatedAt);
-  const iconSlotValue = useStoreSlotValue(
+  const iconSlotValue = usePredicateSlotValue(
     store,
     entity.id,
     typeEntry.iconPredicateId ?? typePredicateId,

@@ -3,6 +3,8 @@ import { applyGraphIdMap, type ResolvedGraphNamespace } from "@io/graph-kernel";
 export * from "./schema.js";
 export * from "./env-var.js";
 export * from "./document.js";
+export * from "./projection.js";
+export * from "./query-executors.js";
 
 import { documentSchema } from "./document.js";
 import { envVarSchema } from "./env-var.js";

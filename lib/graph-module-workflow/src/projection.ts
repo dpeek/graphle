@@ -193,7 +193,7 @@ function titleCaseWord(value: string): string {
   return value.length === 0 ? value : `${value[0]!.toUpperCase()}${value.slice(1)}`;
 }
 
-const workflowQueryRendererIds = ["core:list", "core:table", "core:card-grid"] as const;
+const workflowQueryRendererIds = ["default:list", "default:table", "default:card-grid"] as const;
 
 const workflowBranchStateOptions = Object.freeze(
   branchStateValues.map((state) => ({
@@ -325,7 +325,7 @@ const projectBranchBoardQuerySurface = defineModuleQuerySurfaceSpec({
     compatibleRendererIds: workflowQueryRendererIds,
     itemEntityIds: "required",
     resultKind: "collection",
-    sourceKinds: ["saved", "inline"],
+    sourceKinds: ["saved-query", "inline"],
   },
 });
 
@@ -382,7 +382,7 @@ const branchCommitQueueQuerySurface = defineModuleQuerySurfaceSpec({
     compatibleRendererIds: workflowQueryRendererIds,
     itemEntityIds: "required",
     resultKind: "collection",
-    sourceKinds: ["saved", "inline"],
+    sourceKinds: ["saved-query", "inline"],
   },
 });
 
@@ -398,10 +398,10 @@ const reviewScopeQuerySurface = defineModuleQuerySurfaceSpec({
     scopeId: workflowReviewModuleReadScope.scopeId,
   },
   renderers: {
-    compatibleRendererIds: ["core:list", "core:table"],
+    compatibleRendererIds: ["default:list", "default:table"],
     itemEntityIds: "required",
     resultKind: "scope",
-    sourceKinds: ["saved", "inline"],
+    sourceKinds: ["saved-query", "inline"],
   },
 });
 

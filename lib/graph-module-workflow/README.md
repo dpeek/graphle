@@ -9,12 +9,15 @@
 - workflow entity, enum, and type definitions
 - workflow command contracts and summary/result types, including retained
   session append, artifact-write, and decision-write surfaces
-- workflow projection metadata, read-scope contracts, and invalidation helpers
+- workflow projection metadata, read-scope contracts, dependency-key planning,
+  and invalidation helpers
 - workflow query-surface catalogs for planner, saved-query, editor, and
   renderer registration
 - retained workflow projection checkpoint and row types
 - workflow query/projection index builders and projection schema
 - workflow-owned `env-var` and `document` slices
+- workflow-specific read clients, session-feed contracts, live wrappers, and
+  mutation helpers via `./client` and `./server`
 
 ## What It Depends On
 
@@ -32,12 +35,18 @@
   records from `@io/graph-module-core`
 - host-neutral React helpers from `@io/graph-react`
 - web authority handlers in `lib/app/src/web/lib/*`
-- live transport, routes, Durable Object composition, or other host/runtime adapters
+- app route handlers, Durable Object composition, or other host/runtime adapters
 - workflow UI components in `lib/app/src/web/components/*` or `lib/cli/src/tui/*`
 
 The package root is the canonical internal import surface for built-in
 `workflow:` contracts, projection metadata, and query helpers. Web and TUI
 runtime code consume this package; they do not extend it.
+
+## Entrypoints
+
+- `@io/graph-module-workflow`
+- `@io/graph-module-workflow/client`
+- `@io/graph-module-workflow/server`
 
 ## Query Ownership
 
@@ -48,7 +57,7 @@ runtime code consume this package; they do not extend it.
   workflow review scope surface; it does not own the durable saved-query
   graph objects
 - the current built-in registry combines this package-root catalog with the
-  core package-root catalog in `lib/app/src/web/lib/query-surface-registry.ts`
+  core package-root catalog in the app installation layer
 
 Callers import workflow query-surface metadata through the package root:
 

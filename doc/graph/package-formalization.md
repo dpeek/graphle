@@ -296,9 +296,6 @@ Export the primary runtime along with supporting `*Options`, `*Result`, and
 `@io/graph-surface` should own route-neutral runtime binding for authored
 collection and record surfaces that compose the lower-level query runtime.
 
-The first extraction scope is collection surfaces. Record-surface runtime
-should land here later instead of staying inside app proof UIs.
-
 It should own:
 
 - collection-surface source resolution
@@ -306,11 +303,15 @@ It should own:
 - collection-command binding and subject modeling
 - collection-surface runtime helpers that compose `@io/graph-query`
 - browser mounts for authored collection surfaces
+- record-surface binding over authored `RecordSurfaceSpec`
+- record-surface compatibility adaptation from `ObjectViewSpec`
+- browser mounts for authored record surfaces, including related collection
+  panels that compose shared collection-surface mounts
 
 It should not own:
 
 - query editor or query-container primitives
-- explorer-specific inspector or create-dialog UI
+- explorer-specific inspector editing, secret mutation, or create-dialog UI
 - route-level shells
 
 ### Public Root API
@@ -321,12 +322,18 @@ It should not own:
 - `createEntityCollectionCommandSubject`
 - `createSelectionCollectionCommandSubject`
 - `resolveCollectionCommandBindings`
+- `resolveRecordSurfaceBinding`
+- `adaptObjectViewToRecordSurface`
 
 ### `react-dom` API
 
 - `CollectionSurfaceMount`
 - `CollectionSurfaceMountView`
 - `CollectionCommandButtons`
+- `RecordSurfaceMount`
+- `RecordSurfaceMountView`
+- `RecordSurfaceLayout`
+- `RecordSurfaceSectionView`
 
 ### Source Mapping
 
@@ -349,8 +356,8 @@ It should not own:
 - `@io/graph-query` must not depend on `@io/graph-surface`
 - `@io/graph-surface/react-dom` should mount `QueryContainerSurface` from
   `@io/graph-query/react-dom` instead of re-owning container chrome
-- future record-surface host APIs should be added here rather than directly
-  into `@io/app`
+- record-surface mounts should keep edit orchestration host-injected and use
+  related collection mounts rather than re-owning collection runtime
 
 ## `@io/graph-live`
 
@@ -685,8 +692,9 @@ The extraction order matters because later packages depend on earlier ones.
 
 - move collection-surface runtime and collection-command binding
 - move collection-surface DOM mounts
-- leave explorer proof UI in app until record-surface and generic create flows
-  are formalized
+- add the minimal shared record-surface binding and DOM mounts
+- leave explorer proof UI, debug panels, and generic create flows in app until
+  broader edit orchestration is formalized
 
 ### Slice 5: Extract `@io/graph-live`
 

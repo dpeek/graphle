@@ -5,7 +5,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 import {
   createQueryWorkbenchMemoryStore,
-  encodeQueryWorkbenchParamOverrides,
+  encodeQueryWorkbenchParameterOverrides,
 } from "../lib/query-workbench.js";
 import { createQueryRouteSearch } from "../lib/query-route-state.js";
 import { QueryWorkbench } from "./query-workbench.js";
@@ -23,7 +23,7 @@ describe("query workbench component", () => {
     expect(html).toContain("Save query");
     expect(html).toContain("Save view");
     expect(html).toContain("Preview pending");
-    expect(html).not.toContain('data-query-route-mount="draft-preview"');
+    expect(html).not.toContain('data-query-container-mount="draft-preview"');
   });
 
   it("renders a fail-closed state for invalid route drafts", () => {
@@ -99,14 +99,14 @@ describe("query workbench component", () => {
           pageSize: 25,
         },
         query: {
-          kind: "saved",
+          kind: "saved-query",
           queryId: "saved-query:other",
         },
         refresh: {
           mode: "manual",
         },
         renderer: {
-          rendererId: "core:list",
+          rendererId: "default:list",
         },
       },
       surfaceId: "workflow:project-branch-board",
@@ -166,7 +166,7 @@ describe("query workbench component", () => {
     const html = renderToStaticMarkup(
       <QueryWorkbench
         search={{
-          params: encodeQueryWorkbenchParamOverrides({
+          params: encodeQueryWorkbenchParameterOverrides({
             state: "ready",
           }),
           queryId: "saved-query:owner-board",
@@ -178,7 +178,7 @@ describe("query workbench component", () => {
     expect(html).toContain("Open query: Owner board");
     expect(html).toContain('value="Owner board"');
     expect(html).toContain("query-param-state");
-    expect(html).toContain('data-query-route-mount="saved-query:saved-query:owner-board"');
+    expect(html).toContain('data-query-container-mount="saved-query:saved-query:owner-board"');
     expect(html).toContain('data-query-container-state="loading"');
     expect(html).toContain("Update query");
   });
@@ -217,14 +217,14 @@ describe("query workbench component", () => {
           pageSize: 1,
         },
         query: {
-          kind: "saved",
+          kind: "saved-query",
           queryId: "saved-query:owner-board",
         },
         refresh: {
           mode: "manual",
         },
         renderer: {
-          rendererId: "core:card-grid",
+          rendererId: "default:card-grid",
         },
       },
       surfaceId: "workflow:project-branch-board",
@@ -237,7 +237,7 @@ describe("query workbench component", () => {
 
     expect(html).toContain("Open view: Owner board view");
     expect(html).toContain('value="Owner board view"');
-    expect(html).toContain('data-query-route-mount="saved-view-preview"');
+    expect(html).toContain('data-query-container-mount="saved-view-preview"');
     expect(html).toContain('data-query-container-state="loading"');
     expect(html).toContain("Update view");
   });
@@ -276,14 +276,14 @@ describe("query workbench component", () => {
           pageSize: 1,
         },
         query: {
-          kind: "saved",
+          kind: "saved-query",
           queryId: "saved-query:owner-board",
         },
         refresh: {
           mode: "manual",
         },
         renderer: {
-          rendererId: "core:card-grid",
+          rendererId: "default:card-grid",
         },
       },
       surfaceId: "workflow:project-branch-board",
@@ -294,7 +294,7 @@ describe("query workbench component", () => {
       <QueryWorkbench
         search={createQueryRouteSearch({
           pageSize: 3,
-          rendererId: "core:table",
+          rendererId: "default:table",
           viewId: "saved-view:owner-board",
         })}
         store={store}
@@ -302,6 +302,6 @@ describe("query workbench component", () => {
     );
 
     expect(html).toContain('value="3"');
-    expect(html).toContain('<option value="core:table" selected="">');
+    expect(html).toContain('<option value="default:table" selected="">');
   });
 });

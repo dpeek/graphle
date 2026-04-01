@@ -5,12 +5,12 @@ import {
   type QueryResultPage,
   type SerializedQueryRequest,
 } from "@io/graph-client";
+import { createSavedQueryRepositoryFromGraph } from "@io/graph-query";
 import { createRoot, type Root } from "react-dom/client";
 import { JSDOM } from "jsdom";
 import { act, useState } from "react";
 
 import { encodeQueryWorkbenchDraft } from "../lib/query-workbench.js";
-import { createGraphBackedSavedQueryRepository } from "../lib/saved-query.js";
 import type { QueryRouteSearch } from "../lib/query-route-state.js";
 import { createExampleRuntime } from "../lib/example-runtime.js";
 import { GraphRuntimeProvider, type GraphRuntime } from "./graph-runtime-bootstrap.js";
@@ -195,7 +195,7 @@ describe("query page", () => {
     async () => {
       const runtime = createExampleRuntime();
       const principalId = "principal:query-authoring";
-      const repository = createGraphBackedSavedQueryRepository(runtime.graph, principalId);
+      const repository = createSavedQueryRepositoryFromGraph(runtime.graph, principalId);
       const previewRequests: SerializedQueryRequest[] = [];
       const executePreviewPage = async (request: SerializedQueryRequest) => {
         previewRequests.push(request);
@@ -235,7 +235,7 @@ describe("query page", () => {
         await waitFor(() => {
           expect(domFixture.container.querySelector("[data-query-editor]")).not.toBeNull();
           expect(domFixture.container.textContent).toContain(
-            '"projectId" requires a non-empty string value.',
+            "does not issue an implicit preview on first load.",
           );
         });
 
@@ -271,7 +271,7 @@ describe("query page", () => {
 
         await waitFor(() => {
           expect(
-            domFixture.container.querySelector('[data-query-renderer="core:list"]'),
+            domFixture.container.querySelector('[data-query-renderer="default:list"]'),
           ).not.toBeNull();
           expect(domFixture.container.textContent).toContain("Preview 25 #1");
         });
@@ -310,7 +310,7 @@ describe("query page", () => {
 
         expect(savedView.ownerId).toBe(principalId);
         expect(savedView.queryId).toBe(savedQuery.id);
-        expect(savedView.rendererId).toBe("core:list");
+        expect(savedView.rendererId).toBe("default:list");
         expect(savedView.containerDefaults?.pagination?.pageSize).toBe(25);
         expect(previewRequests.length).toBeGreaterThan(0);
 
@@ -323,7 +323,7 @@ describe("query page", () => {
 
         await waitFor(() => {
           expect(
-            domFixture.container.querySelector('[data-query-renderer="core:list"]'),
+            domFixture.container.querySelector('[data-query-renderer="default:list"]'),
           ).not.toBeNull();
           expect(domFixture.container.textContent).toContain("Open view: Branch board view");
           expect(domFixture.container.textContent).toContain("Update view");

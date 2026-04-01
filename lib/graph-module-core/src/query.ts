@@ -34,7 +34,7 @@ function titleCaseWord(value: string): string {
   return value.length === 0 ? value : `${value[0]!.toUpperCase()}${value.slice(1)}`;
 }
 
-const coreQueryRendererIds = ["core:list", "core:table"] as const;
+const coreQueryRendererIds = ["default:list", "default:table"] as const;
 
 const savedQueryKindOptions = Object.freeze(
   savedQueryKindValues.map((kind) => ({
@@ -58,7 +58,7 @@ const coreCatalogScopeQuerySurface = defineModuleQuerySurfaceSpec({
     compatibleRendererIds: coreQueryRendererIds,
     itemEntityIds: "required",
     resultKind: "scope",
-    sourceKinds: ["saved", "inline"],
+    sourceKinds: ["saved-query", "inline"],
   },
 });
 
@@ -176,7 +176,7 @@ const coreSavedQueryLibraryQuerySurface = defineModuleQuerySurfaceSpec({
     compatibleRendererIds: coreQueryRendererIds,
     itemEntityIds: "required",
     resultKind: "collection",
-    sourceKinds: ["saved", "inline"],
+    sourceKinds: ["saved-query", "inline"],
   },
 });
 

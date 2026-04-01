@@ -4,7 +4,7 @@ import type { WorkflowReviewLiveRegistration } from "./workflow-live-transport.j
 import type {
   WorkflowReviewLiveSync,
   WorkflowReviewLiveSyncPollResult,
-} from "./workflow-review-live-sync.js";
+} from "@io/graph-module-workflow/client";
 import {
   startWorkflowReviewRefreshLoop,
   type WorkflowReviewRefreshLoopOptions,

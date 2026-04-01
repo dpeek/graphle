@@ -40,7 +40,7 @@ describe("workflow live transport client", () => {
             "content-type": "application/json",
           });
           expect(JSON.parse(String(init?.body))).toEqual({
-            kind: "workflow-review-register",
+            kind: "register",
             cursor:
               "scope:kind=module&moduleId=workflow&scopeId=scope%3Aworkflow%3Areview&definitionHash=scope-def%3Aworkflow%3Areview%3Av1&policyFilterVersion=policy%3A0&cursor=web-authority%3A1",
           });
@@ -112,7 +112,7 @@ describe("workflow live transport client", () => {
           expect(input).toBe(webWorkflowLivePath);
           expect(init?.method).toBe("POST");
           expect(JSON.parse(String(init?.body))).toEqual({
-            kind: "workflow-review-pull",
+            kind: "pull",
             scopeId: "scope:workflow:review",
           });
 

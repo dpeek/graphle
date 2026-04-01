@@ -1,7 +1,12 @@
 import { describe, expect, it } from "bun:test";
 
 import { type AuthorizationContext } from "@io/graph-authority";
-import { type QueryResultPage, type SerializedQueryResponse } from "@io/graph-client";
+import {
+  defaultHttpSerializedQueryPath,
+  type QueryResultPage,
+  type SerializedQueryResponse,
+} from "@io/graph-client";
+import { createLiveScopeRouter } from "@io/graph-live/server";
 import { workflowReviewModuleReadScope } from "@io/graph-module-workflow";
 import { defineInvalidationEvent } from "@io/graph-projection";
 
@@ -10,14 +15,14 @@ import {
   WebAppAuthorityWorkflowLiveScopeError,
   WebAppAuthorityWorkflowReadError,
 } from "./authority.js";
-import { webSerializedQueryPath } from "./query-transport.js";
 import {
   handleSerializedQueryRequest,
   handleWorkflowLiveRequest,
   handleWorkflowReadRequest,
 } from "./server-routes.js";
-import { createWorkflowReviewLiveScopeRouter } from "./workflow-live-scope-router.js";
 import type { WorkflowReviewLiveRegistrationTarget } from "./workflow-live-transport.js";
+
+const webSerializedQueryPath = defaultHttpSerializedQueryPath;
 
 const authorization: AuthorizationContext = {
   graphId: "graph:test",
@@ -325,7 +330,7 @@ describe("workflow live server routes", () => {
         }),
       }),
       createWorkflowReadAuthority(),
-      createWorkflowReviewLiveScopeRouter(),
+      createLiveScopeRouter(),
       authorization,
     );
 
@@ -336,7 +341,7 @@ describe("workflow live server routes", () => {
   });
 
   it("registers the first workflow review live scope through the router", async () => {
-    const router = createWorkflowReviewLiveScopeRouter({
+    const router = createLiveScopeRouter({
       now: () => new Date("2026-03-24T00:00:00.000Z"),
     });
     const response = await handleWorkflowLiveRequest(
@@ -371,7 +376,7 @@ describe("workflow live server routes", () => {
     expect(await response.json()).toEqual({
       kind: "workflow-review-register",
       result: {
-        registrationId: "workflow-review:session:test:scope:workflow:review",
+        registrationId: "live-scope:session:test:scope:workflow:review",
         sessionId: "session:test",
         principalId: "principal:test",
         scopeId: workflowReviewModuleReadScope.scopeId,
@@ -385,7 +390,7 @@ describe("workflow live server routes", () => {
   });
 
   it("pulls queued workflow review invalidations through the same route", async () => {
-    const router = createWorkflowReviewLiveScopeRouter({
+    const router = createLiveScopeRouter({
       now: () => new Date("2026-03-24T00:00:00.000Z"),
     });
     router.register({
@@ -436,7 +441,7 @@ describe("workflow live server routes", () => {
 
   it("reports expired workflow live registrations as inactive so callers can re-register", async () => {
     let now = new Date("2026-03-24T00:00:00.000Z");
-    const router = createWorkflowReviewLiveScopeRouter({
+    const router = createLiveScopeRouter({
       now: () => now,
       registrationTtlMs: 1_000,
     });
@@ -511,7 +516,7 @@ describe("workflow live server routes", () => {
           );
         },
       }),
-      createWorkflowReviewLiveScopeRouter(),
+      createLiveScopeRouter(),
       authorization,
     );
 

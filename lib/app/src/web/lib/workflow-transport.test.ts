@@ -1,14 +1,14 @@
 import { describe, expect, it } from "bun:test";
 
-import type { CommitQueueScopeResult, ProjectBranchScopeResult } from "@io/graph-module-workflow";
-
 import {
   requestWorkflowRead,
   webWorkflowReadPath,
   WorkflowReadClientError,
   type CommitQueueScopeWorkflowReadResponse,
   type ProjectBranchScopeWorkflowReadResponse,
-} from "./workflow-transport.js";
+  type CommitQueueScopeResult,
+  type ProjectBranchScopeResult,
+} from "@io/graph-module-workflow/client";
 
 const isoNow = "2026-03-24T00:00:00.000Z";
 

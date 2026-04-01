@@ -59,9 +59,9 @@ describe("query surface registry", () => {
       "show-unmanaged-repository-branches",
     ]);
     expect(surface?.renderers?.compatibleRendererIds).toEqual([
-      "core:list",
-      "core:table",
-      "core:card-grid",
+      "default:list",
+      "default:table",
+      "default:card-grid",
     ]);
     expect(builtInInstalledModuleQuerySurfaceCatalogs.map((catalog) => catalog.catalogId)).toEqual([
       "workflow:query-surfaces",
@@ -95,10 +95,10 @@ describe("query surface registry", () => {
         projectionId: "core:saved-query-library",
       },
       renderers: {
-        compatibleRendererIds: ["core:list", "core:table"],
+        compatibleRendererIds: ["default:list", "default:table"],
         itemEntityIds: "required",
         resultKind: "collection",
-        sourceKinds: ["saved", "inline"],
+        sourceKinds: ["saved-query", "inline"],
       },
     });
     expect(savedQueryLibrarySurface?.filters?.map((field) => field.fieldId)).toEqual([
@@ -201,11 +201,11 @@ describe("query surface registry", () => {
         ? createQuerySurfaceRendererCompatibility(branchBoardRegistrySurface)
         : undefined,
     ).toEqual({
-      compatibleRendererIds: ["core:list", "core:table", "core:card-grid"],
+      compatibleRendererIds: ["default:list", "default:table", "default:card-grid"],
       itemEntityIds: "required",
       queryKind: "collection",
       resultKind: "collection",
-      sourceKinds: ["saved", "inline"],
+      sourceKinds: ["saved-query", "inline"],
       surfaceId: "workflow:project-branch-board",
       surfaceVersion: "query-surface:workflow:project-branch-board:v1",
     });
@@ -214,11 +214,11 @@ describe("query surface registry", () => {
         ? createQuerySurfaceRendererCompatibility(savedQueryLibraryRegistrySurface)
         : undefined,
     ).toEqual({
-      compatibleRendererIds: ["core:list", "core:table"],
+      compatibleRendererIds: ["default:list", "default:table"],
       itemEntityIds: "required",
       queryKind: "collection",
       resultKind: "collection",
-      sourceKinds: ["saved", "inline"],
+      sourceKinds: ["saved-query", "inline"],
       surfaceId: "core:saved-query-library",
       surfaceVersion: "query-surface:core:saved-query-library:v1",
     });

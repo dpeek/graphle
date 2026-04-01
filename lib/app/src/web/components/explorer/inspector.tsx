@@ -1,4 +1,6 @@
 import { isSecretBackedField } from "@io/app/graph";
+import type { RecordSurfaceFieldBinding } from "@io/graph-surface";
+import { RecordSurfaceLayout, RecordSurfaceSectionView } from "@io/graph-surface/react-dom";
 import { GraphIcon } from "@io/graph-module-core/react-dom";
 import { type ReactNode } from "react";
 
@@ -9,7 +11,7 @@ import type {
   MutationCallbacks,
   SubmitSecretFieldMutation,
 } from "./model.js";
-import { EmptyState, Badge, Section } from "./ui.js";
+import { Badge } from "./ui.js";
 
 export type InspectorFieldRow = {
   customEditor?: (callbacks: MutationCallbacks) => ReactNode;
@@ -45,8 +47,15 @@ export function InspectorShell({
 }) {
   return (
     <div className="space-y-4" data-explorer-panel="inspector" data-explorer-state={state}>
-      <Section
-        right={
+      <RecordSurfaceLayout
+        badges={badges}
+        description={description}
+        icon={
+          typeof iconId === "string" && iconId.length > 0 ? (
+            <GraphIcon className="text-muted-foreground size-12" iconId={iconId} />
+          ) : undefined
+        }
+        status={
           <Badge
             className="border-border bg-muted/30 text-muted-foreground tracking-normal normal-case"
             data={{ "data-explorer-inspector-status": status }}
@@ -54,42 +63,12 @@ export function InspectorShell({
             {status}
           </Badge>
         }
-        title="Selection"
+        summaryItems={summaryItems}
+        title={<span data-explorer-inspector-title={title}>{title}</span>}
+        titlePrefix={<span data-explorer-inspector-type={typeLabel}>{typeLabel}</span>}
       >
-        <div className="space-y-3">
-          <div className="flex items-start gap-3">
-            {typeof iconId === "string" && iconId.length > 0 ? (
-              <GraphIcon className="text-muted-foreground size-12" iconId={iconId} />
-            ) : null}
-            <div className="min-w-0 space-y-1">
-              <div
-                className="text-muted-foreground text-xs font-medium tracking-[0.16em] uppercase"
-                data-explorer-inspector-type={typeLabel}
-              >
-                {typeLabel}
-              </div>
-              <h3 className="text-2xl font-semibold" data-explorer-inspector-title={title}>
-                {title}
-              </h3>
-              {description ? (
-                <div className="text-muted-foreground max-w-2xl text-sm">{description}</div>
-              ) : null}
-            </div>
-          </div>
-
-          {summaryItems.length > 0 ? (
-            <div className="text-muted-foreground flex flex-wrap gap-x-4 gap-y-1 text-sm">
-              {summaryItems.map((item) => (
-                <span key={item}>{item}</span>
-              ))}
-            </div>
-          ) : null}
-
-          {badges ? <div className="flex flex-wrap gap-2">{badges}</div> : null}
-        </div>
-      </Section>
-
-      {children}
+        {children}
+      </RecordSurfaceLayout>
     </div>
   );
 }
@@ -113,22 +92,43 @@ export function InspectorFieldSection({
   submitSecretField?: SubmitSecretFieldMutation;
   title?: string;
 }) {
-  const content =
-    rows.length > 0 ? (
-      <div className="grid gap-4">
-        {rows.map((row) => (
+  const fieldEntries = rows.map((row) => ({
+    field: {
+      ...(row.description ? { description: row.description } : {}),
+      label: row.title ?? row.pathLabel,
+      path: row.pathLabel,
+      span: 2,
+      value: row.value,
+    } satisfies RecordSurfaceFieldBinding,
+    row,
+  }));
+
+  return (
+    <RecordSurfaceSectionView
+      chrome={chrome}
+      description={description}
+      emptyMessage={emptyMessage}
+      fields={fieldEntries.map((entry) => entry.field)}
+      renderField={(field) => {
+        const entry = fieldEntries.find((candidate) => candidate.field === field);
+        if (!entry) {
+          return null;
+        }
+        const row = entry.row;
+        const predicate = row.predicate;
+        return (
           <PredicateRow
             customEditor={
-              row.predicate
+              predicate
                 ? (row.customEditor ??
                   (runtime &&
                   submitSecretField &&
-                  isSecretBackedField(row.predicate.field) &&
-                  row.predicate.field.cardinality !== "many"
+                  isSecretBackedField(predicate.field) &&
+                  predicate.field.cardinality !== "many"
                     ? (callbacks) => (
                         <SecretFieldEditor
                           callbacks={callbacks}
-                          predicate={row.predicate!}
+                          predicate={predicate}
                           runtime={runtime}
                           submitSecretField={submitSecretField}
                         />
@@ -139,28 +139,20 @@ export function InspectorFieldSection({
             description={row.description}
             display={row.display}
             hideMissingStatus={hideMissingStatus}
-            key={
-              row.predicate
-                ? `${row.pathLabel}:${row.predicate.predicateId}`
-                : `${row.pathLabel}:value`
-            }
             pathLabel={row.pathLabel}
-            predicate={row.predicate}
+            predicate={predicate}
             readOnly={row.readOnly}
             title={row.title}
             value={row.value}
           />
-        ))}
-      </div>
-    ) : (
-      <EmptyState>{emptyMessage}</EmptyState>
-    );
-
-  if (!chrome) return content;
-
-  return (
-    <Section description={description} title={title}>
-      {content}
-    </Section>
+        );
+      }}
+      section={{
+        ...(description ? { description } : {}),
+        fields: fieldEntries.map((entry) => entry.field),
+        key: title,
+        title,
+      }}
+    />
   );
 }

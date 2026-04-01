@@ -2,15 +2,21 @@ import { describe, expect, it } from "bun:test";
 
 import { coreBuiltInQuerySurfaceIds } from "@io/graph-module-core";
 import { serializedQueryVersion, type SerializedQueryRequest } from "@io/graph-client";
-
-import { createInstalledQueryEditorCatalog } from "../components/query-editor.js";
+import {
+  createInlineQueryContainer,
+  createQueryEditorCatalog,
+  createQueryEditorDraft,
+  createSavedQueryContainer,
+} from "@io/graph-query";
 import {
   builtInQueryRendererRegistry,
   createQueryRendererCapabilityMap,
-} from "../components/query-renderers.js";
-import { mountInlineQueryRenderer, mountSavedQueryRenderer } from "./query-container.js";
-import { createQueryEditorCatalog, createQueryEditorDraft } from "./query-editor.js";
-import { getInstalledModuleQuerySurfaceRendererCompatibility } from "./query-surface-registry.js";
+} from "@io/graph-query/react-dom";
+
+import {
+  getInstalledModuleQueryEditorCatalog,
+  getInstalledModuleQuerySurfaceRendererCompatibility,
+} from "./query-surface-registry.js";
 import {
   QueryWorkbenchSaveError,
   createQueryWorkbenchBrowserStore,
@@ -18,10 +24,10 @@ import {
   createQueryWorkbenchMemoryStore,
   createQueryWorkbenchPreviewRuntime,
   createQueryWorkbenchSourceResolver,
-  decodeQueryWorkbenchParamOverrides,
+  decodeQueryWorkbenchParameterOverrides,
   decodeQueryWorkbenchDraft,
   encodeQueryWorkbenchDraft,
-  encodeQueryWorkbenchParamOverrides,
+  encodeQueryWorkbenchParameterOverrides,
   hydrateQueryWorkbenchDraft,
   resolveQueryWorkbenchRouteTarget,
   resolveQueryWorkbenchState,
@@ -29,6 +35,8 @@ import {
   saveQueryWorkbenchView,
 } from "./query-workbench.js";
 import { validateQueryRouteSearch } from "./query-route-state.js";
+
+const createInstalledQueryEditorCatalog = getInstalledModuleQueryEditorCatalog;
 
 const workflowBoardSurfaceVersion = "query-surface:workflow:project-branch-board:v1";
 const workflowCatalogId = "workflow:query-surfaces";
@@ -176,21 +184,11 @@ describe("query workbench route state", () => {
     });
   });
 
-  it("seeds the initial installed workbench draft with an empty workflow project filter", () => {
+  it("seeds the initial installed workbench draft with the workflow branch board surface", () => {
     const draft = createQueryWorkbenchInitialDraft(createInstalledQueryEditorCatalog());
 
     expect(draft.surfaceId).toBe("workflow:project-branch-board");
-    expect(draft.filters).toEqual([
-      {
-        fieldId: "projectId",
-        id: draft.filters[0]?.id,
-        operator: "eq",
-        value: {
-          kind: "literal",
-          value: "",
-        },
-      },
-    ]);
+    expect(draft.filters).toEqual([]);
   });
 });
 
@@ -237,7 +235,7 @@ describe("query workbench preview runtime", () => {
     } as const;
 
     const value = await runtime.load(
-      mountInlineQueryRenderer(request, {
+      createInlineQueryContainer(request, {
         containerId: "draft-preview",
         pagination: {
           mode: "paged",
@@ -247,7 +245,7 @@ describe("query workbench preview runtime", () => {
           mode: "manual",
         },
         renderer: {
-          rendererId: "core:list",
+          rendererId: "default:list",
         },
       }),
     );
@@ -334,7 +332,7 @@ describe("query workbench preview runtime", () => {
     });
 
     await runtime.load(
-      mountSavedQueryRenderer(
+      createSavedQueryContainer(
         {
           params: { state: "ready" },
           queryId: workflowQuery.id,
@@ -349,13 +347,13 @@ describe("query workbench preview runtime", () => {
             mode: "manual",
           },
           renderer: {
-            rendererId: "core:list",
+            rendererId: "default:list",
           },
         },
       ),
     );
     await runtime.load(
-      mountSavedQueryRenderer(
+      createSavedQueryContainer(
         {
           params: { "surface-module-id": "workflow" },
           queryId: coreQuery.id,
@@ -370,7 +368,7 @@ describe("query workbench preview runtime", () => {
             mode: "manual",
           },
           renderer: {
-            rendererId: "core:table",
+            rendererId: "default:table",
           },
         },
       ),
@@ -455,7 +453,7 @@ describe("query workbench saves", () => {
           mode: "manual",
         },
         renderer: {
-          rendererId: "core:list",
+          rendererId: "default:list",
         },
       },
       store,
@@ -501,7 +499,7 @@ describe("query workbench saves", () => {
           mode: "manual",
         },
         renderer: {
-          rendererId: "core:list",
+          rendererId: "default:list",
         },
       },
       store,
@@ -533,7 +531,7 @@ describe("query workbench saves", () => {
           mode: "manual",
         },
         renderer: {
-          rendererId: "core:table",
+          rendererId: "default:table",
         },
       },
       store,
@@ -550,7 +548,7 @@ describe("query workbench saves", () => {
     expect(store.listViews()).toHaveLength(1);
     expect(store.getQuery(savedQuery.id)?.name).toBe("Branch board final");
     expect(store.getView(savedView.view.id)?.name).toBe("Branch board view final");
-    expect(store.getView(savedView.view.id)?.spec.renderer.rendererId).toBe("core:table");
+    expect(store.getView(savedView.view.id)?.spec.renderer.rendererId).toBe("default:table");
   });
 
   it("rejects incompatible saved views", () => {
@@ -571,16 +569,16 @@ describe("query workbench saves", () => {
             pageSize: 25,
           },
           renderer: {
-            rendererId: "core:table",
+            rendererId: "default:table",
           },
         },
         store,
         surface: {
-          compatibleRendererIds: ["core:list"],
+          compatibleRendererIds: ["default:list"],
           itemEntityIds: "required",
           queryKind: "collection",
           resultKind: "collection",
-          sourceKinds: ["saved", "inline"],
+          sourceKinds: ["saved-query", "inline"],
           surfaceId: "workflow:project-branch-board",
           surfaceVersion: workflowBoardSurfaceVersion,
         },
@@ -656,7 +654,7 @@ describe("query workbench saves", () => {
           mode: "manual",
         },
         renderer: {
-          rendererId: "core:list",
+          rendererId: "default:list",
         },
       },
       store,
@@ -676,8 +674,8 @@ describe("query workbench saves", () => {
       store,
       catalog,
     );
-    const params = decodeQueryWorkbenchParamOverrides(
-      encodeQueryWorkbenchParamOverrides({ state: "ready" }),
+    const params = decodeQueryWorkbenchParameterOverrides(
+      encodeQueryWorkbenchParameterOverrides({ state: "ready" }),
     );
     const resolver = createQueryWorkbenchSourceResolver(store);
 
@@ -692,7 +690,7 @@ describe("query workbench saves", () => {
 
     const resolvedSavedQuery = await resolver(
       {
-        kind: "saved",
+        kind: "saved-query",
         params,
         queryId: savedQuery.id,
       },
@@ -811,7 +809,7 @@ describe("query workbench saves", () => {
           mode: "manual",
         },
         renderer: {
-          rendererId: "core:table",
+          rendererId: "default:table",
         },
       },
       store,
@@ -831,8 +829,8 @@ describe("query workbench saves", () => {
       store,
       catalog,
     );
-    const params = decodeQueryWorkbenchParamOverrides(
-      encodeQueryWorkbenchParamOverrides({ "surface-module-id": "workflow" }),
+    const params = decodeQueryWorkbenchParameterOverrides(
+      encodeQueryWorkbenchParameterOverrides({ "surface-module-id": "workflow" }),
     );
     const resolver = createQueryWorkbenchSourceResolver(store);
 
@@ -847,7 +845,7 @@ describe("query workbench saves", () => {
 
     const resolvedSavedQuery = await resolver(
       {
-        kind: "saved",
+        kind: "saved-query",
         params,
         queryId: savedQuery.id,
       },
@@ -1105,14 +1103,14 @@ describe("query workbench draft hydration", () => {
               pageSize: 25,
             },
             query: {
-              kind: "saved",
+              kind: "saved-query",
               queryId: "saved-query:other",
             },
             refresh: {
               mode: "manual",
             },
             renderer: {
-              rendererId: "core:list",
+              rendererId: "default:list",
             },
           },
           surfaceId: "workflow:project-branch-board",
@@ -1165,7 +1163,7 @@ describe("query workbench draft hydration", () => {
           mode: "manual",
         },
         renderer: {
-          rendererId: "core:table",
+          rendererId: "default:table",
         },
       },
       store,
@@ -1180,7 +1178,7 @@ describe("query workbench draft hydration", () => {
       rendererCapabilities,
       resolveSurfaceCompatibility: () => ({
         ...workflowBoardSurface,
-        compatibleRendererIds: ["core:list"],
+        compatibleRendererIds: ["default:list"],
       }),
       target: resolveQueryWorkbenchRouteTarget(
         {
@@ -1264,14 +1262,14 @@ describe("query workbench browser store", () => {
           pageSize: 25,
         },
         query: {
-          kind: "saved",
+          kind: "saved-query",
           queryId: "saved-query:1",
         },
         refresh: {
           mode: "manual",
         },
         renderer: {
-          rendererId: "core:list",
+          rendererId: "default:list",
         },
       },
       surfaceId: "workflow:project-branch-board",
@@ -1294,7 +1292,7 @@ describe("query workbench saved-source resolution", () => {
     await expect(
       resolver(
         {
-          kind: "saved",
+          kind: "saved-query",
           queryId: "saved-query:missing",
         },
         {},

@@ -13,14 +13,13 @@ import {
   type WorkflowRepositorySummary,
   workflow,
 } from "@io/graph-module-workflow";
-
 import type {
   WorkflowSessionFeedFinalizationState,
   WorkflowSessionFeedHistoryState,
   WorkflowSessionFeedReadQuery,
   WorkflowSessionFeedReadResult,
   WorkflowSessionFeedReadyResult,
-} from "./workflow-session-feed-contract.js";
+} from "@io/graph-module-workflow/client";
 import { buildWorkflowArtifactRecord } from "./workflow-artifact.js";
 import { requireBranch, requireProject } from "./workflow-authority-shared.js";
 import { buildWorkflowDecisionRecord } from "./workflow-decision.js";

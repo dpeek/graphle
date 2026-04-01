@@ -4,12 +4,17 @@ import { describe, expect, it } from "bun:test";
 import type { AuthorizationContext } from "@io/graph-authority";
 import { edgeId } from "@io/graph-kernel";
 import { core } from "@io/graph-module-core";
-
-import { createInstalledQueryEditorCatalog } from "../components/query-editor.js";
+import {
+  createQueryEditorDraft,
+  createSavedQueryRecordInputFromDraft,
+  createSavedViewRecordInput,
+  type SavedQueryRecord,
+  type SavedViewRecord,
+} from "@io/graph-query";
 import {
   builtInQueryRendererRegistry,
   createQueryRendererCapabilityMap,
-} from "../components/query-renderers.js";
+} from "@io/graph-query/react-dom";
 import { createAnonymousAuthorizationContext } from "./auth-bridge.js";
 import { createTestWebAppAuthority } from "./authority-test-helpers.js";
 import {
@@ -18,16 +23,13 @@ import {
 } from "./graph-authority-sql-storage.js";
 import type { DurableObjectSqlStorageLike } from "./graph-authority-sql-startup.js";
 import { webAppPolicyVersion } from "./policy-version.js";
-import { createQueryEditorDraft } from "./query-editor.js";
-import { getInstalledModuleQuerySurfaceRendererCompatibility } from "./query-surface-registry.js";
 import {
-  createSavedQueryRecordInputFromDraft,
-  createSavedViewRecordInput,
-  type SavedQueryRecord,
-  type SavedViewRecord,
-} from "./saved-query.js";
+  getInstalledModuleQueryEditorCatalog,
+  getInstalledModuleQuerySurfaceRendererCompatibility,
+} from "./query-surface-registry.js";
 
 const workflowProjectBranchBoardSurfaceId = "workflow:project-branch-board";
+const createInstalledQueryEditorCatalog = getInstalledModuleQueryEditorCatalog;
 const savedQueryCatalogVersionPredicateId = edgeId(core.savedQuery.fields.surface.catalogVersion);
 const savedQueryDefinitionHashPredicateId = edgeId(core.savedQuery.fields.definitionHash);
 const savedQueryModuleIdPredicateId = edgeId(core.savedQuery.fields.surface.moduleId);
@@ -202,7 +204,7 @@ async function saveSavedQueryFixture(input: {
           mode: "manual",
         },
         renderer: {
-          rendererId: "core:list",
+          rendererId: "default:list",
         },
       },
       surface: getInstalledModuleQuerySurfaceRendererCompatibility(

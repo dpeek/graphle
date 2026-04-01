@@ -96,6 +96,25 @@ import {
   type InvalidationEvent,
 } from "@io/graph-projection";
 import {
+  createSavedQueryRepositoryFromGraph,
+  deriveSavedQueryRecord,
+  deriveSavedViewRecord,
+  resolveCollectionQueryExecutor,
+  resolveSavedQuery as resolveSavedQueryDefinition,
+  resolveScopeQueryExecutor,
+  resolveSavedView as resolveSavedViewDefinition,
+  toSavedQueryDefinitionInput,
+  toSavedViewDefinitionInput,
+  validateSavedQueryCompatibility,
+  validateSavedViewCompatibility,
+  type SavedQueryRecord,
+  type SavedQueryRecordInput,
+  type SavedQueryResolution,
+  type SavedViewRecord,
+  type SavedViewRecordInput,
+  type SavedViewResolution,
+} from "@io/graph-query";
+import {
   createIncrementalSyncFallback,
   createIncrementalSyncPayload,
   createModuleSyncScope,
@@ -118,28 +137,7 @@ import {
   getInstalledModuleQuerySurfaceRendererCompatibility,
   getInstalledModuleQuerySurfaceRegistry,
 } from "./query-surface-registry.js";
-import {
-  resolveSerializedQueryCollectionExecutor,
-  resolveSerializedQueryScopeExecutor,
-} from "./serialized-query-executor-registry.js";
 import { createWebAppSerializedQueryExecutorRegistry } from "./registered-serialized-query-executors.js";
-import {
-  createGraphBackedSavedQueryRepository,
-  deriveSavedQueryRecord,
-  deriveSavedViewRecord,
-  resolveSavedQueryDefinition,
-  resolveSavedViewDefinition,
-  toSavedQueryDefinitionInput,
-  toSavedViewDefinitionInput,
-  validateSavedQueryCompatibility,
-  validateSavedViewCompatibility,
-  type SavedQueryRecordInput,
-  type SavedQueryRecord,
-  type SavedQueryResolution,
-  type SavedViewRecordInput,
-  type SavedViewRecord,
-  type SavedViewResolution,
-} from "./saved-query.js";
 import {
   buildSecretHandleName,
   secretFieldEntityIdRequiredMessage,
@@ -166,7 +164,7 @@ import { readWorkflowSessionFeed as readWorkflowSessionFeedResult } from "./work
 import type {
   WorkflowSessionFeedReadQuery,
   WorkflowSessionFeedReadResult,
-} from "./workflow-session-feed-contract.js";
+} from "@io/graph-module-workflow/client";
 import { WorkflowMutationError } from "./workflow-mutation-helpers.js";
 import type { WorkflowReviewLiveRegistrationTarget } from "./workflow-live-transport.js";
 
@@ -3793,7 +3791,7 @@ export async function createWebAppAuthority(
   }
 
   function createSavedQueryRepository(ownerId: string, store: GraphStore = authority.store) {
-    return createGraphBackedSavedQueryRepository(createGraphClient(store, graph), ownerId);
+    return createSavedQueryRepositoryFromGraph(createGraphClient(store, graph), ownerId);
   }
 
   function readPredicateValue(
@@ -4040,10 +4038,7 @@ export async function createWebAppAuthority(
       normalizedRequest.metadata.pageCursor,
       normalizedRequest.metadata.identityHash,
     );
-    const resolution = resolveSerializedQueryCollectionExecutor(
-      serializedQueryExecutorRegistry,
-      query,
-    );
+    const resolution = resolveCollectionQueryExecutor(serializedQueryExecutorRegistry, query);
     if (!resolution.ok) {
       switch (resolution.code) {
         case "unregistered-surface":
@@ -4080,7 +4075,7 @@ export async function createWebAppAuthority(
     normalizedRequest: NormalizedQueryRequest,
     options: WebAppAuthorityReadOptions,
   ): QueryResultPage {
-    const resolution = resolveSerializedQueryScopeExecutor(serializedQueryExecutorRegistry, query);
+    const resolution = resolveScopeQueryExecutor(serializedQueryExecutorRegistry, query);
     if (!resolution.ok) {
       switch (resolution.code) {
         case "unregistered-surface":
@@ -4204,7 +4199,7 @@ export async function createWebAppAuthority(
       graph,
       `delete:saved-query:${id}:${Date.now()}`,
       async (mutationGraph) => {
-        await createGraphBackedSavedQueryRepository(mutationGraph, ownerId).deleteSavedQuery(id);
+        await createSavedQueryRepositoryFromGraph(mutationGraph, ownerId).deleteSavedQuery(id);
       },
     );
     if (planned.changed) {
@@ -4221,7 +4216,7 @@ export async function createWebAppAuthority(
       graph,
       `delete:saved-view:${id}:${Date.now()}`,
       async (mutationGraph) => {
-        await createGraphBackedSavedQueryRepository(mutationGraph, ownerId).deleteSavedView(id);
+        await createSavedQueryRepositoryFromGraph(mutationGraph, ownerId).deleteSavedView(id);
       },
     );
     if (planned.changed) {
@@ -4263,7 +4258,7 @@ export async function createWebAppAuthority(
         graph,
         `save:saved-query:${ownerId}:${Date.now()}`,
         async (mutationGraph) =>
-          createGraphBackedSavedQueryRepository(mutationGraph, ownerId).saveSavedQuery({
+          createSavedQueryRepositoryFromGraph(mutationGraph, ownerId).saveSavedQuery({
             ...(input.id ? { id: input.id } : {}),
             ...toSavedQueryDefinitionInput(input, ownerId, installedSurface.moduleId),
           }),
@@ -4312,7 +4307,7 @@ export async function createWebAppAuthority(
         graph,
         `save:saved-view:${ownerId}:${Date.now()}`,
         async (mutationGraph) =>
-          createGraphBackedSavedQueryRepository(mutationGraph, ownerId).saveSavedView({
+          createSavedQueryRepositoryFromGraph(mutationGraph, ownerId).saveSavedView({
             ...(input.id ? { id: input.id } : {}),
             ...toSavedViewDefinitionInput(input, ownerId),
           }),
@@ -5270,7 +5265,15 @@ export async function createWebAppAuthority(
         command.input,
         {
           store: authority.store,
-          applyTransaction,
+          applyTransaction(
+            transaction: GraphWriteTransaction,
+            transactionOptions: {
+              readonly authorization: WebAppAuthorityCommandOptions["authorization"];
+              readonly writeScope: "server-command";
+            },
+          ) {
+            return applyTransaction(transaction, transactionOptions);
+          },
         },
         options,
       ) as Promise<WebAppAuthorityCommandResult<Command["kind"]>>;

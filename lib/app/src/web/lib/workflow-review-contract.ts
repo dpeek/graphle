@@ -1,11 +1,10 @@
 import { workflowReviewSyncScopeRequest } from "@io/graph-module-workflow";
-import { graphSyncScope } from "@io/graph-sync";
-
-import type { WorkflowReadRequest } from "./workflow-transport.js";
 import {
   validateWorkflowSessionFeedRouteSearch,
+  type WorkflowReadRequest,
   type WorkflowSessionFeedRouteSearch,
-} from "./workflow-session-feed-contract.js";
+} from "@io/graph-module-workflow/client";
+import { graphSyncScope } from "@io/graph-sync";
 
 export type WorkflowRouteSearch = WorkflowSessionFeedRouteSearch & {
   readonly branch?: string;

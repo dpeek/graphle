@@ -8,6 +8,17 @@ import type {
   ProjectBranchScopeRepositoryObservation,
   ProjectBranchScopeResult,
 } from "@io/graph-module-workflow";
+import {
+  createWorkflowReviewLiveSync,
+  createWorkflowSessionFeedContract,
+  requestWorkflowRead,
+  resolveWorkflowSessionFeedSelectionState,
+  WorkflowReadClientError,
+  type CommitQueueScopeWorkflowReadResponse,
+  type ProjectBranchScopeWorkflowReadResponse,
+  type WorkflowSessionFeedReadResult,
+  type WorkflowSessionFeedSelectionState,
+} from "@io/graph-module-workflow/client";
 import { Badge } from "@io/web/badge";
 import { Button } from "@io/web/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@io/web/card";
@@ -34,20 +45,7 @@ import {
   type WorkflowReviewStartupState,
   type WorkflowRouteSearch,
 } from "../lib/workflow-review-contract.js";
-import { createWorkflowReviewLiveSync } from "../lib/workflow-review-live-sync.js";
 import { startWorkflowReviewRefreshLoop } from "../lib/workflow-review-refresh.js";
-import {
-  createWorkflowSessionFeedContract,
-  resolveWorkflowSessionFeedSelectionState,
-  type WorkflowSessionFeedReadResult,
-  type WorkflowSessionFeedSelectionState,
-} from "../lib/workflow-session-feed-contract.js";
-import {
-  requestWorkflowRead,
-  WorkflowReadClientError,
-  type CommitQueueScopeWorkflowReadResponse,
-  type ProjectBranchScopeWorkflowReadResponse,
-} from "../lib/workflow-transport.js";
 import { useWebAuthSession } from "./auth-shell.js";
 import { useGraphRuntime } from "./graph-runtime-bootstrap.js";
 import {

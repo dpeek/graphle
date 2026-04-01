@@ -4,7 +4,7 @@ import {
   createWorkflowSessionFeedContract,
   resolveWorkflowSessionFeedSelectionState,
   validateWorkflowSessionFeedRouteSearch,
-} from "./workflow-session-feed-contract.js";
+} from "@io/graph-module-workflow/client";
 
 describe("workflow session feed contract", () => {
   it("normalizes feed route search params", () => {

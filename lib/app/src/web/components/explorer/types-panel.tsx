@@ -4,7 +4,7 @@ import { GraphIcon } from "@io/graph-module-core/react-dom";
 import { Button } from "@io/web/button";
 
 import { asTypeMetadataFields } from "./catalog.js";
-import { useStoreSlotValue } from "./field-editor.js";
+import { usePredicateSlotValue } from "./field-editor.js";
 import {
   formatCardinality,
   getDefinitionDisplayLabel,
@@ -27,8 +27,8 @@ export function TypeListItem({
   onSelect: () => void;
   store: ExplorerRuntime["store"];
 }) {
-  const graphName = useStoreSlotValue(store, entry.id, edgeId(core.node.fields.name));
-  const graphIconId = useStoreSlotValue(store, entry.id, typeIconPredicateId);
+  const graphName = usePredicateSlotValue(store, entry.id, edgeId(core.node.fields.name));
+  const graphIconId = usePredicateSlotValue(store, entry.id, typeIconPredicateId);
   const iconId = resolveDisplayedDefinitionIconId(entry.compiledIconId, graphIconId);
 
   return (
@@ -62,9 +62,9 @@ export function TypeInspector({
 }) {
   const typeRef = client.type.ref(entry.id) as unknown as AnyEntityRef;
   const fields = asTypeMetadataFields(typeRef.fields);
-  const graphKey = useStoreSlotValue(store, entry.id, keyPredicateId);
-  const graphName = useStoreSlotValue(store, entry.id, edgeId(core.node.fields.name));
-  const graphIconId = useStoreSlotValue(store, entry.id, typeIconPredicateId);
+  const graphKey = usePredicateSlotValue(store, entry.id, keyPredicateId);
+  const graphName = usePredicateSlotValue(store, entry.id, edgeId(core.node.fields.name));
+  const graphIconId = usePredicateSlotValue(store, entry.id, typeIconPredicateId);
   const graphNameText =
     typeof graphName === "string" && graphName.length > 0 ? graphName : entry.name;
   const iconId = resolveDisplayedDefinitionIconId(entry.compiledIconId, graphIconId);

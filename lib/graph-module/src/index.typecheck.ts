@@ -296,7 +296,7 @@ void ([
   },
 ] satisfies readonly RecordSurfaceRelatedContentSpec[]);
 
-const probeCollectionPresentationKind: CollectionSurfacePresentationKind = "cardGrid";
+const probeCollectionPresentationKind: CollectionSurfacePresentationKind = "card-grid";
 void probeCollectionPresentationKind;
 
 void ({

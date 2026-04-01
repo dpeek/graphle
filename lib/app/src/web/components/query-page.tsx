@@ -1,18 +1,18 @@
 "use client";
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@io/web/card";
-import { useEffect, useState, type ReactNode } from "react";
-
-import type { QueryContainerPageExecutor } from "../lib/query-container.js";
-import type { QueryRouteSearch } from "../lib/query-route-state.js";
-import type { QueryWorkbenchSavedQuery, QueryWorkbenchSavedView } from "../lib/query-workbench.js";
 import {
-  createGraphBackedSavedQueryRepository,
   createSavedQueryDefinitionInputFromDraft,
+  createSavedQueryRepositoryFromGraph,
   createSavedViewDefinitionInput,
   deriveSavedQueryRecord,
   deriveSavedViewRecord,
-} from "../lib/saved-query.js";
+  type QueryContainerPageExecutor,
+} from "@io/graph-query";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@io/web/card";
+import { useEffect, useState, type ReactNode } from "react";
+
+import type { QueryRouteSearch } from "../lib/query-route-state.js";
+import type { QueryWorkbenchSavedQuery, QueryWorkbenchSavedView } from "../lib/query-workbench.js";
 import { GraphAccessGate, useWebAuthSession } from "./auth-shell.js";
 import { useExplorerSyncSnapshot } from "./explorer/sync.js";
 import { GraphRuntimeBootstrap, useGraphRuntime } from "./graph-runtime-bootstrap.js";
@@ -115,7 +115,7 @@ export function QueryPageSurface({
 
   useEffect(() => {
     let cancelled = false;
-    const repository = createGraphBackedSavedQueryRepository(runtime.graph, principalId);
+    const repository = createSavedQueryRepositoryFromGraph(runtime.graph, principalId);
 
     void Promise.all([repository.listSavedQueries(), repository.listSavedViews()])
       .then(([queries, views]) => {
@@ -157,7 +157,7 @@ export function QueryPageSurface({
   ]);
 
   async function handleSaveQuery(input: QueryWorkbenchSaveQueryInput) {
-    const repository = createGraphBackedSavedQueryRepository(runtime.graph, principalId);
+    const repository = createSavedQueryRepositoryFromGraph(runtime.graph, principalId);
     const saved = await repository.saveSavedQuery({
       ...(input.id ? { id: input.id } : {}),
       ...createSavedQueryDefinitionInputFromDraft({
@@ -184,7 +184,7 @@ export function QueryPageSurface({
       );
     }
 
-    const repository = createGraphBackedSavedQueryRepository(runtime.graph, principalId);
+    const repository = createSavedQueryRepositoryFromGraph(runtime.graph, principalId);
     const query = await repository.saveSavedQuery({
       ...(input.queryId ? { id: input.queryId } : {}),
       ...createSavedQueryDefinitionInputFromDraft({

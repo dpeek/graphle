@@ -4,7 +4,13 @@ import {
   type PredicateRef,
   type PredicateValueOf,
 } from "@io/graph-client";
-import { isEntityType, isEnumType, type AnyTypeOutput, type EdgeOutput } from "@io/graph-kernel";
+import {
+  isEntityType,
+  isEnumType,
+  type AnyTypeOutput,
+  type EdgeOutput,
+  type GraphStore,
+} from "@io/graph-kernel";
 import {
   entityReferenceComboboxEditorKind,
   entityReferenceListDisplayKind,
@@ -282,6 +288,29 @@ export function usePredicateValue<T extends EdgeOutput, Defs extends Record<stri
   }
 
   return useSyncExternalStore(predicate.subscribe, readSnapshot, readSnapshot);
+}
+
+export function usePredicateSlotValue(
+  store: GraphStore,
+  subjectId: string,
+  predicateId: string,
+): string | undefined {
+  const hasSnapshotRef = useRef(false);
+  const snapshotRef = useRef<string | undefined>(undefined);
+
+  function readSnapshot(): string | undefined {
+    const next = store.facts(subjectId, predicateId)[0]?.o;
+    if (hasSnapshotRef.current && snapshotRef.current === next) return snapshotRef.current;
+    snapshotRef.current = next;
+    hasSnapshotRef.current = true;
+    return next;
+  }
+
+  return useSyncExternalStore(
+    (listener) => store.subscribePredicateSlot(subjectId, predicateId, listener),
+    readSnapshot,
+    readSnapshot,
+  );
 }
 
 /**

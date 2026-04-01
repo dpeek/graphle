@@ -5,11 +5,12 @@ import { describe, expect, it } from "bun:test";
 import { parseSetCookieHeader } from "better-auth/cookies";
 
 import type { AuthorizationContext, WebPrincipalSummary } from "@io/graph-authority";
-import { createGraphClient } from "@io/graph-client";
+import { createGraphClient, defaultHttpSerializedQueryPath } from "@io/graph-client";
 import { createGraphStore, type GraphStoreSnapshot } from "@io/graph-kernel";
 import { type GraphWriteTransaction } from "@io/graph-kernel";
 import { core } from "@io/graph-module-core";
 import { workflow } from "@io/graph-module-workflow";
+import { webWorkflowReadPath } from "@io/graph-module-workflow/client";
 
 import { createAnonymousAuthorizationContext, issueBearerShareToken } from "../lib/auth-bridge.js";
 import {
@@ -37,16 +38,16 @@ import {
   localhostBootstrapRedeemPath,
   type LocalhostBootstrapCredential,
 } from "../lib/local-bootstrap.js";
-import { webSerializedQueryPath } from "../lib/query-transport.js";
 import { readRequestAuthorizationContext } from "../lib/server-routes.js";
 import { webWorkflowLivePath } from "../lib/workflow-live-transport.js";
-import { webWorkflowReadPath } from "../lib/workflow-transport.js";
 import {
   BetterAuthSessionVerificationError,
   createWorkerFetchHandler,
   webAppBootstrapPath,
 } from "./index.js";
 import worker from "./index.js";
+
+const webSerializedQueryPath = defaultHttpSerializedQueryPath;
 
 type DurableObjectSqlCursor<T extends Record<string, unknown>> = Iterable<T> & {
   one(): T;

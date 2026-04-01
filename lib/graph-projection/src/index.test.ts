@@ -198,10 +198,10 @@ describe("graph projection contracts", () => {
         },
       ],
       renderers: {
-        compatibleRendererIds: ["core:list", "core:table"],
+        compatibleRendererIds: ["default:list", "default:table"],
         itemEntityIds: "required",
         resultKind: "collection",
-        sourceKinds: ["inline", "saved"],
+        sourceKinds: ["inline", "saved-query"],
       },
     });
 

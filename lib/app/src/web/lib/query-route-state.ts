@@ -1,4 +1,8 @@
-export const queryRoutePreviewRendererIds = ["core:list", "core:table", "core:card-grid"] as const;
+export const queryRoutePreviewRendererIds = [
+  "default:list",
+  "default:table",
+  "default:card-grid",
+] as const;
 
 const queryRoutePreviewRendererIdSet = new Set<string>(queryRoutePreviewRendererIds);
 
@@ -20,7 +24,7 @@ export type QueryRoutePreviewState = {
 
 export const defaultQueryRoutePreviewState = Object.freeze({
   pageSize: 25,
-  rendererId: "core:list",
+  rendererId: "default:list",
 } satisfies QueryRoutePreviewState);
 
 export function isQueryRoutePreviewRendererId(value: string): value is QueryRoutePreviewRendererId {

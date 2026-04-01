@@ -13,13 +13,13 @@ describe("query route state", () => {
         pageSize: "50",
         params: "params-token",
         queryId: " saved-query:1 ",
-        rendererId: "core:table",
+        rendererId: "default:table",
       }),
     ).toEqual({
       pageSize: 50,
       params: "params-token",
       queryId: "saved-query:1",
-      rendererId: "core:table",
+      rendererId: "default:table",
     });
   });
 
@@ -42,7 +42,7 @@ describe("query route state", () => {
       resolveQueryRoutePreviewState({
         fallback: {
           pageSize: 5,
-          rendererId: "core:card-grid",
+          rendererId: "default:card-grid",
         },
         search: {
           pageSize: 10,
@@ -50,7 +50,7 @@ describe("query route state", () => {
       }),
     ).toEqual({
       pageSize: 10,
-      rendererId: "core:card-grid",
+      rendererId: "default:card-grid",
     });
 
     expect(resolveQueryRoutePreviewState({ search: {} })).toEqual(defaultQueryRoutePreviewState);

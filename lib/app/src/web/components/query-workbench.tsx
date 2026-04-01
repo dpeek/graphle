@@ -1,14 +1,28 @@
 "use client";
 
 import {
-  QueryEditor,
+  createInlineQueryContainer,
+  createSavedQueryContainer,
   getQueryEditorSurface,
   serializeQueryEditorDraft,
   validateQueryEditorDraft,
+  type QueryContainerPageExecutor,
+  type QueryContainerSpec,
   type QueryEditorCatalog,
   type QueryEditorDraft,
-} from "@io/graph-module-core/react-dom";
+  type QueryRendererCapability,
+  type QuerySurfaceRendererCompatibility,
+} from "@io/graph-query";
 import type { QueryLiteral } from "@io/graph-client";
+import {
+  QueryContainerMount as QueryRouteMount,
+  QueryEditor,
+  builtInQueryRendererRegistry,
+  createDefaultCardGridRendererBinding,
+  createDefaultListRendererBinding,
+  createDefaultTableRendererBinding,
+  createQueryRendererCapabilityMap,
+} from "@io/graph-query/react-dom";
 import { Badge } from "@io/web/badge";
 import { Button } from "@io/web/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@io/web/card";
@@ -17,22 +31,14 @@ import { Input } from "@io/web/input";
 import { useEffect, useMemo, useState } from "react";
 
 import {
-  mountInlineQueryRenderer,
-  mountSavedQueryRenderer,
-  type QueryContainerPageExecutor,
-  type QueryContainerSpec,
-  type QueryRendererCapability,
-  type QuerySurfaceRendererCompatibility,
-} from "../lib/query-container.js";
-import {
   QueryWorkbenchSaveError,
   createQueryWorkbenchBrowserStore,
   createQueryWorkbenchInitialDraft,
   createQueryWorkbenchMemoryStore,
   createQueryWorkbenchPreviewRuntime,
-  decodeQueryWorkbenchParamOverrides,
+  decodeQueryWorkbenchParameterOverrides,
   encodeQueryWorkbenchDraft,
-  encodeQueryWorkbenchParamOverrides,
+  encodeQueryWorkbenchParameterOverrides,
   resolveQueryWorkbenchState,
   resolveQueryWorkbenchRouteTarget,
   saveQueryWorkbenchQuery,
@@ -55,14 +61,6 @@ import {
   installedModuleQueryEditorCatalog,
   getInstalledModuleQuerySurfaceRendererCompatibility,
 } from "../lib/query-surface-registry.js";
-import {
-  builtInQueryRendererRegistry,
-  createCardGridRendererBinding,
-  createListRendererBinding,
-  createQueryRendererCapabilityMap,
-  createTableRendererBinding,
-} from "./query-renderers.js";
-import { QueryRouteMount } from "./query-route-mount.js";
 
 const catalog = installedModuleQueryEditorCatalog;
 const rendererCapabilities = createQueryRendererCapabilityMap(builtInQueryRendererRegistry);
@@ -112,7 +110,7 @@ type PreviewControls = {
 };
 
 function createPreviewRendererBinding(_rendererId: PreviewControls["rendererId"]) {
-  return createListRendererBinding({
+  return createDefaultListRendererBinding({
     metaFields: [{ fieldId: "state", label: "State" }],
     titleField: "title",
   });
@@ -149,8 +147,8 @@ function createPreviewRendererBindingForSurface(
     (fieldId) => fieldId !== titleField && fieldId !== badgeField,
   );
 
-  if (rendererId === "core:table") {
-    return createTableRendererBinding(
+  if (rendererId === "default:table") {
+    return createDefaultTableRendererBinding(
       [titleField, badgeField, ...remainingFields.slice(0, 2)]
         .filter((fieldId): fieldId is string => typeof fieldId === "string")
         .map((fieldId) => ({
@@ -159,8 +157,8 @@ function createPreviewRendererBindingForSurface(
         })),
     );
   }
-  if (rendererId === "core:card-grid") {
-    return createCardGridRendererBinding({
+  if (rendererId === "default:card-grid") {
+    return createDefaultCardGridRendererBinding({
       ...(badgeField ? { badgeField } : {}),
       fields: remainingFields.slice(0, 2).map((fieldId) => ({
         fieldId,
@@ -287,7 +285,9 @@ export function QueryWorkbench({
     () => getInstalledModuleQuerySurfaceRendererCompatibility(activeSurfaceId),
     [activeSurfaceId],
   );
-  const routeParams = search.params ? decodeQueryWorkbenchParamOverrides(search.params) : undefined;
+  const routeParams = search.params
+    ? decodeQueryWorkbenchParameterOverrides(search.params)
+    : undefined;
   const previewRuntime = useMemo(
     () =>
       createQueryWorkbenchPreviewRuntime(store, {
@@ -350,7 +350,7 @@ export function QueryWorkbench({
     const source =
       routeTarget.kind === "saved-query"
         ? {
-            kind: "saved" as const,
+            kind: "saved-query" as const,
             params: routeParams,
             queryId: routeTarget.query.id,
           }
@@ -373,9 +373,9 @@ export function QueryWorkbench({
       renderer: createPreviewRendererBindingForSurface(previewControls.rendererId, activeSurfaceId),
     };
     return (
-      source.kind === "saved"
-        ? mountSavedQueryRenderer(source, mountOptions)
-        : mountInlineQueryRenderer(source.request, mountOptions)
+      source.kind === "saved-query"
+        ? createSavedQueryContainer(source, mountOptions)
+        : createInlineQueryContainer(source.request, mountOptions)
     ) satisfies QueryContainerSpec;
   }, [
     activeSurfaceId,
@@ -821,8 +821,8 @@ export function QueryWorkbench({
               <CardTitle className="text-base">Preview pending</CardTitle>
               <CardDescription>
                 Live results stay idle until the current draft validates and syncs into route state.
-                The default workflow board draft starts with an empty `projectId` filter so `/query`
-                does not issue unsupported preview requests on first load.
+                The default blank route keeps the workflow board draft local so `/query` does not
+                issue an implicit preview on first load.
               </CardDescription>
             </CardHeader>
           </Card>
@@ -851,7 +851,9 @@ function ParameterOverrideEditor({
   readonly previewControls: PreviewControls;
   readonly search: QueryRouteSearch;
 }) {
-  const overrides = search.params ? (decodeQueryWorkbenchParamOverrides(search.params) ?? {}) : {};
+  const overrides = search.params
+    ? (decodeQueryWorkbenchParameterOverrides(search.params) ?? {})
+    : {};
 
   return (
     <div className="grid gap-3">
@@ -871,7 +873,7 @@ function ParameterOverrideEditor({
                 }
                 const nextParams =
                   Object.keys(nextOverrides).length > 0
-                    ? encodeQueryWorkbenchParamOverrides(nextOverrides)
+                    ? encodeQueryWorkbenchParameterOverrides(nextOverrides)
                     : undefined;
                 void onSearchChange?.(
                   createQueryRouteSearch({

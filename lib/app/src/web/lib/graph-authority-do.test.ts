@@ -16,7 +16,11 @@ import {
   type PersistedAuthoritativeGraphStorage,
 } from "@io/graph-authority";
 import { bootstrap } from "@io/graph-bootstrap";
-import { createGraphClient, type GraphClient } from "@io/graph-client";
+import {
+  createGraphClient,
+  defaultHttpSerializedQueryPath,
+  type GraphClient,
+} from "@io/graph-client";
 import {
   type AuthoritativeGraphRetainedHistoryPolicy,
   type GraphWriteTransaction,
@@ -29,6 +33,7 @@ import {
   workflowReviewModuleReadScope,
   workflowReviewSyncScopeRequest,
 } from "@io/graph-module-workflow";
+import { webWorkflowReadPath, type WorkflowReadResponse } from "@io/graph-module-workflow/client";
 
 import {
   createBearerShareAuthorizationContext,
@@ -50,13 +55,13 @@ import {
   webGraphAuthoritySessionPrincipalLookupPath,
 } from "./graph-authority-do.js";
 import { webAppPolicyVersion } from "./policy-version.js";
-import { webSerializedQueryPath } from "./query-transport.js";
 import {
   encodeRequestAuthorizationContext,
   webAppAuthorizationContextHeader,
 } from "./server-routes.js";
 import { webWorkflowLivePath, type WorkflowLiveResponse } from "./workflow-live-transport.js";
-import { webWorkflowReadPath, type WorkflowReadResponse } from "./workflow-transport.js";
+
+const webSerializedQueryPath = defaultHttpSerializedQueryPath;
 
 setDefaultTimeout(20_000);
 
@@ -2773,7 +2778,7 @@ describe("web graph authority durable object", () => {
     expect(registered.payload).toMatchObject({
       kind: "workflow-review-register",
       result: {
-        registrationId: `workflow-review:${testAuthorityAuthorization.sessionId}:${workflowReviewModuleReadScope.scopeId}`,
+        registrationId: `live-scope:${testAuthorityAuthorization.sessionId}:${workflowReviewModuleReadScope.scopeId}`,
         sessionId: testAuthorityAuthorization.sessionId,
         principalId: testAuthorityAuthorization.principalId,
         scopeId: workflowReviewModuleReadScope.scopeId,

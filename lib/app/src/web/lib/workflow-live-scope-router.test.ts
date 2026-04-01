@@ -1,8 +1,8 @@
 import { describe, expect, it } from "bun:test";
 
+import { createLiveScopeRouter } from "@io/graph-live/server";
 import { defineInvalidationEvent } from "@io/graph-projection";
 
-import { createWorkflowReviewLiveScopeRouter } from "./workflow-live-scope-router.js";
 import type { WorkflowReviewLiveRegistrationTarget } from "./workflow-live-transport.js";
 
 function createRegistrationTarget(
@@ -36,13 +36,13 @@ function createWorkflowReviewInvalidation() {
 
 describe("workflow review live scope router", () => {
   it("registers and indexes workflow review registrations by session, scope, and dependency key", () => {
-    const router = createWorkflowReviewLiveScopeRouter({
+    const router = createLiveScopeRouter({
       now: () => new Date("2026-03-24T00:00:00.000Z"),
     });
     const registration = router.register(createRegistrationTarget());
 
     expect(registration).toEqual({
-      registrationId: "workflow-review:session:review-1:scope:workflow:review",
+      registrationId: "live-scope:session:review-1:scope:workflow:review",
       sessionId: "session:review-1",
       principalId: "principal:reviewer-1",
       scopeId: "scope:workflow:review",
@@ -65,7 +65,7 @@ describe("workflow review live scope router", () => {
 
   it("renews an existing session scope registration without duplicating fan-out targets", () => {
     let now = new Date("2026-03-24T00:00:00.000Z");
-    const router = createWorkflowReviewLiveScopeRouter({
+    const router = createLiveScopeRouter({
       now: () => now,
     });
     const initial = router.register(createRegistrationTarget());
@@ -82,7 +82,7 @@ describe("workflow review live scope router", () => {
   });
 
   it("queues compatible invalidations for active registrations and drains them per session scope", () => {
-    const router = createWorkflowReviewLiveScopeRouter({
+    const router = createLiveScopeRouter({
       now: () => new Date("2026-03-24T00:00:00.000Z"),
     });
     const registration = router.register(createRegistrationTarget());
@@ -114,7 +114,7 @@ describe("workflow review live scope router", () => {
   });
 
   it("fans matching invalidations out to every registration that shares the dependency keys", () => {
-    const router = createWorkflowReviewLiveScopeRouter({
+    const router = createLiveScopeRouter({
       now: () => new Date("2026-03-24T00:00:00.000Z"),
     });
     const first = router.register(createRegistrationTarget());
@@ -170,7 +170,7 @@ describe("workflow review live scope router", () => {
 
   it("expires registrations and clears every index", () => {
     let now = new Date("2026-03-24T00:00:00.000Z");
-    const router = createWorkflowReviewLiveScopeRouter({
+    const router = createLiveScopeRouter({
       now: () => now,
       registrationTtlMs: 10_000,
     });
@@ -196,7 +196,7 @@ describe("workflow review live scope router", () => {
   });
 
   it("removes registrations explicitly", () => {
-    const router = createWorkflowReviewLiveScopeRouter({
+    const router = createLiveScopeRouter({
       now: () => new Date("2026-03-24T00:00:00.000Z"),
     });
     router.register(createRegistrationTarget());
@@ -217,11 +217,11 @@ describe("workflow review live scope router", () => {
   });
 
   it("treats router loss as a freshness-only reset that requires re-registration", () => {
-    const firstRouter = createWorkflowReviewLiveScopeRouter({
+    const firstRouter = createLiveScopeRouter({
       now: () => new Date("2026-03-24T00:00:00.000Z"),
     });
     const registration = firstRouter.register(createRegistrationTarget());
-    const restartedRouter = createWorkflowReviewLiveScopeRouter({
+    const restartedRouter = createLiveScopeRouter({
       now: () => new Date("2026-03-24T00:00:05.000Z"),
     });
 

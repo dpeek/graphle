@@ -1,4 +1,4 @@
-import type { WorkflowReviewLiveSync } from "./workflow-review-live-sync.js";
+import type { WorkflowReviewLiveSync } from "@io/graph-module-workflow/client";
 
 export type WorkflowReviewRefreshLoopOptions = {
   readonly liveSync: WorkflowReviewLiveSync;

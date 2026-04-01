@@ -2,7 +2,7 @@ import { usePredicateField } from "@io/graph-react";
 import { Button } from "@io/web/button";
 
 import { asPredicateMetadataFields } from "./catalog.js";
-import { PredicateRangeEditor, useStoreSlotValue } from "./field-editor.js";
+import { PredicateRangeEditor, usePredicateSlotValue } from "./field-editor.js";
 import {
   formatGraphCardinality,
   getDefinitionDisplayLabel,
@@ -38,7 +38,7 @@ export function PredicateInspector({
   const name = usePredicateField(fields.name).value;
   const range = usePredicateField(fields.range).value;
   const cardinality = usePredicateField(fields.cardinality).value;
-  const graphIconId = useStoreSlotValue(store, entry.id, predicateIconPredicateId);
+  const graphIconId = usePredicateSlotValue(store, entry.id, predicateIconPredicateId);
   const iconId = resolveDisplayedDefinitionIconId(entry.compiledIconId, graphIconId);
   const title = getDefinitionDisplayLabel(typeof name === "string" ? name : undefined, entry.key);
 

@@ -8,6 +8,8 @@ import {
   type SerializedQueryRequest,
 } from "@io/graph-client";
 import { type GraphWriteTransaction } from "@io/graph-kernel";
+import { liveScopeRequestKindValues } from "@io/graph-live";
+import { type LiveScopeRouter } from "@io/graph-live/server";
 import {
   projectBranchScopeOrderDirectionValues,
   projectBranchScopeOrderFieldValues,
@@ -19,6 +21,11 @@ import {
   type ProjectBranchScopeQuery,
   type WorkflowBranchStateValue,
 } from "@io/graph-module-workflow";
+import {
+  workflowReadRequestKinds,
+  type WorkflowReadRequest,
+  type WorkflowSessionFeedReadQuery,
+} from "@io/graph-module-workflow/client";
 
 import type {
   WebAppAuthority,
@@ -26,14 +33,11 @@ import type {
   WebAuthorityCommand,
   WebAuthorityCommandResult,
 } from "./authority.js";
-import type { WorkflowReviewLiveScopeRouter } from "./workflow-live-scope-router.js";
-import type { WorkflowSessionFeedReadQuery } from "./workflow-session-feed-contract.js";
 import {
   type WorkflowLiveRequestKind,
   type WorkflowLiveRequest,
   workflowLiveRequestKinds,
 } from "./workflow-live-transport.js";
-import { type WorkflowReadRequest, workflowReadRequestKinds } from "./workflow-transport.js";
 
 const supportedPrincipalKinds = new Set([
   "human",
@@ -543,14 +547,25 @@ function parseWorkflowLiveRequest(value: unknown): WorkflowLiveRequest {
   const kind = value.kind;
   if (
     typeof kind !== "string" ||
-    !workflowLiveRequestKinds.includes(kind as WorkflowLiveRequestKind)
+    (!workflowLiveRequestKinds.includes(kind as WorkflowLiveRequestKind) &&
+      !liveScopeRequestKindValues.includes(kind as (typeof liveScopeRequestKindValues)[number]))
   ) {
     throw new RequestWorkflowLiveError(
-      `Workflow live request "kind" must be one of: ${workflowLiveRequestKinds.join(", ")}.`,
+      `Workflow live request "kind" must be one of: ${[
+        ...workflowLiveRequestKinds,
+        ...liveScopeRequestKindValues,
+      ].join(", ")}.`,
     );
   }
 
-  const workflowLiveKind = kind as WorkflowLiveRequestKind;
+  const workflowLiveKind =
+    kind === "register"
+      ? "workflow-review-register"
+      : kind === "pull"
+        ? "workflow-review-pull"
+        : kind === "remove"
+          ? "workflow-review-remove"
+          : (kind as WorkflowLiveRequestKind);
 
   if (workflowLiveKind === "workflow-review-register") {
     return {
@@ -678,7 +693,7 @@ function executeWorkflowReadRequest(
 function executeWorkflowLiveRequest(
   live: WorkflowLiveRequest,
   authority: WebAppAuthority,
-  router: WorkflowReviewLiveScopeRouter,
+  router: LiveScopeRouter,
   authorization: AuthorizationContext,
 ): Response {
   try {
@@ -935,7 +950,7 @@ export async function handleSerializedQueryRequest(
 export async function handleWorkflowLiveRequest(
   request: Request,
   authority: WebAppAuthority,
-  router: WorkflowReviewLiveScopeRouter,
+  router: LiveScopeRouter,
   authorization: AuthorizationContext,
 ): Promise<Response> {
   if (request.method !== "POST") {

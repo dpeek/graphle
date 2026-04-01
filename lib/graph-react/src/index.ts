@@ -1,4 +1,6 @@
+export * from "./draft-value.js";
 export * from "./edit-session.js";
+export * from "./entity-draft.js";
 export * from "./entity.js";
 export * from "./filter.js";
 export * from "./mutation-validation.js";

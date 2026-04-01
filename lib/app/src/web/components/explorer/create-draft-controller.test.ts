@@ -6,7 +6,7 @@ import { defineType } from "@io/graph-module";
 import { stringTypeModule } from "@io/graph-module-core";
 import type { MutableRefObject } from "react";
 
-import { createDraftController } from "./create-draft-controller.js";
+import { createEntityDraftController } from "./create-draft-controller.js";
 import type { EntityCatalogEntry } from "./model.js";
 
 const draftItemType = defineType({
@@ -82,7 +82,7 @@ function createController(
     validateCreate,
   };
 
-  return createDraftController({
+  return createEntityDraftController({
     entry,
     entityEntryByIdRef: {
       current: new Map<string, EntityCatalogEntry>(),

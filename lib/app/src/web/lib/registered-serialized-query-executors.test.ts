@@ -13,16 +13,13 @@ import {
   workflowBuiltInQuerySurfaceIds,
   type WorkflowBuiltInQuerySurfaceSpec,
 } from "@io/graph-module-workflow";
+import { resolveCollectionQueryExecutor, resolveScopeQueryExecutor } from "@io/graph-query";
 
 import {
   getInstalledModuleQuerySurfaceRegistry,
   getInstalledModuleQuerySurface,
 } from "./query-surface-registry.js";
 import { createWebAppSerializedQueryExecutorRegistry } from "./registered-serialized-query-executors.js";
-import {
-  resolveSerializedQueryCollectionExecutor,
-  resolveSerializedQueryScopeExecutor,
-} from "./serialized-query-executor-registry.js";
 
 const normalizedMetadata = {
   executionContextHash: "ctx-hash",
@@ -163,7 +160,7 @@ describe("registered serialized query executors", () => {
     const branchBoardSurface = requireWorkflowSurface(
       workflowBuiltInQuerySurfaceIds.projectBranchBoard,
     );
-    const branchBoardResolution = resolveSerializedQueryCollectionExecutor(registry, {
+    const branchBoardResolution = resolveCollectionQueryExecutor(registry, {
       kind: "collection",
       indexId: branchBoardSurface.surfaceId,
     });
@@ -234,7 +231,7 @@ describe("registered serialized query executors", () => {
     const commitQueueSurface = requireWorkflowSurface(
       workflowBuiltInQuerySurfaceIds.branchCommitQueue,
     );
-    const commitQueueResolution = resolveSerializedQueryCollectionExecutor(registry, {
+    const commitQueueResolution = resolveCollectionQueryExecutor(registry, {
       kind: "collection",
       indexId: commitQueueSurface.surfaceId,
     });
@@ -278,7 +275,7 @@ describe("registered serialized query executors", () => {
       ],
     });
 
-    const workflowScopeResolution = resolveSerializedQueryScopeExecutor(registry, {
+    const workflowScopeResolution = resolveScopeQueryExecutor(registry, {
       kind: "scope",
       scopeId: workflowBuiltInQuerySurfaceIds.reviewScope,
     });
@@ -296,7 +293,7 @@ describe("registered serialized query executors", () => {
     });
 
     const coreScopeSurface = requireCoreSurface(coreBuiltInQuerySurfaceIds.catalogScope);
-    const coreScopeResolution = resolveSerializedQueryScopeExecutor(registry, {
+    const coreScopeResolution = resolveScopeQueryExecutor(registry, {
       kind: "scope",
       scopeId: coreScopeSurface.surfaceId,
     });
@@ -339,7 +336,7 @@ describe("registered serialized query executors", () => {
       },
     });
 
-    const branchBoardResolution = resolveSerializedQueryCollectionExecutor(registry, {
+    const branchBoardResolution = resolveCollectionQueryExecutor(registry, {
       kind: "collection",
       indexId: workflowBuiltInQuerySurfaceIds.projectBranchBoard,
     });
@@ -360,7 +357,7 @@ describe("registered serialized query executors", () => {
       `Collection query "${workflowBuiltInQuerySurfaceIds.projectBranchBoard}" requires an equality filter for "projectId".`,
     );
 
-    const scopeResolution = resolveSerializedQueryScopeExecutor(registry, {
+    const scopeResolution = resolveScopeQueryExecutor(registry, {
       kind: "scope",
       scopeId: coreBuiltInQuerySurfaceIds.catalogScope,
     });

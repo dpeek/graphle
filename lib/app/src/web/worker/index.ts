@@ -1,4 +1,6 @@
 import { defineWebPrincipalBootstrapPayload } from "@io/graph-authority";
+import { defaultHttpSerializedQueryPath } from "@io/graph-client";
+import { webWorkflowReadPath } from "@io/graph-module-workflow/client";
 
 import {
   BearerShareTokenProjectionError,
@@ -22,7 +24,6 @@ import {
   webGraphAuthoritySessionPrincipalActivatePath,
   webGraphAuthoritySessionPrincipalLookupPath,
 } from "../lib/graph-authority-do.js";
-import { webSerializedQueryPath } from "../lib/query-transport.js";
 import {
   encodeRequestAuthorizationContext,
   webAppAuthorizationContextHeader,
@@ -39,7 +40,8 @@ import {
   type LocalhostBootstrapCredential,
 } from "../lib/local-bootstrap.js";
 import { webWorkflowLivePath } from "../lib/workflow-live-transport.js";
-import { webWorkflowReadPath } from "../lib/workflow-transport.js";
+
+const webSerializedQueryPath = defaultHttpSerializedQueryPath;
 
 type Fetcher = {
   fetch(request: Request): Promise<Response>;

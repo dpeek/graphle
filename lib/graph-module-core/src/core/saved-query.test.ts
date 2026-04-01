@@ -99,7 +99,7 @@ describe("core saved query graph schema", () => {
           },
         ],
       },
-      rendererId: "core:table",
+      rendererId: "default:table",
     });
 
     expect(query.kind).toBe("collection");
@@ -177,7 +177,7 @@ describe("core saved query graph schema", () => {
     });
     expect(queriedSavedView).toEqual({
       id: view.id,
-      rendererId: "core:table",
+      rendererId: "default:table",
       query: {
         id: query.id,
         name: "Branch board",

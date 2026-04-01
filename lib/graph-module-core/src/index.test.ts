@@ -263,10 +263,10 @@ describe("@io/graph-module-core", () => {
         label: "Core Catalog Scope",
         description: expect.any(String),
         renderers: {
-          compatibleRendererIds: ["core:list", "core:table"],
+          compatibleRendererIds: ["default:list", "default:table"],
           itemEntityIds: "required",
           resultKind: "scope",
-          sourceKinds: ["saved", "inline"],
+          sourceKinds: ["saved-query", "inline"],
         },
       },
       savedQueryLibrary: {
@@ -384,10 +384,10 @@ describe("@io/graph-module-core", () => {
           },
         ],
         renderers: {
-          compatibleRendererIds: ["core:list", "core:table"],
+          compatibleRendererIds: ["default:list", "default:table"],
           itemEntityIds: "required",
           resultKind: "collection",
-          sourceKinds: ["saved", "inline"],
+          sourceKinds: ["saved-query", "inline"],
         },
       },
     });

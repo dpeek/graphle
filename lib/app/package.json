@@ -5,9 +5,7 @@
   "type": "module",
   "exports": {
     "./graph": "./src/graph/index.ts",
-    "./web/better-auth": "./src/web/lib/better-auth.ts",
-    "./web/query-container": "./src/web/lib/query-container.ts",
-    "./web/saved-query": "./src/web/lib/saved-query.ts"
+    "./web/better-auth": "./src/web/lib/better-auth.ts"
   },
   "scripts": {
     "auth:migrations:apply:local": "wrangler d1 migrations apply AUTH_DB --local --persist-to out/wrangler",
@@ -28,11 +26,14 @@
     "@io/graph-bootstrap": "workspace:*",
     "@io/graph-client": "workspace:*",
     "@io/graph-kernel": "workspace:*",
+    "@io/graph-live": "workspace:*",
     "@io/graph-module": "workspace:*",
     "@io/graph-module-core": "workspace:*",
     "@io/graph-module-workflow": "workspace:*",
     "@io/graph-projection": "workspace:*",
+    "@io/graph-query": "workspace:*",
     "@io/graph-react": "workspace:*",
+    "@io/graph-surface": "workspace:*",
     "@io/graph-sync": "workspace:*",
     "@io/web": "workspace:*",
     "@op/cli": "workspace:*",

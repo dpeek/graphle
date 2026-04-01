@@ -301,7 +301,7 @@ export const querySurfaceRendererResultKindValues = [
 
 export type QuerySurfaceRendererResultKind = (typeof querySurfaceRendererResultKindValues)[number];
 
-export const querySurfaceRendererSourceKindValues = ["saved", "inline"] as const;
+export const querySurfaceRendererSourceKindValues = ["saved-query", "inline"] as const;
 
 export type QuerySurfaceRendererSourceKind = (typeof querySurfaceRendererSourceKindValues)[number];
 

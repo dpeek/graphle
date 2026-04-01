@@ -1,14 +1,14 @@
 import { type GraphStore } from "@io/app/graph";
-import { type AuthoritativeGraphWriteResult, type GraphWriteTransaction } from "@io/graph-kernel";
 import {
   type WorkflowMutationAction,
   type WorkflowMutationResult,
 } from "@io/graph-module-workflow";
+import {
+  runWorkflowMutationCommand as runWorkflowMutationServerCommand,
+  type WorkflowMutationAuthority as WorkflowMutationServerAuthority,
+} from "@io/graph-module-workflow/server";
 
-import type {
-  WebAppAuthorityCommandOptions,
-  WebAppAuthorityTransactionOptions,
-} from "./authority.js";
+import type { WebAppAuthorityCommandOptions } from "./authority.js";
 import { dispatchWorkflowAggregateMutation } from "./workflow-authority-aggregate-handlers.js";
 import {
   createWorkflowCommit,
@@ -23,34 +23,19 @@ import {
   type ProductGraphClient,
 } from "./workflow-mutation-helpers.js";
 
-type WorkflowMutationAuthority = {
-  readonly store: GraphStore;
-  applyTransaction(
-    transaction: GraphWriteTransaction,
-    options: WebAppAuthorityTransactionOptions,
-  ): Promise<AuthoritativeGraphWriteResult>;
-};
+type WorkflowMutationAuthority = WorkflowMutationServerAuthority<
+  WebAppAuthorityCommandOptions["authorization"]
+>;
 
 export async function runWorkflowMutationCommand(
   input: WorkflowMutationAction,
   authority: WorkflowMutationAuthority,
   options: WebAppAuthorityCommandOptions,
 ): Promise<WorkflowMutationResult> {
-  const planned = planWorkflowMutation(
-    authority.store.snapshot(),
-    `workflow-mutation:${input.action}:${Date.now()}`,
-    (graph, store) => mutateWorkflow(graph, store, input),
-  );
-
-  if (!planned.changed) return planned.result;
-
-  const write = await authority.applyTransaction(planned.transaction, {
-    authorization: options.authorization,
-    writeScope: "server-command",
+  return runWorkflowMutationServerCommand(input, authority, options, {
+    mutateWorkflow,
+    planWorkflowMutation,
   });
-  planned.result.cursor = write.cursor;
-  planned.result.replayed = write.replayed;
-  return planned.result;
 }
 
 function mutateWorkflow(

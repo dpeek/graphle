@@ -2,10 +2,11 @@ import { describe, expect, it, setDefaultTimeout } from "bun:test";
 
 import type { AuthorizationContext } from "@io/graph-authority";
 import { createHttpGraphClient, type FetchImpl } from "@io/graph-client";
+import { createLiveScopeRouter } from "@io/graph-live/server";
 import type { GraphWriteTransaction } from "@io/graph-kernel";
 import { core, coreGraphBootstrapOptions } from "@io/graph-module-core";
-import { workflow } from "@io/graph-module-workflow";
-import { workflowReviewSyncScopeRequest } from "@io/graph-module-workflow";
+import { workflow, workflowReviewSyncScopeRequest } from "@io/graph-module-workflow";
+import { createWorkflowReviewLiveSync } from "@io/graph-module-workflow/client";
 
 import {
   createTestWebAppAuthority,
@@ -14,9 +15,7 @@ import {
 } from "./authority-test-helpers.js";
 import { type WebAppAuthority } from "./authority.js";
 import { handleSyncRequest, handleWorkflowLiveRequest } from "./server-routes.js";
-import { createWorkflowReviewLiveScopeRouter } from "./workflow-live-scope-router.js";
 import { webWorkflowLivePath, type WorkflowLiveRequest } from "./workflow-live-transport.js";
-import { createWorkflowReviewLiveSync } from "./workflow-review-live-sync.js";
 
 const baseUrl = "https://web.local/";
 const graphSchema = { ...workflow } as const;
@@ -49,7 +48,7 @@ type WorkflowLiveHarness = {
 function createWorkflowLiveHarness(
   authority: WebAppAuthority,
   router: {
-    current: ReturnType<typeof createWorkflowReviewLiveScopeRouter>;
+    current: ReturnType<typeof createLiveScopeRouter>;
   },
 ): WorkflowLiveHarness {
   const liveRequests: WorkflowLiveRequest[] = [];
@@ -92,7 +91,7 @@ function createWorkflowLiveHarness(
 describe("workflow review live sync", () => {
   it("scoped re-pulls the workflow review scope after a cursor-advanced invalidation", async () => {
     const router = {
-      current: createWorkflowReviewLiveScopeRouter(),
+      current: createLiveScopeRouter(),
     };
     const authority = await createTestWebAppAuthority(undefined, {
       onWorkflowReviewInvalidation(invalidation) {
@@ -158,10 +157,7 @@ describe("workflow review live sync", () => {
     });
     expectScopedCursor(client.sync.getState().cursor, created.cursor);
     expect(client.graph.commit.get(created.summary.id).name).toBe("Workflow live scoped refresh");
-    expect(harness.liveRequests.map((request) => request.kind)).toEqual([
-      "workflow-review-register",
-      "workflow-review-pull",
-    ]);
+    expect(harness.liveRequests.map((request) => request.kind)).toEqual(["register", "pull"]);
     expect(harness.syncRequests).toEqual([
       "https://web.local/api/sync?scopeKind=module&moduleId=workflow&scopeId=scope%3Aworkflow%3Areview",
       `https://web.local/api/sync?after=${encodeURIComponent(initialCursor)}&scopeKind=module&moduleId=workflow&scopeId=scope%3Aworkflow%3Areview`,
@@ -171,7 +167,7 @@ describe("workflow review live sync", () => {
   it("re-registers and scoped re-pulls after workflow live registration expiry", async () => {
     let now = new Date("2026-03-24T00:00:00.000Z");
     const router = {
-      current: createWorkflowReviewLiveScopeRouter({
+      current: createLiveScopeRouter({
         now: () => now,
         registrationTtlMs: 1_000,
       }),
@@ -239,9 +235,9 @@ describe("workflow review live sync", () => {
     expectScopedCursor(client.sync.getState().cursor, created.cursor);
     expect(client.graph.commit.get(created.summary.id).name).toBe("Workflow live expiry recovery");
     expect(harness.liveRequests.map((request) => request.kind)).toEqual([
-      "workflow-review-register",
-      "workflow-review-pull",
-      "workflow-review-register",
+      "register",
+      "pull",
+      "register",
     ]);
     expect(harness.syncRequests).toEqual([
       "https://web.local/api/sync?scopeKind=module&moduleId=workflow&scopeId=scope%3Aworkflow%3Areview",
@@ -251,7 +247,7 @@ describe("workflow review live sync", () => {
 
   it("re-registers and scoped re-pulls after router loss", async () => {
     const router = {
-      current: createWorkflowReviewLiveScopeRouter(),
+      current: createLiveScopeRouter(),
     };
     const authority = await createTestWebAppAuthority(undefined, {
       onWorkflowReviewInvalidation(invalidation) {
@@ -274,7 +270,7 @@ describe("workflow review live sync", () => {
     const initialCursor = client.sync.getState().cursor;
 
     await liveSync.register();
-    router.current = createWorkflowReviewLiveScopeRouter();
+    router.current = createLiveScopeRouter();
     const created = await executeTestWorkflowMutation(authority, authorization, {
       action: "createCommit",
       branchId: fixture.branchId,
@@ -313,9 +309,9 @@ describe("workflow review live sync", () => {
       "Workflow live router-loss recovery",
     );
     expect(harness.liveRequests.map((request) => request.kind)).toEqual([
-      "workflow-review-register",
-      "workflow-review-pull",
-      "workflow-review-register",
+      "register",
+      "pull",
+      "register",
     ]);
     expect(harness.syncRequests).toEqual([
       "https://web.local/api/sync?scopeKind=module&moduleId=workflow&scopeId=scope%3Aworkflow%3Areview",
