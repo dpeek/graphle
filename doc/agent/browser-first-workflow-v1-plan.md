@@ -511,11 +511,21 @@ Primary code targets:
 - `lib/app/src/web/lib/workflow-session-feed.ts`
 - `lib/app/src/web/components/workflow-review-page.tsx`
 
+Stage 2 should prefer one direct workflow read that:
+
+- resolves the implicit operator branch for the selected project
+- returns the commit queue page for that branch
+- returns selected-commit detail, including retained session linkage and enough
+  context metadata for the browser to render the commit-first surface without a
+  separate branch-board bootstrap query
+
 Done when:
 
 - the browser can render the commit queue, selected commit detail, and session
   feed without requiring branch-first navigation
-- the browser shows gating state and next runnable session
+- the selected commit detail shows the current gate state, the next runnable
+  session, and the retained session context that explains what the operator can
+  inspect next
 
 ### Stage 3: Launch the first browser session with correct context
 

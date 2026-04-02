@@ -417,6 +417,84 @@ describe("workflow projection query helpers", () => {
     expect(secondPage.nextCursor).toBeUndefined();
   });
 
+  it("reads the implicit main commit workflow with selected-commit detail and retained linkage", () => {
+    const { graph, ids } = createWorkflowQueryFixture();
+    const projection = createWorkflowProjectionIndex(graph, {
+      projectedAt: "2026-01-10T00:00:00.000Z",
+    });
+
+    const result = projection.readMainCommitWorkflowScope({
+      projectId: ids.projectId,
+      limit: 1,
+      commitId: ids.commit2Id,
+    });
+
+    expect(result.project.id).toBe(ids.projectId);
+    expect(result.repository?.repositoryKey).toBe("repo:io");
+    expect(result.branch.branch.id).toBe(ids.activeBranchId);
+    expect(result.branch.branch.contextSummary).toBe("Primary branch startup memory.");
+    expect(result.rows.map((row) => row.commit.id)).toEqual([ids.commit1Id]);
+    expect(result.nextCursor).toEqual(expect.any(String));
+    expect(result.selectedCommit).toMatchObject({
+      row: {
+        commit: {
+          id: ids.commit2Id,
+          contextDocumentId: ids.commitContextDocumentId,
+          contextSummary: "Primary commit execution memory.",
+        },
+        repositoryCommit: {
+          state: "attached",
+        },
+      },
+      latestSession: {
+        id: ids.branchCommitSessionId,
+        kind: "execution",
+        runtimeState: "running",
+        sessionKey: "session:workflow-runtime-contract-execution-01",
+      },
+      nextSessionKind: "execution",
+    });
+  });
+
+  it("retains user-review gate metadata in selected commit detail", () => {
+    const { graph, ids } = createWorkflowQueryFixture();
+    graph.commit.update(ids.commit2Id, {
+      gateReason: "Await manual review before implementation resumes.",
+      gateRequestedAt: date("2026-01-05T13:00:00.000Z"),
+      gateRequestedBySessionId: ids.branchCommitSessionId,
+      state: workflow.commitState.values.blocked.id,
+      updatedAt: date("2026-01-05T13:00:00.000Z"),
+    });
+    graph.agentSession.update(ids.branchCommitSessionId, {
+      runtimeState: workflow.agentSessionRuntimeState.values.blocked.id,
+      updatedAt: date("2026-01-05T13:00:00.000Z"),
+    });
+    const projection = createWorkflowProjectionIndex(graph, {
+      projectedAt: "2026-01-10T00:00:00.000Z",
+    });
+
+    const result = projection.readMainCommitWorkflowScope({
+      projectId: ids.projectId,
+      commitId: ids.commit2Id,
+    });
+
+    expect(result.selectedCommit).toMatchObject({
+      latestSession: {
+        id: ids.branchCommitSessionId,
+        runtimeState: "blocked",
+      },
+      row: {
+        commit: {
+          id: ids.commit2Id,
+          gate: "UserReview",
+          gateReason: "Await manual review before implementation resumes.",
+          gateRequestedAt: "2026-01-05T13:00:00.000Z",
+          gateRequestedBySessionId: ids.branchCommitSessionId,
+        },
+      },
+    });
+  });
+
   it("keeps workflow rows readable when repository observations are missing", () => {
     const { graph, ids } = createWorkflowQueryFixture({
       includeRepositoryBranches: false,
@@ -623,6 +701,10 @@ describe("workflow projection query helpers", () => {
       branchId: ids.activeBranchId,
       limit: 2,
     });
+    const mainWorkflow = hydrated.readMainCommitWorkflowScope({
+      projectId: ids.projectId,
+      commitId: ids.commit2Id,
+    });
 
     expect(branchBoard.rows.map((row) => row.branch.id)).toEqual([
       ids.activeBranchId,
@@ -631,6 +713,10 @@ describe("workflow projection query helpers", () => {
     expect(branchBoard.freshness.projectionCursor).toBe("workflow-projection:retained-01");
     expect(commitQueue.rows.map((row) => row.commit.id)).toEqual([ids.commit1Id, ids.commit2Id]);
     expect(commitQueue.branch.latestSession?.id).toBe(ids.branchCommitSessionId);
+    expect(mainWorkflow.selectedCommit?.latestSession?.id).toBe(ids.branchCommitSessionId);
+    expect(mainWorkflow.selectedCommit?.row.commit.contextSummary).toBe(
+      "Primary commit execution memory.",
+    );
   });
 
   it("fails explicitly when retained projection metadata has an incompatible definitionHash", () => {

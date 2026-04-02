@@ -106,6 +106,7 @@ export type WorkflowRepositorySummary = WorkflowSummaryBase & {
 export type WorkflowBranchSummary = WorkflowSummaryBase & {
   readonly activeCommitId?: string;
   readonly branchKey: string;
+  readonly contextSummary?: string;
   readonly entity: "branch";
   readonly contextDocumentId?: string;
   readonly goalDocumentId?: string;
@@ -118,6 +119,7 @@ export type WorkflowBranchSummary = WorkflowSummaryBase & {
 export type WorkflowCommitSummary = WorkflowSummaryBase & {
   readonly branchId: string;
   readonly commitKey: string;
+  readonly contextSummary?: string;
   readonly contextDocumentId?: string;
   readonly entity: "commit";
   readonly gate?: WorkflowCommitGateValue;

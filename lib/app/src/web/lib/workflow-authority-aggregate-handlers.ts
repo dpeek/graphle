@@ -7,6 +7,7 @@ import {
   type WorkflowCreateBranchAction,
   type WorkflowCreateProjectAction,
   type WorkflowCreateRepositoryAction,
+  type WorkflowMutationAction,
   type WorkflowSetBranchStateAction,
   type WorkflowMutationResult,
   type WorkflowUpdateBranchAction,
@@ -44,6 +45,8 @@ import {
   trimOptionalString,
   branchStateIds,
 } from "./workflow-mutation-helpers.js";
+
+type BranchRepositoryTargetMutation = WorkflowAttachBranchRepositoryTargetAction;
 
 function createWorkflowProject(
   graph: ProductGraphClient,

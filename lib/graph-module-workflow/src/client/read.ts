@@ -1,6 +1,8 @@
 import type {
   CommitQueueScopeQuery,
   CommitQueueScopeResult,
+  MainCommitWorkflowScopeQuery,
+  MainCommitWorkflowScopeResult,
   ProjectBranchScopeQuery,
   ProjectBranchScopeResult,
 } from "../query.js";
@@ -12,6 +14,7 @@ import type {
 export const webWorkflowReadPath = "/api/workflow-read";
 
 export const workflowReadRequestKinds = [
+  "main-commit-workflow-scope",
   "project-branch-scope",
   "commit-queue-scope",
   "session-feed",
@@ -22,6 +25,11 @@ export type WorkflowReadRequestKind = (typeof workflowReadRequestKinds)[number];
 export type ProjectBranchScopeWorkflowReadRequest = {
   readonly kind: "project-branch-scope";
   readonly query: ProjectBranchScopeQuery;
+};
+
+export type MainCommitWorkflowScopeWorkflowReadRequest = {
+  readonly kind: "main-commit-workflow-scope";
+  readonly query: MainCommitWorkflowScopeQuery;
 };
 
 export type CommitQueueScopeWorkflowReadRequest = {
@@ -35,9 +43,15 @@ export type WorkflowSessionFeedWorkflowReadRequest = {
 };
 
 export type WorkflowReadRequest =
+  | MainCommitWorkflowScopeWorkflowReadRequest
   | ProjectBranchScopeWorkflowReadRequest
   | CommitQueueScopeWorkflowReadRequest
   | WorkflowSessionFeedWorkflowReadRequest;
+
+export type MainCommitWorkflowScopeWorkflowReadResponse = {
+  readonly kind: "main-commit-workflow-scope";
+  readonly result: MainCommitWorkflowScopeResult;
+};
 
 export type ProjectBranchScopeWorkflowReadResponse = {
   readonly kind: "project-branch-scope";
@@ -55,18 +69,21 @@ export type WorkflowSessionFeedWorkflowReadResponse = {
 };
 
 export type WorkflowReadResponse =
+  | MainCommitWorkflowScopeWorkflowReadResponse
   | ProjectBranchScopeWorkflowReadResponse
   | CommitQueueScopeWorkflowReadResponse
   | WorkflowSessionFeedWorkflowReadResponse;
 
 type WorkflowReadResponseFor<TRequest extends WorkflowReadRequest> =
-  TRequest extends ProjectBranchScopeWorkflowReadRequest
-    ? ProjectBranchScopeWorkflowReadResponse
-    : TRequest extends CommitQueueScopeWorkflowReadRequest
-      ? CommitQueueScopeWorkflowReadResponse
-      : TRequest extends WorkflowSessionFeedWorkflowReadRequest
-        ? WorkflowSessionFeedWorkflowReadResponse
-        : never;
+  TRequest extends MainCommitWorkflowScopeWorkflowReadRequest
+    ? MainCommitWorkflowScopeWorkflowReadResponse
+    : TRequest extends ProjectBranchScopeWorkflowReadRequest
+      ? ProjectBranchScopeWorkflowReadResponse
+      : TRequest extends CommitQueueScopeWorkflowReadRequest
+        ? CommitQueueScopeWorkflowReadResponse
+        : TRequest extends WorkflowSessionFeedWorkflowReadRequest
+          ? WorkflowSessionFeedWorkflowReadResponse
+          : never;
 
 type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 

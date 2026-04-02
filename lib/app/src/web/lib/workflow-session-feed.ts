@@ -243,6 +243,9 @@ function buildWorkflowBranchSummary(
   const goalSummary = entity.goalDocument
     ? trimOptionalString(graph.document.get(entity.goalDocument).description)
     : undefined;
+  const contextSummary = entity.contextDocument
+    ? trimOptionalString(graph.document.get(entity.contextDocument).description)
+    : undefined;
 
   return {
     createdAt: entity.createdAt.toISOString(),
@@ -250,6 +253,7 @@ function buildWorkflowBranchSummary(
     id: entity.id,
     ...(entity.activeCommit ? { activeCommitId: entity.activeCommit } : {}),
     branchKey: entity.branchKey,
+    ...(contextSummary ? { contextSummary } : {}),
     ...(entity.contextDocument ? { contextDocumentId: entity.contextDocument } : {}),
     ...(entity.goalDocument ? { goalDocumentId: entity.goalDocument } : {}),
     projectId: entity.project,
@@ -263,12 +267,17 @@ function buildWorkflowBranchSummary(
 
 function buildWorkflowCommitSummary(
   entity: ReturnType<ProductGraphClient["commit"]["get"]>,
+  graph: Pick<ProductGraphClient, "document">,
 ): WorkflowCommitSummary {
   const state = decodeWorkflowCommitState(entity.state);
+  const contextSummary = entity.contextDocument
+    ? trimOptionalString(graph.document.get(entity.contextDocument).description)
+    : undefined;
   return {
     branchId: entity.branch,
     commitKey: entity.commitKey,
     createdAt: entity.createdAt.toISOString(),
+    ...(contextSummary ? { contextSummary } : {}),
     ...(entity.contextDocument ? { contextDocumentId: entity.contextDocument } : {}),
     entity: "commit",
     id: entity.id,
@@ -691,7 +700,7 @@ function buildReadyResult(
     status: "ready",
     subject: {
       branch,
-      ...(commit ? { commit: buildWorkflowCommitSummary(commit) } : {}),
+      ...(commit ? { commit: buildWorkflowCommitSummary(commit, graph) } : {}),
       projectId: project.id,
       ...(repository ? { repository } : {}),
       ...(repositoryBranch ? { repositoryBranch } : {}),

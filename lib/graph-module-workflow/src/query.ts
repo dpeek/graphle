@@ -228,6 +228,39 @@ export interface CommitQueueScopeResult {
   readonly rows: readonly CommitQueueScopeCommitRow[];
 }
 
+export const mainCommitWorkflowScopeFailureCodes = [
+  "main-branch-not-found",
+  "policy-denied",
+  "project-not-found",
+  "projection-stale",
+] as const;
+
+export type MainCommitWorkflowScopeFailureCode =
+  (typeof mainCommitWorkflowScopeFailureCodes)[number];
+
+export interface MainCommitWorkflowScopeQuery {
+  readonly commitId?: string;
+  readonly cursor?: string;
+  readonly limit?: number;
+  readonly projectId: string;
+}
+
+export interface MainCommitWorkflowScopeSelectedCommit {
+  readonly latestSession?: CommitQueueScopeSessionSummary;
+  readonly nextSessionKind?: CommitQueueScopeSessionKind;
+  readonly row: CommitQueueScopeCommitRow;
+}
+
+export interface MainCommitWorkflowScopeResult {
+  readonly branch: CommitQueueScopeBranchDetail;
+  readonly freshness: CommitQueueScopeFreshness;
+  readonly nextCursor?: string;
+  readonly project: WorkflowProjectSummary;
+  readonly repository?: WorkflowRepositorySummary;
+  readonly rows: readonly CommitQueueScopeCommitRow[];
+  readonly selectedCommit?: MainCommitWorkflowScopeSelectedCommit;
+}
+
 const projectionWorkflowSchema: ProjectionWorkflowSchema = applyGraphIdMap(workflowIds, {
   project,
   repository,
@@ -304,6 +337,9 @@ export interface WorkflowProjectionGraphClient {
   };
 }
 type WorkflowProjectionErrorCode = ProjectBranchScopeFailureCode | CommitQueueScopeFailureCode;
+type WorkflowProjectionReadErrorCode =
+  | WorkflowProjectionErrorCode
+  | MainCommitWorkflowScopeFailureCode;
 type WorkflowProjectionCursorKind = "project-branch" | "commit-queue";
 type WorkflowProjectionCursor = {
   readonly anchorId: string;
@@ -322,6 +358,7 @@ type WorkflowProjectionIndexState = {
   readonly branchesByProjectId: ReadonlyMap<string, readonly WorkflowBranchSummary[]>;
   readonly commitRowsByBranchId: ReadonlyMap<string, readonly CommitQueueScopeCommitRow[]>;
   readonly latestSessionByBranchId: ReadonlyMap<string, CommitQueueScopeSessionSummary>;
+  readonly latestSessionByCommitId: ReadonlyMap<string, CommitQueueScopeSessionSummary>;
   readonly managedRepositoryBranchByBranchId: ReadonlyMap<
     string,
     ProjectBranchScopeRepositoryObservation
@@ -397,9 +434,9 @@ const agentSessionSubjectKindKeysById = invertRecord(agentSessionSubjectKindIds)
 const branchStateOrder = new Map(branchStateValues.map((value, index) => [value, index] as const));
 
 export class WorkflowProjectionQueryError extends Error {
-  readonly code: WorkflowProjectionErrorCode;
+  readonly code: WorkflowProjectionReadErrorCode;
 
-  constructor(code: WorkflowProjectionErrorCode, message: string) {
+  constructor(code: WorkflowProjectionReadErrorCode, message: string) {
     super(message);
     this.name = "WorkflowProjectionQueryError";
     this.code = code;
@@ -416,6 +453,7 @@ export interface WorkflowProjectionIndex {
   readonly projectedAt: string;
   readonly projectionCursor: string;
   readCommitQueueScope(query: CommitQueueScopeQuery): CommitQueueScopeResult;
+  readMainCommitWorkflowScope(query: MainCommitWorkflowScopeQuery): MainCommitWorkflowScopeResult;
   readProjectBranchScope(query: ProjectBranchScopeQuery): ProjectBranchScopeResult;
 }
 
@@ -480,6 +518,12 @@ type RetainedBranchCommitQueueRow =
     >
   | RetainedProjectionRowRecord<
       "latest-session",
+      CommitQueueScopeSessionSummary,
+      typeof projectionMetadata.branchCommitQueue.projectionId,
+      typeof projectionMetadata.branchCommitQueue.definitionHash
+    >
+  | RetainedProjectionRowRecord<
+      "latest-commit-session",
       CommitQueueScopeSessionSummary,
       typeof projectionMetadata.branchCommitQueue.projectionId,
       typeof projectionMetadata.branchCommitQueue.definitionHash
@@ -649,6 +693,16 @@ export function createRetainedWorkflowProjectionState(
       value: session,
     });
   }
+  for (const [commitId, session] of state.latestSessionByCommitId.entries()) {
+    rows.push({
+      projectionId: projectionMetadata.branchCommitQueue.projectionId,
+      definitionHash: projectionMetadata.branchCommitQueue.definitionHash,
+      rowKind: "latest-commit-session",
+      rowKey: commitId,
+      sortKey: commitId,
+      value: session,
+    });
+  }
 
   return {
     checkpoints: [
@@ -707,6 +761,7 @@ export function createWorkflowProjectionIndexFromRetainedState(
   const activeCommitByBranchId = new Map<string, CommitQueueScopeCommitRow>();
   const commitRowsByBranchId = new Map<string, CommitQueueScopeCommitRow[]>();
   const latestSessionByBranchId = new Map<string, CommitQueueScopeSessionSummary>();
+  const latestSessionByCommitId = new Map<string, CommitQueueScopeSessionSummary>();
 
   for (const row of retained.rows) {
     switch (row.rowKind) {
@@ -745,6 +800,9 @@ export function createWorkflowProjectionIndexFromRetainedState(
       case "latest-session":
         latestSessionByBranchId.set(row.rowKey, row.value);
         break;
+      case "latest-commit-session":
+        latestSessionByCommitId.set(row.rowKey, row.value);
+        break;
     }
   }
 
@@ -766,6 +824,7 @@ export function createWorkflowProjectionIndexFromRetainedState(
       branchesByProjectId,
       commitRowsByBranchId,
       latestSessionByBranchId,
+      latestSessionByCommitId,
       managedRepositoryBranchByBranchId,
       projectById,
       projectFreshnessById,
@@ -881,12 +940,85 @@ function createWorkflowProjectionIndexFromState(
     };
   }
 
+  function readMainCommitWorkflowScope(
+    query: MainCommitWorkflowScopeQuery,
+  ): MainCommitWorkflowScopeResult {
+    const project = state.projectById.get(query.projectId);
+    if (!project) {
+      throw new WorkflowProjectionQueryError(
+        "project-not-found",
+        `Workflow project "${query.projectId}" was not found in the current projection.`,
+      );
+    }
+
+    const branch = resolveImplicitMainBranch(state, query.projectId);
+    if (!branch) {
+      throw new WorkflowProjectionQueryError(
+        "main-branch-not-found",
+        `Workflow project "${query.projectId}" does not expose an implicit main branch in the current projection.`,
+      );
+    }
+
+    const rows = state.commitRowsByBranchId.get(branch.id) ?? [];
+    const page = paginateWorkflowProjectionRows({
+      anchorId: branch.id,
+      items: rows,
+      cursor: query.cursor,
+      kind: "commit-queue",
+      limit: query.limit,
+      projectionCursor,
+    });
+    const selectedRow = resolveSelectedCommitRow(rows, branch.activeCommitId, query.commitId);
+    const latestSession = selectedRow
+      ? state.latestSessionByCommitId.get(selectedRow.commit.id)
+      : undefined;
+    const nextSessionKind =
+      selectedRow === undefined ? undefined : resolveNextSessionKind(selectedRow, latestSession);
+    const repository = state.repositoryByProjectId.get(query.projectId);
+
+    return {
+      project,
+      ...(repository ? { repository } : {}),
+      branch: {
+        branch,
+        ...(state.managedRepositoryBranchByBranchId.get(branch.id)
+          ? {
+              repositoryBranch: state.managedRepositoryBranchByBranchId.get(branch.id),
+            }
+          : {}),
+        ...(state.activeCommitByBranchId.get(branch.id)
+          ? { activeCommit: state.activeCommitByBranchId.get(branch.id) }
+          : {}),
+        ...(state.latestSessionByBranchId.get(branch.id)
+          ? { latestSession: state.latestSessionByBranchId.get(branch.id) }
+          : {}),
+      },
+      rows: page.items,
+      freshness: createScopeFreshness(
+        projectedAt,
+        projectionCursor,
+        state.projectFreshnessById.get(branch.projectId),
+      ),
+      ...(page.nextCursor ? { nextCursor: page.nextCursor } : {}),
+      ...(selectedRow
+        ? {
+            selectedCommit: {
+              row: selectedRow,
+              ...(latestSession ? { latestSession } : {}),
+              ...(nextSessionKind ? { nextSessionKind } : {}),
+            },
+          }
+        : {}),
+    };
+  }
+
   return {
     projections: projectionMetadata,
     projectedAt,
     projectionCursor,
     readProjectBranchScope,
     readCommitQueueScope,
+    readMainCommitWorkflowScope,
   };
 }
 
@@ -953,7 +1085,7 @@ function buildWorkflowProjectionIndexState(
 
   const commitRowsByBranchId = groupBy(
     graph.commit.list().map((commit) => {
-      const commitSummary = buildCommitSummary(commit);
+      const commitSummary = buildCommitSummary(graph, commit);
       return {
         commit: commitSummary,
         ...(repositoryCommitByWorkflowCommitId.get(commitSummary.id)
@@ -1022,6 +1154,7 @@ function buildWorkflowProjectionIndexState(
   }
 
   const latestSessionByBranchId = new Map<string, CommitQueueScopeSessionSummary>();
+  const latestSessionByCommitId = new Map<string, CommitQueueScopeSessionSummary>();
   const sessionsByBranchId = groupBy(
     graph.agentSession
       .list()
@@ -1036,6 +1169,28 @@ function buildWorkflowProjectionIndexState(
     const [latest] = [...sessionSummaries].sort(compareSessionSummaries);
     if (!latest) continue;
     latestSessionByBranchId.set(branchId, stripBranchId(latest));
+  }
+  const sessionsByCommitId = groupBy(
+    graph.agentSession
+      .list()
+      .map(buildCommitQueueScopeSessionSummary)
+      .filter(
+        (
+          summary,
+        ): summary is CommitQueueScopeSessionSummary & {
+          readonly branchId: string;
+          readonly subject: {
+            readonly commitId: string;
+            readonly kind: "commit";
+          };
+        } => summary !== undefined && summary.subject.kind === "commit",
+      ),
+    (summary) => summary.subject.commitId,
+  );
+  for (const [commitId, sessionSummaries] of sessionsByCommitId.entries()) {
+    const [latest] = [...sessionSummaries].sort(compareSessionSummaries);
+    if (!latest) continue;
+    latestSessionByCommitId.set(commitId, stripBranchId(latest));
   }
 
   const projectFreshnessById = new Map<string, WorkflowProjectionFreshnessEntry>();
@@ -1055,6 +1210,7 @@ function buildWorkflowProjectionIndexState(
     branchesByProjectId,
     commitRowsByBranchId,
     latestSessionByBranchId,
+    latestSessionByCommitId,
     managedRepositoryBranchByBranchId,
     projectById,
     projectFreshnessById,
@@ -1121,6 +1277,7 @@ function buildProjectionCursor(state: WorkflowProjectionIndexState): string {
       0,
     ),
     state.latestSessionByBranchId.size,
+    state.latestSessionByCommitId.size,
   ].join(":");
 }
 
@@ -1219,6 +1376,54 @@ function stripBranchId(
 ): CommitQueueScopeSessionSummary {
   const { branchId: _branchId, ...summary } = value;
   return summary;
+}
+
+function resolveImplicitMainBranch(
+  state: WorkflowProjectionIndexState,
+  projectId: string,
+): WorkflowBranchSummary | undefined {
+  const branches = sortWorkflowBranches(state.branchesByProjectId.get(projectId) ?? [], undefined);
+  return branches[0];
+}
+
+function resolveSelectedCommitRow(
+  rows: readonly CommitQueueScopeCommitRow[],
+  activeCommitId: string | undefined,
+  selectedCommitId: string | undefined,
+): CommitQueueScopeCommitRow | undefined {
+  if (rows.length === 0) {
+    return undefined;
+  }
+  if (selectedCommitId) {
+    return rows.find((row) => row.commit.id === selectedCommitId);
+  }
+  if (activeCommitId) {
+    return rows.find((row) => row.commit.id === activeCommitId) ?? rows[0];
+  }
+  return rows[0];
+}
+
+function isOpenSessionRuntimeState(value: CommitQueueScopeSessionRuntimeState): boolean {
+  return value === "running" || value === "awaiting-user-input" || value === "blocked";
+}
+
+function resolveNextSessionKind(
+  row: CommitQueueScopeCommitRow,
+  latestSession: CommitQueueScopeSessionSummary | undefined,
+): CommitQueueScopeSessionKind | undefined {
+  if (latestSession && isOpenSessionRuntimeState(latestSession.runtimeState)) {
+    return latestSession.kind;
+  }
+
+  switch (row.commit.state) {
+    case "planned":
+      return "planning";
+    case "ready":
+    case "active":
+      return "execution";
+    default:
+      return undefined;
+  }
 }
 
 function sortWorkflowBranches(
@@ -1394,6 +1599,9 @@ function collectProjectionTimestamps(state: WorkflowProjectionIndexState): strin
     ...Array.from(state.latestSessionByBranchId.values()).flatMap((entry) =>
       [entry.startedAt, entry.endedAt].filter((value): value is string => Boolean(value)),
     ),
+    ...Array.from(state.latestSessionByCommitId.values()).flatMap((entry) =>
+      [entry.startedAt, entry.endedAt].filter((value): value is string => Boolean(value)),
+    ),
   ];
 }
 
@@ -1430,19 +1638,20 @@ function trimOptionalString(value: string | undefined): string | undefined {
   return trimmed.length > 0 ? trimmed : undefined;
 }
 
-function readGoalSummary(
+function readDocumentSummary(
   graph: Pick<WorkflowProjectionGraphClient, "document">,
-  goalDocumentId: string | undefined,
+  documentId: string | undefined,
 ): string | undefined {
-  if (!goalDocumentId) return undefined;
-  return trimOptionalString(graph.document.get(goalDocumentId).description);
+  if (!documentId) return undefined;
+  return trimOptionalString(graph.document.get(documentId).description);
 }
 
 function buildBranchSummary(
   graph: Pick<WorkflowProjectionGraphClient, "document">,
   entity: WorkflowBranchEntity,
 ): WorkflowBranchSummary {
-  const goalSummary = readGoalSummary(graph, entity.goalDocument);
+  const goalSummary = readDocumentSummary(graph, entity.goalDocument);
+  const contextSummary = readDocumentSummary(graph, entity.contextDocument);
 
   return {
     entity: "branch",
@@ -1451,6 +1660,7 @@ function buildBranchSummary(
     projectId: entity.project,
     branchKey: entity.branchKey,
     state: decodeWorkflowBranchState(entity.state),
+    ...(contextSummary ? { contextSummary } : {}),
     ...(goalSummary ? { goalSummary } : {}),
     ...(entity.goalDocument ? { goalDocumentId: entity.goalDocument } : {}),
     ...(entity.contextDocument ? { contextDocumentId: entity.contextDocument } : {}),
@@ -1461,8 +1671,27 @@ function buildBranchSummary(
   };
 }
 
-function buildCommitSummary(entity: WorkflowCommitEntity): WorkflowCommitSummary {
+function buildCommitSummary(
+  graph: Pick<WorkflowProjectionGraphClient, "document">,
+  entity: WorkflowCommitEntity,
+): WorkflowCommitSummary {
   const state = decodeWorkflowCommitState(entity.state);
+  const contextSummary = readDocumentSummary(graph, entity.contextDocument);
+  const gateMetadata =
+    state === "blocked"
+      ? {
+          gate: "UserReview" as const,
+          ...(trimOptionalString(entity.gateReason)
+            ? { gateReason: trimOptionalString(entity.gateReason) }
+            : {}),
+          ...(entity.gateRequestedAt
+            ? { gateRequestedAt: entity.gateRequestedAt.toISOString() }
+            : {}),
+          ...(trimOptionalString(entity.gateRequestedBySessionId)
+            ? { gateRequestedBySessionId: trimOptionalString(entity.gateRequestedBySessionId) }
+            : {}),
+        }
+      : {};
   return {
     entity: "commit",
     id: entity.id,
@@ -1470,7 +1699,8 @@ function buildCommitSummary(entity: WorkflowCommitEntity): WorkflowCommitSummary
     branchId: entity.branch,
     commitKey: entity.commitKey,
     state,
-    ...(state === "blocked" ? { gate: "UserReview" as const } : {}),
+    ...(contextSummary ? { contextSummary } : {}),
+    ...gateMetadata,
     order: entity.order,
     ...(entity.parentCommit ? { parentCommitId: entity.parentCommit } : {}),
     ...(entity.contextDocument ? { contextDocumentId: entity.contextDocument } : {}),

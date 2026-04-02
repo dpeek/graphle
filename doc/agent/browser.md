@@ -147,7 +147,9 @@ The definition of done is not "the browser can show something live." The
 definition of done is:
 
 - an operator can open `/workflow`
-- see the canonical branch board, branch detail, and commit queue
+- see the main commit queue, selected commit detail, and retained session feed
+- inspect implicit-main branch context from a secondary inspector instead of a
+  primary branch board
 - trigger branch-scoped and commit-scoped session launches
 - watch session progress live
 - reload the page and recover the same session state from the graph
@@ -254,13 +256,13 @@ local bridge disappears.
 The route-level session-feed selection model is now explicit before feed UI
 wiring begins:
 
-- the current workflow review branch selection remains the required base
-  selection for the feed
-- an optional `commit` route selection narrows the feed subject to one commit
-  on that branch; when `commit` is absent, the feed subject is the branch
+- the resolved project still implies one workflow branch: `main`
+- an optional `commit` route selection pins the feed subject to one commit on
+  that branch; when `commit` is absent, the browser should infer the active or
+  first visible commit and canonicalize that selection back into the route
 - an optional `session` route selection pins the feed to one session id; when
   `session` is absent, the browser asks for the latest session for the selected
-  subject only
+  commit; branch-scoped session history remains a secondary affordance
 - stale `commit` or `session` selections remain visible as degraded state; the
   browser does not silently swap to another commit, another subject, or another
   session
@@ -281,9 +283,10 @@ Replace the generic entity browser with a workflow-native route.
 The first browser workflow screen should:
 
 - boot against the workflow review sync scope rather than the whole graph
-- render the same three core surfaces the TUI already proves:
-  branch board, branch detail, and commit queue
-- derive selection from URL state so project and branch deep links are stable
+- render the primary commit-first surfaces:
+  commit queue, selected commit detail, and session feed
+- keep implicit-main branch context available as a secondary inspector
+- derive selection from URL state so project and commit deep links are stable
 - show `latestSession` and repository-backed status summaries already present in
   `ProjectBranchScope` and `CommitQueueScope`
 - re-pull on workflow-review invalidations using the existing web live sync
@@ -294,10 +297,10 @@ path for `/workflow`: the route stays on the shipped workflow-review sync scope,
 registers live interest, and re-runs the workflow review reads after
 `cursor-advanced` invalidations without widening back to whole-graph sync.
 
-The route now also canonicalizes inferred singleton project and branch
+The route now also canonicalizes inferred singleton project and selected-commit
 selection back into `/workflow` URL state, while keeping explicitly stale route
 selections visible as degraded review state instead of silently switching to a
-different branch.
+different commit.
 
 Implementation notes:
 

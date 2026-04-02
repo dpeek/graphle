@@ -16,6 +16,7 @@ import {
   branchStateValues,
   workflowReviewModuleReadScope,
   type CommitQueueScopeQuery,
+  type MainCommitWorkflowScopeQuery,
   type ProjectBranchScopeFilters,
   type ProjectBranchScopeOrderClause,
   type ProjectBranchScopeQuery,
@@ -435,6 +436,26 @@ function parseCommitQueueScopeQuery(value: unknown): CommitQueueScopeQuery {
   };
 }
 
+function parseMainCommitWorkflowScopeQuery(value: unknown): MainCommitWorkflowScopeQuery {
+  const query = requireWorkflowReadObject(value, 'Workflow read request "query"');
+  const commitId =
+    query.commitId === undefined
+      ? undefined
+      : requireWorkflowReadString(query.commitId, 'Workflow read request "query.commitId"');
+  const cursor = parseWorkflowReadCursor(query.cursor, 'Workflow read request "query.cursor"');
+  const limit = parseWorkflowReadLimit(query.limit, 'Workflow read request "query.limit"');
+
+  return {
+    projectId: requireWorkflowReadString(
+      query.projectId,
+      'Workflow read request "query.projectId"',
+    ),
+    ...(commitId !== undefined ? { commitId } : {}),
+    ...(cursor !== undefined ? { cursor } : {}),
+    ...(limit !== undefined ? { limit } : {}),
+  };
+}
+
 function parseWorkflowSessionFeedReadQuery(value: unknown): WorkflowSessionFeedReadQuery {
   const query = requireWorkflowReadObject(value, 'Workflow read request "query"');
   const subject = requireWorkflowReadObject(query.subject, 'Workflow read request "query.subject"');
@@ -509,6 +530,13 @@ function parseWorkflowReadRequest(value: unknown): WorkflowReadRequest {
     throw new RequestWorkflowReadError(
       `Workflow read request "kind" must be one of: ${workflowReadRequestKinds.join(", ")}.`,
     );
+  }
+
+  if (kind === "main-commit-workflow-scope") {
+    return {
+      kind: "main-commit-workflow-scope",
+      query: parseMainCommitWorkflowScopeQuery(request.query),
+    };
   }
 
   if (kind === "project-branch-scope") {
@@ -661,20 +689,25 @@ function executeWorkflowReadRequest(
 ): Response {
   try {
     const response =
-      read.kind === "project-branch-scope"
+      read.kind === "main-commit-workflow-scope"
         ? {
             kind: read.kind,
-            result: authority.readProjectBranchScope(read.query, { authorization }),
+            result: authority.readMainCommitWorkflowScope(read.query, { authorization }),
           }
-        : read.kind === "commit-queue-scope"
+        : read.kind === "project-branch-scope"
           ? {
               kind: read.kind,
-              result: authority.readCommitQueueScope(read.query, { authorization }),
+              result: authority.readProjectBranchScope(read.query, { authorization }),
             }
-          : {
-              kind: read.kind,
-              result: authority.readWorkflowSessionFeed(read.query, { authorization }),
-            };
+          : read.kind === "commit-queue-scope"
+            ? {
+                kind: read.kind,
+                result: authority.readCommitQueueScope(read.query, { authorization }),
+              }
+            : {
+                kind: read.kind,
+                result: authority.readWorkflowSessionFeed(read.query, { authorization }),
+              };
 
     return Response.json(response, {
       headers: {

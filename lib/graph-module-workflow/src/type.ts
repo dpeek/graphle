@@ -440,6 +440,17 @@ export const commit = defineType({
       excludeSubject: true,
       label: "Parent commit",
     }),
+    gateReason: optionalStringField("Gate reason"),
+    gateRequestedAt: dateTypeModule.field({
+      cardinality: "one?",
+      meta: {
+        label: "Gate requested at",
+      },
+    }),
+    gateRequestedBySessionId: existingEntityReferenceField("workflow:agentSession", {
+      cardinality: "one?",
+      label: "Gate requested by session",
+    }),
     contextDocument: existingEntityReferenceField(document, {
       cardinality: "one?",
       label: "Context document",

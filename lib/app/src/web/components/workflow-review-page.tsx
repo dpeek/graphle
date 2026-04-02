@@ -5,6 +5,8 @@ import type {
   CommitQueueScopeCommitRow,
   CommitQueueScopeResult,
   CommitQueueScopeSessionSummary,
+  MainCommitWorkflowScopeResult,
+  MainCommitWorkflowScopeSelectedCommit,
   ProjectBranchScopeRepositoryObservation,
   ProjectBranchScopeResult,
 } from "@io/graph-module-workflow";
@@ -14,8 +16,6 @@ import {
   requestWorkflowRead,
   resolveWorkflowSessionFeedSelectionState,
   WorkflowReadClientError,
-  type CommitQueueScopeWorkflowReadResponse,
-  type ProjectBranchScopeWorkflowReadResponse,
   type WorkflowSessionFeedReadResult,
   type WorkflowSessionFeedSelectionState,
 } from "@io/graph-module-workflow/client";
@@ -60,8 +60,9 @@ import {
 export type WorkflowReviewReadState =
   | { readonly status: "loading" }
   | {
-      readonly branchBoard: ProjectBranchScopeWorkflowReadResponse["result"];
-      readonly commitQueue?: CommitQueueScopeWorkflowReadResponse["result"];
+      readonly branchBoard: ProjectBranchScopeResult;
+      readonly commitQueue: CommitQueueScopeResult;
+      readonly mainWorkflow: MainCommitWorkflowScopeResult;
       readonly status: "ready";
     }
   | {
@@ -139,9 +140,6 @@ function buildWorkflowHref(search: WorkflowRouteSearch): string {
   if (search.project) {
     params.set("project", search.project);
   }
-  if (search.branch) {
-    params.set("branch", search.branch);
-  }
   if (search.commit) {
     params.set("commit", search.commit);
   }
@@ -150,6 +148,20 @@ function buildWorkflowHref(search: WorkflowRouteSearch): string {
   }
   const query = params.toString();
   return query.length > 0 ? `/workflow?${query}` : "/workflow";
+}
+
+function resolveEffectiveWorkflowSearch(
+  search: WorkflowRouteSearch,
+  selectedCommitId?: string,
+): WorkflowRouteSearch {
+  if (search.commit || search.session || !selectedCommitId) {
+    return search;
+  }
+
+  return {
+    ...search,
+    commit: selectedCommitId,
+  };
 }
 
 function formatTimestamp(value: string | undefined): string {
@@ -171,6 +183,180 @@ function formatLatestSession(commitQueue: CommitQueueScopeResult | undefined): s
     return "No retained session recorded.";
   }
   return `${latestSession.kind} / ${latestSession.runtimeState} / ${latestSession.sessionKey}`;
+}
+
+function formatSessionSummary(session: CommitQueueScopeSessionSummary | undefined): string {
+  if (!session) {
+    return "No retained session recorded.";
+  }
+  return `${session.kind} / ${session.runtimeState} / ${session.sessionKey}`;
+}
+
+type SelectedCommitWorkflowStatus = {
+  readonly badgeLabel: string;
+  readonly badgeVariant: "default" | "outline" | "secondary";
+  readonly detail: string;
+  readonly nextRunnableSession: string;
+};
+
+type SelectedCommitRetainedContext = {
+  readonly detail: string;
+  readonly history: string;
+  readonly session: string;
+};
+
+function isRetainedSessionOpen(
+  runtimeState: CommitQueueScopeSessionSummary["runtimeState"],
+): boolean {
+  return (
+    runtimeState === "running" ||
+    runtimeState === "awaiting-user-input" ||
+    runtimeState === "blocked"
+  );
+}
+
+function resolveSelectedCommitWorkflowStatus(
+  selectedCommitDetail: MainCommitWorkflowScopeSelectedCommit | undefined,
+): SelectedCommitWorkflowStatus {
+  const commit = selectedCommitDetail?.row.commit;
+  const latestSession = selectedCommitDetail?.latestSession;
+
+  if (!commit) {
+    return {
+      badgeLabel: "pending",
+      badgeVariant: "outline",
+      detail:
+        "Resolve the selected workflow commit before the browser can determine the next runnable session.",
+      nextRunnableSession: "Unavailable",
+    };
+  }
+
+  if (commit.gate === "UserReview") {
+    return {
+      badgeLabel: "paused",
+      badgeVariant: "outline",
+      detail:
+        commit.gateReason ??
+        "This commit is paused for explicit operator review before workflow can continue.",
+      nextRunnableSession: "No runnable session",
+    };
+  }
+
+  if (latestSession && isRetainedSessionOpen(latestSession.runtimeState)) {
+    return {
+      badgeLabel: "runnable",
+      badgeVariant: "secondary",
+      detail: `Retained ${formatEnumLabel(latestSession.kind)} session ${latestSession.sessionKey} is ${formatEnumLabel(latestSession.runtimeState)}.`,
+      nextRunnableSession: formatEnumLabel(latestSession.kind),
+    };
+  }
+
+  if (selectedCommitDetail?.nextSessionKind) {
+    return {
+      badgeLabel: "runnable",
+      badgeVariant: "secondary",
+      detail: `Launch the next ${formatEnumLabel(selectedCommitDetail.nextSessionKind)} session when you are ready to continue this commit.`,
+      nextRunnableSession: formatEnumLabel(selectedCommitDetail.nextSessionKind),
+    };
+  }
+
+  switch (commit.state) {
+    case "planned":
+      return {
+        badgeLabel: "idle",
+        badgeVariant: "outline",
+        detail: "Planned commits must be promoted before execution can launch.",
+        nextRunnableSession: "No runnable session",
+      };
+    case "committed":
+      return {
+        badgeLabel: "idle",
+        badgeVariant: "outline",
+        detail: "This commit is already committed and does not accept more execution sessions.",
+        nextRunnableSession: "No runnable session",
+      };
+    case "dropped":
+      return {
+        badgeLabel: "idle",
+        badgeVariant: "outline",
+        detail: "Dropped commits do not accept workflow sessions.",
+        nextRunnableSession: "No runnable session",
+      };
+    default:
+      return {
+        badgeLabel: latestSession ? "history" : "idle",
+        badgeVariant: "outline",
+        detail: latestSession
+          ? `No runnable session is queued. Inspect retained history from ${formatSessionSummary(latestSession)}.`
+          : "No runnable session or retained history is recorded for this commit yet.",
+        nextRunnableSession: "No runnable session",
+      };
+  }
+}
+
+function resolveSelectedCommitRetainedContext(
+  sessionFeedState: WorkflowSessionFeedReadState,
+): SelectedCommitRetainedContext {
+  switch (sessionFeedState.status) {
+    case "loading":
+      return {
+        detail: "The browser is loading the retained session feed for the selected commit.",
+        history: "Pending retained history",
+        session: "Loading retained session",
+      };
+    case "missing-data":
+      return {
+        detail: sessionFeedState.result.message,
+        history: "Retained history unavailable",
+        session: "Retained session unavailable",
+      };
+    case "stale-selection":
+      return {
+        detail: sessionFeedState.result.message,
+        history: "Retained history unavailable",
+        session: "Pinned retained session is stale",
+      };
+    case "error":
+      return {
+        detail: sessionFeedState.message,
+        history: "Retained history unavailable",
+        session: "Retained session feed failed",
+      };
+    case "ready":
+      if (sessionFeedState.result.status === "no-session") {
+        return {
+          detail: sessionFeedState.result.branchLatestSession
+            ? `No retained session is recorded for this commit yet. Branch latest session: ${formatBranchLatestSessionSummary(sessionFeedState.result.branchLatestSession)}.`
+            : "No retained session is recorded for this commit yet.",
+          history: "No retained history",
+          session: "No retained session recorded",
+        };
+      }
+
+      if (sessionFeedState.result.status === "stale-selection") {
+        const staleDetail =
+          sessionFeedState.result.reason === "session-not-found"
+            ? "The pinned retained session is no longer visible in graph history."
+            : "The pinned retained session no longer matches the selected commit.";
+        return {
+          detail: sessionFeedState.result.branchLatestSession
+            ? `${staleDetail} Branch latest session: ${formatBranchLatestSessionSummary(sessionFeedState.result.branchLatestSession)}.`
+            : staleDetail,
+          history: "Retained history unavailable",
+          session: "Pinned retained session is stale",
+        };
+      }
+
+      return {
+        detail: `${sessionFeedState.result.header.title} is ${formatEnumLabel(sessionFeedState.result.runtime.state)}.`,
+        history: formatSessionFeedHistory(sessionFeedState.result.history).detail,
+        session: `${
+          sessionFeedState.result.query.session.kind === "session-id"
+            ? "Pinned retained session"
+            : "Latest retained session"
+        }: ${sessionFeedState.result.header.sessionKey}`,
+      };
+  }
 }
 
 function formatRepositoryCommitSummary(row: CommitQueueScopeCommitRow): string {
@@ -208,6 +394,34 @@ function resolveSelectedCommitRow(
     commitQueue.branch.activeCommit?.commit.id ?? commitQueue.branch.branch.activeCommitId;
 
   return commitQueue.rows.find((row) => row.commit.id === activeCommitId) ?? commitQueue.rows[0];
+}
+
+function createCommitQueueResult(input: MainCommitWorkflowScopeResult): CommitQueueScopeResult {
+  return {
+    branch: input.branch,
+    freshness: input.freshness,
+    ...(input.nextCursor ? { nextCursor: input.nextCursor } : {}),
+    rows: input.rows,
+  };
+}
+
+function createImplicitMainBranchBoard(
+  input: MainCommitWorkflowScopeResult,
+): ProjectBranchScopeResult {
+  return {
+    freshness: input.freshness,
+    project: input.project,
+    ...(input.repository ? { repository: input.repository } : {}),
+    rows: [
+      {
+        branch: input.branch.branch,
+        ...(input.branch.repositoryBranch
+          ? { repositoryBranch: input.branch.repositoryBranch }
+          : {}),
+      },
+    ],
+    unmanagedRepositoryBranches: [],
+  };
 }
 
 function isLaunchFailure(result: CodexSessionLaunchResult): result is CodexSessionLaunchFailure {
@@ -360,11 +574,14 @@ export function createCommitSessionActionModel(input: {
   readonly commitQueue?: CommitQueueScopeResult;
   readonly lookupState: SessionLookupState;
   readonly runtime: BrowserAgentRuntimeProbe;
+  readonly selectedCommitDetail?: MainCommitWorkflowScopeSelectedCommit;
   readonly selectedCommitId?: string;
   readonly selectedBranchState?: ProjectBranchScopeResult["rows"][number]["branch"]["state"];
 }): SessionActionModel {
   const description = "Start a commit-scoped execution session from the selected workflow commit.";
-  const selectedCommit = resolveSelectedCommitRow(input.commitQueue, input.selectedCommitId);
+  const selectedCommit =
+    input.selectedCommitDetail?.row ??
+    resolveSelectedCommitRow(input.commitQueue, input.selectedCommitId);
 
   if (input.authStatus !== "ready") {
     return {
@@ -402,6 +619,18 @@ export function createCommitSessionActionModel(input: {
     };
   }
 
+  if (selectedCommit.commit.gate === "UserReview") {
+    return {
+      availability: "unavailable",
+      description:
+        "Commit execution is paused while the selected commit waits on explicit user review.",
+      label: "Launch commit session",
+      reason:
+        selectedCommit.commit.gateReason ??
+        "This commit is waiting on explicit user review before workflow can continue.",
+    };
+  }
+
   if (input.lookupState.status === "ready" && input.lookupState.result.ok === false) {
     return {
       availability: "unavailable",
@@ -420,17 +649,19 @@ export function createCommitSessionActionModel(input: {
     };
   }
 
-  const latestSession = input.commitQueue.branch.latestSession;
+  const branchLatestSession = input.commitQueue.branch.latestSession;
+  const selectedCommitLatestSession = input.selectedCommitDetail?.latestSession;
   const hasRunningSession =
-    latestSession?.runtimeState === "running" &&
-    latestSession.subject.kind === "commit" &&
-    latestSession.subject.commitId === selectedCommit.commit.id;
+    selectedCommitLatestSession?.runtimeState === "running" &&
+    selectedCommitLatestSession.subject.kind === "commit" &&
+    selectedCommitLatestSession.subject.commitId === selectedCommit.commit.id;
   const runningBranchSession =
-    latestSession?.runtimeState === "running" && latestSession.subject.kind === "branch";
+    branchLatestSession?.runtimeState === "running" &&
+    branchLatestSession.subject.kind === "branch";
   const runningOtherCommitSession =
-    latestSession?.runtimeState === "running" &&
-    latestSession.subject.kind === "commit" &&
-    latestSession.subject.commitId !== selectedCommit.commit.id;
+    branchLatestSession?.runtimeState === "running" &&
+    branchLatestSession.subject.kind === "commit" &&
+    branchLatestSession.subject.commitId !== selectedCommit.commit.id;
   const selectedBranchState = input.selectedBranchState;
   let reason: string | undefined;
 
@@ -506,17 +737,17 @@ function RecoveryHint() {
 }
 
 function PageHeader({
-  branchCount,
+  branch,
   commitCount,
   projectId,
   runtime,
-  selectedBranchId,
+  selectedCommit,
 }: {
-  readonly branchCount?: number;
+  readonly branch?: CommitQueueScopeResult["branch"]["branch"];
   readonly commitCount?: number;
   readonly projectId?: string;
   readonly runtime: BrowserAgentRuntimeProbe;
-  readonly selectedBranchId?: string;
+  readonly selectedCommit?: CommitQueueScopeCommitRow["commit"];
 }) {
   return (
     <Card className="border-border/70 bg-card/95 border shadow-sm">
@@ -525,21 +756,22 @@ function PageHeader({
           <div className="space-y-1">
             <CardTitle>Workflow review</CardTitle>
             <CardDescription>
-              `/workflow` now resolves the shipped `workflow` review scope into a workflow branch
-              board, branch detail, and commit queue layout.
+              `/workflow` now opens on the implicit-main commit queue, keeps branch context
+              secondary, and recovers retained session state for the selected commit.
             </CardDescription>
           </div>
           <div className="flex flex-wrap gap-1.5">
             <Badge variant="outline">workflow-review scope</Badge>
-            <Badge variant="outline">branch board</Badge>
-            <Badge variant="outline">commit queue</Badge>
+            <Badge variant="outline">commit first</Badge>
+            <Badge variant="outline">implicit main</Badge>
+            <Badge variant="outline">session recovery</Badge>
             <Badge variant={runtime.status === "ready" ? "secondary" : "outline"}>
               {runtime.status === "ready" ? "browser-agent ready" : "browser-agent unavailable"}
             </Badge>
           </div>
         </div>
       </CardHeader>
-      <CardContent className="grid gap-3 text-sm md:grid-cols-3">
+      <CardContent className="grid gap-3 text-sm md:grid-cols-4">
         <div className="grid gap-1">
           <span className="text-muted-foreground text-xs font-medium tracking-[0.16em] uppercase">
             Resolved project
@@ -548,13 +780,19 @@ function PageHeader({
         </div>
         <div className="grid gap-1">
           <span className="text-muted-foreground text-xs font-medium tracking-[0.16em] uppercase">
-            Selected branch
+            Workflow branch
           </span>
-          <code>{selectedBranchId ?? "pending selection"}</code>
+          <code>{branch ? `${branch.title} [${branch.state}]` : "pending selection"}</code>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Badge variant="secondary">{branchCount ?? 0} branches</Badge>
-          <Badge variant="secondary">{commitCount ?? 0} commits</Badge>
+        <div className="grid gap-1">
+          <span className="text-muted-foreground text-xs font-medium tracking-[0.16em] uppercase">
+            Selected commit
+          </span>
+          <code>{selectedCommit ? selectedCommit.commitKey : "pending selection"}</code>
+        </div>
+        <div className="flex flex-wrap items-start gap-2">
+          <Badge variant="secondary">{commitCount ?? 0} queued</Badge>
+          {selectedCommit ? <Badge variant="secondary">{selectedCommit.state}</Badge> : null}
         </div>
       </CardContent>
     </Card>
@@ -653,7 +891,7 @@ function ProjectChooserPanel({
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">
       <p className="text-muted-foreground text-sm">
-        Select a project before branch-board composition starts.
+        Select a project before the implicit-main commit queue loads.
       </p>
       <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-auto">
         {startupState.visibleProjects.map((project) => (
@@ -671,185 +909,93 @@ function ProjectChooserPanel({
   );
 }
 
-function BranchBoardPanel({
-  activeBranchId,
-  branchBoard,
-  projectId,
-  startupState,
-}: {
-  readonly activeBranchId?: string;
-  readonly branchBoard?: ProjectBranchScopeResult;
-  readonly projectId?: string;
-  readonly startupState: WorkflowReviewStartupState;
-}) {
-  if (!branchBoard) {
-    if (
-      startupState.kind === "missing-data" &&
-      startupState.reason === "project-selection-required"
-    ) {
-      return <ProjectChooserPanel startupState={startupState} />;
-    }
-
-    return (
-      <EmptyPanelBody
-        detail={
-          startupState.kind !== "ready" ? startupState.message : "Resolve a workflow project first."
-        }
-        title="Branch board unavailable"
-      />
-    );
-  }
-
-  if (branchBoard.rows.length === 0) {
-    return (
-      <EmptyPanelBody
-        detail="The selected project does not currently expose any workflow branches."
-        title="No branches in scope"
-      />
-    );
-  }
-
-  return (
-    <div className="flex h-full min-h-0 flex-col gap-3">
-      <div className="flex flex-wrap gap-2">
-        <Badge variant="secondary">{branchBoard.rows.length} managed</Badge>
-        <Badge variant="secondary">
-          {branchBoard.unmanagedRepositoryBranches.length} repository-only
-        </Badge>
-      </div>
-      <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-auto pr-1">
-        {branchBoard.rows.map((row) => {
-          const selected = row.branch.id === activeBranchId;
-          return (
-            <a
-              aria-current={selected ? "page" : undefined}
-              className={`rounded-lg border px-3 py-3 text-sm transition-colors ${
-                selected
-                  ? "border-foreground/40 bg-muted/60"
-                  : "border-border/70 hover:border-foreground/30 hover:bg-muted/30"
-              }`}
-              href={buildWorkflowHref({
-                ...(projectId ? { project: projectId } : {}),
-                branch: row.branch.id,
-              })}
-              key={row.branch.id}
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <div className="font-medium">{row.branch.title}</div>
-                  <div className="text-muted-foreground mt-1 text-xs">{row.branch.branchKey}</div>
-                </div>
-                <Badge variant={selected ? "default" : "outline"}>{row.branch.state}</Badge>
-              </div>
-              <div className="text-muted-foreground mt-3 space-y-1 text-xs">
-                <div>Queue rank: {row.branch.queueRank ?? "unranked"}</div>
-                <div>Repository: {formatRepositoryObservation(row.repositoryBranch)}</div>
-              </div>
-            </a>
-          );
-        })}
-      </div>
-      {branchBoard.unmanagedRepositoryBranches.length > 0 ? (
-        <div className="border-border/70 rounded-lg border border-dashed px-3 py-3 text-xs">
-          <div className="mb-2 font-medium">Observed repository branches</div>
-          <div className="text-muted-foreground space-y-1">
-            {branchBoard.unmanagedRepositoryBranches.map((observation) => (
-              <div key={observation.repositoryBranch.id}>
-                {observation.repositoryBranch.branchName} [{observation.freshness}]
-              </div>
-            ))}
-          </div>
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-function BranchDetailPanel({
+function MainBranchInspectorPanel({
   branchAction,
   branchActionState,
-  branchBoard,
   branchLookupState,
-  commitQueue,
+  mainWorkflow,
   onTriggerBranchSession,
   startupState,
 }: {
   readonly branchAction: SessionActionModel;
   readonly branchActionState?: SessionActionRequestState;
-  readonly branchBoard?: ProjectBranchScopeResult;
   readonly branchLookupState: SessionLookupState;
-  readonly commitQueue?: CommitQueueScopeResult;
+  readonly mainWorkflow?: MainCommitWorkflowScopeResult;
   readonly onTriggerBranchSession: () => void;
   readonly startupState: WorkflowReviewStartupState;
 }) {
-  const selectedBranchId =
-    commitQueue?.branch.branch.id ??
-    (startupState.kind === "ready" ? startupState.selectedBranch?.id : undefined);
-  const selectedRow = branchBoard?.rows.find((row) => row.branch.id === selectedBranchId);
+  const branch = mainWorkflow?.branch.branch;
+  const commitQueue = mainWorkflow ? createCommitQueueResult(mainWorkflow) : undefined;
 
-  if (!selectedRow) {
+  if (!branch) {
     return (
       <EmptyPanelBody
-        detail="Select a workflow branch to inspect its repository status, latest session, and launch context."
-        title="No branch selected"
+        detail={
+          startupState.kind === "ready"
+            ? "Resolve the implicit main branch before inspecting secondary planning context."
+            : startupState.message
+        }
+        title="Main branch context unavailable"
       />
     );
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-4 text-sm">
+    <div className="grid gap-4 text-sm">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <div className="text-lg font-semibold">{selectedRow.branch.title}</div>
-          <div className="text-muted-foreground mt-1 font-mono text-xs">
-            {selectedRow.branch.branchKey}
-          </div>
+          <div className="text-lg font-semibold">{branch.title}</div>
+          <div className="text-muted-foreground mt-1 font-mono text-xs">{branch.branchKey}</div>
         </div>
-        <Badge>{selectedRow.branch.state}</Badge>
+        <div className="flex flex-wrap gap-2">
+          <Badge>{branch.state}</Badge>
+          <Badge variant="secondary">secondary inspector</Badge>
+        </div>
       </div>
-      <div className="grid gap-3 sm:grid-cols-2">
-        <DetailField
-          label="Queue rank"
-          value={String(selectedRow.branch.queueRank ?? "unranked")}
-        />
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <DetailField label="Queue rank" value={String(branch.queueRank ?? "unranked")} />
         <DetailField
           label="Repository branch"
-          value={formatRepositoryObservation(selectedRow.repositoryBranch)}
+          value={formatRepositoryObservation(mainWorkflow?.branch.repositoryBranch)}
         />
         <DetailField label="Latest session" value={formatLatestSession(commitQueue)} />
         <DetailField
           label="Active commit"
-          value={commitQueue?.branch.activeCommit?.commit.title ?? "None selected"}
+          value={mainWorkflow?.branch.activeCommit?.commit.title ?? "None selected"}
         />
       </div>
       <DetailField
-        label="Goal"
-        value={selectedRow.branch.goalSummary ?? "No goal summary recorded."}
+        label="Branch context"
+        value={branch.contextSummary ?? branch.goalSummary ?? "No branch context recorded."}
       />
-      {branchBoard?.repository ? (
+      {mainWorkflow?.repository ? (
         <DetailField
           label="Repository"
-          value={`${branchBoard.repository.title} (${branchBoard.repository.repositoryKey}) -> ${branchBoard.repository.defaultBaseBranch}`}
+          value={`${mainWorkflow.repository.title} (${mainWorkflow.repository.repositoryKey}) -> ${mainWorkflow.repository.defaultBaseBranch}`}
         />
       ) : null}
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <DetailField
           label="Projected at"
-          value={formatTimestamp(branchBoard?.freshness.projectedAt)}
+          value={formatTimestamp(mainWorkflow?.freshness.projectedAt)}
         />
         <DetailField
           label="Repository freshness"
-          value={branchBoard?.freshness.repositoryFreshness ?? "missing"}
+          value={mainWorkflow?.freshness.repositoryFreshness ?? "missing"}
         />
         <DetailField
           label="Repository reconciled"
-          value={formatTimestamp(branchBoard?.freshness.repositoryReconciledAt)}
+          value={formatTimestamp(mainWorkflow?.freshness.repositoryReconciledAt)}
         />
         <DetailField
           label="Projection cursor"
-          value={branchBoard?.freshness.projectionCursor ?? "Not exposed"}
+          value={mainWorkflow?.freshness.projectionCursor ?? "Not exposed"}
         />
       </div>
+      <p className="text-muted-foreground text-sm">
+        Branch-scoped planning stays visible here as secondary context while the primary route stays
+        centered on commit execution.
+      </p>
       <BranchSessionActionCard
         action={branchAction}
         actionState={branchActionState}
@@ -1224,7 +1370,7 @@ function SessionFeedPanel({
   if (sessionFeedState.status === "loading") {
     return (
       <EmptyPanelBody
-        detail="Resolve the selected branch and commit context before the browser requests retained session history."
+        detail="Resolve the selected workflow commit and retained session context before the browser requests retained history."
         title="Loading session panel"
       />
     );
@@ -1249,7 +1395,6 @@ function SessionFeedPanel({
         <a
           className="text-sm underline underline-offset-2"
           href={buildWorkflowHref({
-            branch: search.branch,
             project: search.project,
           })}
         >
@@ -1294,14 +1439,12 @@ function SessionFeedPanel({
     const clearSearch =
       sessionFeedState.result.query.session.kind === "session-id"
         ? {
-            branch: sessionFeedState.result.query.subject.branchId,
             ...(sessionFeedState.result.query.subject.kind === "commit"
               ? { commit: sessionFeedState.result.query.subject.commitId }
               : {}),
             project: sessionFeedState.result.query.projectId,
           }
         : {
-            branch: sessionFeedState.result.query.subject.branchId,
             project: sessionFeedState.result.query.projectId,
           };
 
@@ -1405,19 +1548,17 @@ function SessionFeedPanel({
             <a
               className="underline underline-offset-2"
               href={buildWorkflowHref({
-                branch: result.query.subject.branchId,
                 project: result.query.projectId,
                 ...(search.session ? { session: search.session } : {}),
               })}
             >
-              View branch session feed
+              View main branch session feed
             </a>
           ) : null}
           {search.session ? (
             <a
               className="underline underline-offset-2"
               href={buildWorkflowHref({
-                branch: result.query.subject.branchId,
                 ...(result.query.subject.kind === "commit"
                   ? { commit: result.query.subject.commitId }
                   : {}),
@@ -1620,28 +1761,29 @@ function CommitSessionActionCard({
 }
 
 function CommitQueuePanel({
-  commitAction,
-  commitActionState,
-  commitLookupState,
   commitQueue,
-  onTriggerCommitSession,
   projectId,
   search,
+  selectedCommitId,
+  startupState,
 }: {
-  readonly commitAction: SessionActionModel;
-  readonly commitActionState?: SessionActionRequestState;
-  readonly commitLookupState: SessionLookupState;
   readonly commitQueue?: CommitQueueScopeResult;
-  readonly onTriggerCommitSession: () => void;
   readonly projectId?: string;
   readonly search: WorkflowRouteSearch;
+  readonly selectedCommitId?: string;
+  readonly startupState: WorkflowReviewStartupState;
 }) {
-  const selectedCommit = resolveSelectedCommitRow(commitQueue, search.commit);
-
   if (!commitQueue) {
+    if (
+      startupState.kind === "missing-data" &&
+      startupState.reason === "project-selection-required"
+    ) {
+      return <ProjectChooserPanel startupState={startupState} />;
+    }
+
     return (
       <EmptyPanelBody
-        detail="Select a workflow branch to load its commit queue."
+        detail="Resolve a workflow project before loading the implicit-main commit queue."
         title="Commit queue unavailable"
       />
     );
@@ -1655,7 +1797,7 @@ function CommitQueuePanel({
           <Badge variant="outline">{commitQueue.branch.branch.state}</Badge>
         </div>
         <EmptyPanelBody
-          detail="The selected branch does not currently have any logical commits queued for execution."
+          detail="The implicit workflow branch does not currently have any logical commits queued for execution."
           title="No commits queued"
         />
       </div>
@@ -1673,14 +1815,26 @@ function CommitQueuePanel({
         </div>
         <Badge variant="secondary">{commitQueue.rows.length} commits</Badge>
       </div>
+      {search.commit && !selectedCommitId ? (
+        <div className="border-destructive/20 bg-destructive/5 rounded-lg border px-3 py-3 text-sm">
+          The configured workflow commit is no longer visible in the current main queue. Pick a
+          visible commit or{" "}
+          <a
+            className="underline underline-offset-2"
+            href={buildWorkflowHref(projectId ? { project: projectId } : {})}
+          >
+            return to the inferred queue selection
+          </a>
+          .
+        </div>
+      ) : null}
       <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-auto pr-1">
         {commitQueue.rows.map((row) => {
-          const selected = row.commit.id === selectedCommit?.commit.id;
+          const selected = row.commit.id === selectedCommitId;
           const active = row.commit.id === commitQueue.branch.branch.activeCommitId;
           return (
             <a
               href={buildWorkflowHref({
-                branch: commitQueue.branch.branch.id,
                 commit: row.commit.id,
                 project: projectId,
               })}
@@ -1708,24 +1862,182 @@ function CommitQueuePanel({
           );
         })}
       </div>
-      {selectedCommit ? (
+    </div>
+  );
+}
+
+function SelectedCommitPanel({
+  commitAction,
+  commitActionState,
+  commitLookupState,
+  commitQueue,
+  onTriggerCommitSession,
+  projectId,
+  sessionFeedState,
+  selectedCommitDetail,
+}: {
+  readonly commitAction: SessionActionModel;
+  readonly commitActionState?: SessionActionRequestState;
+  readonly commitLookupState: SessionLookupState;
+  readonly commitQueue?: CommitQueueScopeResult;
+  readonly onTriggerCommitSession: () => void;
+  readonly projectId?: string;
+  readonly sessionFeedState: WorkflowSessionFeedReadState;
+  readonly selectedCommitDetail?: MainCommitWorkflowScopeSelectedCommit;
+}) {
+  const selectedCommit = selectedCommitDetail?.row;
+
+  if (!commitQueue) {
+    return (
+      <EmptyPanelBody
+        detail="Resolve a workflow project before loading the selected commit detail."
+        title="Selected commit unavailable"
+      />
+    );
+  }
+
+  if (commitQueue.rows.length === 0) {
+    return (
+      <EmptyPanelBody
+        detail="The implicit main branch does not currently expose a commit to inspect."
+        title="No commit selected"
+      />
+    );
+  }
+
+  if (!selectedCommit) {
+    return (
+      <div className="flex h-full min-h-0 flex-col justify-center gap-3 rounded-lg border border-dashed px-4 py-6 text-center">
+        <p className="font-medium">Selected commit is stale</p>
+        <p className="text-muted-foreground text-sm">
+          The configured workflow commit is no longer visible in the current main queue.
+        </p>
+        <a
+          className="text-sm underline underline-offset-2"
+          href={buildWorkflowHref(projectId ? { project: projectId } : {})}
+        >
+          Return to the inferred queue selection
+        </a>
+      </div>
+    );
+  }
+
+  const gate = selectedCommit.commit.gate ?? "None";
+  const showContinueAffordance = gate === "UserReview";
+  const workflowStatus = resolveSelectedCommitWorkflowStatus(selectedCommitDetail);
+  const retainedContext = resolveSelectedCommitRetainedContext(sessionFeedState);
+
+  return (
+    <div className="flex h-full min-h-0 flex-col gap-4 text-sm">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="text-lg font-semibold">
+            {selectedCommit.commit.order}. {selectedCommit.commit.title}
+          </div>
+          <div className="text-muted-foreground mt-1 font-mono text-xs">
+            {selectedCommit.commit.commitKey}
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Badge>{selectedCommit.commit.state}</Badge>
+          {gate !== "None" ? <Badge variant="outline">{gate}</Badge> : null}
+        </div>
+      </div>
+
+      <div className="border-border/70 grid gap-3 rounded-lg border px-3 py-3">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="space-y-1">
+            <div className="font-medium">Workflow status</div>
+            <p className="text-muted-foreground text-sm">{workflowStatus.detail}</p>
+          </div>
+          <Badge variant={workflowStatus.badgeVariant}>{workflowStatus.badgeLabel}</Badge>
+        </div>
+        <div className="grid gap-3 lg:grid-cols-2">
+          <DetailField label="Next runnable session" value={workflowStatus.nextRunnableSession} />
+          <DetailField label="Gate state" value={gate} />
+          {selectedCommit.commit.gateRequestedAt ? (
+            <DetailField label="Gate requested" value={selectedCommit.commit.gateRequestedAt} />
+          ) : null}
+          {selectedCommit.commit.gateRequestedBySessionId ? (
+            <DetailField
+              label="Requested by session"
+              value={selectedCommit.commit.gateRequestedBySessionId}
+            />
+          ) : null}
+        </div>
+      </div>
+
+      <div className="grid gap-3 lg:grid-cols-2">
+        <DetailField
+          label="Repository commit"
+          value={formatRepositoryCommitSummary(selectedCommit)}
+        />
+        <DetailField
+          label="Repository branch"
+          value={formatRepositoryObservation(commitQueue.branch.repositoryBranch)}
+        />
+        <DetailField
+          label="Repository freshness"
+          value={commitQueue.freshness.repositoryFreshness}
+        />
+      </div>
+
+      <div className="border-border/70 grid gap-3 rounded-lg border px-3 py-3">
+        <div className="space-y-1">
+          <div className="font-medium">Retained session context</div>
+          <p className="text-muted-foreground text-sm">{retainedContext.detail}</p>
+        </div>
+        <div className="grid gap-3 lg:grid-cols-2">
+          <DetailField label="Retained session" value={retainedContext.session} />
+          <DetailField label="Retained history" value={retainedContext.history} />
+        </div>
+      </div>
+
+      <DetailField
+        label="Commit context"
+        value={selectedCommit.commit.contextSummary ?? "No commit context recorded."}
+      />
+      <DetailField
+        label="Main branch context"
+        value={
+          commitQueue.branch.branch.contextSummary ??
+          commitQueue.branch.branch.goalSummary ??
+          "No branch context recorded."
+        }
+      />
+
+      {showContinueAffordance ? (
         <div className="border-border/70 grid gap-3 rounded-lg border border-dashed px-3 py-3">
-          <div className="font-medium">Selected commit detail</div>
-          <DetailField label="Commit" value={selectedCommit.commit.title} />
-          <DetailField label="State" value={selectedCommit.commit.state} />
-          <DetailField
-            label="Repository commit"
-            value={formatRepositoryCommitSummary(selectedCommit)}
-          />
-          <CommitSessionActionCard
-            action={commitAction}
-            actionState={commitActionState}
-            lookupState={commitLookupState}
-            onTrigger={onTriggerCommitSession}
-            pending={commitActionState?.status === "pending"}
-          />
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="space-y-1">
+              <div className="font-medium">Continue workflow</div>
+              <p className="text-muted-foreground text-sm">
+                {selectedCommit.commit.gateReason ??
+                  "This commit is paused for explicit user review before workflow can continue."}
+              </p>
+            </div>
+            <Button
+              data-workflow-continue-action="disabled"
+              disabled
+              type="button"
+              variant="outline"
+            >
+              Continue workflow
+            </Button>
+          </div>
+          <p className="text-muted-foreground text-sm">
+            Retained context: {retainedContext.session}
+          </p>
         </div>
       ) : null}
+
+      <CommitSessionActionCard
+        action={commitAction}
+        actionState={commitActionState}
+        lookupState={commitLookupState}
+        onTrigger={onTriggerCommitSession}
+        pending={commitActionState?.status === "pending"}
+      />
     </div>
   );
 }
@@ -1761,13 +2073,11 @@ export function WorkflowReviewSurface({
   readonly sessionFeedState?: WorkflowSessionFeedReadState;
   readonly startupState: WorkflowReviewStartupState;
 }) {
-  const selectedBranchId =
-    readState.status === "ready"
-      ? (readState.commitQueue?.branch.branch.id ??
-        (startupState.kind === "ready" ? startupState.selectedBranch?.id : undefined))
-      : startupState.kind === "ready"
-        ? startupState.selectedBranch?.id
-        : undefined;
+  const selectedBranch =
+    readState.status === "ready" ? readState.commitQueue.branch.branch : undefined;
+  const selectedCommit =
+    readState.status === "ready" ? readState.mainWorkflow.selectedCommit?.row.commit : undefined;
+  const selectedCommitId = selectedCommit?.id;
   const projectId = startupState.kind === "missing-data" ? search.project : startupState.project.id;
   const showLoadingPanels = startupState.kind === "ready" && readState.status === "loading";
 
@@ -1775,13 +2085,34 @@ export function WorkflowReviewSurface({
     <div className="flex min-h-0 flex-1 flex-col gap-4" data-workflow-page="">
       <h1 className="text-3xl font-semibold tracking-tight">Workflow</h1>
       <PageHeader
-        branchCount={readState.status === "ready" ? readState.branchBoard.rows.length : undefined}
+        branch={selectedBranch}
         commitCount={readState.status === "ready" ? readState.commitQueue?.rows.length : undefined}
         projectId={projectId}
         runtime={runtime}
-        selectedBranchId={selectedBranchId}
+        selectedCommit={selectedCommit}
       />
       <BrowserAgentStatusCard runtime={runtime} />
+
+      <PanelShell
+        description="Keep the implicit main branch and branch-scoped planning visible as secondary context while the primary route stays commit-first."
+        title="Main branch context"
+      >
+        {showLoadingPanels ? (
+          <EmptyPanelBody
+            detail="Resolve the implicit main branch and branch-scoped planning context."
+            title="Loading main branch context"
+          />
+        ) : (
+          <MainBranchInspectorPanel
+            branchAction={branchAction}
+            branchActionState={branchActionState}
+            branchLookupState={branchLookupState}
+            mainWorkflow={readState.status === "ready" ? readState.mainWorkflow : undefined}
+            onTriggerBranchSession={onTriggerBranchSession}
+            startupState={startupState}
+          />
+        )}
+      </PanelShell>
 
       {readState.status === "error" ? (
         <Card className="border-destructive/20 bg-card/95 border shadow-sm">
@@ -1796,74 +2127,63 @@ export function WorkflowReviewSurface({
         </Card>
       ) : null}
 
-      <div className="grid min-h-0 flex-1 gap-4 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1fr)_minmax(0,1.1fr)]">
+      <div className="grid min-h-0 flex-1 gap-4 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1fr)_minmax(0,1.1fr)]">
         <PanelShell
-          description="Select a workflow branch from the resolved project scope."
-          title="Branch board"
-        >
-          <BranchBoardPanel
-            activeBranchId={selectedBranchId}
-            branchBoard={readState.status === "ready" ? readState.branchBoard : undefined}
-            projectId={projectId}
-            startupState={startupState}
-          />
-        </PanelShell>
-
-        <PanelShell
-          description="Inspect the selected branch, repository observation, and latest session."
-          title="Branch detail"
+          description="Review the implicit-main commit queue and keep selection stable across refreshes and invalidations."
+          title="Commit queue"
         >
           {showLoadingPanels ? (
             <EmptyPanelBody
-              detail="Read `ProjectBranchScope` first, then resolve the selected branch detail from the scoped results."
-              title="Loading branch detail"
+              detail="The route is waiting for the implicit-main commit queue to finish loading."
+              title="Loading commit queue"
             />
           ) : (
-            <BranchDetailPanel
-              branchAction={branchAction}
-              branchActionState={branchActionState}
-              branchBoard={readState.status === "ready" ? readState.branchBoard : undefined}
-              branchLookupState={branchLookupState}
+            <CommitQueuePanel
               commitQueue={readState.status === "ready" ? readState.commitQueue : undefined}
-              onTriggerBranchSession={onTriggerBranchSession}
+              projectId={projectId}
+              search={search}
+              selectedCommitId={selectedCommitId}
               startupState={startupState}
             />
           )}
         </PanelShell>
 
         <PanelShell
-          description="Review the selected branch commit queue without widening back to the whole graph."
-          title="Commit queue"
+          description="Inspect the selected commit, its retained session state, and the next operator action."
+          title="Selected commit"
         >
           {showLoadingPanels ? (
             <EmptyPanelBody
-              detail="The route is waiting for the selected branch commit queue to finish loading."
-              title="Loading commit queue"
+              detail="Resolve the selected commit detail from the implicit-main workflow read."
+              title="Loading selected commit"
             />
           ) : (
-            <CommitQueuePanel
+            <SelectedCommitPanel
               commitAction={commitAction}
               commitActionState={commitActionState}
               commitLookupState={commitLookupState}
               commitQueue={readState.status === "ready" ? readState.commitQueue : undefined}
               onTriggerCommitSession={onTriggerCommitSession}
               projectId={projectId}
-              search={search}
+              sessionFeedState={sessionFeedState}
+              selectedCommitDetail={
+                readState.status === "ready" ? readState.mainWorkflow.selectedCommit : undefined
+              }
             />
           )}
         </PanelShell>
-      </div>
 
-      <PanelShell
-        description="Inspect graph-backed session history, transcript blocks, artifacts, and decisions for the selected workflow subject."
-        title="Session panel"
-      >
-        <SessionFeedPanel
-          liveSessionState={liveSessionState}
-          search={search}
-          sessionFeedState={sessionFeedState}
-        />
-      </PanelShell>
+        <PanelShell
+          description="Inspect graph-backed session history, transcript blocks, artifacts, and decisions for the selected workflow subject."
+          title="Session feed"
+        >
+          <SessionFeedPanel
+            liveSessionState={liveSessionState}
+            search={search}
+            sessionFeedState={sessionFeedState}
+          />
+        </PanelShell>
+      </div>
 
       {startupState.kind !== "ready" || readState.status !== "ready" ? <RecoveryHint /> : null}
     </div>
@@ -1880,7 +2200,6 @@ export function WorkflowReviewPage({
   const runtime = useGraphRuntime();
   const auth = useWebAuthSession();
   const contract = useMemo(() => createWorkflowReviewStartupContract(search), [search]);
-  const sessionFeedContract = useMemo(() => createWorkflowSessionFeedContract(search), [search]);
   const [refreshVersion, setRefreshVersion] = useState(0);
   const visibleProjects = useMemo(
     () =>
@@ -1895,20 +2214,9 @@ export function WorkflowReviewPage({
         ),
     [refreshVersion, runtime],
   );
-  const visibleBranches = useMemo(
-    () =>
-      runtime.graph.branch.list().map((branch) => ({
-        id: branch.id,
-        projectId: branch.project,
-        queueRank: branch.queueRank,
-        title: branch.name,
-        updatedAt: branch.updatedAt?.toISOString(),
-      })),
-    [refreshVersion, runtime],
-  );
   const startupState = useMemo(
-    () => resolveWorkflowReviewStartupState(visibleProjects, visibleBranches, contract),
-    [contract, visibleBranches, visibleProjects],
+    () => resolveWorkflowReviewStartupState(visibleProjects, contract),
+    [contract, visibleProjects],
   );
   const [runtimeState, setRuntimeState] = useState<BrowserAgentRuntimeProbe>({
     message: "Checking local browser-agent runtime.",
@@ -1934,17 +2242,8 @@ export function WorkflowReviewPage({
   const [commitActionStates, setCommitActionStates] = useState<
     Readonly<Record<string, SessionActionRequestState>>
   >({});
-  const canonicalSearch = useMemo(
-    () => resolveCanonicalWorkflowRouteSearch(search, startupState),
-    [search, startupState],
-  );
   const selectedBranchId =
-    readState.status === "ready"
-      ? (readState.commitQueue?.branch.branch.id ??
-        (startupState.kind === "ready" ? startupState.selectedBranch?.id : undefined))
-      : startupState.kind === "ready"
-        ? startupState.selectedBranch?.id
-        : undefined;
+    readState.status === "ready" ? readState.commitQueue.branch.branch.id : undefined;
   const selectedBranchState =
     readState.status === "ready"
       ? readState.branchBoard.rows.find((row) => row.branch.id === selectedBranchId)?.branch.state
@@ -1963,19 +2262,27 @@ export function WorkflowReviewPage({
   const branchActionState = selectedBranchId ? branchActionStates[selectedBranchId] : undefined;
   const selectedCommit =
     readState.status === "ready"
-      ? resolveSelectedCommitRow(readState.commitQueue, search.commit)
+      ? (readState.mainWorkflow.selectedCommit?.row ??
+        resolveSelectedCommitRow(readState.commitQueue, search.commit))
       : undefined;
   const selectedCommitId = selectedCommit?.commit.id;
-  const selectedProjectId =
-    startupState.kind === "ready" || startupState.kind === "partial-data"
-      ? startupState.project.id
-      : undefined;
-  const startupSelectedBranchId =
-    startupState.kind === "ready" ? startupState.selectedBranch?.id : undefined;
+  const effectiveSearch = useMemo(
+    () => resolveEffectiveWorkflowSearch(search, selectedCommitId),
+    [search, selectedCommitId],
+  );
+  const sessionFeedContract = useMemo(
+    () => createWorkflowSessionFeedContract(effectiveSearch),
+    [effectiveSearch],
+  );
+  const canonicalSearch = useMemo(
+    () => resolveCanonicalWorkflowRouteSearch(search, startupState, selectedCommitId),
+    [search, selectedCommitId, startupState],
+  );
+  const selectedProjectId = startupState.kind === "ready" ? startupState.project.id : undefined;
   const readyBranchBoardProjectId =
     readState.status === "ready" ? readState.branchBoard.project.id : undefined;
   const readyCommitQueueBranchId =
-    readState.status === "ready" ? readState.commitQueue?.branch.branch.id : undefined;
+    readState.status === "ready" ? readState.commitQueue.branch.branch.id : undefined;
   const commitAction = useMemo(
     () =>
       createCommitSessionActionModel({
@@ -1983,6 +2290,8 @@ export function WorkflowReviewPage({
         commitQueue: readState.status === "ready" ? readState.commitQueue : undefined,
         lookupState: commitLookupState,
         runtime: runtimeState,
+        selectedCommitDetail:
+          readState.status === "ready" ? readState.mainWorkflow.selectedCommit : undefined,
         selectedCommitId: search.commit,
         selectedBranchState,
       }),
@@ -1994,9 +2303,9 @@ export function WorkflowReviewPage({
       resolveLiveSessionCandidate({
         branchLookupState,
         commitLookupState,
-        search,
+        search: effectiveSearch,
       }),
-    [branchLookupState, commitLookupState, search],
+    [branchLookupState, commitLookupState, effectiveSearch],
   );
 
   useEffect(() => {
@@ -2022,13 +2331,13 @@ export function WorkflowReviewPage({
     if (
       auth.status !== "ready" ||
       runtimeState.status !== "ready" ||
-      startupState.kind !== "ready"
+      readState.status !== "ready"
     ) {
       setBranchLookupState((current) => (current.status === "idle" ? current : { status: "idle" }));
       return;
     }
 
-    const branchId = startupSelectedBranchId;
+    const branchId = selectedBranchId;
     if (!branchId) {
       setBranchLookupState((current) => (current.status === "idle" ? current : { status: "idle" }));
       return;
@@ -2083,10 +2392,10 @@ export function WorkflowReviewPage({
     auth.principalId,
     auth.sessionId,
     auth.status,
+    readState.status,
     runtimeState.status,
     selectedProjectId,
-    startupSelectedBranchId,
-    startupState.kind,
+    selectedBranchId,
   ]);
 
   useEffect(() => {
@@ -2100,7 +2409,8 @@ export function WorkflowReviewPage({
     }
 
     const commitQueue = readState.commitQueue;
-    const selectedCommit = resolveSelectedCommitRow(commitQueue);
+    const selectedCommit =
+      readState.mainWorkflow.selectedCommit?.row ?? resolveSelectedCommitRow(commitQueue);
     if (!selectedCommit || !commitQueue) {
       setCommitLookupState((current) => (current.status === "idle" ? current : { status: "idle" }));
       return;
@@ -2205,47 +2515,24 @@ export function WorkflowReviewPage({
 
     void (async () => {
       try {
-        const branchBoard = await requestWorkflowRead(
+        const mainWorkflow = await requestWorkflowRead(
           {
-            kind: "project-branch-scope",
+            kind: "main-commit-workflow-scope",
             query: {
-              filter: {
-                showUnmanagedRepositoryBranches: true,
-              },
               projectId: startupState.project.id,
+              ...(search.commit ? { commitId: search.commit } : {}),
             },
           },
           {
             signal: controller.signal,
           },
         );
-
-        const selectedBranchId =
-          startupState.selectedBranch?.id ?? branchBoard.result.rows[0]?.branch.id;
-
-        if (!selectedBranchId) {
-          setReadState({
-            branchBoard: branchBoard.result,
-            status: "ready",
-          });
-          return;
-        }
-
-        const commitQueue = await requestWorkflowRead(
-          {
-            kind: "commit-queue-scope",
-            query: {
-              branchId: selectedBranchId,
-            },
-          },
-          {
-            signal: controller.signal,
-          },
-        );
+        const commitQueue = createCommitQueueResult(mainWorkflow.result);
 
         setReadState({
-          branchBoard: branchBoard.result,
-          commitQueue: commitQueue.result,
+          branchBoard: createImplicitMainBranchBoard(mainWorkflow.result),
+          commitQueue,
+          mainWorkflow: mainWorkflow.result,
           status: "ready",
         });
       } catch (error) {
@@ -2268,7 +2555,7 @@ export function WorkflowReviewPage({
     return () => {
       controller.abort();
     };
-  }, [refreshVersion, startupState]);
+  }, [refreshVersion, search.commit, startupState]);
 
   useEffect(() => {
     if (startupState.kind !== "ready" || readState.status !== "ready") {
@@ -2280,7 +2567,7 @@ export function WorkflowReviewPage({
       contract: sessionFeedContract,
       selectedBranchId,
       selectedProjectId,
-      visibleCommitIds: readState.commitQueue?.rows.map((row) => row.commit.id),
+      visibleCommitIds: readState.commitQueue.rows.map((row) => row.commit.id),
     });
 
     if (selectionState.kind === "missing-data") {
@@ -2466,14 +2753,15 @@ export function WorkflowReviewPage({
   function handleTriggerBranchSession() {
     if (
       auth.status !== "ready" ||
-      startupState.kind !== "ready" ||
-      !startupState.selectedBranch ||
+      readState.status !== "ready" ||
+      !selectedBranchId ||
+      !selectedProjectId ||
       branchAction.availability !== "available"
     ) {
       return;
     }
 
-    const branchId = startupState.selectedBranch.id;
+    const branchId = selectedBranchId;
     updateBranchActionState(branchId, {
       message: `${branchAction.label} requested for ${branchId}.`,
       status: "pending",
@@ -2487,10 +2775,10 @@ export function WorkflowReviewPage({
       },
       kind: "planning",
       preference: branchAction.preference,
-      projectId: startupState.project.id,
+      projectId: selectedProjectId,
       selection: {
         branchId,
-        projectId: startupState.project.id,
+        projectId: selectedProjectId,
       },
       subject: {
         kind: "branch",
@@ -2541,7 +2829,8 @@ export function WorkflowReviewPage({
       return;
     }
 
-    const selectedCommit = resolveSelectedCommitRow(readState.commitQueue);
+    const selectedCommit =
+      readState.mainWorkflow.selectedCommit?.row ?? resolveSelectedCommitRow(readState.commitQueue);
     const commitQueue = readState.commitQueue;
     if (!selectedCommit || !commitQueue) {
       return;
@@ -2562,11 +2851,11 @@ export function WorkflowReviewPage({
       },
       kind: "execution",
       preference: commitAction.preference,
-      projectId: readState.branchBoard.project.id,
+      projectId: readState.mainWorkflow.project.id,
       selection: {
         branchId,
         commitId,
-        projectId: readState.branchBoard.project.id,
+        projectId: readState.mainWorkflow.project.id,
       },
       subject: {
         kind: "commit",
@@ -2622,7 +2911,7 @@ export function WorkflowReviewPage({
       onTriggerCommitSession={handleTriggerCommitSession}
       readState={readState}
       runtime={runtimeState}
-      search={search}
+      search={effectiveSearch}
       sessionFeedState={sessionFeedState}
       startupState={startupState}
     />

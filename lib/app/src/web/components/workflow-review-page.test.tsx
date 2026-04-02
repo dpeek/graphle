@@ -1,6 +1,10 @@
 import { describe, expect, it } from "bun:test";
 
-import type { CommitQueueScopeResult, ProjectBranchScopeResult } from "@io/graph-module-workflow";
+import type {
+  CommitQueueScopeResult,
+  MainCommitWorkflowScopeResult,
+  ProjectBranchScopeResult,
+} from "@io/graph-module-workflow";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import type { BrowserAgentRuntimeProbe } from "@op/cli/browser-agent";
@@ -65,6 +69,7 @@ function createBranchBoard(): ProjectBranchScopeResult {
         },
         branch: {
           branchKey: "branch:workflow-runtime",
+          contextSummary: "Primary branch startup memory.",
           createdAt: "2026-03-26T09:00:00.000Z",
           entity: "branch",
           goalSummary: "Replace the browser placeholder with the review layout.",
@@ -157,6 +162,7 @@ function createCommitQueue(): CommitQueueScopeResult {
       branch: {
         activeCommitId: "commit-1",
         branchKey: "branch:workflow-runtime",
+        contextSummary: "Primary branch startup memory.",
         createdAt: "2026-03-26T09:00:00.000Z",
         entity: "branch",
         goalSummary: "Replace the browser placeholder with the review layout.",
@@ -195,6 +201,7 @@ function createCommitQueue(): CommitQueueScopeResult {
         commit: {
           branchId: "branch-1",
           commitKey: "commit:review-layout",
+          contextSummary: "Primary commit execution memory.",
           createdAt: "2026-03-26T09:10:00.000Z",
           entity: "commit",
           id: "commit-1",
@@ -208,6 +215,7 @@ function createCommitQueue(): CommitQueueScopeResult {
         commit: {
           branchId: "branch-1",
           commitKey: "commit:polish-copy",
+          contextSummary: "Polish the remaining review copy.",
           createdAt: "2026-03-26T09:17:00.000Z",
           entity: "commit",
           id: "commit-2",
@@ -223,34 +231,29 @@ function createCommitQueue(): CommitQueueScopeResult {
 
 function createReadyStartupState(): WorkflowReviewStartupState {
   return {
-    availableBranches: [
-      {
-        id: "branch-1",
-        projectId: "project-io",
-        queueRank: 1,
-        title: "Workflow runtime contract",
-        updatedAt: "2026-03-26T09:59:00.000Z",
-      },
-      {
-        id: "branch-2",
-        projectId: "project-io",
-        queueRank: 2,
-        title: "Workflow docs alignment",
-        updatedAt: "2026-03-26T09:30:00.000Z",
-      },
-    ],
     contract: {} as WorkflowReviewStartupState["contract"],
     kind: "ready",
     project: {
       id: "project-io",
       title: "IO",
     },
-    selectedBranch: {
-      id: "branch-1",
-      projectId: "project-io",
-      queueRank: 1,
-      title: "Workflow runtime contract",
-      updatedAt: "2026-03-26T09:59:00.000Z",
+  };
+}
+
+function createMainWorkflow(): MainCommitWorkflowScopeResult {
+  const branchBoard = createBranchBoard();
+  const commitQueue = createCommitQueue();
+
+  return {
+    branch: commitQueue.branch,
+    freshness: commitQueue.freshness,
+    project: branchBoard.project,
+    repository: branchBoard.repository,
+    rows: commitQueue.rows,
+    selectedCommit: {
+      latestSession: commitQueue.branch.latestSession,
+      nextSessionKind: "execution",
+      row: commitQueue.rows[0]!,
     },
   };
 }
@@ -284,6 +287,7 @@ function createCommitActionOverrides() {
     commitQueue: createCommitQueue(),
     lookupState: { status: "idle" },
     runtime: createRuntimeState(),
+    selectedCommitDetail: createMainWorkflow().selectedCommit,
     selectedBranchState: "active",
   });
 }
@@ -350,13 +354,120 @@ function createSessionFeedState(): WorkflowSessionFeedReadState {
   };
 }
 
-describe("workflow review page", () => {
-  it("renders the workflow-native branch board, branch detail, and commit queue layout", () => {
-    const readState: WorkflowReviewReadState = {
-      branchBoard: createBranchBoard(),
-      commitQueue: createCommitQueue(),
+function createCommitSessionFeedState(): WorkflowSessionFeedReadState {
+  const branchBoard = createBranchBoard();
+  const commitQueue = createCommitQueue();
+
+  return {
+    result: {
+      artifacts: [],
+      decisions: [],
+      events: [
+        {
+          type: "session",
+          phase: "started",
+          sequence: 1,
+          timestamp: "2026-03-26T02:00:00.000Z",
+        },
+        {
+          type: "status",
+          code: "ready",
+          format: "line",
+          sequence: 2,
+          text: "Running",
+          timestamp: "2026-03-26T02:00:01.000Z",
+        },
+      ],
+      finalization: {
+        status: "pending",
+      },
+      header: {
+        id: "session:commit:1",
+        kind: "execution",
+        sessionKey: "session:workflow-commit",
+        title: "Workflow review execution",
+      },
+      history: {
+        lastSequence: 2,
+        persistedEventCount: 2,
+        reason: "history-pending-append",
+        status: "partial",
+      },
+      query: {
+        projectId: "project-io",
+        session: {
+          kind: "latest-for-subject",
+        },
+        subject: {
+          branchId: "branch-1",
+          commitId: "commit-1",
+          kind: "commit",
+        },
+      },
+      runtime: {
+        startedAt: "2026-03-26T02:00:00.000Z",
+        state: "running",
+      },
       status: "ready",
-    };
+      subject: {
+        branch: branchBoard.rows[0]!.branch,
+        commit: commitQueue.rows[0]!.commit,
+        projectId: "project-io",
+        repository: branchBoard.repository,
+        repositoryBranch: branchBoard.rows[0]!.repositoryBranch,
+        repositoryCommit: commitQueue.rows[0]!.repositoryCommit,
+      },
+    },
+    status: "ready",
+  };
+}
+
+function createNoSessionCommitSessionFeedState(): WorkflowSessionFeedReadState {
+  return {
+    result: {
+      query: {
+        projectId: "project-io",
+        session: {
+          kind: "latest-for-subject",
+        },
+        subject: {
+          branchId: "branch-1",
+          commitId: "commit-1",
+          kind: "commit",
+        },
+      },
+      status: "no-session",
+    },
+    status: "ready",
+  };
+}
+
+function createReadyReadState(): Extract<WorkflowReviewReadState, { readonly status: "ready" }> {
+  const mainWorkflow = createMainWorkflow();
+  return {
+    branchBoard: {
+      freshness: mainWorkflow.freshness,
+      project: mainWorkflow.project,
+      ...(mainWorkflow.repository ? { repository: mainWorkflow.repository } : {}),
+      rows: [
+        {
+          branch: mainWorkflow.branch.branch,
+          ...(mainWorkflow.branch.repositoryBranch
+            ? { repositoryBranch: mainWorkflow.branch.repositoryBranch }
+            : {}),
+        },
+      ],
+      unmanagedRepositoryBranches: [],
+    },
+    commitQueue: createCommitQueue(),
+    mainWorkflow,
+    status: "ready",
+  };
+}
+
+describe("workflow review page", () => {
+  it("renders the commit-first queue, selected commit, and session feed layout", () => {
+    const readState: WorkflowReviewReadState = createReadyReadState();
 
     const html = renderToStaticMarkup(
       <WorkflowReviewSurface
@@ -370,17 +481,18 @@ describe("workflow review page", () => {
         onTriggerCommitSession={() => {}}
         readState={readState}
         runtime={createRuntimeState()}
-        search={{ project: "project-io", branch: "branch-1" }}
+        search={{ project: "project-io" }}
         startupState={createReadyStartupState()}
       />,
     );
 
-    expect(html).toContain("Branch board");
-    expect(html).toContain("Branch detail");
+    expect(html).toContain("Main branch context");
     expect(html).toContain("Commit queue");
+    expect(html).toContain("Selected commit");
+    expect(html).toContain("Session feed");
     expect(html).toContain("Workflow runtime contract");
     expect(html).toContain("Build workflow review layout");
-    expect(html).toContain("Observed repository branches");
+    expect(html).toContain("Primary commit execution memory.");
     expect(html).toContain("Local browser-agent runtime ready");
     expect(html).toContain("Launch branch session");
     expect(html).toContain("Commit session");
@@ -392,7 +504,7 @@ describe("workflow review page", () => {
     const startupState: WorkflowReviewStartupState = {
       contract: {} as WorkflowReviewStartupState["contract"],
       kind: "missing-data",
-      message: "Select a project before branch-board composition starts.",
+      message: "Select one explicitly before the commit queue loads.",
       reason: "project-selection-required",
       visibleProjects: [
         { id: "project-io", title: "IO" },
@@ -421,25 +533,23 @@ describe("workflow review page", () => {
       />,
     );
 
-    expect(html).toContain("Select a project before branch-board composition starts.");
-    expect(html).toContain("Branch board");
-    expect(html).toContain("No branch selected");
-    expect(html).toContain("Commit queue unavailable");
+    expect(html).toContain("Select a project before the implicit-main commit queue loads.");
+    expect(html).toContain("Main branch context");
+    expect(html).toContain("Main branch context unavailable");
+    expect(html).toContain("Selected commit unavailable");
     expect(html).toContain("Local browser-agent runtime unavailable");
     expect(html).toContain("io browser-agent");
   });
 
-  it("renders an explicit empty branch-board state when the project has no branches", () => {
-    const startupState: WorkflowReviewStartupState = {
-      availableBranches: [],
-      contract: {} as WorkflowReviewStartupState["contract"],
-      kind: "partial-data",
-      message: "The selected project does not currently expose any workflow branches.",
-      project: {
-        id: "project-io",
-        title: "IO",
+  it("keeps stale commit selections explicit instead of silently swapping to another queue row", () => {
+    const baseReadState = createReadyReadState();
+    const readState: WorkflowReviewReadState = {
+      ...baseReadState,
+      mainWorkflow: {
+        ...baseReadState.mainWorkflow,
+        selectedCommit: undefined,
       },
-      reason: "project-has-no-branches",
+      status: "ready",
     };
 
     const html = renderToStaticMarkup(
@@ -452,39 +562,32 @@ describe("workflow review page", () => {
         commitLookupState={{ status: "idle" }}
         onTriggerBranchSession={() => {}}
         onTriggerCommitSession={() => {}}
-        readState={{ status: "loading" }}
+        readState={readState}
         runtime={createRuntimeState()}
-        search={{ project: "project-io" }}
-        startupState={startupState}
+        search={{ commit: "commit:missing", project: "project-io" }}
+        startupState={createReadyStartupState()}
       />,
     );
 
-    expect(html).toContain("Branch board unavailable");
-    expect(html).toContain("The selected project does not currently expose any workflow branches.");
-    expect(html).toContain("No branch selected");
-    expect(html).toContain("Commit queue unavailable");
+    expect(html).toContain("Selected commit is stale");
+    expect(html).toContain(
+      "The configured workflow commit is no longer visible in the current main queue.",
+    );
+    expect(html).toContain("return to the inferred queue selection");
   });
 
-  it("renders stale branch selections as explicit branch-board drift instead of another branch", () => {
-    const startupState: WorkflowReviewStartupState = {
-      availableBranches: [
-        {
-          id: "branch-2",
-          projectId: "project-io",
-          queueRank: 2,
-          title: "Workflow docs alignment",
-          updatedAt: "2026-03-26T09:30:00.000Z",
-        },
-      ],
-      contract: {} as WorkflowReviewStartupState["contract"],
-      kind: "partial-data",
-      message:
-        "The configured workflow branch is not visible in the resolved project branch board.",
-      project: {
-        id: "project-io",
-        title: "IO",
+  it("keeps the continue workflow affordance visible when the selected commit is gated for review", () => {
+    const readState = createReadyReadState();
+    const gatedCommit = {
+      ...readState.commitQueue.rows[0]!,
+      commit: {
+        ...readState.commitQueue.rows[0]!.commit,
+        gate: "UserReview" as const,
+        gateReason: "Await manual review before implementation resumes.",
+        gateRequestedAt: "2026-03-26T10:01:00.000Z",
+        gateRequestedBySessionId: "session:review:1",
+        state: "blocked" as const,
       },
-      reason: "configured-branch-missing",
     };
 
     const html = renderToStaticMarkup(
@@ -492,25 +595,102 @@ describe("workflow review page", () => {
         branchAction={createBranchActionOverrides()}
         branchActionState={undefined}
         branchLookupState={{ status: "idle" }}
-        commitAction={createCommitActionOverrides()}
+        commitAction={createCommitSessionActionModel({
+          authStatus: "ready",
+          commitQueue: {
+            ...readState.commitQueue,
+            rows: [gatedCommit, ...readState.commitQueue.rows.slice(1)],
+          },
+          lookupState: { status: "idle" },
+          runtime: createRuntimeState(),
+          selectedCommitDetail: {
+            latestSession: readState.mainWorkflow.selectedCommit?.latestSession,
+            nextSessionKind: readState.mainWorkflow.selectedCommit?.nextSessionKind,
+            row: gatedCommit,
+          },
+          selectedBranchState: "active",
+        })}
         commitActionState={undefined}
         commitLookupState={{ status: "idle" }}
         onTriggerBranchSession={() => {}}
         onTriggerCommitSession={() => {}}
-        readState={{ status: "loading" }}
+        readState={{
+          ...readState,
+          commitQueue: {
+            ...readState.commitQueue,
+            branch: {
+              ...readState.commitQueue.branch,
+              activeCommit: gatedCommit,
+            },
+            rows: [gatedCommit, ...readState.commitQueue.rows.slice(1)],
+          },
+          mainWorkflow: {
+            ...readState.mainWorkflow,
+            branch: {
+              ...readState.mainWorkflow.branch,
+              activeCommit: gatedCommit,
+            },
+            rows: [gatedCommit, ...readState.mainWorkflow.rows.slice(1)],
+            selectedCommit: {
+              latestSession: readState.mainWorkflow.selectedCommit?.latestSession,
+              nextSessionKind: readState.mainWorkflow.selectedCommit?.nextSessionKind,
+              row: gatedCommit,
+            },
+          },
+          status: "ready",
+        }}
         runtime={createRuntimeState()}
-        search={{ branch: "branch-missing", project: "project-io" }}
-        startupState={startupState}
+        search={{ project: "project-io" }}
+        sessionFeedState={createNoSessionCommitSessionFeedState()}
+        startupState={createReadyStartupState()}
       />,
     );
 
-    expect(html).toContain("Branch board unavailable");
-    expect(html).toContain(
-      "The configured workflow branch is not visible in the resolved project branch board.",
-    );
-    expect(html).toContain("project-io");
-    expect(html).toContain("pending selection");
-    expect(html).not.toContain("Workflow docs alignment");
+    expect(html).toContain("Continue workflow");
+    expect(html).toContain('data-workflow-continue-action="disabled"');
+    expect(html).toContain("UserReview");
+    expect(html).toContain("No runnable session");
+    expect(html).toContain("Await manual review before implementation resumes.");
+    expect(html).toContain("Requested by session");
+    expect(html).toContain("session:review:1");
+    expect(html).toContain("No retained session recorded");
+    expect(html).toContain("data-workflow-commit-session-reason");
+  });
+
+  it("blocks commit launch when the selected commit is gated for review", () => {
+    const readState = createReadyReadState();
+    const gatedCommit = {
+      ...readState.commitQueue.rows[0]!,
+      commit: {
+        ...readState.commitQueue.rows[0]!.commit,
+        gate: "UserReview" as const,
+        gateReason: "Await manual review before implementation resumes.",
+        state: "blocked" as const,
+      },
+    };
+
+    const action = createCommitSessionActionModel({
+      authStatus: "ready",
+      commitQueue: {
+        ...readState.commitQueue,
+        branch: {
+          ...readState.commitQueue.branch,
+          activeCommit: gatedCommit,
+        },
+        rows: [gatedCommit, ...readState.commitQueue.rows.slice(1)],
+      },
+      lookupState: { status: "idle" },
+      runtime: createRuntimeState(),
+      selectedCommitDetail: {
+        latestSession: readState.mainWorkflow.selectedCommit?.latestSession,
+        nextSessionKind: readState.mainWorkflow.selectedCommit?.nextSessionKind,
+        row: gatedCommit,
+      },
+      selectedBranchState: "active",
+    });
+
+    expect(action.availability).toBe("unavailable");
+    expect(action.reason).toBe("Await manual review before implementation resumes.");
   });
 
   it("switches the branch action into attach mode when an active branch session exists", () => {
@@ -655,10 +835,14 @@ describe("workflow review page", () => {
         readState={{
           branchBoard: createBranchBoard(),
           commitQueue,
+          mainWorkflow: {
+            ...createMainWorkflow(),
+            branch: commitQueue.branch,
+          },
           status: "ready",
         }}
         runtime={createRuntimeState()}
-        search={{ project: "project-io", branch: "branch-1" }}
+        search={{ project: "project-io" }}
         startupState={createReadyStartupState()}
       />,
     );
@@ -748,6 +932,7 @@ describe("workflow review page", () => {
             result: lookupResult,
           },
           runtime: createRuntimeState(),
+          selectedCommitDetail: createMainWorkflow().selectedCommit,
           selectedBranchState: "active",
         })}
         commitActionState={undefined}
@@ -757,13 +942,9 @@ describe("workflow review page", () => {
         }}
         onTriggerBranchSession={() => {}}
         onTriggerCommitSession={() => {}}
-        readState={{
-          branchBoard: createBranchBoard(),
-          commitQueue: createCommitQueue(),
-          status: "ready",
-        }}
+        readState={createReadyReadState()}
         runtime={createRuntimeState()}
-        search={{ project: "project-io", branch: "branch-1" }}
+        search={{ project: "project-io" }}
         startupState={createReadyStartupState()}
       />,
     );
@@ -818,13 +999,9 @@ describe("workflow review page", () => {
         commitLookupState={{ status: "idle" }}
         onTriggerBranchSession={() => {}}
         onTriggerCommitSession={() => {}}
-        readState={{
-          branchBoard: createBranchBoard(),
-          commitQueue: createCommitQueue(),
-          status: "ready",
-        }}
+        readState={createReadyReadState()}
         runtime={createRuntimeState()}
-        search={{ project: "project-io", branch: "branch-1" }}
+        search={{ project: "project-io" }}
         startupState={createReadyStartupState()}
       />,
     );
@@ -891,13 +1068,9 @@ describe("workflow review page", () => {
         commitLookupState={{ status: "idle" }}
         onTriggerBranchSession={() => {}}
         onTriggerCommitSession={() => {}}
-        readState={{
-          branchBoard: createBranchBoard(),
-          commitQueue: createCommitQueue(),
-          status: "ready",
-        }}
+        readState={createReadyReadState()}
         runtime={createRuntimeState()}
-        search={{ project: "project-io", branch: "branch-1" }}
+        search={{ project: "project-io" }}
         startupState={createReadyStartupState()}
       />,
     );
@@ -919,6 +1092,7 @@ describe("workflow review page", () => {
           commitQueue: createCommitQueue(),
           lookupState: { status: "idle" },
           runtime: createRuntimeState(),
+          selectedCommitDetail: createMainWorkflow().selectedCommit,
           selectedBranchState: "active",
         })}
         commitActionState={{
@@ -967,13 +1141,9 @@ describe("workflow review page", () => {
         commitLookupState={{ status: "idle" }}
         onTriggerBranchSession={() => {}}
         onTriggerCommitSession={() => {}}
-        readState={{
-          branchBoard: createBranchBoard(),
-          commitQueue: createCommitQueue(),
-          status: "ready",
-        }}
+        readState={createReadyReadState()}
         runtime={createRuntimeState()}
-        search={{ project: "project-io", branch: "branch-1" }}
+        search={{ project: "project-io" }}
         startupState={createReadyStartupState()}
       />,
     );
@@ -1014,13 +1184,9 @@ describe("workflow review page", () => {
         }}
         onTriggerBranchSession={() => {}}
         onTriggerCommitSession={() => {}}
-        readState={{
-          branchBoard: createBranchBoard(),
-          commitQueue: createCommitQueue(),
-          status: "ready",
-        }}
+        readState={createReadyReadState()}
         runtime={createRuntimeState()}
-        search={{ project: "project-io", branch: "branch-1" }}
+        search={{ project: "project-io" }}
         sessionFeedState={createSessionFeedState()}
         startupState={createReadyStartupState()}
       />,
@@ -1052,13 +1218,9 @@ describe("workflow review page", () => {
         }}
         onTriggerBranchSession={() => {}}
         onTriggerCommitSession={() => {}}
-        readState={{
-          branchBoard: createBranchBoard(),
-          commitQueue: createCommitQueue(),
-          status: "ready",
-        }}
+        readState={createReadyReadState()}
         runtime={createRuntimeState()}
-        search={{ project: "project-io", branch: "branch-1" }}
+        search={{ project: "project-io" }}
         sessionFeedState={createSessionFeedState()}
         startupState={createReadyStartupState()}
       />,
@@ -1069,5 +1231,30 @@ describe("workflow review page", () => {
       "Local live session updates unavailable. Showing graph-backed history only.",
     );
     expect(html).toContain("Running");
+  });
+
+  it("surfaces commit-scoped retained session context inside the selected commit detail", () => {
+    const html = renderToStaticMarkup(
+      <WorkflowReviewSurface
+        branchAction={createBranchActionOverrides()}
+        branchActionState={undefined}
+        branchLookupState={{ status: "idle" }}
+        commitAction={createCommitActionOverrides()}
+        commitActionState={undefined}
+        commitLookupState={{ status: "idle" }}
+        onTriggerBranchSession={() => {}}
+        onTriggerCommitSession={() => {}}
+        readState={createReadyReadState()}
+        runtime={createRuntimeState()}
+        search={{ commit: "commit-1", project: "project-io" }}
+        sessionFeedState={createCommitSessionFeedState()}
+        startupState={createReadyStartupState()}
+      />,
+    );
+
+    expect(html).toContain("Retained session context");
+    expect(html).toContain("Latest retained session: session:workflow-commit");
+    expect(html).toContain("Workflow review execution is running.");
+    expect(html).toContain("2 retained events with history pending append.");
   });
 });

@@ -76,6 +76,9 @@ import {
   type CommitQueueScopeFailureCode,
   type CommitQueueScopeQuery,
   type CommitQueueScopeResult,
+  type MainCommitWorkflowScopeFailureCode,
+  type MainCommitWorkflowScopeQuery,
+  type MainCommitWorkflowScopeResult,
   type ProjectBranchScopeFailureCode,
   type ProjectBranchScopeQuery,
   type ProjectBranchScopeResult,
@@ -486,6 +489,10 @@ export type WebAppAuthority = Omit<
     predicateId: string,
     options: WebAppAuthorityPredicateReadOptions,
   ): unknown;
+  readMainCommitWorkflowScope(
+    query: MainCommitWorkflowScopeQuery,
+    options: WebAppAuthorityReadOptions,
+  ): MainCommitWorkflowScopeResult;
   readProjectBranchScope(
     query: ProjectBranchScopeQuery,
     options: WebAppAuthorityReadOptions,
@@ -1188,12 +1195,14 @@ function createSerializedQueryErrorResponse(error: string, code: string): Serial
 
 type WorkflowProjectionReadFailureCode =
   | ProjectBranchScopeFailureCode
-  | CommitQueueScopeFailureCode;
+  | CommitQueueScopeFailureCode
+  | MainCommitWorkflowScopeFailureCode;
 
 function resolveWorkflowProjectionReadStatus(code: WorkflowProjectionReadFailureCode): number {
   switch (code) {
     case "project-not-found":
     case "branch-not-found":
+    case "main-branch-not-found":
       return 404;
     case "projection-stale":
       return 409;
@@ -4463,6 +4472,18 @@ export async function createWebAppAuthority(
     }
   }
 
+  function readMainCommitWorkflowScope(
+    query: MainCommitWorkflowScopeQuery,
+    options: WebAppAuthorityReadOptions,
+  ): MainCommitWorkflowScopeResult {
+    const projection = createAuthorizedWorkflowProjection(options.authorization);
+    try {
+      return projection.readMainCommitWorkflowScope(query);
+    } catch (error) {
+      return throwWorkflowProjectionReadError(error);
+    }
+  }
+
   function readCommitQueueScope(
     query: CommitQueueScopeQuery,
     options: WebAppAuthorityReadOptions,
@@ -5338,6 +5359,7 @@ export async function createWebAppAuthority(
     lookupSessionPrincipal,
     planWorkflowReviewLiveRegistration,
     readCommitQueueScope,
+    readMainCommitWorkflowScope,
     readPredicateValue,
     readProjectBranchScope,
     readWorkflowSessionFeed,

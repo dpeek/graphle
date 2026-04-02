@@ -1,13 +1,11 @@
 import { workflowReviewSyncScopeRequest } from "@io/graph-module-workflow";
 import {
   validateWorkflowSessionFeedRouteSearch,
-  type WorkflowReadRequest,
   type WorkflowSessionFeedRouteSearch,
 } from "@io/graph-module-workflow/client";
 import { graphSyncScope } from "@io/graph-sync";
 
 export type WorkflowRouteSearch = WorkflowSessionFeedRouteSearch & {
-  readonly branch?: string;
   readonly project?: string;
 };
 
@@ -20,22 +18,12 @@ export type WorkflowReviewProjectResolution =
       readonly kind: "infer-singleton";
     };
 
-export type WorkflowReviewBranchResolution =
-  | {
-      readonly branchId: string;
-      readonly kind: "configured";
-    }
-  | {
-      readonly kind: "first-branch-board-row";
-    };
-
 export interface WorkflowReviewStartupContract {
   readonly graph: {
     readonly fallbackScope: typeof graphSyncScope;
     readonly requestedScope: typeof workflowReviewSyncScopeRequest;
   };
   readonly initialSelection: {
-    readonly branch: WorkflowReviewBranchResolution;
     readonly project: WorkflowReviewProjectResolution;
   };
   readonly loading: {
@@ -45,26 +33,16 @@ export interface WorkflowReviewStartupContract {
     readonly reviewTitle: string;
   };
   readonly missingData: {
-    readonly emptyProject: string;
     readonly missingProject: string;
     readonly noProjects: string;
-    readonly unresolvedBranch: string;
     readonly unresolvedProject: string;
   };
   readonly reads: {
-    readonly branchBoard: Omit<WorkflowReadRequest, "query"> & {
-      readonly kind: "project-branch-scope";
+    readonly mainWorkflow: {
+      readonly kind: "main-commit-workflow-scope";
       readonly query: {
-        readonly filter: {
-          readonly showUnmanagedRepositoryBranches: true;
-        };
-        readonly projectId: string;
-      };
-    };
-    readonly commitQueue: Omit<WorkflowReadRequest, "query"> & {
-      readonly kind: "commit-queue-scope";
-      readonly query: {
-        readonly branchId: string;
+        readonly commitId: ":selected-workflow-commit";
+        readonly projectId: ":resolved-project-id";
       };
     };
   };
@@ -73,14 +51,6 @@ export interface WorkflowReviewStartupContract {
 export type WorkflowReviewVisibleProject = {
   readonly id: string;
   readonly title: string;
-};
-
-export type WorkflowReviewVisibleBranch = {
-  readonly id: string;
-  readonly projectId: string;
-  readonly queueRank?: number;
-  readonly title: string;
-  readonly updatedAt?: string;
 };
 
 export type WorkflowReviewStartupState =
@@ -95,19 +65,9 @@ export type WorkflowReviewStartupState =
       readonly visibleProjects: readonly WorkflowReviewVisibleProject[];
     }
   | {
-      readonly availableBranches: readonly WorkflowReviewVisibleBranch[];
-      readonly contract: WorkflowReviewStartupContract;
-      readonly kind: "partial-data";
-      readonly message: string;
-      readonly project: WorkflowReviewVisibleProject;
-      readonly reason: "configured-branch-missing" | "project-has-no-branches";
-    }
-  | {
-      readonly availableBranches: readonly WorkflowReviewVisibleBranch[];
       readonly contract: WorkflowReviewStartupContract;
       readonly kind: "ready";
       readonly project: WorkflowReviewVisibleProject;
-      readonly selectedBranch?: WorkflowReviewVisibleBranch;
     };
 
 function normalizeSearchValue(value: unknown): string | undefined {
@@ -118,21 +78,6 @@ function normalizeSearchValue(value: unknown): string | undefined {
   return normalized.length > 0 ? normalized : undefined;
 }
 
-function compareBranches(
-  left: WorkflowReviewVisibleBranch,
-  right: WorkflowReviewVisibleBranch,
-): number {
-  const leftRank = left.queueRank ?? Number.MAX_SAFE_INTEGER;
-  const rightRank = right.queueRank ?? Number.MAX_SAFE_INTEGER;
-  if (leftRank !== rightRank) {
-    return leftRank - rightRank;
-  }
-  if (left.updatedAt !== right.updatedAt) {
-    return (right.updatedAt ?? "").localeCompare(left.updatedAt ?? "");
-  }
-  return left.title.localeCompare(right.title) || left.id.localeCompare(right.id);
-}
-
 export function validateWorkflowRouteSearch(search: Record<string, unknown>): WorkflowRouteSearch {
   const sessionFeedSearch = validateWorkflowSessionFeedRouteSearch(search);
   return {
@@ -140,7 +85,6 @@ export function validateWorkflowRouteSearch(search: Record<string, unknown>): Wo
     ...(normalizeSearchValue(search.project)
       ? { project: normalizeSearchValue(search.project) }
       : {}),
-    ...(normalizeSearchValue(search.branch) ? { branch: normalizeSearchValue(search.branch) } : {}),
   };
 }
 
@@ -153,14 +97,6 @@ export function createWorkflowReviewStartupContract(
       requestedScope: workflowReviewSyncScopeRequest,
     }),
     initialSelection: Object.freeze({
-      branch: search.branch
-        ? Object.freeze({
-            branchId: search.branch,
-            kind: "configured" as const,
-          })
-        : Object.freeze({
-            kind: "first-branch-board-row" as const,
-          }),
       project: search.project
         ? Object.freeze({
             kind: "configured" as const,
@@ -172,38 +108,26 @@ export function createWorkflowReviewStartupContract(
     }),
     loading: Object.freeze({
       bootstrapDescription:
-        "Boot the browser workflow review surface against the shipped workflow review sync scope before reading branch-board and commit-queue projections.",
+        "Boot the browser workflow review surface against the shipped workflow review sync scope before reading the implicit-main commit workflow state.",
       bootstrapTitle: "Loading workflow review",
       reviewDescription:
-        "Resolve the initial project, read the branch board, and then read the selected branch commit queue over the workflow review contract.",
+        "Resolve the initial project and then read the implicit-main commit queue plus selected-commit detail over the workflow review contract.",
       reviewTitle: "Resolving workflow review",
     }),
     missingData: Object.freeze({
-      emptyProject:
-        "The resolved workflow project is visible in the review scope, but it does not currently expose any workflow branches.",
       missingProject:
         "The configured workflow project is not visible in the current workflow review scope.",
       noProjects:
         "The current workflow review scope does not expose any visible WorkflowProject records.",
-      unresolvedBranch:
-        "The configured workflow branch is not visible in the resolved project branch board.",
       unresolvedProject:
-        "The workflow review scope exposes multiple visible WorkflowProject records. Select one explicitly before branch-board composition starts.",
+        "The workflow review scope exposes multiple visible WorkflowProject records. Select one explicitly before the commit queue loads.",
     }),
     reads: Object.freeze({
-      branchBoard: Object.freeze({
-        kind: "project-branch-scope" as const,
+      mainWorkflow: Object.freeze({
+        kind: "main-commit-workflow-scope" as const,
         query: Object.freeze({
-          filter: Object.freeze({
-            showUnmanagedRepositoryBranches: true as const,
-          }),
-          projectId: ":resolved-project-id",
-        }),
-      }),
-      commitQueue: Object.freeze({
-        kind: "commit-queue-scope" as const,
-        query: Object.freeze({
-          branchId: ":selected-branch-id",
+          commitId: ":selected-workflow-commit" as const,
+          projectId: ":resolved-project-id" as const,
         }),
       }),
     }),
@@ -212,7 +136,6 @@ export function createWorkflowReviewStartupContract(
 
 export function resolveWorkflowReviewStartupState(
   projects: readonly WorkflowReviewVisibleProject[],
-  branches: readonly WorkflowReviewVisibleBranch[],
   contract: WorkflowReviewStartupContract,
 ): WorkflowReviewStartupState {
   const configuredProject =
@@ -248,53 +171,16 @@ export function resolveWorkflowReviewStartupState(
     };
   }
 
-  const availableBranches = branches
-    .filter((branch) => branch.projectId === resolvedProject.id)
-    .sort(compareBranches);
-
-  if (availableBranches.length === 0) {
-    return {
-      availableBranches,
-      contract,
-      kind: "partial-data",
-      message: contract.missingData.emptyProject,
-      project: resolvedProject,
-      reason: "project-has-no-branches",
-    };
-  }
-
-  const configuredBranch =
-    contract.initialSelection.branch.kind === "configured"
-      ? contract.initialSelection.branch
-      : undefined;
-  const selectedBranch = configuredBranch
-    ? availableBranches.find((branch) => branch.id === configuredBranch.branchId)
-    : availableBranches[0];
-
-  if (!selectedBranch) {
-    return {
-      availableBranches,
-      contract,
-      kind: "partial-data",
-      message: contract.missingData.unresolvedBranch,
-      project: resolvedProject,
-      reason: "configured-branch-missing",
-    };
-  }
-
   return {
-    availableBranches,
     contract,
     kind: "ready",
     project: resolvedProject,
-    selectedBranch,
   };
 }
 
 function routeSearchMatches(current: WorkflowRouteSearch, next: WorkflowRouteSearch): boolean {
   return (
     current.project === next.project &&
-    current.branch === next.branch &&
     current.commit === next.commit &&
     current.session === next.session
   );
@@ -303,20 +189,20 @@ function routeSearchMatches(current: WorkflowRouteSearch, next: WorkflowRouteSea
 export function resolveCanonicalWorkflowRouteSearch(
   current: WorkflowRouteSearch,
   startupState: WorkflowReviewStartupState,
+  inferredCommitId?: string,
 ): WorkflowRouteSearch | undefined {
   const next =
     startupState.kind === "ready"
       ? {
-          branch: startupState.selectedBranch?.id,
-          commit: current.commit,
+          ...(current.commit
+            ? { commit: current.commit }
+            : !current.session && inferredCommitId
+              ? { commit: inferredCommitId }
+              : {}),
           project: startupState.project.id,
-          session: current.session,
+          ...(current.session ? { session: current.session } : {}),
         }
-      : startupState.kind === "partial-data" && startupState.reason === "project-has-no-branches"
-        ? {
-            project: startupState.project.id,
-          }
-        : undefined;
+      : undefined;
 
   if (!next || routeSearchMatches(current, next)) {
     return undefined;

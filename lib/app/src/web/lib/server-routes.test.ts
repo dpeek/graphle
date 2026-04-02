@@ -38,6 +38,7 @@ const authorization: AuthorizationContext = {
 function createWorkflowReadAuthority(
   overrides: {
     readonly executeSerializedQuery?: WebAppAuthority["executeSerializedQuery"];
+    readonly readMainCommitWorkflowScope?: WebAppAuthority["readMainCommitWorkflowScope"];
     readonly readProjectBranchScope?: WebAppAuthority["readProjectBranchScope"];
     readonly readCommitQueueScope?: WebAppAuthority["readCommitQueueScope"];
     readonly planWorkflowReviewLiveRegistration?: WebAppAuthority["planWorkflowReviewLiveRegistration"];
@@ -48,6 +49,11 @@ function createWorkflowReadAuthority(
       overrides.executeSerializedQuery ??
       (async () => {
         throw new Error("Unexpected serialized query execution.");
+      }),
+    readMainCommitWorkflowScope:
+      overrides.readMainCommitWorkflowScope ??
+      (() => {
+        throw new Error("Unexpected main commit workflow scope read.");
       }),
     readProjectBranchScope:
       overrides.readProjectBranchScope ??
@@ -79,6 +85,79 @@ function createQueryResultPage(kind: QueryResultPage["kind"] = "entity"): QueryR
 }
 
 describe("workflow read server routes", () => {
+  it("dispatches the implicit-main workflow read through the dedicated authority hook", async () => {
+    const response = await handleWorkflowReadRequest(
+      new Request("https://web.local/api/workflow-read", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          kind: "main-commit-workflow-scope",
+          query: {
+            commitId: "commit:selected",
+            projectId: "project:io",
+          },
+        }),
+      }),
+      createWorkflowReadAuthority({
+        readMainCommitWorkflowScope(query) {
+          expect(query).toEqual({
+            commitId: "commit:selected",
+            projectId: "project:io",
+          });
+          return {
+            branch: {
+              branch: {
+                id: "branch:workflow",
+              },
+            },
+            freshness: {
+              projectedAt: "2026-03-30T10:00:00.000Z",
+              projectionCursor: "projection:workflow",
+              repositoryFreshness: "fresh",
+            },
+            project: {
+              id: "project:io",
+            },
+            rows: [
+              {
+                commit: {
+                  id: "commit:selected",
+                },
+              },
+            ],
+            selectedCommit: {
+              row: {
+                commit: {
+                  id: "commit:selected",
+                },
+              },
+            },
+          } as ReturnType<WebAppAuthority["readMainCommitWorkflowScope"]>;
+        },
+      }),
+      authorization,
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      kind: "main-commit-workflow-scope",
+      result: {
+        project: {
+          id: "project:io",
+        },
+        selectedCommit: {
+          row: {
+            commit: {
+              id: "commit:selected",
+            },
+          },
+        },
+      },
+    });
+  });
+
   it("rejects malformed JSON bodies", async () => {
     const response = await handleWorkflowReadRequest(
       new Request("https://web.local/api/workflow-read", {

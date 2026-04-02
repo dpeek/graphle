@@ -19,26 +19,31 @@ describe("workflow review startup contract", () => {
     expect(contract.initialSelection.project).toEqual({
       kind: "infer-singleton",
     });
-    expect(contract.initialSelection.branch).toEqual({
-      kind: "first-branch-board-row",
+    expect(contract.reads.mainWorkflow).toEqual({
+      kind: "main-commit-workflow-scope",
+      query: {
+        commitId: ":selected-workflow-commit",
+        projectId: ":resolved-project-id",
+      },
     });
   });
 
   it("normalizes workflow route search params", () => {
     expect(
       validateWorkflowRouteSearch({
-        branch: " branch:workflow-review ",
+        commit: " commit:selected ",
         project: " project:io ",
+        session: " session:latest ",
       }),
     ).toEqual({
-      branch: "branch:workflow-review",
+      commit: "commit:selected",
       project: "project:io",
+      session: "session:latest",
     });
 
     expect(
       validateWorkflowRouteSearch({
-        branch: "   ",
-        project: 42,
+        project: "   ",
       }),
     ).toEqual({});
   });
@@ -52,7 +57,6 @@ describe("workflow review startup contract", () => {
           { id: "project:io", title: "IO" },
           { id: "project:docs", title: "Docs" },
         ],
-        [],
         contract,
       ),
     ).toMatchObject({
@@ -61,128 +65,78 @@ describe("workflow review startup contract", () => {
     });
   });
 
-  it("falls back to the first branch-board row contract after project inference", () => {
+  it("resolves the singleton project without requiring a branch inventory step", () => {
     const contract = createWorkflowReviewStartupContract();
-    const state = resolveWorkflowReviewStartupState(
-      [{ id: "project:io", title: "IO" }],
-      [
-        {
-          id: "branch:later",
-          projectId: "project:io",
-          queueRank: 2,
-          title: "Later",
-          updatedAt: "2026-03-25T00:00:00.000Z",
-        },
-        {
-          id: "branch:first",
-          projectId: "project:io",
-          queueRank: 1,
-          title: "First",
-          updatedAt: "2026-03-26T00:00:00.000Z",
-        },
-      ],
-      contract,
-    );
+    const state = resolveWorkflowReviewStartupState([{ id: "project:io", title: "IO" }], contract);
 
-    expect(state).toMatchObject({
+    expect(state).toEqual({
+      contract,
       kind: "ready",
       project: {
         id: "project:io",
-      },
-      selectedBranch: {
-        id: "branch:first",
+        title: "IO",
       },
     });
   });
 
-  it("surfaces configured branch drift as partial data", () => {
+  it("surfaces configured project drift as missing data", () => {
     const contract = createWorkflowReviewStartupContract({
-      branch: "branch:missing",
-      project: "project:io",
+      project: "project:missing",
     });
 
     expect(
-      resolveWorkflowReviewStartupState(
-        [{ id: "project:io", title: "IO" }],
-        [
-          {
-            id: "branch:visible",
-            projectId: "project:io",
-            queueRank: 1,
-            title: "Visible",
-            updatedAt: "2026-03-26T00:00:00.000Z",
-          },
-        ],
-        contract,
-      ),
+      resolveWorkflowReviewStartupState([{ id: "project:io", title: "IO" }], contract),
     ).toMatchObject({
-      kind: "partial-data",
-      reason: "configured-branch-missing",
+      kind: "missing-data",
+      reason: "configured-project-missing",
     });
   });
 
-  it("canonicalizes inferred route selection once the resolved project and branch are known", () => {
+  it("canonicalizes inferred route selection once the resolved project is known", () => {
     const contract = createWorkflowReviewStartupContract();
     const startupState = resolveWorkflowReviewStartupState(
       [{ id: "project:io", title: "IO" }],
-      [
-        {
-          id: "branch:first",
-          projectId: "project:io",
-          queueRank: 1,
-          title: "First",
-          updatedAt: "2026-03-26T00:00:00.000Z",
-        },
-      ],
-      contract,
-    );
-
-    expect(resolveCanonicalWorkflowRouteSearch({}, startupState)).toEqual({
-      branch: "branch:first",
-      project: "project:io",
-    });
-  });
-
-  it("preserves explicit stale branch selections instead of rewriting them to another branch", () => {
-    const contract = createWorkflowReviewStartupContract({
-      branch: "branch:missing",
-      project: "project:io",
-    });
-    const startupState = resolveWorkflowReviewStartupState(
-      [{ id: "project:io", title: "IO" }],
-      [
-        {
-          id: "branch:visible",
-          projectId: "project:io",
-          queueRank: 1,
-          title: "Visible",
-          updatedAt: "2026-03-26T00:00:00.000Z",
-        },
-      ],
       contract,
     );
 
     expect(
       resolveCanonicalWorkflowRouteSearch(
         {
-          branch: "branch:missing",
-          project: "project:io",
+          commit: "commit:selected",
+          session: "session:latest",
         },
         startupState,
       ),
-    ).toBeUndefined();
+    ).toEqual({
+      commit: "commit:selected",
+      project: "project:io",
+      session: "session:latest",
+    });
   });
 
-  it("canonicalizes singleton project selection when the project has no visible branches", () => {
+  it("canonicalizes the inferred selected commit when the route has no explicit commit yet", () => {
     const contract = createWorkflowReviewStartupContract();
     const startupState = resolveWorkflowReviewStartupState(
       [{ id: "project:io", title: "IO" }],
-      [],
       contract,
     );
 
-    expect(resolveCanonicalWorkflowRouteSearch({}, startupState)).toEqual({
+    expect(resolveCanonicalWorkflowRouteSearch({}, startupState, "commit:queue-head")).toEqual({
+      commit: "commit:queue-head",
       project: "project:io",
+    });
+
+    expect(
+      resolveCanonicalWorkflowRouteSearch(
+        {
+          session: "session:branch",
+        },
+        startupState,
+        "commit:queue-head",
+      ),
+    ).toEqual({
+      project: "project:io",
+      session: "session:branch",
     });
   });
 });
