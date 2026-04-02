@@ -293,9 +293,7 @@ export type WorkflowUpdateBranchAction = {
   readonly title?: string;
 };
 
-export type WorkflowBranchMutationAction =
-  | WorkflowCreateBranchAction
-  | WorkflowUpdateBranchAction;
+export type WorkflowBranchMutationAction = WorkflowCreateBranchAction | WorkflowUpdateBranchAction;
 
 // These actions remain only to bridge the broader pre-v1 branch contract while
 // authority handlers still derive branch lifecycle and repository targeting.

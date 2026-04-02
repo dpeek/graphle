@@ -5,8 +5,23 @@
 ## Read This First
 
 - Start with `./out/index.d.ts` for the compact public contract.
+- Use the package-adjacent docs below for package-specific semantics.
 - Read `./src/index.ts` for the curated root export surface.
 - Read one nearby `./src/*.test.ts` file for usage examples.
+
+## Package Docs
+
+These are the canonical agent docs for package-specific behavior in
+`@io/graph-kernel`.
+
+- [`./doc/schema.md`](./doc/schema.md): schema authoring, field trees, authority metadata, and fallback policy lowering
+- [`./doc/identity.md`](./doc/identity.md): runtime ids, stable id maps, key extraction, and in-place id application
+- [`./doc/store.md`](./doc/store.md): append-oriented facts, snapshots, versioning, and predicate-slot subscriptions
+- [`./doc/write-transactions.md`](./doc/write-transactions.md): canonical write envelopes, snapshot diffs, and retained-history contracts
+
+Cross-package architecture still lives in `../../doc/graph/*.md`. Start here
+when the question is local to this package. Jump to the root graph docs when
+the question crosses package boundaries.
 
 ## What It Owns
 

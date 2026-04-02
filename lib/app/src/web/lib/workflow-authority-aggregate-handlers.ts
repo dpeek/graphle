@@ -3,6 +3,7 @@ import { workflow } from "@io/graph-module-workflow";
 import {
   branchStateValues,
   type WorkflowAttachBranchRepositoryTargetAction,
+  type WorkflowMutationAction,
   type WorkflowCreateBranchAction,
   type WorkflowCreateProjectAction,
   type WorkflowCreateRepositoryAction,
@@ -276,7 +277,7 @@ function resolveBranchRepositoryTarget(
   store: GraphStore,
   branch: ReturnType<typeof requireBranch>,
   repositoryId: string,
-  input: BranchRepositoryTargetMutation,
+  input: WorkflowAttachBranchRepositoryTargetAction,
 ) {
   const existingManagedBranch = findManagedRepositoryBranchForBranch(graph, branch.id);
   const selectedRepositoryBranch =
@@ -329,7 +330,7 @@ function updateManagedBranchRepositoryTarget(
   store: GraphStore,
   branch: ReturnType<typeof requireBranch>,
   repositoryBranch: ReturnType<typeof requireRepositoryBranch>,
-  input: BranchRepositoryTargetMutation,
+  input: WorkflowAttachBranchRepositoryTargetAction,
 ): WorkflowMutationResult {
   const patch: Record<string, unknown> = {
     name: input.title ?? repositoryBranch.name ?? branch.name,
@@ -395,7 +396,7 @@ function createManagedBranchRepositoryTarget(
   graph: ProductGraphClient,
   branch: ReturnType<typeof requireBranch>,
   repositoryId: string,
-  input: BranchRepositoryTargetMutation,
+  input: WorkflowAttachBranchRepositoryTargetAction,
 ): WorkflowMutationResult {
   const latestReconciledAt = parseOptionalDate(input.latestReconciledAt, "Latest reconciled at");
   const repositoryBranchId = graph.repositoryBranch.create({
