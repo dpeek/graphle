@@ -1,7 +1,14 @@
 import { edgeId } from "@io/graph-kernel";
 import type { GraphCommandSpec } from "@io/graph-module";
 
-import { branch, commit, project, repository } from "./type.js";
+import {
+  agentSession,
+  branch,
+  commit,
+  project,
+  repository,
+  workflowV1CommitGateValues,
+} from "./type.js";
 
 export const branchStateValues = [
   "backlog",
@@ -24,6 +31,21 @@ export const commitStateValues = [
 ] as const;
 
 export type WorkflowCommitStateValue = (typeof commitStateValues)[number];
+
+export const workflowCommitGateValues = workflowV1CommitGateValues;
+
+export type WorkflowCommitGateValue = (typeof workflowCommitGateValues)[number];
+
+// Session mutation stays aligned with retained AgentSession storage for the
+// first browser milestone, so the write surface keeps the v1 kinds that map
+// cleanly today and defers Todo/Merge until native session storage lands.
+export const workflowMutableSessionKindValues = ["Plan", "Review", "Implement"] as const;
+
+export type WorkflowMutableSessionKind = (typeof workflowMutableSessionKindValues)[number];
+
+export const workflowMutableSessionStatusValues = ["Open", "Done"] as const;
+
+export type WorkflowMutableSessionStatus = (typeof workflowMutableSessionStatusValues)[number];
 
 export const repositoryCommitStateValues = [
   "planned",
@@ -98,9 +120,29 @@ export type WorkflowCommitSummary = WorkflowSummaryBase & {
   readonly commitKey: string;
   readonly contextDocumentId?: string;
   readonly entity: "commit";
+  readonly gate?: WorkflowCommitGateValue;
+  readonly gateReason?: string;
+  readonly gateRequestedAt?: string;
+  readonly gateRequestedBySessionId?: string;
   readonly order: number;
   readonly parentCommitId?: string;
   readonly state: WorkflowCommitStateValue;
+};
+
+export type WorkflowSessionSummary = WorkflowSummaryBase & {
+  readonly branchId: string;
+  readonly commitId: string;
+  readonly endedAt?: string;
+  readonly entity: "session";
+  readonly kind: WorkflowMutableSessionKind;
+  readonly projectId: string;
+  readonly repositoryId?: string;
+  readonly sessionKey: string;
+  readonly startedAt: string;
+  readonly status: WorkflowMutableSessionStatus;
+  readonly threadId?: string;
+  readonly turnId?: string;
+  readonly workerId: string;
 };
 
 export type RepositoryBranchSummary = WorkflowSummaryBase & {
@@ -137,6 +179,7 @@ export type WorkflowMutationSummary =
   | WorkflowRepositorySummary
   | WorkflowBranchSummary
   | WorkflowCommitSummary
+  | WorkflowSessionSummary
   | RepositoryBranchSummary
   | RepositoryCommitSummary;
 
@@ -179,112 +222,208 @@ export type WorkflowCommitFinalizationAcknowledgement = {
   readonly repositoryCommit?: RepositoryCommitSummary;
 };
 
-type WorkflowCommitFinalizationAction = {
+export type WorkflowCommitFinalizationAction = {
   readonly action: "finalizeCommit";
 } & WorkflowCommitFinalizationRequest;
 
+export type WorkflowCreateProjectAction = {
+  readonly action: "createProject";
+  readonly inferred?: boolean;
+  readonly projectKey: string;
+  readonly title: string;
+};
+
+export type WorkflowUpdateProjectAction = {
+  readonly action: "updateProject";
+  readonly inferred?: boolean;
+  readonly projectId: string;
+  readonly projectKey?: string;
+  readonly title?: string;
+};
+
+export type WorkflowProjectMutationAction =
+  | WorkflowCreateProjectAction
+  | WorkflowUpdateProjectAction;
+
+export type WorkflowCreateRepositoryAction = {
+  readonly action: "createRepository";
+  readonly defaultBaseBranch: string;
+  readonly mainRemoteName?: string | null;
+  readonly projectId: string;
+  readonly repoRoot: string;
+  readonly repositoryKey: string;
+  readonly title: string;
+};
+
+export type WorkflowUpdateRepositoryAction = {
+  readonly action: "updateRepository";
+  readonly defaultBaseBranch?: string;
+  readonly mainRemoteName?: string | null;
+  readonly repoRoot?: string;
+  readonly repositoryId: string;
+  readonly repositoryKey?: string;
+  readonly title?: string;
+};
+
+export type WorkflowRepositoryMutationAction =
+  | WorkflowCreateRepositoryAction
+  | WorkflowUpdateRepositoryAction;
+
+// Branch records stay typed in v1 because the graph still persists the
+// singleton visible branch plus its prompt context, even though the browser
+// milestone is now commit-first.
+export type WorkflowCreateBranchAction = {
+  readonly action: "createBranch";
+  readonly branchKey: string;
+  readonly contextDocumentId?: string | null;
+  readonly goalDocumentId?: string | null;
+  readonly projectId: string;
+  readonly queueRank?: number | null;
+  readonly state?: Extract<WorkflowBranchStateValue, "backlog" | "ready">;
+  readonly title: string;
+};
+
+export type WorkflowUpdateBranchAction = {
+  readonly action: "updateBranch";
+  readonly branchId: string;
+  readonly branchKey?: string;
+  readonly contextDocumentId?: string | null;
+  readonly goalDocumentId?: string | null;
+  readonly queueRank?: number | null;
+  readonly title?: string;
+};
+
+export type WorkflowBranchMutationAction =
+  | WorkflowCreateBranchAction
+  | WorkflowUpdateBranchAction;
+
+// These actions remain only to bridge the broader pre-v1 branch contract while
+// authority handlers still derive branch lifecycle and repository targeting.
+export type WorkflowSetBranchStateAction = {
+  readonly action: "setBranchState";
+  readonly branchId: string;
+  readonly state: WorkflowBranchStateValue;
+};
+
+export type WorkflowAttachBranchRepositoryTargetAction = {
+  readonly action: "attachBranchRepositoryTarget";
+  readonly baseBranchName: string;
+  readonly branchId: string;
+  readonly branchName: string;
+  readonly headSha?: string | null;
+  readonly latestReconciledAt?: string | null;
+  readonly repositoryBranchId?: string;
+  readonly repositoryId: string;
+  readonly title?: string;
+  readonly upstreamName?: string | null;
+  readonly worktreePath?: string | null;
+};
+
+export type WorkflowTransitionalBranchMutationAction =
+  | WorkflowSetBranchStateAction
+  | WorkflowAttachBranchRepositoryTargetAction;
+
+export type WorkflowCreateCommitAction = {
+  readonly action: "createCommit";
+  readonly branchId: string;
+  readonly commitKey: string;
+  readonly contextDocumentId?: string | null;
+  readonly order: number;
+  readonly parentCommitId?: string | null;
+  readonly state?: Extract<WorkflowCommitStateValue, "planned" | "ready">;
+  readonly title: string;
+};
+
+export type WorkflowUpdateCommitAction = {
+  readonly action: "updateCommit";
+  readonly commitId: string;
+  readonly commitKey?: string;
+  readonly contextDocumentId?: string | null;
+  readonly order?: number;
+  readonly parentCommitId?: string | null;
+  readonly title?: string;
+};
+
+export type WorkflowSetCommitStateAction = {
+  readonly action: "setCommitState";
+  readonly commitId: string;
+  readonly state: WorkflowCommitStateValue;
+};
+
+export type WorkflowCommitMutationAction =
+  | WorkflowCreateCommitAction
+  | WorkflowUpdateCommitAction
+  | WorkflowSetCommitStateAction;
+
+export type WorkflowSetCommitUserReviewGateAction = {
+  readonly action: "setCommitUserReviewGate";
+  readonly commitId: string;
+  readonly reason?: string | null;
+  readonly requestedAt?: string | null;
+  readonly requestedBySessionId?: string | null;
+};
+
+export type WorkflowClearCommitUserReviewGateAction = {
+  readonly action: "clearCommitUserReviewGate";
+  readonly commitId: string;
+};
+
+export type WorkflowCommitUserReviewGateMutationAction =
+  | WorkflowSetCommitUserReviewGateAction
+  | WorkflowClearCommitUserReviewGateAction;
+
+export type WorkflowCreateSessionAction = {
+  readonly action: "createSession";
+  readonly commitId: string;
+  readonly endedAt?: string | null;
+  readonly kind: WorkflowMutableSessionKind;
+  readonly name: string;
+  readonly sessionKey: string;
+  readonly startedAt?: string;
+  readonly status?: WorkflowMutableSessionStatus;
+  readonly threadId?: string | null;
+  readonly turnId?: string | null;
+  readonly workerId: string;
+};
+
+export type WorkflowUpdateSessionAction = {
+  readonly action: "updateSession";
+  readonly endedAt?: string | null;
+  readonly name?: string;
+  readonly sessionId: string;
+  readonly status?: WorkflowMutableSessionStatus;
+  readonly threadId?: string | null;
+  readonly turnId?: string | null;
+};
+
+export type WorkflowSessionMutationAction =
+  | WorkflowCreateSessionAction
+  | WorkflowUpdateSessionAction;
+
+// Repository-commit creation stays runtime-only while local git realization
+// remains an authority concern rather than part of the operator-facing v1
+// workflow contract.
+export type WorkflowCreateRepositoryCommitAction = {
+  readonly action: "createRepositoryCommit";
+  readonly repositoryBranchId?: string | null;
+  readonly repositoryId: string;
+  readonly state?: Exclude<RepositoryCommitStateValue, "committed">;
+  readonly title?: string | null;
+  readonly commitId?: string;
+  readonly worktree?: WorkflowRepositoryWorktreeInput;
+};
+
+export type WorkflowRuntimeMutationAction = WorkflowCreateRepositoryCommitAction;
+
 export type WorkflowMutationAction =
-  | {
-      readonly action: "createProject";
-      readonly inferred?: boolean;
-      readonly projectKey: string;
-      readonly title: string;
-    }
-  | {
-      readonly action: "updateProject";
-      readonly inferred?: boolean;
-      readonly projectId: string;
-      readonly projectKey?: string;
-      readonly title?: string;
-    }
-  | {
-      readonly action: "createRepository";
-      readonly defaultBaseBranch: string;
-      readonly mainRemoteName?: string | null;
-      readonly projectId: string;
-      readonly repoRoot: string;
-      readonly repositoryKey: string;
-      readonly title: string;
-    }
-  | {
-      readonly action: "updateRepository";
-      readonly defaultBaseBranch?: string;
-      readonly mainRemoteName?: string | null;
-      readonly repoRoot?: string;
-      readonly repositoryId: string;
-      readonly repositoryKey?: string;
-      readonly title?: string;
-    }
-  | {
-      readonly action: "createBranch";
-      readonly branchKey: string;
-      readonly contextDocumentId?: string | null;
-      readonly goalDocumentId?: string | null;
-      readonly projectId: string;
-      readonly queueRank?: number | null;
-      readonly state?: Extract<WorkflowBranchStateValue, "backlog" | "ready">;
-      readonly title: string;
-    }
-  | {
-      readonly action: "updateBranch";
-      readonly branchId: string;
-      readonly branchKey?: string;
-      readonly contextDocumentId?: string | null;
-      readonly goalDocumentId?: string | null;
-      readonly queueRank?: number | null;
-      readonly title?: string;
-    }
-  | {
-      readonly action: "setBranchState";
-      readonly branchId: string;
-      readonly state: WorkflowBranchStateValue;
-    }
-  | {
-      readonly action: "attachBranchRepositoryTarget";
-      readonly baseBranchName: string;
-      readonly branchId: string;
-      readonly branchName: string;
-      readonly headSha?: string | null;
-      readonly latestReconciledAt?: string | null;
-      readonly repositoryBranchId?: string;
-      readonly repositoryId: string;
-      readonly title?: string;
-      readonly upstreamName?: string | null;
-      readonly worktreePath?: string | null;
-    }
-  | {
-      readonly action: "createCommit";
-      readonly branchId: string;
-      readonly commitKey: string;
-      readonly contextDocumentId?: string | null;
-      readonly order: number;
-      readonly parentCommitId?: string | null;
-      readonly state?: Extract<WorkflowCommitStateValue, "planned" | "ready">;
-      readonly title: string;
-    }
-  | {
-      readonly action: "updateCommit";
-      readonly commitId: string;
-      readonly commitKey?: string;
-      readonly contextDocumentId?: string | null;
-      readonly order?: number;
-      readonly parentCommitId?: string | null;
-      readonly title?: string;
-    }
-  | {
-      readonly action: "setCommitState";
-      readonly commitId: string;
-      readonly state: WorkflowCommitStateValue;
-    }
-  | {
-      readonly action: "createRepositoryCommit";
-      readonly repositoryBranchId?: string | null;
-      readonly repositoryId: string;
-      readonly state?: Exclude<RepositoryCommitStateValue, "committed">;
-      readonly title?: string | null;
-      readonly commitId?: string;
-      readonly worktree?: WorkflowRepositoryWorktreeInput;
-    }
+  | WorkflowProjectMutationAction
+  | WorkflowRepositoryMutationAction
+  | WorkflowBranchMutationAction
+  | WorkflowTransitionalBranchMutationAction
+  | WorkflowCommitMutationAction
+  | WorkflowCommitUserReviewGateMutationAction
+  | WorkflowSessionMutationAction
+  | WorkflowRuntimeMutationAction
   | WorkflowCommitFinalizationAction;
 
 type WorkflowMutationBaseResult = {
@@ -319,6 +458,10 @@ export const workflowMutationCommand = {
       { predicateId: edgeId(branch.fields.activeCommit) },
       { predicateId: edgeId(commit.fields.contextDocument) },
       { predicateId: edgeId(commit.fields.state) },
+      { predicateId: edgeId(agentSession.fields.sessionKey) },
+      { predicateId: edgeId(agentSession.fields.kind) },
+      { predicateId: edgeId(agentSession.fields.runtimeState) },
+      { predicateId: edgeId(agentSession.fields.commit) },
     ],
   },
 } satisfies GraphCommandSpec<WorkflowMutationAction, WorkflowMutationResult>;

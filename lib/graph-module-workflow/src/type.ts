@@ -167,6 +167,99 @@ export const commitKeyPattern = buildWorkflowKeyPattern("commit");
 export const agentSessionKeyPattern = buildWorkflowKeyPattern("session");
 export const contextBundleKeyPattern = buildWorkflowKeyPattern("bundle");
 
+// Browser-first v1 keeps the product contract explicit even while broader graph
+// records still exist for retained runtime and repository realization details.
+export const workflowV1CommitStateValues = ["Todo", "Open", "Done"] as const;
+
+export type WorkflowCommitState = (typeof workflowV1CommitStateValues)[number];
+
+export const workflowV1CommitGateValues = ["None", "UserReview"] as const;
+
+export type WorkflowCommitGate = (typeof workflowV1CommitGateValues)[number];
+
+export const workflowV1SessionKindValues = ["Plan", "Review", "Implement", "Merge"] as const;
+
+export type WorkflowSessionKind = (typeof workflowV1SessionKindValues)[number];
+
+export const workflowV1SessionStatusValues = ["Todo", "Open", "Done"] as const;
+
+export type WorkflowSessionStatus = (typeof workflowV1SessionStatusValues)[number];
+
+export const workflowV1SessionCreatedByValues = ["system", "agent"] as const;
+
+export type WorkflowSessionCreatedBy = (typeof workflowV1SessionCreatedByValues)[number];
+
+interface WorkflowContextRecord {
+  readonly context: string;
+  readonly references: string;
+}
+
+export interface WorkflowBranch extends WorkflowContextRecord {
+  readonly id: string;
+  readonly name: string;
+  readonly slug: string;
+}
+
+export interface WorkflowCommitGitState {
+  readonly baseBranchSlug: "main";
+  readonly branchName: string;
+  readonly commitMessage?: string;
+  readonly finalSha?: string;
+  readonly headSha?: string;
+  readonly worktreePath: string;
+}
+
+export interface WorkflowCommit extends WorkflowContextRecord {
+  readonly branchId: string;
+  readonly gate: WorkflowCommitGate;
+  readonly gateReason?: string;
+  readonly gateRequestedAt?: string;
+  readonly gateRequestedBySessionId?: string;
+  readonly git: WorkflowCommitGitState;
+  readonly id: string;
+  readonly name: string;
+  readonly order: number;
+  readonly slug: string;
+  readonly state: WorkflowCommitState;
+}
+
+export interface WorkflowSession extends WorkflowContextRecord {
+  readonly commitId: string;
+  readonly createdBy: WorkflowSessionCreatedBy;
+  readonly endedAt?: string;
+  readonly id: string;
+  readonly kind: WorkflowSessionKind;
+  readonly name: string;
+  readonly parentSessionId?: string;
+  readonly startedAt?: string;
+  readonly status: WorkflowSessionStatus;
+}
+
+export const workflowV1Branch = Object.freeze({
+  emphasis: "secondary" as const,
+  requiredFields: ["slug", "name", "context", "references"] as const,
+});
+
+export const workflowV1Commit = Object.freeze({
+  emphasis: "primary" as const,
+  gateMetadataFields: ["gateReason", "gateRequestedAt", "gateRequestedBySessionId"] as const,
+  gateValues: workflowV1CommitGateValues,
+  requiredFields: ["slug", "name", "context", "references"] as const,
+  stateValues: workflowV1CommitStateValues,
+});
+
+export const workflowV1Session = Object.freeze({
+  createdByValues: workflowV1SessionCreatedByValues,
+  kindValues: workflowV1SessionKindValues,
+  requiredFields: ["name", "context", "references"] as const,
+  retainedStorage: {
+    eventTypeKey: "workflow:agentSessionEvent",
+    renameDeferred: true,
+    sessionTypeKey: "workflow:agentSession",
+  },
+  statusValues: workflowV1SessionStatusValues,
+});
+
 export const project = defineType({
   values: { key: "workflow:project", name: "Project" },
   fields: {

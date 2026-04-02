@@ -7,6 +7,16 @@ the terminal sibling to `web`, and it exists separately from the legacy
 `agent/tui` retained-session monitor so downstream workflow screens have a
 stable home.
 
+Shipping note on 2026-04-02:
+
+- the first shipped workflow loop is now defined by the browser-first Branch 6
+  contract and centers implicit `main`, commit queues, sessions, and the user
+  review gate
+- this TUI doc remains a semantic reference and fallback operator surface
+  during that transition
+- the branch-scoped actions described below are not the release gate for the
+  first browser-launched session
+
 ## Ownership Boundary
 
 `tui` is the terminal product shell, not the shared graph/OpenTUI adapter
@@ -62,6 +72,9 @@ package.
 ## First Action Surface
 
 The first workflow TUI action model is intentionally narrow. It exposes only:
+
+This action model is broader than the first browser milestone. Keep it as a
+reference for shared subject-state rules, not as the canonical release gate.
 
 - one branch-scoped session action for the selected `WorkflowBranch`
 - one commit-scoped session action for the selected `WorkflowCommit`

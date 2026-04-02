@@ -149,6 +149,10 @@ describe("workflow schema", () => {
         { predicateId: workflow.branch.fields.state.key },
         { predicateId: workflow.branch.fields.activeCommit.key },
         { predicateId: workflow.commit.fields.state.key },
+        { predicateId: workflow.agentSession.fields.sessionKey.key },
+        { predicateId: workflow.agentSession.fields.kind.key },
+        { predicateId: workflow.agentSession.fields.runtimeState.key },
+        { predicateId: workflow.agentSession.fields.commit.key },
       ]),
     );
     expect(agentSessionAppendCommand.policy.touchesPredicates).toEqual(

@@ -7,9 +7,12 @@ import {
   agentSessionEventPhase,
   agentSessionKind,
   agentSessionRawLineEncoding,
+  agentSessionRuntimeState,
   agentSessionStatusCode,
   agentSessionStatusFormat,
   agentSessionStream,
+  type WorkflowSessionKind,
+  type WorkflowSessionStatus,
 } from "./type.js";
 
 export const agentSessionAppendFailureCodes = [
@@ -47,10 +50,44 @@ export type AgentSessionAppendRetainedRuntimeState =
 
 export type AgentSessionAppendSessionKind = keyof typeof agentSessionKind.options;
 export type AgentSessionAppendLifecyclePhase = keyof typeof agentSessionEventPhase.options;
+export type AgentSessionAppendRuntimeState = keyof typeof agentSessionRuntimeState.options;
 export type AgentSessionAppendStatusCode = keyof typeof agentSessionStatusCode.options;
 export type AgentSessionAppendStatusFormat = keyof typeof agentSessionStatusFormat.options;
 export type AgentSessionAppendStream = keyof typeof agentSessionStream.options;
 export type AgentSessionAppendRawLineEncoding = keyof typeof agentSessionRawLineEncoding.options;
+
+export type RetainedWorkflowSessionKind = Exclude<WorkflowSessionKind, "Merge">;
+
+export type RetainedWorkflowSessionStatus = Exclude<WorkflowSessionStatus, "Todo">;
+
+// The first browser milestone keeps AgentSession as retained storage while the
+// operator-facing contract shifts to explicit WorkflowSession semantics.
+export const retainedAgentSessionKindToWorkflowSessionKind = Object.freeze({
+  execution: "Implement",
+  planning: "Plan",
+  review: "Review",
+} as const satisfies Record<AgentSessionAppendSessionKind, RetainedWorkflowSessionKind>);
+
+export const retainedAgentSessionRuntimeStateToWorkflowSessionStatus = Object.freeze({
+  "awaiting-user-input": "Open",
+  blocked: "Open",
+  cancelled: "Done",
+  completed: "Done",
+  failed: "Done",
+  running: "Open",
+} as const satisfies Record<AgentSessionAppendRuntimeState, RetainedWorkflowSessionStatus>);
+
+export function resolveWorkflowSessionKindFromAgentSessionKind(
+  kind: AgentSessionAppendSessionKind,
+): RetainedWorkflowSessionKind {
+  return retainedAgentSessionKindToWorkflowSessionKind[kind];
+}
+
+export function resolveWorkflowSessionStatusFromAgentSessionRuntimeState(
+  state: AgentSessionAppendRuntimeState,
+): RetainedWorkflowSessionStatus {
+  return retainedAgentSessionRuntimeStateToWorkflowSessionStatus[state];
+}
 
 export interface AgentSessionAppendIssueRef {
   readonly id?: string;

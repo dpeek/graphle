@@ -2,103 +2,179 @@
 
 ## Purpose
 
-Describe the canonical `workflow` schema slice for graph-native workflow
-planning and repository-backed execution state.
+Describe the canonical Branch 6 schema surface for browser-first v1 workflow.
 
-This slice is the first Branch 6 schema surface. It establishes the stable type
-and predicate ids for logical workflow roots plus the repository branch and
-commit records that map that logical work onto git reality.
+This doc now prioritizes the operator-facing contract from
+[`../branch/06-workflow-and-agent-runtime.md`](../branch/06-workflow-and-agent-runtime.md)
+and
+[`../agent/browser-first-workflow-v1-plan.md`](../agent/browser-first-workflow-v1-plan.md).
+The current package still carries broader repository and TUI-oriented records;
+those remain valid only when they support the smaller v1 contract.
 
-## Graph Shape
+## Current Code Surface
 
-The canonical workflow slice now lives in
-`../../lib/graph-module-workflow/src/`.
+The canonical workflow slice lives in `../../lib/graph-module-workflow/src/`.
 
-The exported surface is:
+Key exports:
 
-- `schema.ts`: backs `@io/graph-module-workflow` and re-exports the
-  workflow entity, enum, mutation, and read-contract definitions
-- `type.ts`: owns the entity families, state enums, reference wiring, key
-  validators, and default lifecycle values
-- `command.ts`: defines the stable `workflow-mutation` command envelope,
-  summary shapes, commit finalization request and acknowledgement types,
-  and failure codes consumed by the authority layer
-- `projection.ts`: defines the canonical workflow review scope descriptor plus
-  the first Branch 3 projection ids, `definitionHash` values, dependency-key
-  compilation helpers, and conservative invalidation-event builder shared
-  across workflow reads and the web authority proof
-- `query.ts`: defines the stable `ProjectBranchScope` branch-board contract and
-  the stable `CommitQueueScope` branch-detail and commit-queue contract,
-  plus the rebuildable in-memory projection helpers that materialize those
-  reads from workflow, repository, and session records
-  consumed by projections and operator surfaces
+- `schema.ts`: package export surface for `@io/graph-module-workflow`
+- `type.ts`: workflow entities, enums, keys, and retained-record definitions
+- `command.ts`: `workflow-mutation`, summaries, and commit finalization types
+- `projection.ts`: workflow review projection metadata and invalidation helpers
+- `query.ts`: project and commit-queue read contracts
+- `client/session-feed.ts`: route-level workflow session feed contract used by
+  browser workflow reads
 
-`workflow:` is now package-owned in `@io/graph-module-workflow`. The built-in
+`workflow:` remains package-owned in `@io/graph-module-workflow`. The built-in
 `core:` namespace remains owned by `@io/graph-module-core`.
 
-The first workflow slice currently defines:
+## V1 Priorities
 
-- workflow lineage entities:
-  `WorkflowProject`, `WorkflowRepository`, `WorkflowBranch`, and
-  `WorkflowCommit`
-- repository execution entities: `RepositoryBranch` and `RepositoryCommit`
-- retained execution entities:
-  `AgentSession`, `AgentSessionEvent`, `WorkflowArtifact`,
-  `WorkflowDecision`, `ContextBundle`, and `ContextBundleEntry`
-- workflow and retained enums:
-  `WorkflowBranchState`, `WorkflowCommitState`, `RepositoryCommitState`,
-  `RepositoryCommitLeaseState`, `AgentSessionSubjectKind`,
-  `AgentSessionKind`, `AgentSessionRuntimeState`, `AgentSessionEventType`,
-  `AgentSessionEventPhase`, `AgentSessionStatusCode`,
-  `AgentSessionStatusFormat`, `AgentSessionStream`,
-  `AgentSessionRawLineEncoding`, `WorkflowArtifactKind`,
-  `WorkflowDecisionKind`, and `ContextBundleEntrySource`
+The first browser milestone should keep the schema focused on these rules:
 
-## Modeling Notes
+- one inferred `WorkflowProject`
+- one attached `WorkflowRepository`
+- one operator-visible `WorkflowBranch`: `main`
+- a commit queue as the primary workflow surface
+- explicit workflow sessions
+- one `UserReview` gate
+- authoritative retained session, artifact, and decision history
+- no separate `WorkflowRun`
 
-The schema intentionally keeps logical workflow entities distinct from
-repository-backed execution entities:
+## Primary Entities
 
-- `WorkflowProject`, `WorkflowRepository`, `WorkflowBranch`, and
-  `WorkflowCommit` model the operator-facing workflow lineage
-- `RepositoryBranch` and `RepositoryCommit` model the concrete git execution
-  substrate that can realize that lineage
-- `AgentSession` and `AgentSessionEvent` preserve retained execution history
-  with a graph-native subject model while keeping the current
-  `session | status | raw-line | codex-notification` event envelope
-- `WorkflowArtifact`, `WorkflowDecision`, `ContextBundle`, and
-  `ContextBundleEntry` keep direct branch, commit, repository, and session
-  provenance on durable outputs and immutable context snapshots
+### `WorkflowProject`
 
-The slice also encodes the Branch 6 v1 assumptions where schema can own them
-directly:
+`WorkflowProject` remains the logical root.
 
-- stable `project:`, `repo:`, `branch:`, and `commit:` key formats
-- required one-parent lineage refs such as repository -> project,
-  branch -> project, and commit -> branch
-- default lifecycle values such as inferred projects, backlog branches,
-  planned commits, unmanaged observed repository branches, and unassigned
-  repository worktree leases
+V1 expectation:
 
-Cross-entity count invariants such as "one inferred project per graph" and
-"one attached repository per project" remain authority-command concerns because
-they depend on the current graph store rather than one field in isolation.
+- exactly one operator-visible project per graph
 
-## Authority Command
+### `WorkflowRepository`
 
-Workflow mutations now cross the shared web authority command seam with
-`kind: "workflow-mutation"`.
+`WorkflowRepository` remains the attached execution substrate.
 
-The command contract is intentionally one envelope with action-specific payloads
-for:
+V1 expectations:
 
-- project and repository create/update
-- branch and commit create/update
-- branch and commit state transitions
-- logical-to-repository branch attachment
-- repository-commit creation and finalization
+- exactly one attached repository
+- `main` is the default base branch for workflow commits
 
-The stable failure codes exposed by the command contract are:
+### `WorkflowBranch`
+
+`WorkflowBranch` remains in the lineage, but it is secondary in v1.
+
+V1 expectations:
+
+- exactly one visible branch record: `main`
+- branch context remains useful for prompt assembly
+- branch inventory is not the primary browser workflow surface
+- `type.ts` now codifies this browser-first contract in `workflowV1Branch`
+  with required `slug`, `name`, `context`, and `references`
+
+### `WorkflowCommit`
+
+`WorkflowCommit` is the main operator-facing record.
+
+Recommended v1 lifecycle:
+
+```ts
+type WorkflowCommitState = "Todo" | "Open" | "Done";
+type WorkflowCommitGate = "None" | "UserReview";
+```
+
+Recommended operator-facing fields:
+
+- `slug`
+- `name`
+- `order`
+- `state`
+- `gate`
+- `context`
+- `references`
+- git metadata for branch name, worktree path, and final SHA
+
+`type.ts` now codifies this operator-facing contract in `WorkflowCommit`,
+`workflowV1Commit`, `workflowV1CommitStateValues`, and
+`workflowV1CommitGateValues`.
+
+### `WorkflowSession`
+
+The product model should treat sessions explicitly:
+
+```ts
+type WorkflowSessionKind = "Plan" | "Review" | "Implement" | "Merge";
+type WorkflowSessionStatus = "Todo" | "Open" | "Done";
+```
+
+Current storage note:
+
+- `type.ts` still defines `AgentSession` and `AgentSessionEvent`
+- that storage shape is acceptable while browser-first v1 ships
+- the operator-facing contract should still speak in `WorkflowSession` terms
+- what matters is commit-centric session selection, correct session-kind
+  semantics, and retained recovery
+
+The workflow module now makes that bridge explicit:
+
+- `type.ts` exports `WorkflowSession`, `workflowV1Session`,
+  `workflowV1SessionKindValues`, and `workflowV1SessionStatusValues`
+- `session-append.ts` exports
+  `retainedAgentSessionKindToWorkflowSessionKind` and
+  `retainedAgentSessionRuntimeStateToWorkflowSessionStatus` so the retained
+  runtime maps cleanly onto the smaller v1 session contract
+
+### Retained outputs and implementation records
+
+`WorkflowArtifact` and `WorkflowDecision` remain first-class retained outputs.
+
+`RepositoryBranch`, `RepositoryCommit`, `ContextBundle`, and
+`ContextBundleEntry` may still exist in the graph, but they are not the
+primary operator contract for the first browser milestone. They support local
+git execution, retained history, and future expansion.
+
+## Current Code Vs V1 Simplification
+
+The current code still exports broader state spaces:
+
+- `WorkflowBranchState = backlog | ready | active | blocked | done | archived`
+- `WorkflowCommitState = planned | ready | active | blocked | committed | dropped`
+- `AgentSessionKind = planning | execution | review`
+- repository branch and commit records still appear in summaries and queries
+
+That is acceptable during the migration, but this broader storage model is now
+transitional. Browser-facing and agent-facing workflow reads should collapse
+those details down to the smaller v1 operator model:
+
+- one visible `WorkflowBranch` record: `main`
+- commit-first reads and mutations
+- explicit review gating rather than overloading commit state
+- session semantics that distinguish `Plan`, `Review`, `Implement`, and
+  `Merge`
+
+The workflow module now codifies that target product model directly even
+though the broader stored enums and retained record names still exist
+underneath.
+
+Implementation rule:
+
+- when broader stored enums remain, reads should project them down to the
+  smaller operator contract instead of widening the product again
+
+## Mutation Model
+
+### Current typed workflow command
+
+`command.ts` already defines `workflow-mutation` for:
+
+- project and repository create or update
+- branch and commit create or update
+- commit state transitions plus explicit `UserReview` gate set and clear
+- commit-scoped workflow session create or update
+- `finalizeCommit`
+- transitional repository-commit creation for local runtime realization
+
+Stable failure codes:
 
 - `repository-missing`
 - `branch-lock-conflict`
@@ -106,454 +182,132 @@ The stable failure codes exposed by the command contract are:
 - `invalid-transition`
 - `subject-not-found`
 
-The authority implementation keeps the first Branch 6 assumptions explicit:
+### Required v1 mutation surface
 
-- exactly one inferred workflow project per graph
-- exactly one attached workflow repository per graph
-- one managed repository branch per workflow branch
-- one repository commit result per workflow commit
-- one active commit per workflow branch
+The v1 workflow contract should interpret or extend those seams to cover:
 
-### Commit Finalization Contract
+- singleton project, repository, and `main` branch provisioning
+- commit create or update as the main operator action
+- commit context and reference updates from `Plan` and `Review`
+- session create or update and follow-on session creation
+- setting and clearing `UserReview`, plus gate reason and provenance
+- commit finalization by `committed | blocked | dropped`
+- separate retained session append, decision write, and artifact write commands
 
-`command.ts` now exports the first explicit workflow commit finalization
-surface:
+Rules:
 
-- `workflowCommitFinalizationOutcomeValues`
-- `WorkflowCommitFinalizationRequest`
-- `WorkflowCommitFinalizationAcknowledgement`
-- `WorkflowCommitFinalizationResult`
+- keep workflow writes behind typed commands
+- do not teach the browser or agent to manipulate raw workflow entities
+  directly
+- keep repository branch and commit writes as local-runtime and authority
+  implementation details
+- while broader stored enums remain, the current `UserReview` gate may still
+  persist through the stored blocked commit state as long as reads and mutation
+  summaries project that back to the gate-oriented v1 contract
 
-`finalizeCommit` is commit-centric rather than repository-commit-centric.
+Current retained-storage note:
 
-Its contract is:
+- `createSession` and `updateSession` map onto `AgentSession`
+- the narrowed mutation surface currently supports the v1 session kinds with a
+  distinct retained mapping today: `Plan | Review | Implement`
+- queued `Todo` sessions and distinct retained `Merge` session storage remain
+  deferred until the stored session model grows beyond the current retained
+  runtime shape
 
-- `commitId` always identifies the workflow commit being finalized
-- `outcome` is one of `committed`, `blocked`, or `dropped`
-- `committed` requires git result data for `sha`, optional `committedAt`, and
-  optional managed repository/worktree metadata
-- `committed` creates or updates one durable `RepositoryCommit`, resolved by
-  `git.repositoryCommitId`, the one already attached to the workflow commit,
-  or a new managed record when neither exists yet
-- `blocked` and `dropped` do not create or promote a repository commit to
-  `state = "committed"`
-- `blocked` and `dropped` may include optional `git` metadata only to refresh
-  retained repository-branch or worktree fields on an existing
-  `RepositoryCommit`
-- `finalizeCommit` always acknowledges the resulting branch summary, commit
-  summary, outcome, and the related repository-commit summary when one is part
-  of the authoritative write
+### Commit finalization
 
-This keeps the repository-backed commit record boundary explicit:
+`finalizeCommit` stays commit-centric.
 
-- `RepositoryCommit` is the durable record of a real git commit only for the
-  `committed` outcome
-- `blocked` and `dropped` finalize the workflow attempt, not a repository
-  commit result
-- worktree cleanup or replay stays outside this contract; callers must request
-  lease changes explicitly when they want them recorded
+Canonical outcomes:
 
-## Branch Board Query
+- `committed`: persist the final git result and mark the workflow commit done
+- `blocked`: finalize the current attempt without producing a landed git commit
+- `dropped`: stop the commit without landing it
 
-The first stable workflow read contract in this slice is `ProjectBranchScope`.
+The outcome is about the workflow commit. `RepositoryCommit` remains a concrete
+git record, not the primary operator-facing unit of work.
 
-It defines one project-scoped branch-board view with two distinct collections:
+## Read Model
 
-- `rows`: workflow-managed `WorkflowBranch` rows for the operator-facing board
-- `unmanagedRepositoryBranches`: observed `RepositoryBranch` rows that are not
-  the identity of a workflow row and must stay visually separate
+### Primary browser read: commit queue
 
-The canonical request shape is:
+`CommitQueueScope` should be the primary browser workflow read.
 
-- `projectId`: required workflow project id
-- `filter.states?`: optional `WorkflowBranchStateValue[]` filter applied to managed
-  workflow rows
-- `filter.hasActiveCommit?`: optional active-commit filter applied to managed
-  workflow rows
-- `filter.showUnmanagedRepositoryBranches?`: opt-in inclusion of the separate
-  unmanaged repository branch collection
-- `order?`: optional ordered clauses over `queue-rank`, `updated-at`,
-  `created-at`, `title`, or `state`
-- `cursor?` and `limit?`: optional pagination inputs for the managed rows
+V1 expectations:
 
-The canonical result shape is:
+- one selected visible branch: `main`
+- ordered commit queue rows
+- selected commit detail
+- current gate state
+- latest or next session summary for the selected commit
 
-- `project` and optional `repository` summaries for the current workflow root
-- `rows[]`, where each row nests `branch` and an optional
-  `repositoryBranch` observation instead of flattening repository state onto
-  workflow identity
-- `unmanagedRepositoryBranches[]`, returned separately from `rows`
-- `freshness`, including `projectedAt`, optional `projectionCursor`, project
-  repository freshness state, and the last successful repository reconcile time
-- `nextCursor?` for additional managed rows
+### Secondary read: branch summary
 
-The stable failure codes exposed by the query contract are:
+`ProjectBranchScope` may remain in the package, but it is secondary in v1.
 
-- `project-not-found`
-- `policy-denied`
-- `projection-stale`
+Use it for:
 
-The workflow slice now also exports `createWorkflowProjectionIndex(graph, options?)`.
-It builds a rebuildable read index from the current graph client and exposes
-`readProjectBranchScope(...)` and `readCommitQueueScope(...)` so downstream TUI
-work can consume stable workflow read helpers without reaching into raw
-workflow, repository, and session records directly.
-That read helper now also exposes the canonical workflow projection metadata
-for the branch board and commit queue, so projection ids and `definitionHash`
-values stay shared with the authority-side scope proof instead of living in
-web-local constants.
-The first retained projection storage seam now shares checkpoint and row
-metadata through `@io/graph-projection`, and retained workflow
-reads treat `{ projectionId, definitionHash }` as the explicit compatibility
-boundary. A retained row set for the right `projectionId` but the wrong
-`definitionHash` is incompatible state that must rebuild, not a silent or
-“missing checkpoint” fallback.
-When retained workflow projection state is missing, row-incomplete, stale for
-the current authority cursor, or incompatible at restart, the authority
-rebuilds it deterministically from authoritative graph facts and rewrites only
-the retained projection rows/checkpoints before serving reads. Callers do not
-repair or merge retained rows themselves.
-`createWebAppAuthority(...)` now also exposes
-`rebuildRetainedWorkflowProjection()` as the explicit retained-projection
-recovery seam, so later queue-driven rebuild orchestration can move off the
-read path without changing the rebuild contract.
-The same module export now owns the first live invalidation proof for workflow
-review:
+- project and branch header context
+- lightweight inspection
+- TUI and transition-period surfaces
 
-- review-scope registrations compile to
-  `scope:workflow:review`,
-  `projection:workflow:project-branch-board`, and
-  `projection:workflow:branch-commit-queue`
-- any accepted write that touches a workflow entity type conservatively emits
-  that full dependency-key set, even when only one workflow projection may have
-  changed
-- `createWorkflowReviewInvalidationEvent(...)` currently emits only
-  `cursor-advanced` delivery with the workflow review scope id and both
-  workflow projection ids attached; direct scoped deltas stay out of scope for
-  the current proof
-- `compileWorkflowReviewScopeDependencyKeys()` is the shared dependency-key
-  planner used by the first live registration proof, so the authority and
-  router agree on the scope and projection fan-out set
-- the current web proof delivers those invalidations through
-  `workflow-review-pull`, so callers react by scoped `/api/sync` re-pull, and
-  only re-register from their current scoped cursor when a pull reports
-  `active: false`
+Do not use it as the primary navigation model for the first browser-launched
+session.
 
-The first authority-owned runtime seam now lives beside the web authority in
-`../../lib/app/src/web/lib/authority.ts`. `createWebAppAuthority(...)` exposes
-`readProjectBranchScope(...)`, `readCommitQueueScope(...)`,
-`rebuildRetainedWorkflowProjection()`, and
-`planWorkflowReviewLiveRegistration(...)`, validates retained workflow
-projection state against authoritative graph facts during startup recovery,
-rebuilds retained rows explicitly when recovery is required, derives live
-registrations from the current scoped cursor and authenticated session
-principal, and maps read-policy and live-registration failures back onto
-stable workflow codes such as `policy-denied`, `policy-changed`, and
-`scope-changed`.
-The first shipped web transport proofs for those reads and live registrations
-now live in `../../lib/app/src/web/lib/workflow-transport.ts`,
-`../../lib/app/src/web/lib/workflow-live-transport.ts`, and
-`../../lib/app/src/web/lib/server-routes.ts`. The first shipped caller seam for the
-live proof now lives in `../../lib/app/src/web/lib/workflow-review-live-sync.ts`:
+### Primary retained-session read
 
-- `POST /api/workflow-read`
-- request body:
-  `{ kind: "project-branch-scope", query: ProjectBranchScopeQuery }` or
-  `{ kind: "commit-queue-scope", query: CommitQueueScopeQuery }`
-- success body:
-  `{ kind: "project-branch-scope", result: ProjectBranchScopeResult }` or
-  `{ kind: "commit-queue-scope", result: CommitQueueScopeResult }`
-- failure body: `{ error, code? }`, where stable workflow read codes such as
-  `project-not-found`, `branch-not-found`, `policy-denied`, and
-  `projection-stale` are preserved at the transport boundary
-- `POST /api/workflow-live`
-- request body:
-  `{ kind: "workflow-review-register", cursor: string }`,
-  `{ kind: "workflow-review-pull", scopeId: string }`, or
-  `{ kind: "workflow-review-remove", scopeId: string }`
-- success body:
-  `{ kind: "workflow-review-register", result: WorkflowReviewLiveRegistration }`
-  or
-  `{ kind: "workflow-review-pull", result: { active, invalidations, scopeId, sessionId } }`
-  or
-  `{ kind: "workflow-review-remove", result: { removed, scopeId, sessionId } }`
-- runtime model:
-  live registrations are ephemeral, indexed by session, scope, and dependency
-  key inside the Durable Object process, accepted workflow-affecting writes
-  publish `cursor-advanced` invalidations from the authority write hook and
-  queue them for matching registrations, and callers treat
-  `active: false` on `workflow-review-pull` as the signal to re-register from
-  the current scoped sync cursor before the next scoped refresh
-- caller helper:
-  `createWorkflowReviewLiveSync(sync, options)` wraps the current
-  `workflow-review-register`, `workflow-review-pull`, and scoped `/api/sync`
-  flow so a workflow-review client can register interest, react to
-  `cursor-advanced`, and recover freshness after expiry or router loss without
-  widening to whole-graph sync
-- failure body: `{ error, code? }`, where stable live-registration codes such
-  as `auth.unauthenticated`, `policy-changed`, and `scope-changed` are
-  preserved at the transport boundary
+The workflow session feed is part of the core v1 contract.
 
-## Workflow TUI Boundary
+The route and read shape now live in:
 
-The first graph-backed `io tui` startup flow consumes this workflow slice
-directly, but the ownership line stays explicit:
+- `../../lib/graph-module-workflow/src/client/session-feed.ts`
+- `../../lib/app/src/web/lib/workflow-session-feed.ts`
 
-- `graph` owns the fixed workflow review sync scope descriptor,
-  `createWorkflowProjectionIndex(...)`, and the stable
-  `ProjectBranchScope` plus `CommitQueueScope` read contracts
-- `../../lib/cli/src/tui/server.ts` owns CLI parsing, graph URL selection, initial
-  project-and-branch resolution, and startup failure presentation
-- `../../lib/cli/src/tui/startup.ts` owns the startup contract defaults and the
-  `--graph-url` / workflow-config / default precedence that selects the graph
-  source before hydration starts
-- the first TUI hydration remains read-only: it consumes graph-backed
-  projection reads and fails closed when startup cannot materialize the first
-  surface rather than falling back to legacy retained-session state
+V1 rules:
 
-## Branch Detail And Commit Queue Query
+- branch selection remains the outer route context
+- commit selection is the primary browser session subject
+- when `session` is absent, read the latest session for that selected subject
+- when `session` is present, stay pinned to that session instead of silently
+  switching
+- authoritative graph history is the recovery source after reload or reconnect
 
-The branch-detail view paired with the TUI commit queue uses
-`CommitQueueScope`.
+### TUI boundary
 
-It defines one branch-scoped detail surface with:
+The TUI may keep consuming broader branch-board helpers during the transition,
+but that does not change the browser-first v1 contract. Query and projection
+helpers should move toward the same commit-first semantics instead of
+maintaining separate product models.
 
-- `branch.branch`: the canonical `WorkflowBranchSummary`, including the
-  derived branch goal summary and `activeCommitId`
-- `branch.repositoryBranch?`: the attached repository-branch observation when
-  one exists, reusing the same freshness envelope as the branch board
-- `branch.activeCommit?`: the active commit row promoted into branch detail so
-  the first TUI shell does not depend on the current page including it
-- `branch.latestSession?`: the most recent branch-scoped or commit-scoped
-  session summary for the selected branch
-- `rows`: ordered `WorkflowCommit` queue rows with optional attached
-  `RepositoryCommit` summaries
-- `freshness` and `nextCursor?`: the same projection freshness and pagination
-  semantics used by `ProjectBranchScope`
+## Git And Retained Execution Model
 
-The canonical request shape is:
+The graph still needs concrete git realization records, but they are secondary
+to the operator-facing contract.
 
-- `branchId`: required workflow branch id
-- `cursor?` and `limit?`: optional pagination inputs for the ordered commit
-  rows
+- `RepositoryBranch` and `RepositoryCommit` record real git state when the
+  local runtime needs it
+- each `WorkflowCommit` owns one git branch and one worktree
+- one eventual git commit maps back to one `WorkflowCommit`
+- `AgentSession` and `AgentSessionEvent` remain the authoritative retained
+  runtime history until or unless the storage names are narrowed later
+- browser-first v1 currently maps retained `planning -> Plan`,
+  `review -> Review`, and `execution -> Implement`
+- retained runtime states map to `WorkflowSession.status` as
+  `running | awaiting-user-input | blocked -> Open` and
+  `completed | failed | cancelled -> Done`
+- `WorkflowArtifact` and `WorkflowDecision` keep session and commit provenance
+  on durable outputs
+- `ContextBundle` may remain a retained implementation detail until direct
+  branch, commit, and session context assembly needs immutable snapshots
 
-The canonical result shape is:
+## Field And Naming Conventions
 
-- `branch`, with nested `branch`, optional `repositoryBranch`,
-  optional `activeCommit`, and optional `latestSession`
-- `rows[]`, where each row nests `commit` and an optional
-  `repositoryCommit` realization summary
-- `freshness`, reusing `projectedAt`, optional `projectionCursor`, repository
-  freshness state, and the last successful repository reconcile time
-- `nextCursor?` for additional commit rows
-
-Contract rules:
-
-- `branch.branch.goalSummary` is derived from
-  `branch.branch.goalDocumentId` when that document has a non-empty
-  `description`; the query does not duplicate that summary elsewhere
-- `rows` are ordered by `commit.order asc`; projections may add
-  deterministic tie-breakers but cannot change queue-order semantics
-- `branch.activeCommit` may duplicate one row from `rows` so the active commit
-  remains available even when pagination excludes it
-- `branch.latestSession` summarizes the most recent branch-targeted or
-  commit-targeted session attached to the selected branch
-- repository execution state stays nested under `repositoryCommit` and
-  `branch.repositoryBranch` so workflow identity remains distinct from git
-  realization metadata
-
-The stable failure codes exposed by the query contract are:
-
-- `branch-not-found`
-- `policy-denied`
-- `projection-stale`
-
-## Freshness And Rebuild Rules
-
-- the browser session feed contract now lives in
-  `../../lib/app/src/web/lib/workflow-session-feed-contract.ts` as the route-level
-  selection and read-shape seam that will back the later authority transport
-  without changing browser selection semantics
-- `createWorkflowProjectionIndex(graph, options?)` rebuilds the workflow read
-  model from authoritative `WorkflowProject`, `WorkflowRepository`,
-  `WorkflowBranch`, `WorkflowCommit`, `RepositoryBranch`, `RepositoryCommit`,
-  and `AgentSession` records. No TUI-local state is required to recover the
-  branch board or commit queue.
-- the web authority read seam reuses that same rebuild-on-read path directly
-  against authoritative graph state, so board and commit-queue reads do not
-  depend on TUI-local caches or filtered browser sync state
-- `freshness.projectedAt` records when the current in-memory projection was
-  rebuilt for the read. `freshness.projectionCursor` identifies the
-  authoritative-state shape used for pagination, so follow-up pages either
-  stay on that projection or fail closed with `projection-stale`.
-- the shipped proof boundary is authority-backed rebuildability, not retained
-  projection durability. The current authority path keeps no durable workflow
-  projection rows or checkpoints; it rebuilds them from authoritative
-  workflow, repository, and session state on each read.
-- retained workflow projection rows, restart-stable checkpoints, and other
-  durable projection state remain deferred to `OPE-418`
-- workflow lineage remains authoritative when repository observations are not
-  current. `rows[]`, `branch.branch`, `branch.activeCommit`, and
-  `branch.latestSession` still return from retained workflow state even when
-  repository freshness is `stale` or `missing`.
-- `ProjectBranchScopeRepositoryObservation.freshness` is per observed
-  repository branch. `result.freshness.repositoryFreshness` is the
-  project-level aggregate reused by both `ProjectBranchScope` and
-  `CommitQueueScope`.
-- `repositoryFreshness: "fresh"` means every observed `RepositoryBranch` in the
-  project has `latestReconciledAt`.
-- `repositoryFreshness: "stale"` means at least one observed
-  `RepositoryBranch` lacks `latestReconciledAt`. Reads still succeed; callers
-  keep workflow rows and retained `RepositoryCommit` summaries while treating
-  attached repository-branch observations as advisory.
-- `repositoryFreshness: "missing"` means there is no attached repository
-  summary or no repository-branch observation materialized yet. Reads still
-  succeed with workflow-only rows and no `repositoryReconciledAt`.
-- `unmanagedRepositoryBranches[]` and `branch.repositoryBranch` rebuild from
-  `RepositoryBranch` summaries and stay separate from workflow identity so
-  stale git observations cannot overwrite managed workflow lineage.
-- cursors are projection-scoped. `projection-stale` is the fail-closed result
-  for lagged pagination, scope mismatch, or reuse after a projection rebuild.
-  Callers discard the cursor and restart from the first page against a fresh
-  projection.
-- retained workflow projection durability does not change the source of truth:
-  workflow, repository, and session graph facts remain authoritative, while
-  retained projection rows are restart optimization only.
-
-## Browser Session Feed Contract
-
-The next browser-facing workflow read contract is the session feed for one
-selected branch or commit subject and one selected session. The route-level
-contract now lives in
-`../../lib/app/src/web/lib/workflow-session-feed-contract.ts`.
-
-The canonical query shape is:
-
-```ts
-type WorkflowSessionFeedSubject =
-  | { kind: "branch"; branchId: string }
-  | { kind: "commit"; branchId: string; commitId: string };
-
-type WorkflowSessionFeedSessionSelection =
-  | { kind: "latest-for-subject" }
-  | { kind: "session-id"; sessionId: string };
-
-interface WorkflowSessionFeedReadQuery {
-  projectId: string;
-  subject: WorkflowSessionFeedSubject;
-  session: WorkflowSessionFeedSessionSelection;
-}
-```
-
-The canonical result shape is:
-
-```ts
-interface WorkflowSessionFeedReadyResult {
-  status: "ready";
-  query: WorkflowSessionFeedReadQuery;
-  header: {
-    id: string;
-    title: string;
-    sessionKey: string;
-    kind: CommitQueueScopeSessionKind;
-  };
-  subject: {
-    projectId: string;
-    branch: WorkflowBranchSummary;
-    commit?: WorkflowCommitSummary;
-    repository?: WorkflowRepositorySummary;
-    repositoryBranch?: ProjectBranchScopeRepositoryObservation;
-    repositoryCommit?: RepositoryCommitSummary;
-  };
-  runtime: {
-    state: CommitQueueScopeSessionRuntimeState;
-    startedAt: string;
-    endedAt?: string;
-  };
-  finalization:
-    | { status: "not-applicable" }
-    | { status: "pending" }
-    | {
-        status: "finalized";
-        commitSha?: string;
-        finalizedAt?: string;
-        landedAt?: string;
-        linearState?: string;
-      }
-    | { status: "unknown"; reason: "graph-finalization-unavailable" };
-  history:
-    | { status: "empty" }
-    | { status: "complete"; persistedEventCount: number; lastSequence: number }
-    | {
-        status: "partial";
-        persistedEventCount: number;
-        lastSequence?: number;
-        reason: "event-gap" | "history-pending-append" | "transcript-truncated";
-      };
-  events: readonly AgentSessionAppendEvent[];
-  artifacts: readonly WorkflowArtifactRecord[];
-  decisions: readonly WorkflowDecisionRecord[];
-}
-
-type WorkflowSessionFeedReadResult =
-  | WorkflowSessionFeedReadyResult
-  | {
-      status: "no-session";
-      query: WorkflowSessionFeedReadQuery & {
-        session: { kind: "latest-for-subject" };
-      };
-      branchLatestSession?: CommitQueueScopeSessionSummary;
-    }
-  | {
-      status: "stale-selection";
-      query: WorkflowSessionFeedReadQuery & {
-        session: { kind: "session-id"; sessionId: string };
-      };
-      reason: "session-not-found" | "session-subject-mismatch" | "session-branch-mismatch";
-      branchLatestSession?: CommitQueueScopeSessionSummary;
-    };
-```
-
-Contract rules:
-
-- `/workflow` keeps project and branch selection from the existing workflow
-  review startup contract; the session feed adds optional `commit` and
-  `session` route selections on top of that branch selection
-- when `commit` is absent, the selected session subject is the selected branch
-- when `commit` is present, the selected session subject is that specific
-  commit on the already-selected branch
-- when `session` is absent, the feed reads `latest-for-subject`; it never
-  cross-falls back between branch-scoped and commit-scoped sessions
-- when `session` is present, the feed stays pinned to that session id and
-  returns `stale-selection` instead of silently switching to another session
-- if the configured `commit` is not visible in the selected branch commit
-  queue, the browser keeps the selection visible as stale state instead of
-  silently moving to the branch subject or another commit
-- `no-session` is the explicit empty state for a selected subject with no
-  retained session; callers keep the subject selection and show empty feed
-  chrome instead of substituting another subject's latest session
-- `history.status = "partial"` keeps the session header, subject summary,
-  runtime state, finalization state, retained artifacts, retained decisions,
-  and the persisted event subset visible while marking the feed degraded
-- branch-scoped sessions typically return `finalization.status =
-  "not-applicable"`; commit-scoped sessions may return `pending`, `finalized`,
-  or `unknown` when finalization metadata is not yet recoverable from retained
-  graph state
-- the browser may layer a matching local browser-agent event stream on top of
-  `events[]` as transient UI state, but only the graph-backed `events[]`
-  result is authoritative and reconnect always reconciles back to that order
-
-## Field Conventions
-
-- all six entity types reuse `core:node:name` as the operator-facing title so
-  existing explorer and serialization surfaces keep a stable summary field
-- workflow keys stay on dedicated predicates so commands and read models can
-  join on stable human-readable identifiers without depending on display names
-- session and bundle keys extend the same stable-key convention with `session:`
-  and `bundle:` prefixes
-- `RepositoryCommit.worktree.*` stays nested to preserve the worktree lease
-  envelope from the Branch 6 spec without splitting it into unrelated top-level
-  fields
-- retained event payloads keep optional typed fields for lifecycle, status,
-  raw-line, and Codex-notification variants rather than splitting the envelope
-  into separate entity families
+- stable keys stay explicit: `project:`, `repo:`, `branch:`, `commit:`,
+  `session:`, and `bundle:`
+- keep one-parent lineage stable: repository -> project, branch -> project,
+  commit -> branch
+- `main` is the only operator-visible branch key in v1
+- commit and session context should live on explicit workflow fields or
+  workflow-owned docs, not in ad hoc browser-only state
+- the schema should not reintroduce a separate `WorkflowRun` unless later retry
+  or detached finalization behavior proves it necessary

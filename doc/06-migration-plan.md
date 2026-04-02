@@ -108,7 +108,7 @@ The roadmap recommends this order because each step unlocks the next:
 
 - define graph-native workflow types such as project, branch, commit, artifact,
   decision, and session
-- build one TUI-first project workflow loop without a tracker dependency
+- build one browser-first project workflow loop without a tracker dependency
 - design and implement the first scoped sync contract for one narrow scope class
 - build one materialized collection index and one live scope registration proof
 - end the period with one end-to-end demo:

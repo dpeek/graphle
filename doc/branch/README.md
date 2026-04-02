@@ -29,8 +29,8 @@ contract stay together.
    blob metadata, upload and finalize flow, queue-backed ingestion,
    derivatives, provenance, and file or media module families
 6. [`06-workflow-and-agent-runtime.md`](./06-workflow-and-agent-runtime.md):
-   graph-native workflow, context retrieval, runs, sessions, artifacts, and
-   the agent runtime
+   browser-first workflow, implicit `main`, commit queues, sessions, artifacts,
+   and the agent runtime
 7. [`07-web-and-operator-surfaces.md`](./07-web-and-operator-surfaces.md):
    browser bootstrap, module hosting, capability-aware UX, graph devtools, and
    operator surfaces
@@ -57,8 +57,8 @@ Wave 1:
 - Branch 2 can start immediately on principal and policy contracts
 - Branch 4 can start on manifest shape and built-in module install flow using a
   provisional permission model
-- Branch 6 can start on graph-native project, branch, commit, and session
-  workflow using current graph primitives plus local git inspection
+- Branch 6 can start on graph-native project, implicit `main`, commit, and
+  session workflow using current graph primitives plus local git inspection
 - Branch 7 can keep improving the shell and devtools against the current
   single-graph proof
 
@@ -81,5 +81,6 @@ Later:
 - scope, query, projection, and invalidation model: owned by Branch 3
 - module manifest and install contracts: owned by Branch 4
 - blob record and ingest job contracts: owned by Branch 5
-- workflow, run, artifact, and context-bundle contracts: owned by Branch 6
+- workflow, session, artifact, decision, and context contracts: owned by
+  Branch 6
 - module-host and capability-aware client contracts: owned by Branch 7

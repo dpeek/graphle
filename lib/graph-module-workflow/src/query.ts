@@ -1462,13 +1462,15 @@ function buildBranchSummary(
 }
 
 function buildCommitSummary(entity: WorkflowCommitEntity): WorkflowCommitSummary {
+  const state = decodeWorkflowCommitState(entity.state);
   return {
     entity: "commit",
     id: entity.id,
     title: entity.name,
     branchId: entity.branch,
     commitKey: entity.commitKey,
-    state: decodeWorkflowCommitState(entity.state),
+    state,
+    ...(state === "blocked" ? { gate: "UserReview" as const } : {}),
     order: entity.order,
     ...(entity.parentCommit ? { parentCommitId: entity.parentCommit } : {}),
     ...(entity.contextDocument ? { contextDocumentId: entity.contextDocument } : {}),

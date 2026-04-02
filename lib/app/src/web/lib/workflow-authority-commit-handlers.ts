@@ -4,12 +4,15 @@ import {
   repositoryCommitLeaseStateValues,
   repositoryCommitStateValues,
   commitStateValues,
+  workflowMutableSessionKindValues,
+  workflowMutableSessionStatusValues,
   type WorkflowBranchStateValue,
   type WorkflowMutationAction,
   type WorkflowMutationResult,
 } from "@io/graph-module-workflow";
 
 import {
+  requireAgentSession,
   requireBranch,
   requireCommit,
   requireDocument,
@@ -23,6 +26,7 @@ import {
   buildBranchSummary,
   buildCommitSummary,
   buildRepositoryCommitSummary,
+  buildSessionSummary,
   clearSingleValue,
   decodeRepositoryCommitLeaseState,
   decodeRepositoryCommitState,
@@ -34,6 +38,8 @@ import {
   repositoryCommitLeaseStateIds,
   repositoryCommitStateIds,
   requireAllowedValue,
+  requireStoredWorkflowSessionKind,
+  requireStoredWorkflowSessionStatus,
   requireString,
   requireWorkflowTransition,
   setSingleValue,
@@ -48,6 +54,16 @@ import {
 type CommitCreateMutation = Extract<WorkflowMutationAction, { action: "createCommit" }>;
 type CommitUpdateMutation = Extract<WorkflowMutationAction, { action: "updateCommit" }>;
 type CommitStateMutation = Extract<WorkflowMutationAction, { action: "setCommitState" }>;
+type CommitUserReviewGateMutation = Extract<
+  WorkflowMutationAction,
+  { action: "setCommitUserReviewGate" }
+>;
+type CommitUserReviewGateClearMutation = Extract<
+  WorkflowMutationAction,
+  { action: "clearCommitUserReviewGate" }
+>;
+type SessionCreateMutation = Extract<WorkflowMutationAction, { action: "createSession" }>;
+type SessionUpdateMutation = Extract<WorkflowMutationAction, { action: "updateSession" }>;
 type RepositoryCommitCreateMutation = Extract<
   WorkflowMutationAction,
   { action: "createRepositoryCommit" }
@@ -464,6 +480,93 @@ function advanceBranchAfterCommitFinalization(
   });
 }
 
+function findWorkflowSessionByProjectAndKey(
+  graph: ProductGraphClient,
+  projectId: string,
+  sessionKey: string,
+) {
+  return graph.agentSession
+    .list()
+    .find((session) => session.project === projectId && session.sessionKey === sessionKey);
+}
+
+function findAttachedRepositoryForProject(graph: ProductGraphClient, projectId: string) {
+  const repositories = graph.repository
+    .list()
+    .filter((repository) => repository.project === projectId);
+  if (repositories.length > 1) {
+    throw new WorkflowMutationError(
+      409,
+      `Workflow project "${projectId}" has multiple attached repositories.`,
+      "invalid-transition",
+    );
+  }
+  return repositories[0];
+}
+
+function buildCommitUserReviewSummary(
+  commit: ReturnType<ProductGraphClient["commit"]["get"]>,
+  input?: Pick<CommitUserReviewGateMutation, "reason" | "requestedAt" | "requestedBySessionId">,
+) {
+  return {
+    ...buildCommitSummary(commit),
+    ...(input?.reason ? { gateReason: input.reason } : {}),
+    ...(input?.requestedAt ? { gateRequestedAt: input.requestedAt } : {}),
+    ...(input?.requestedBySessionId
+      ? { gateRequestedBySessionId: input.requestedBySessionId }
+      : {}),
+  };
+}
+
+function validateWorkflowSessionCreateSubject(
+  graph: ProductGraphClient,
+  store: GraphStore,
+  commitId: string,
+) {
+  const commit = requireCommit(graph, store, requireString(commitId, "Workflow commit id"));
+  const branch = requireBranch(graph, store, commit.branch);
+  const repository = findAttachedRepositoryForProject(graph, branch.project);
+  return {
+    branch,
+    commit,
+    projectId: branch.project,
+    repositoryId: repository?.id,
+  };
+}
+
+function resolveWorkflowSessionStatus(status: SessionCreateMutation["status"] | undefined) {
+  return status === undefined
+    ? "Open"
+    : requireAllowedValue(status, workflowMutableSessionStatusValues, "Workflow session status");
+}
+
+function resolveWorkflowSessionKind(kind: SessionCreateMutation["kind"]) {
+  return requireAllowedValue(kind, workflowMutableSessionKindValues, "Workflow session kind");
+}
+
+function resolveCreateSessionEndedAt(
+  status: ReturnType<typeof resolveWorkflowSessionStatus>,
+  value: SessionCreateMutation["endedAt"],
+) {
+  const endedAt = parseOptionalDate(value, "Workflow session ended at");
+  if (status === "Done") {
+    if (endedAt === null) {
+      throw new WorkflowMutationError(
+        400,
+        "Workflow session ended at must be a valid ISO timestamp when the session is done.",
+      );
+    }
+    return endedAt ?? new Date();
+  }
+  if (endedAt) {
+    throw new WorkflowMutationError(
+      400,
+      "Workflow session ended at can only be set when the session status is Done.",
+    );
+  }
+  return undefined;
+}
+
 export function createWorkflowCommit(
   graph: ProductGraphClient,
   store: GraphStore,
@@ -578,6 +681,200 @@ export function updateWorkflowCommit(
   if (Object.keys(patch).length > 0) {
     graph.commit.update(commit.id, patch);
   }
+  return {
+    action: input.action,
+    created: false,
+    summary: buildCommitSummary(graph.commit.get(commit.id)),
+  };
+}
+
+export function createWorkflowSession(
+  graph: ProductGraphClient,
+  store: GraphStore,
+  input: SessionCreateMutation,
+): WorkflowMutationResult {
+  const { branch, commit, projectId, repositoryId } = validateWorkflowSessionCreateSubject(
+    graph,
+    store,
+    input.commitId,
+  );
+  const sessionKey = requireString(input.sessionKey, "Workflow session key");
+  const existingSession = findWorkflowSessionByProjectAndKey(graph, projectId, sessionKey);
+  if (existingSession) {
+    throw new WorkflowMutationError(
+      409,
+      `Workflow session key "${sessionKey}" is already in use by "${existingSession.id}".`,
+      "invalid-transition",
+    );
+  }
+
+  const kind = resolveWorkflowSessionKind(input.kind);
+  const status = resolveWorkflowSessionStatus(input.status);
+  const endedAt = resolveCreateSessionEndedAt(status, input.endedAt);
+  const startedAt = parseOptionalDate(input.startedAt, "Workflow session started at");
+  const sessionId = graph.agentSession.create({
+    name: requireString(input.name, "Workflow session name"),
+    project: projectId,
+    ...(repositoryId ? { repository: repositoryId } : {}),
+    subjectKind: workflow.agentSessionSubjectKind.values.commit.id as string,
+    branch: branch.id,
+    commit: commit.id,
+    sessionKey,
+    kind: requireStoredWorkflowSessionKind(kind),
+    workerId: requireString(input.workerId, "Workflow session worker id"),
+    ...(input.threadId !== undefined && input.threadId !== null
+      ? { threadId: requireString(input.threadId, "Workflow session thread id") }
+      : {}),
+    ...(input.turnId !== undefined && input.turnId !== null
+      ? { turnId: requireString(input.turnId, "Workflow session turn id") }
+      : {}),
+    runtimeState: requireStoredWorkflowSessionStatus(status),
+    ...(startedAt ? { startedAt } : {}),
+    ...(endedAt ? { endedAt } : {}),
+  });
+
+  return {
+    action: input.action,
+    created: true,
+    summary: buildSessionSummary(graph.agentSession.get(sessionId)),
+  };
+}
+
+export function updateWorkflowSession(
+  graph: ProductGraphClient,
+  store: GraphStore,
+  input: SessionUpdateMutation,
+): WorkflowMutationResult {
+  const session = requireAgentSession(graph, store, requireString(input.sessionId, "Session id"));
+  if (!session.commit) {
+    throw new WorkflowMutationError(
+      409,
+      `Workflow session "${session.id}" is missing commit provenance.`,
+      "invalid-transition",
+    );
+  }
+
+  const patch: Record<string, unknown> = {};
+  if (input.name !== undefined) {
+    patch.name = requireString(input.name, "Workflow session name");
+  }
+  if (input.threadId !== undefined) {
+    if (input.threadId === null) {
+      clearSingleValue(store, session.id, edgeId(workflow.agentSession.fields.threadId));
+    } else {
+      patch.threadId = requireString(input.threadId, "Workflow session thread id");
+    }
+  }
+  if (input.turnId !== undefined) {
+    if (input.turnId === null) {
+      clearSingleValue(store, session.id, edgeId(workflow.agentSession.fields.turnId));
+    } else {
+      patch.turnId = requireString(input.turnId, "Workflow session turn id");
+    }
+  }
+  if (input.status !== undefined) {
+    const status = resolveWorkflowSessionStatus(input.status);
+    patch.runtimeState = requireStoredWorkflowSessionStatus(status);
+    if (status === "Open") {
+      if (input.endedAt) {
+        throw new WorkflowMutationError(
+          400,
+          "Workflow session ended at can only be set when the session status is Done.",
+        );
+      }
+      clearSingleValue(store, session.id, edgeId(workflow.agentSession.fields.endedAt));
+    } else {
+      const endedAt = parseOptionalDate(input.endedAt, "Workflow session ended at");
+      if (endedAt === null) {
+        throw new WorkflowMutationError(
+          400,
+          "Workflow session ended at must be a valid ISO timestamp when the session is done.",
+        );
+      }
+      patch.endedAt = endedAt ?? session.endedAt ?? new Date();
+    }
+  } else if (input.endedAt !== undefined) {
+    const endedAt = parseOptionalDate(input.endedAt, "Workflow session ended at");
+    if (endedAt === null) {
+      clearSingleValue(store, session.id, edgeId(workflow.agentSession.fields.endedAt));
+    } else if (endedAt) {
+      patch.endedAt = endedAt;
+    }
+  }
+
+  if (Object.keys(patch).length > 0) {
+    graph.agentSession.update(session.id, patch);
+  }
+
+  return {
+    action: input.action,
+    created: false,
+    summary: buildSessionSummary(graph.agentSession.get(session.id)),
+  };
+}
+
+export function setWorkflowCommitUserReviewGate(
+  graph: ProductGraphClient,
+  store: GraphStore,
+  input: CommitUserReviewGateMutation,
+): WorkflowMutationResult {
+  const commit = requireCommit(graph, store, requireString(input.commitId, "Commit id"));
+  const branch = requireBranch(graph, store, commit.branch);
+  const currentState = decodeWorkflowCommitState(commit.state);
+  if (isWorkflowCommitTerminal(currentState)) {
+    throw new WorkflowMutationError(
+      409,
+      `Workflow commit "${commit.id}" does not accept a user-review gate in state "${currentState}".`,
+      "invalid-transition",
+    );
+  }
+
+  const requestedBySessionId = trimOptionalString(input.requestedBySessionId);
+  if (requestedBySessionId) {
+    const session = requireAgentSession(graph, store, requestedBySessionId);
+    if (session.commit !== commit.id) {
+      throw new WorkflowMutationError(
+        409,
+        `Workflow session "${session.id}" does not belong to commit "${commit.id}".`,
+        "invalid-transition",
+      );
+    }
+  }
+  const requestedAt = parseOptionalDate(input.requestedAt, "Workflow gate requested at");
+
+  if (currentState !== "blocked") {
+    graph.commit.update(commit.id, {
+      state: commitStateIds.blocked,
+    });
+    reconcileBranchAfterCommitChange(graph, store, branch.id, commit.id);
+  }
+
+  return {
+    action: input.action,
+    created: false,
+    summary: buildCommitUserReviewSummary(graph.commit.get(commit.id), {
+      ...(trimOptionalString(input.reason) ? { reason: trimOptionalString(input.reason) } : {}),
+      ...(requestedAt ? { requestedAt: requestedAt.toISOString() } : {}),
+      ...(requestedBySessionId ? { requestedBySessionId } : {}),
+    }),
+  };
+}
+
+export function clearWorkflowCommitUserReviewGate(
+  graph: ProductGraphClient,
+  store: GraphStore,
+  input: CommitUserReviewGateClearMutation,
+): WorkflowMutationResult {
+  const commit = requireCommit(graph, store, requireString(input.commitId, "Commit id"));
+  const branch = requireBranch(graph, store, commit.branch);
+
+  if (decodeWorkflowCommitState(commit.state) === "blocked") {
+    graph.commit.update(commit.id, {
+      state: commitStateIds.ready,
+    });
+    reconcileBranchAfterCommitChange(graph, store, branch.id, commit.id);
+  }
+
   return {
     action: input.action,
     created: false,

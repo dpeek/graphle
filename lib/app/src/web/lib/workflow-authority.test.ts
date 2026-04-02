@@ -470,6 +470,164 @@ describe("workflow authority", () => {
   );
 
   it(
+    "creates and updates commit-scoped workflow sessions through workflow mutation",
+    async () => {
+      const authorization = createTestAuthorizationContext();
+      const { authority, fixture } =
+        await createTestWebAppAuthorityWithWorkflowFixture(authorization);
+      const commit = await executeWorkflowMutation(authority, authorization, {
+        action: "createCommit",
+        branchId: fixture.branchId,
+        title: "Plan workflow session",
+        commitKey: "commit:plan-workflow-session",
+        order: 0,
+        state: "ready",
+      });
+
+      const created = await executeWorkflowMutation(authority, authorization, {
+        action: "createSession",
+        commitId: commit.summary.id,
+        kind: "Plan",
+        name: "Workflow plan session",
+        sessionKey: "session:workflow-plan-01",
+        threadId: "thread:workflow-plan-01",
+        turnId: "turn:workflow-plan-01",
+        workerId: "worker-plan-01",
+      });
+
+      expect(created).toMatchObject({
+        action: "createSession",
+        created: true,
+        summary: {
+          entity: "session",
+          projectId: fixture.projectId,
+          repositoryId: fixture.repositoryId,
+          branchId: fixture.branchId,
+          commitId: commit.summary.id,
+          kind: "Plan",
+          status: "Open",
+          sessionKey: "session:workflow-plan-01",
+          title: "Workflow plan session",
+          threadId: "thread:workflow-plan-01",
+          turnId: "turn:workflow-plan-01",
+          workerId: "worker-plan-01",
+        },
+      });
+
+      const updated = await executeWorkflowMutation(authority, authorization, {
+        action: "updateSession",
+        sessionId: created.summary.id,
+        name: "Workflow plan session complete",
+        status: "Done",
+        threadId: null,
+        endedAt: "2026-03-30T11:00:00.000Z",
+      });
+
+      expect(updated).toMatchObject({
+        action: "updateSession",
+        created: false,
+        summary: {
+          entity: "session",
+          id: created.summary.id,
+          kind: "Plan",
+          status: "Done",
+          title: "Workflow plan session complete",
+          endedAt: "2026-03-30T11:00:00.000Z",
+        },
+      });
+      expect("threadId" in updated.summary).toBe(false);
+
+      const persisted = readProductGraph(authority, authorization).agentSession.get(
+        created.summary.id,
+      );
+      expect(persisted).toMatchObject({
+        project: fixture.projectId,
+        repository: fixture.repositoryId,
+        branch: fixture.branchId,
+        commit: commit.summary.id,
+        kind: workflow.agentSessionKind.values.planning.id,
+        runtimeState: workflow.agentSessionRuntimeState.values.completed.id,
+        name: "Workflow plan session complete",
+        turnId: "turn:workflow-plan-01",
+        workerId: "worker-plan-01",
+      });
+      expect(persisted.threadId).toBeUndefined();
+      expect(persisted.endedAt?.toISOString()).toBe("2026-03-30T11:00:00.000Z");
+    },
+    workflowAuthorityTimeout,
+  );
+
+  it(
+    "sets and clears the user-review gate through workflow mutation",
+    async () => {
+      const authorization = createTestAuthorizationContext();
+      const { authority, fixture } =
+        await createTestWebAppAuthorityWithWorkflowFixture(authorization);
+      const commit = await executeWorkflowMutation(authority, authorization, {
+        action: "createCommit",
+        branchId: fixture.branchId,
+        title: "Gate workflow commit",
+        commitKey: "commit:gate-workflow-commit",
+        order: 0,
+        state: "ready",
+      });
+      const session = await executeWorkflowMutation(authority, authorization, {
+        action: "createSession",
+        commitId: commit.summary.id,
+        kind: "Review",
+        name: "Workflow review session",
+        sessionKey: "session:workflow-review-01",
+        workerId: "worker-review-01",
+      });
+
+      const gated = await executeWorkflowMutation(authority, authorization, {
+        action: "setCommitUserReviewGate",
+        commitId: commit.summary.id,
+        reason: "Await manual review before implementation resumes.",
+        requestedAt: "2026-03-30T12:00:00.000Z",
+        requestedBySessionId: session.summary.id,
+      });
+
+      expect(gated).toMatchObject({
+        action: "setCommitUserReviewGate",
+        created: false,
+        summary: {
+          entity: "commit",
+          id: commit.summary.id,
+          state: "blocked",
+          gate: "UserReview",
+          gateReason: "Await manual review before implementation resumes.",
+          gateRequestedAt: "2026-03-30T12:00:00.000Z",
+          gateRequestedBySessionId: session.summary.id,
+        },
+      });
+      expect(readProductGraph(authority, authorization).commit.get(commit.summary.id).state).toBe(
+        workflow.commitState.values.blocked.id,
+      );
+
+      const cleared = await executeWorkflowMutation(authority, authorization, {
+        action: "clearCommitUserReviewGate",
+        commitId: commit.summary.id,
+      });
+
+      expect(cleared).toMatchObject({
+        action: "clearCommitUserReviewGate",
+        created: false,
+        summary: {
+          entity: "commit",
+          id: commit.summary.id,
+          state: "ready",
+        },
+      });
+      expect("gate" in cleared.summary).toBe(false);
+      expect(readProductGraph(authority, authorization).commit.get(commit.summary.id).state).toBe(
+        workflow.commitState.values.ready.id,
+      );
+    },
+    workflowAuthorityTimeout,
+  );
+
+  it(
     "finalizes a committed workflow outcome by promoting a reserved repository commit record",
     async () => {
       const authorization = createTestAuthorizationContext();

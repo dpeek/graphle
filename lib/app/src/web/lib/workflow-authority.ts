@@ -11,10 +11,14 @@ import {
 import type { WebAppAuthorityCommandOptions } from "./authority.js";
 import { dispatchWorkflowAggregateMutation } from "./workflow-authority-aggregate-handlers.js";
 import {
+  clearWorkflowCommitUserReviewGate,
+  createWorkflowSession,
   createWorkflowCommit,
   createWorkflowRepositoryCommit,
   finalizeWorkflowCommit,
+  setWorkflowCommitUserReviewGate,
   setWorkflowCommitState,
+  updateWorkflowSession,
   updateWorkflowCommit,
 } from "./workflow-authority-commit-handlers.js";
 import {
@@ -53,6 +57,14 @@ function mutateWorkflow(
       return updateWorkflowCommit(graph, store, input);
     case "setCommitState":
       return setWorkflowCommitState(graph, store, input);
+    case "setCommitUserReviewGate":
+      return setWorkflowCommitUserReviewGate(graph, store, input);
+    case "clearCommitUserReviewGate":
+      return clearWorkflowCommitUserReviewGate(graph, store, input);
+    case "createSession":
+      return createWorkflowSession(graph, store, input);
+    case "updateSession":
+      return updateWorkflowSession(graph, store, input);
     case "createRepositoryCommit":
       return createWorkflowRepositoryCommit(graph, store, input);
     case "finalizeCommit":

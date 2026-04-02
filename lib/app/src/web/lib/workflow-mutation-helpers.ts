@@ -4,16 +4,23 @@ import { type GraphWriteTransaction } from "@io/graph-kernel";
 import { core } from "@io/graph-module-core";
 import { workflow } from "@io/graph-module-workflow";
 import {
+  type AgentSessionAppendRuntimeState,
+  type AgentSessionAppendSessionKind,
   type RepositoryCommitLeaseStateValue,
   type RepositoryCommitStateValue,
   repositoryCommitLeaseStateValues,
   repositoryCommitStateValues,
+  resolveWorkflowSessionStatusFromAgentSessionRuntimeState,
   type WorkflowBranchStateValue,
+  type WorkflowCommitGateValue,
   branchStateValues,
   commitStateValues,
+  type WorkflowMutableSessionKind,
+  type WorkflowMutableSessionStatus,
   type WorkflowCommitStateValue,
   type WorkflowMutationFailureCode,
   type WorkflowMutationSummary,
+  type WorkflowSessionSummary,
 } from "@io/graph-module-workflow";
 
 import { planRecordedMutation } from "./mutation-planning.js";
@@ -45,10 +52,35 @@ const repositoryCommitLeaseStateIds = Object.fromEntries(
   ]),
 ) as Record<RepositoryCommitLeaseStateValue, string>;
 
+const workflowSessionKindToAgentSessionKind = {
+  Plan: "planning",
+  Review: "review",
+  Implement: "execution",
+} as const satisfies Record<WorkflowMutableSessionKind, AgentSessionAppendSessionKind>;
+
+const agentSessionKindIds = Object.fromEntries(
+  Object.entries(workflowSessionKindToAgentSessionKind).map(([kind, storedKind]) => [
+    kind,
+    resolvedEnumValue(workflow.agentSessionKind.values[storedKind]),
+  ]),
+) as Record<WorkflowMutableSessionKind, string>;
+
+const agentSessionRuntimeStateIds = {
+  Open: resolvedEnumValue(workflow.agentSessionRuntimeState.values.running),
+  Done: resolvedEnumValue(workflow.agentSessionRuntimeState.values.completed),
+} as const satisfies Record<WorkflowMutableSessionStatus, string>;
+
 const branchStateKeysById = invertRecord(branchStateIds);
 const commitStateKeysById = invertRecord(commitStateIds);
 const repositoryCommitStateKeysById = invertRecord(repositoryCommitStateIds);
 const repositoryCommitLeaseStateKeysById = invertRecord(repositoryCommitLeaseStateIds);
+const agentSessionKindKeysById = invertRecord(agentSessionKindIds);
+const agentSessionRuntimeStateKeysById = Object.fromEntries(
+  Object.entries(workflow.agentSessionRuntimeState.values).map(([key, value]) => {
+    const enumValue = value as { key: string; id?: string };
+    return [resolvedEnumValue(enumValue), key];
+  }),
+) as Record<string, AgentSessionAppendRuntimeState>;
 
 export const branchTransitions: Record<
   WorkflowBranchStateValue,
@@ -210,6 +242,12 @@ export function isWorkflowCommitTerminal(state: WorkflowCommitStateValue): boole
   return state === "committed" || state === "dropped";
 }
 
+export function deriveWorkflowCommitGate(
+  state: WorkflowCommitStateValue,
+): WorkflowCommitGateValue | undefined {
+  return state === "blocked" ? "UserReview" : undefined;
+}
+
 export function requireWorkflowTransition<TState extends string>(
   current: TState,
   next: TState,
@@ -293,17 +331,69 @@ export function buildBranchSummary(
 }
 
 export function buildCommitSummary(entity: ReturnType<ProductGraphClient["commit"]["get"]>) {
+  const state = decodeWorkflowCommitState(entity.state);
+  const gate = deriveWorkflowCommitGate(state);
   return appendTimestampSummary(entity, {
     entity: "commit",
     id: entity.id,
     title: entity.name,
     branchId: entity.branch,
     commitKey: entity.commitKey,
-    state: decodeWorkflowCommitState(entity.state),
+    state,
+    ...(gate ? { gate } : {}),
     order: entity.order,
     ...(entity.parentCommit ? { parentCommitId: entity.parentCommit } : {}),
     ...(entity.contextDocument ? { contextDocumentId: entity.contextDocument } : {}),
   }) satisfies WorkflowMutationSummary;
+}
+
+function decodeStoredWorkflowSessionKind(value: string): WorkflowMutableSessionKind {
+  const kind = agentSessionKindKeysById[value];
+  if (!kind) {
+    throw new Error(`Unknown workflow session kind id "${value}".`);
+  }
+  return kind;
+}
+
+function decodeStoredWorkflowSessionStatus(value: string): WorkflowMutableSessionStatus {
+  const runtimeState = agentSessionRuntimeStateKeysById[value];
+  if (!runtimeState) {
+    throw new Error(`Unknown workflow session runtime state id "${value}".`);
+  }
+  return resolveWorkflowSessionStatusFromAgentSessionRuntimeState(runtimeState);
+}
+
+export function requireStoredWorkflowSessionKind(kind: WorkflowMutableSessionKind): string {
+  return agentSessionKindIds[kind];
+}
+
+export function requireStoredWorkflowSessionStatus(status: WorkflowMutableSessionStatus): string {
+  return agentSessionRuntimeStateIds[status];
+}
+
+export function buildSessionSummary(
+  entity: ReturnType<ProductGraphClient["agentSession"]["get"]>,
+): WorkflowSessionSummary {
+  if (!entity.commit) {
+    throw new Error(`Workflow session "${entity.id}" is missing commit provenance.`);
+  }
+  return appendTimestampSummary(entity, {
+    entity: "session",
+    id: entity.id,
+    projectId: entity.project,
+    ...(entity.repository ? { repositoryId: entity.repository } : {}),
+    branchId: entity.branch,
+    commitId: entity.commit,
+    sessionKey: entity.sessionKey,
+    kind: decodeStoredWorkflowSessionKind(entity.kind),
+    status: decodeStoredWorkflowSessionStatus(entity.runtimeState),
+    title: entity.name,
+    workerId: entity.workerId,
+    ...(entity.threadId ? { threadId: entity.threadId } : {}),
+    ...(entity.turnId ? { turnId: entity.turnId } : {}),
+    startedAt: entity.startedAt.toISOString(),
+    ...(entity.endedAt ? { endedAt: entity.endedAt.toISOString() } : {}),
+  }) satisfies WorkflowSessionSummary;
 }
 
 export function buildRepositoryBranchSummary(

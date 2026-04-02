@@ -60,7 +60,8 @@ here keep the current architecture split in smaller reviewable slices.
 - [`branch/05-blob-ingestion-and-media.md`](./branch/05-blob-ingestion-and-media.md):
   canonical contract for Branch 5 blob, ingestion, provenance, and media work
 - [`branch/06-workflow-and-agent-runtime.md`](./branch/06-workflow-and-agent-runtime.md):
-  canonical contract for Branch 6 workflow and agent runtime work
+  canonical contract for the browser-first Branch 6 workflow model around
+  implicit `main`, commit queues, sessions, and the review gate
 - [`branch/07-web-and-operator-surfaces.md`](./branch/07-web-and-operator-surfaces.md):
   canonical contract for Branch 7 web and operator surface work
 

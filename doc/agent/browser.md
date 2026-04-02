@@ -15,6 +15,8 @@ Shipping note on 2026-04-01:
 - this proposal remains useful for the long-lived browser-agent and graph
   authority split, but the new plan is the current delivery target for the
   first browser-launched workflow session
+- the branch-board and branch-scoped launch language below is therefore
+  longer-lived reference material, not the v1 release gate
 
 ## Recommendation
 

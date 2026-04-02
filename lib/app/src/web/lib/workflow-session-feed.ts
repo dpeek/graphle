@@ -264,6 +264,7 @@ function buildWorkflowBranchSummary(
 function buildWorkflowCommitSummary(
   entity: ReturnType<ProductGraphClient["commit"]["get"]>,
 ): WorkflowCommitSummary {
+  const state = decodeWorkflowCommitState(entity.state);
   return {
     branchId: entity.branch,
     commitKey: entity.commitKey,
@@ -273,7 +274,8 @@ function buildWorkflowCommitSummary(
     id: entity.id,
     order: entity.order,
     ...(entity.parentCommit ? { parentCommitId: entity.parentCommit } : {}),
-    state: decodeWorkflowCommitState(entity.state),
+    state,
+    ...(state === "blocked" ? { gate: "UserReview" as const } : {}),
     title: entity.name,
     updatedAt: entity.updatedAt.toISOString(),
   };

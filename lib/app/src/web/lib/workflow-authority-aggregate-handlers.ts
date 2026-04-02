@@ -2,8 +2,15 @@ import { edgeId, type GraphStore } from "@io/app/graph";
 import { workflow } from "@io/graph-module-workflow";
 import {
   branchStateValues,
-  type WorkflowMutationAction,
+  type WorkflowAttachBranchRepositoryTargetAction,
+  type WorkflowCreateBranchAction,
+  type WorkflowCreateProjectAction,
+  type WorkflowCreateRepositoryAction,
+  type WorkflowSetBranchStateAction,
   type WorkflowMutationResult,
+  type WorkflowUpdateBranchAction,
+  type WorkflowUpdateProjectAction,
+  type WorkflowUpdateRepositoryAction,
 } from "@io/graph-module-workflow";
 
 import {
@@ -37,21 +44,9 @@ import {
   branchStateIds,
 } from "./workflow-mutation-helpers.js";
 
-type ProjectCreateMutation = Extract<WorkflowMutationAction, { action: "createProject" }>;
-type ProjectUpdateMutation = Extract<WorkflowMutationAction, { action: "updateProject" }>;
-type RepositoryCreateMutation = Extract<WorkflowMutationAction, { action: "createRepository" }>;
-type RepositoryUpdateMutation = Extract<WorkflowMutationAction, { action: "updateRepository" }>;
-type BranchCreateMutation = Extract<WorkflowMutationAction, { action: "createBranch" }>;
-type BranchUpdateMutation = Extract<WorkflowMutationAction, { action: "updateBranch" }>;
-type BranchStateMutation = Extract<WorkflowMutationAction, { action: "setBranchState" }>;
-type BranchRepositoryTargetMutation = Extract<
-  WorkflowMutationAction,
-  { action: "attachBranchRepositoryTarget" }
->;
-
 function createWorkflowProject(
   graph: ProductGraphClient,
-  input: ProjectCreateMutation,
+  input: WorkflowCreateProjectAction,
 ): WorkflowMutationResult {
   const projectKey = requireString(input.projectKey, "Project key");
   const title = requireString(input.title, "Project title");
@@ -73,7 +68,7 @@ function createWorkflowProject(
 function updateWorkflowProject(
   graph: ProductGraphClient,
   store: GraphStore,
-  input: ProjectUpdateMutation,
+  input: WorkflowUpdateProjectAction,
 ): WorkflowMutationResult {
   const project = requireProject(graph, store, requireString(input.projectId, "Project id"));
   const patch: Partial<typeof project> & Record<string, unknown> = {};
@@ -100,7 +95,7 @@ function updateWorkflowProject(
 function createWorkflowRepository(
   graph: ProductGraphClient,
   store: GraphStore,
-  input: RepositoryCreateMutation,
+  input: WorkflowCreateRepositoryAction,
 ): WorkflowMutationResult {
   const project = requireProject(graph, store, requireString(input.projectId, "Project id"));
   requireSingleAttachedRepository(graph);
@@ -124,7 +119,7 @@ function createWorkflowRepository(
 function updateWorkflowRepository(
   graph: ProductGraphClient,
   store: GraphStore,
-  input: RepositoryUpdateMutation,
+  input: WorkflowUpdateRepositoryAction,
 ): WorkflowMutationResult {
   const repository = requireRepository(
     graph,
@@ -163,7 +158,7 @@ function updateWorkflowRepository(
 function createWorkflowBranch(
   graph: ProductGraphClient,
   store: GraphStore,
-  input: BranchCreateMutation,
+  input: WorkflowCreateBranchAction,
 ): WorkflowMutationResult {
   const project = requireProject(graph, store, requireString(input.projectId, "Project id"));
   const branchKey = requireString(input.branchKey, "Branch key");
@@ -209,7 +204,7 @@ function createWorkflowBranch(
 function updateWorkflowBranch(
   graph: ProductGraphClient,
   store: GraphStore,
-  input: BranchUpdateMutation,
+  input: WorkflowUpdateBranchAction,
 ): WorkflowMutationResult {
   const branch = requireBranch(graph, store, requireString(input.branchId, "Branch id"));
   const patch: Record<string, unknown> = {};
@@ -261,7 +256,7 @@ function updateWorkflowBranch(
 function setWorkflowBranchState(
   graph: ProductGraphClient,
   store: GraphStore,
-  input: BranchStateMutation,
+  input: WorkflowSetBranchStateAction,
 ): WorkflowMutationResult {
   const branch = requireBranch(graph, store, requireString(input.branchId, "Branch id"));
   const targetState = requireAllowedValue(input.state, branchStateValues, "Workflow branch state");
@@ -426,7 +421,7 @@ function createManagedBranchRepositoryTarget(
 function attachWorkflowBranchRepositoryTarget(
   graph: ProductGraphClient,
   store: GraphStore,
-  input: BranchRepositoryTargetMutation,
+  input: WorkflowAttachBranchRepositoryTargetAction,
 ): WorkflowMutationResult {
   const branch = requireBranch(graph, store, requireString(input.branchId, "Branch id"));
   const repository = requireRepository(

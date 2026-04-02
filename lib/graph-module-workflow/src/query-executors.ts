@@ -24,7 +24,7 @@ export type WorkflowQueryExecutorDependencies<ReadOptions> = {
   readonly unsupported: (message: string) => Error;
 };
 
-type WorkflowQueryExecutorRegistration<ReadOptions> = {
+type WorkflowQueryExecutorRegistration<_ReadOptions> = {
   readonly execute: (context: any) => QueryResultPage;
   readonly queryKind: "collection" | "scope";
   readonly surfaceId: string;

@@ -133,7 +133,7 @@ Stability target for this branch:
 - capability-aware visibility, disabled-state, and redaction behavior in the
   UI
 - built-in operator surfaces such as the graph explorer and sync monitor
-- operator-facing integration surfaces for workflow, run, and session views
+- operator-facing integration surfaces for workflow, commit, and session views
 - shell conventions for loading, stale, fallback, and error states
 
 ### Out of scope
@@ -142,7 +142,7 @@ Stability target for this branch:
 - auth provider implementation or principal resolution logic
 - scoped sync planning, projection building, or invalidation routing
 - module manifest shape, install records, or migration ownership
-- workflow entity taxonomy, run/session persistence, or artifact storage
+- workflow entity taxonomy, commit or session persistence, or artifact storage
 - blob ingestion workers, extraction queues, or media storage
 
 ### Upstream assumptions
@@ -155,7 +155,7 @@ Stability target for this branch:
   semantics before module surfaces rely on scoped caches
 - Branch 4 provides installed-module records plus declared UI and command
   contributions
-- Branch 6 provides workflow, run, session, and artifact records or an
+- Branch 6 provides workflow, commit, session, and artifact records or an
   adapter-backed equivalent during migration
 
 ## 3. Core Model
@@ -775,7 +775,7 @@ Rules:
 
 - dependency direction: Branch 7 imports Branch 6
 - imported contracts:
-  - workflow, run, session, and artifact records
+  - workflow, commit, session, and artifact records
   - operator session event feeds
   - retained replay or attach semantics during migration
 - exported contracts:
@@ -785,7 +785,7 @@ Rules:
   - current retained TUI feeds may stand in for graph-native workflow views
 - must be stable before safe implementation:
   - session ordering
-  - lifecycle states for runs and sessions
+  - lifecycle states for commits and sessions
   - artifact identity and access rules
 
 ## 8. Main Flows

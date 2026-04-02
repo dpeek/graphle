@@ -9,6 +9,8 @@ import {
   agentSessionAppendSessionAckStatusValues,
   createAgentSessionAppendEventFingerprint,
   evaluateAgentSessionAppendRequest,
+  resolveWorkflowSessionKindFromAgentSessionKind,
+  resolveWorkflowSessionStatusFromAgentSessionRuntimeState,
   type AgentSessionAppendRequest,
 } from "./schema.js";
 
@@ -82,6 +84,20 @@ describe("agent session append contract", () => {
       "pending-finalization",
       "running",
     ]);
+  });
+
+  it("maps retained agent-session runtime records onto workflow-session semantics", () => {
+    expect(resolveWorkflowSessionKindFromAgentSessionKind("planning")).toBe("Plan");
+    expect(resolveWorkflowSessionKindFromAgentSessionKind("review")).toBe("Review");
+    expect(resolveWorkflowSessionKindFromAgentSessionKind("execution")).toBe("Implement");
+    expect(resolveWorkflowSessionStatusFromAgentSessionRuntimeState("running")).toBe("Open");
+    expect(resolveWorkflowSessionStatusFromAgentSessionRuntimeState("awaiting-user-input")).toBe(
+      "Open",
+    );
+    expect(resolveWorkflowSessionStatusFromAgentSessionRuntimeState("blocked")).toBe("Open");
+    expect(resolveWorkflowSessionStatusFromAgentSessionRuntimeState("completed")).toBe("Done");
+    expect(resolveWorkflowSessionStatusFromAgentSessionRuntimeState("failed")).toBe("Done");
+    expect(resolveWorkflowSessionStatusFromAgentSessionRuntimeState("cancelled")).toBe("Done");
   });
 
   it("accepts the next contiguous retained event and advances the stream acknowledgement", () => {

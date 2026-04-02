@@ -59,12 +59,16 @@ const requiredWorkflowExports = [
   "compileWorkflowReviewScopeDependencyKeys",
   "compileWorkflowReviewWriteDependencyKeys",
   "createAgentSessionAppendEventFingerprint",
+  "resolveWorkflowSessionKindFromAgentSessionKind",
+  "resolveWorkflowSessionStatusFromAgentSessionRuntimeState",
   "evaluateArtifactWriteRequest",
   "decisionWriteCommand",
   "decisionWriteFailureCodes",
   "createWorkflowReviewInvalidationEvent",
   "evaluateDecisionWriteRequest",
   "evaluateAgentSessionAppendRequest",
+  "retainedAgentSessionKindToWorkflowSessionKind",
+  "retainedAgentSessionRuntimeStateToWorkflowSessionStatus",
   "repositoryBranch",
   "repositoryCommit",
   "repositoryCommitLeaseState",
@@ -87,6 +91,17 @@ const requiredWorkflowExports = [
   "workflowReviewModuleReadScope",
   "workflowReviewScopeDependencyKey",
   "workflowReviewSyncScopeRequest",
+  "workflowV1Branch",
+  "workflowV1Commit",
+  "workflowCommitGateValues",
+  "workflowMutableSessionKindValues",
+  "workflowMutableSessionStatusValues",
+  "workflowV1CommitGateValues",
+  "workflowV1CommitStateValues",
+  "workflowV1Session",
+  "workflowV1SessionCreatedByValues",
+  "workflowV1SessionKindValues",
+  "workflowV1SessionStatusValues",
   "projectKeyPattern",
   "repository",
   "repositoryKeyPattern",
@@ -265,6 +280,41 @@ describe("workflow module entry surfaces", () => {
     expect("core" in workflowExports).toBe(false);
     expect("stringTypeModule" in workflowExports).toBe(false);
     expect("graphIconSeeds" in workflowExports).toBe(false);
+    expect(workflowExports.workflowV1Branch).toEqual({
+      emphasis: "secondary",
+      requiredFields: ["slug", "name", "context", "references"],
+    });
+    expect(workflowExports.workflowV1Commit).toEqual({
+      emphasis: "primary",
+      gateMetadataFields: ["gateReason", "gateRequestedAt", "gateRequestedBySessionId"],
+      gateValues: ["None", "UserReview"],
+      requiredFields: ["slug", "name", "context", "references"],
+      stateValues: ["Todo", "Open", "Done"],
+    });
+    expect(workflowExports.workflowV1Session).toEqual({
+      createdByValues: ["system", "agent"],
+      kindValues: ["Plan", "Review", "Implement", "Merge"],
+      requiredFields: ["name", "context", "references"],
+      retainedStorage: {
+        eventTypeKey: "workflow:agentSessionEvent",
+        renameDeferred: true,
+        sessionTypeKey: "workflow:agentSession",
+      },
+      statusValues: ["Todo", "Open", "Done"],
+    });
+    expect(workflowExports.retainedAgentSessionKindToWorkflowSessionKind).toEqual({
+      execution: "Implement",
+      planning: "Plan",
+      review: "Review",
+    });
+    expect(workflowExports.retainedAgentSessionRuntimeStateToWorkflowSessionStatus).toEqual({
+      "awaiting-user-input": "Open",
+      blocked: "Open",
+      cancelled: "Done",
+      completed: "Done",
+      failed: "Done",
+      running: "Open",
+    });
     expect(typeof workflowExports.workflow.envVar.values.id).toBe("string");
     expect(typeof workflowExports.workflow.project.values.id).toBe("string");
     expect(typeof workflowExports.workflow.document.values.id).toBe("string");
