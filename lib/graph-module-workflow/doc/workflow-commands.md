@@ -1,7 +1,7 @@
 ---
 name: Graph module workflow commands
 description: "Workflow mutation, retained session append, artifact write, and decision write commands in @io/graph-module-workflow."
-last_updated: 2026-04-02
+last_updated: 2026-04-07
 ---
 
 # Graph module workflow commands
@@ -44,7 +44,7 @@ Current action families are:
 - branch create or update
 - branch state changes and repository-target attachment
 - commit create or update
-- commit state changes and explicit `UserReview` gate set or clear
+- commit state changes and explicit `UserReview` request or clear actions
 - session create or update
 - repository-commit creation
 - commit finalization
@@ -62,6 +62,15 @@ The command publishes stable failure codes:
 - `commit-lock-conflict`
 - `invalid-transition`
 - `subject-not-found`
+
+Explicit review-gate rule:
+
+- `requestCommitUserReview` is the only workflow mutation that moves a commit
+  into the `UserReview` gate and refreshes the gate metadata snapshot
+- `clearCommitUserReview` removes the gate and clears the gate metadata fields
+- request-changes flows keep the gate in place; the audit trail lives in
+  `workflow:decision-write` plus retained session history, and follow-on review
+  work should be created through `createSession`
 
 ## Retained session append
 

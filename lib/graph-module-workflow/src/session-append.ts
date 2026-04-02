@@ -151,9 +151,11 @@ export type AgentSessionAppendSubject =
     };
 
 export interface AgentSessionAppendSessionCreate {
+  readonly context?: string;
   readonly mode: "create";
   readonly kind: AgentSessionAppendSessionKind;
   readonly projectId: string;
+  readonly references?: string;
   readonly repositoryId?: string;
   readonly retainedSession: AgentSessionAppendRetainedSessionRef;
   readonly sessionKey: string;

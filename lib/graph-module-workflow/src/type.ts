@@ -132,6 +132,15 @@ function optionalStringField(
   });
 }
 
+function optionalMultilineStringField(label: string, description?: string) {
+  return optionalStringField(label, {
+    ...(description ? { description } : {}),
+    multiline: true,
+    defaultOperator: "contains",
+    operators: ["contains", "equals"] as const,
+  });
+}
+
 function workflowKeyField(label: string, prefix: string, description?: string) {
   return stringTypeModule.field({
     cardinality: "one",
@@ -361,6 +370,8 @@ export const branch = defineType({
         label: "Queue rank",
       },
     }),
+    context: optionalMultilineStringField("Context"),
+    references: optionalMultilineStringField("References"),
     goalDocument: existingEntityReferenceField(document, {
       cardinality: "one?",
       label: "Goal document",
@@ -402,6 +413,20 @@ export const commitState = defineEnum({
 
 export const commitStateTypeModule = defineDefaultEnumTypeModule(commitState);
 
+export const commitGate = defineEnum({
+  values: { key: "workflow:commitGate", name: "Commit Gate" },
+  options: {
+    None: {
+      name: "None",
+    },
+    UserReview: {
+      name: "User Review",
+    },
+  },
+});
+
+export const commitGateTypeModule = defineDefaultEnumTypeModule(commitGate);
+
 export const commit = defineType({
   values: { key: "workflow:commit", name: "Commit" },
   fields: {
@@ -428,6 +453,23 @@ export const commit = defineType({
       }),
       createOptional: true as const,
     },
+    gate: {
+      ...commitGateTypeModule.field({
+        cardinality: "one",
+        onCreate: ({ incoming }) => incoming ?? resolvedEnumValue(commitGate.values.None),
+        meta: {
+          label: "Gate",
+          display: {
+            kind: "badge",
+          },
+        },
+        filter: {
+          operators: ["is", "oneOf"] as const,
+          defaultOperator: "is",
+        },
+      }),
+      createOptional: true as const,
+    },
     order: numberTypeModule.field({
       cardinality: "one",
       validate: ({ value }) => validateNonNegativeInteger("Commit order", value),
@@ -435,6 +477,8 @@ export const commit = defineType({
         label: "Order",
       },
     }),
+    context: optionalMultilineStringField("Context"),
+    references: optionalMultilineStringField("References"),
     parentCommit: existingEntityReferenceField("workflow:commit", {
       cardinality: "one?",
       excludeSubject: true,
@@ -753,6 +797,8 @@ export const agentSession = defineType({
       },
     }),
     workerId: requiredStringField("Worker id"),
+    context: optionalMultilineStringField("Context"),
+    references: optionalMultilineStringField("References"),
     threadId: optionalStringField("Thread id"),
     turnId: optionalStringField("Turn id"),
     runtimeState: {

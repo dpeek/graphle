@@ -76,6 +76,9 @@ Current rules:
 
 - the browser-agent is a local runtime bridge for browser-owned launch, attach,
   and live session-event streaming
+- launch and active-session lookup exchange one explicit `workflow.selection`
+  plus `workflow.context` payload; optional `workflow.local` hints carry
+  repository root, worktree path, git branch name, and HEAD SHA when known
 - when no shared launch coordinator is configured, the runtime reports itself
   as unavailable instead of pretending browser launch exists
 

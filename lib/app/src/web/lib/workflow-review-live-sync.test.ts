@@ -14,6 +14,7 @@ import {
   executeTestWorkflowMutation,
 } from "./authority-test-helpers.js";
 import { type WebAppAuthority } from "./authority.js";
+import { webAppPolicyVersion } from "./policy-version.js";
 import { handleSyncRequest, handleWorkflowLiveRequest } from "./server-routes.js";
 import { webWorkflowLivePath, type WorkflowLiveRequest } from "./workflow-live-transport.js";
 
@@ -30,7 +31,7 @@ const authorization: AuthorizationContext = {
   roleKeys: ["graph:authority"],
   capabilityGrantIds: [],
   capabilityVersion: 0,
-  policyVersion: 0,
+  policyVersion: webAppPolicyVersion,
 };
 
 setDefaultTimeout(20_000);

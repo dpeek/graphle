@@ -467,10 +467,20 @@ Required v1 workflow-specific writes:
 
 - create and update commits in the simplified model
 - create and update workflow sessions
-- set and clear the user-review gate
+- request and clear the user-review gate
 - update commit context and references
 - append retained session events
 - finalize commits by outcome
+
+Review-gate rule:
+
+- `requestCommitUserReview` moves a commit into the explicit `UserReview` gate
+  and refreshes the visible gate metadata snapshot
+- `clearCommitUserReview` resumes workflow by clearing the gate and its
+  metadata
+- `Request changes` keeps the gate in place; use `decision-write` plus
+  follow-on `createSession` work for audit and review-loop continuation instead
+  of adding a second gate-specific audit path
 
 Repository-branch and repository-commit records remain implementation details
 behind this boundary. They should not force a broader operator contract in the

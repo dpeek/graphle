@@ -10,12 +10,11 @@ import {
 } from "./policy-version.js";
 
 describe("policy version contract snapshot", () => {
-  it("keeps the current compiled snapshot at version zero", () => {
+  it("keeps the current compiled snapshot aligned with the exported policy version", () => {
     const snapshot = createWebAppPolicyContractSnapshot();
     const baselineHash = hashWebAppPolicyContractFingerprint(webAppPolicyContractFingerprint);
 
-    expect(deriveWebAppPolicyVersion(snapshot, baselineHash)).toBe(0);
-    expect(webAppPolicyVersion).toBe(0);
+    expect(deriveWebAppPolicyVersion(snapshot, baselineHash)).toBe(webAppPolicyVersion);
   });
 
   it("changes when an authored predicate policy changes", () => {

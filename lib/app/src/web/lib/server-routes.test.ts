@@ -20,6 +20,7 @@ import {
   handleWorkflowLiveRequest,
   handleWorkflowReadRequest,
 } from "./server-routes.js";
+import { webAppPolicyVersion } from "./policy-version.js";
 import type { WorkflowReviewLiveRegistrationTarget } from "./workflow-live-transport.js";
 
 const webSerializedQueryPath = defaultHttpSerializedQueryPath;
@@ -32,7 +33,7 @@ const authorization: AuthorizationContext = {
   roleKeys: ["graph:authority"],
   capabilityGrantIds: [],
   capabilityVersion: 0,
-  policyVersion: 0,
+  policyVersion: webAppPolicyVersion,
 };
 
 function createWorkflowReadAuthority(

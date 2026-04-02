@@ -405,6 +405,10 @@ function createSessionValues(
     sessionKey: input.sessionKey,
     kind: agentSessionKindIds[input.kind],
     workerId: input.workerId,
+    ...(trimOptionalString(input.context) ? { context: trimOptionalString(input.context) } : {}),
+    ...(trimOptionalString(input.references)
+      ? { references: trimOptionalString(input.references) }
+      : {}),
     ...(input.threadId ? { threadId: input.threadId } : {}),
     ...(input.turnId ? { turnId: input.turnId } : {}),
     runtimeState: agentSessionRuntimeStateIds[projection.runtimeState],
@@ -470,6 +474,14 @@ function buildSessionUpdateValues(
 
   if (current.name !== title) {
     updates.name = title;
+  }
+  const context = trimOptionalString(input.context);
+  if (context && current.context !== context) {
+    updates.context = context;
+  }
+  const references = trimOptionalString(input.references);
+  if (references && current.references !== references) {
+    updates.references = references;
   }
   if (input.threadId && current.threadId !== input.threadId) {
     updates.threadId = input.threadId;

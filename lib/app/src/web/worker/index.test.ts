@@ -23,6 +23,7 @@ import {
   webPrincipalBootstrapPath,
 } from "../lib/auth-client.js";
 import { createTestWebAppAuthority } from "../lib/authority-test-helpers.js";
+import { webAppPolicyVersion } from "../lib/policy-version.js";
 import type { WebAppAuthority } from "../lib/authority.js";
 import type { BetterAuthWorkerEnv } from "../lib/better-auth.js";
 import {
@@ -61,7 +62,7 @@ const authorityAuthorization: AuthorizationContext = {
   roleKeys: ["graph:authority"],
   capabilityGrantIds: [],
   capabilityVersion: 0,
-  policyVersion: 0,
+  policyVersion: webAppPolicyVersion,
 };
 
 const betterAuthSchemaSql = readFileSync(
@@ -84,7 +85,7 @@ function createSessionPrincipalProjectionResponse(
       sharedRead: false,
     },
     capabilityVersion: 4,
-    policyVersion: 0,
+    policyVersion: webAppPolicyVersion,
     ...overrides,
   };
 
@@ -630,7 +631,7 @@ describe("web worker route forwarding", () => {
           sharedRead: false,
         },
         capabilityVersion: 4,
-        policyVersion: 0,
+        policyVersion: webAppPolicyVersion,
       },
     });
   });
@@ -1922,7 +1923,7 @@ describe("web worker localhost instant onboarding end to end", () => {
       {
         authorization: createAnonymousAuthorizationContext({
           graphId: "graph:global",
-          policyVersion: 0,
+          policyVersion: webAppPolicyVersion,
         }),
       },
     );
@@ -2027,7 +2028,7 @@ describe("web worker admission flows", () => {
       {
         authorization: createAnonymousAuthorizationContext({
           graphId: "graph:global",
-          policyVersion: 0,
+          policyVersion: webAppPolicyVersion,
         }),
       },
     );
@@ -2215,7 +2216,7 @@ describe("web worker admission flows", () => {
       {
         authorization: createAnonymousAuthorizationContext({
           graphId: "graph:global",
-          policyVersion: 0,
+          policyVersion: webAppPolicyVersion,
         }),
       },
     );

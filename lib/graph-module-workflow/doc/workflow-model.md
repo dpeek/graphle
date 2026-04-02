@@ -1,7 +1,7 @@
 ---
 name: Graph module workflow model
 description: "Built-in workflow namespace assembly, schema ownership, and the browser-first v1 operator model in @io/graph-module-workflow."
-last_updated: 2026-04-03
+last_updated: 2026-04-07
 ---
 
 # Graph module workflow model
@@ -79,6 +79,21 @@ That model is exported directly through:
 - `workflowV1CommitGateValues`
 - `workflowV1SessionKindValues`
 - `workflowV1SessionStatusValues`
+
+The browser launch contract treats the selected commit as the source of truth
+for the next runnable session:
+
+- retained open session wins when one already exists for the selected commit
+- otherwise `planned -> Plan`, `ready -> Implement`, `active -> Implement`
+- `blocked`, `committed`, `dropped`, or an active `UserReview` gate mean there
+  is no runnable next session until workflow state changes
+- launch and active-session lookup send one explicit `workflow.selection` plus
+  `workflow.context` payload so branch, commit, and session prompt fields stay
+  aligned with the selected commit
+- authored `context` and `references` on branch, commit, and retained session
+  records win over generated fallback lines
+- optional `workflow.local` hints may carry repository root, worktree path, git
+  branch name, and HEAD SHA when that metadata is already known
 
 ## Key patterns and lineage
 

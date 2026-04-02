@@ -80,10 +80,18 @@ package, authority, or product boundaries.
   explicit bridge to `WorkflowSession` semantics lives in `session-append.ts`,
   which maps retained session kinds and runtime states onto the smaller v1
   session contract.
+- Selected-commit launch stays explicit: reuse a retained open session when one
+  exists for the commit, otherwise map `planned -> Plan` and
+  `ready | active -> Implement`, and carry the resolved branch, commit, and
+  session context through one `workflow.selection` plus `workflow.context`
+  payload.
 - `workflow:mutation` is the typed server-command write surface for project,
   repository, branch, commit, and session changes. Mutable session writes stay
   narrowed to `Plan`, `Review`, and `Implement` until native workflow-session
   storage lands.
+- `requestCommitUserReview` and `clearCommitUserReview` are the explicit gate
+  mutations; review-change audit history stays in retained decisions and
+  session history rather than a second gate-specific write surface.
 - The package owns the workflow review read scope, projection dependency keys,
   invalidation planning, and the built-in query-surface catalog for the branch
   board, commit queue, and review scope.

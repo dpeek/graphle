@@ -70,7 +70,9 @@ function requireDecisionKindId(value: string): string {
 
 export function buildWorkflowDecisionRecord(
   entity: ReturnType<ProductGraphClient["decision"]["get"]>,
+  graph: Pick<ProductGraphClient, "agentSession">,
 ): WorkflowDecisionRecord {
+  const session = graph.agentSession.get(entity.session);
   return {
     id: entity.id,
     projectId: entity.project,
@@ -78,6 +80,7 @@ export function buildWorkflowDecisionRecord(
     branchId: entity.branch,
     ...(entity.commit ? { commitId: entity.commit } : {}),
     sessionId: entity.session,
+    sessionKey: session.sessionKey,
     kind: decodeDecisionKind(entity.kind),
     summary: entity.name,
     ...(entity.details ? { details: entity.details } : {}),
@@ -104,6 +107,34 @@ function resolveDecisionCommitId(
   throw new Error(`Unknown workflow session subject kind id "${session.subjectKind}".`);
 }
 
+type CreateWorkflowDecisionInput = {
+  readonly details?: string;
+  readonly kind: DecisionWriteKind;
+  readonly sessionId: string;
+  readonly summary: string;
+};
+
+export function createWorkflowDecision(
+  graph: ProductGraphClient,
+  store: GraphStore,
+  input: CreateWorkflowDecisionInput,
+): WorkflowDecisionRecord {
+  const session = requireAgentSession(graph, store, requireString(input.sessionId, "Session id"));
+  const commitId = resolveDecisionCommitId(session);
+  const decisionId = graph.decision.create({
+    name: input.summary,
+    project: session.project,
+    ...(session.repository ? { repository: session.repository } : {}),
+    branch: session.branch,
+    ...(commitId ? { commit: commitId } : {}),
+    session: session.id,
+    kind: requireDecisionKindId(input.kind),
+    ...(input.details ? { details: input.details } : {}),
+  });
+
+  return buildWorkflowDecisionRecord(graph.decision.get(decisionId), graph);
+}
+
 function materializeDecisionWrite(
   graph: ProductGraphClient,
   store: GraphStore,
@@ -115,20 +146,13 @@ function materializeDecisionWrite(
     throw new WorkflowMutationError(400, evaluated.message);
   }
 
-  const commitId = resolveDecisionCommitId(session);
-  const decisionId = graph.decision.create({
-    name: evaluated.decision.summary,
-    project: session.project,
-    ...(session.repository ? { repository: session.repository } : {}),
-    branch: session.branch,
-    ...(commitId ? { commit: commitId } : {}),
-    session: session.id,
-    kind: requireDecisionKindId(evaluated.decision.kind),
-    ...(evaluated.decision.details ? { details: evaluated.decision.details } : {}),
-  });
-
   return {
-    decision: buildWorkflowDecisionRecord(graph.decision.get(decisionId)),
+    decision: createWorkflowDecision(graph, store, {
+      ...(evaluated.decision.details ? { details: evaluated.decision.details } : {}),
+      kind: evaluated.decision.kind,
+      sessionId: session.id,
+      summary: evaluated.decision.summary,
+    }),
   };
 }
 

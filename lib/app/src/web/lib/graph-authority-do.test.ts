@@ -1107,7 +1107,7 @@ describe("web graph authority durable object", () => {
     );
     const authorization = createAnonymousAuthorizationContext({
       graphId: "graph:durable",
-      policyVersion: 0,
+      policyVersion: webAppPolicyVersion,
     });
     const response = await durableObject.fetch(
       createAuthorizedRequest("https://graph-authority.local/api/sync", {}, authorization),
@@ -1602,7 +1602,7 @@ describe("web graph authority durable object", () => {
     };
     const bearerAuthorization = createBearerShareAuthorizationContext({
       graphId: "graph:test",
-      policyVersion: 0,
+      policyVersion: webAppPolicyVersion,
       capabilityGrantIds: projection.capabilityGrantIds,
     });
     const sync = await readSyncPayload(durableObject, undefined, bearerAuthorization);

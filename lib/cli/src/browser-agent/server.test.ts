@@ -220,6 +220,167 @@ describe("browser-agent server", () => {
     expect(calls).toEqual(["launch:branch:project:1", "lookup:branch:project:1"]);
   });
 
+  it("parses explicit commit workflow payloads on launch and active-session lookup", async () => {
+    const launchRequests: unknown[] = [];
+    const lookupRequests: unknown[] = [];
+    const coordinator: BrowserAgentLaunchCoordinator = {
+      async launchSession(request) {
+        launchRequests.push(request);
+        return {
+          ok: true,
+          outcome: "launched",
+          session: {
+            id: "session:1",
+            kind: request.kind,
+            runtimeState: "starting",
+            sessionKey: "session:key:1",
+            startedAt: "2026-03-26T02:00:00.000Z",
+            subject: request.subject,
+          },
+          attach: {
+            attachToken: "attach:1",
+            browserAgentSessionId: "browser-agent:1",
+            expiresAt: "2026-03-26T03:00:00.000Z",
+            transport: "browser-agent-http",
+          },
+          workspace: {
+            repositoryId: "repo:1",
+          },
+          authority: {
+            auditActorPrincipalId: request.actor.principalId,
+            appendGrant: {
+              allowedActions: ["append-session-events", "write-artifact", "write-decision"],
+              expiresAt: "2026-03-26T03:00:00.000Z",
+              grantId: "grant:1",
+              grantToken: "grant-token:1",
+              issuedAt: "2026-03-26T02:00:00.000Z",
+              sessionId: "session:1",
+            },
+          },
+        };
+      },
+      async lookupActiveSession(request) {
+        lookupRequests.push(request);
+        return {
+          ok: true,
+          found: false,
+        };
+      },
+      async observeSessionEvents() {
+        throw new Error("not implemented");
+      },
+    };
+    const server = createBrowserAgentServer(createWorkflowResult(), {
+      coordinator,
+      now: () => new Date("2026-03-26T02:00:00.000Z"),
+    });
+
+    const workflowPayload = {
+      context: {
+        branch: {
+          context: "Primary branch startup memory.",
+          name: "Workflow runtime",
+          references: "workflow.branch.key=branch:workflow-runtime",
+          slug: "workflow-runtime",
+        },
+        commit: {
+          context: "Carry the explicit workflow launch payload through the browser.",
+          name: "Define workflow launch contract",
+          references: "workflow.commit.key=commit:workflow-runtime-contract",
+          slug: "workflow-runtime-contract",
+        },
+        session: {
+          context:
+            'Run the planning session for commit "Define workflow launch contract" on branch "Workflow runtime".',
+          kind: "Plan",
+          name: "Plan Define workflow launch contract",
+          references: "workflow.session.kind=Plan",
+        },
+      },
+      local: {
+        gitBranchName: "workflow/runtime",
+        headSha: "abc1234",
+        repositoryRoot: "/workspace/io",
+        worktreePath: "/tmp/worktree-1",
+      },
+      selection: {
+        source: "planned-commit",
+        strategy: "selected-commit-next-runnable",
+        workflowSessionKind: "Plan",
+      },
+    } as const;
+
+    await server.fetch(
+      new Request("http://127.0.0.1:4317/launch-session", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          actor: {
+            principalId: "principal:1",
+            sessionId: "session:web:1",
+            surface: "browser",
+          },
+          kind: "planning",
+          projectId: "project:1",
+          subject: {
+            kind: "commit",
+            branchId: "branch:1",
+            commitId: "commit:1",
+          },
+          workflow: workflowPayload,
+        }),
+      }),
+    );
+    await server.fetch(
+      new Request("http://127.0.0.1:4317/active-session", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          actor: {
+            principalId: "principal:1",
+            sessionId: "session:web:1",
+            surface: "browser",
+          },
+          kind: "planning",
+          projectId: "project:1",
+          subject: {
+            kind: "commit",
+            branchId: "branch:1",
+            commitId: "commit:1",
+          },
+          workflow: workflowPayload,
+        }),
+      }),
+    );
+
+    expect(launchRequests).toMatchObject([
+      {
+        kind: "planning",
+        subject: {
+          kind: "commit",
+          branchId: "branch:1",
+          commitId: "commit:1",
+        },
+        workflow: workflowPayload,
+      },
+    ]);
+    expect(lookupRequests).toMatchObject([
+      {
+        kind: "planning",
+        subject: {
+          kind: "commit",
+          branchId: "branch:1",
+          commitId: "commit:1",
+        },
+        workflow: workflowPayload,
+      },
+    ]);
+  });
+
   it("streams session events through the shared coordinator", async () => {
     const coordinator: BrowserAgentLaunchCoordinator = {
       async launchSession() {

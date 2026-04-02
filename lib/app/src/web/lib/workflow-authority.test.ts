@@ -13,6 +13,7 @@ import {
   executeTestWorkflowMutation as executeWorkflowMutation,
 } from "./authority-test-helpers.js";
 import { type WebAppAuthority } from "./authority.js";
+import { webAppPolicyVersion } from "./policy-version.js";
 
 const workflowAuthorityTimeout = 20_000;
 const productGraph = { ...core, ...workflow } as const;
@@ -23,7 +24,7 @@ function createTestAuthorizationContext(
   return {
     ...createAnonymousAuthorizationContext({
       graphId: "graph:test",
-      policyVersion: 0,
+      policyVersion: webAppPolicyVersion,
     }),
     principalId: "principal:authority",
     principalKind: "service",
@@ -243,6 +244,72 @@ describe("workflow authority", () => {
       expect(readProductGraph(authority, authorization).branch.get(fixture.branchId).state).toBe(
         workflow.branchState.values.active.id,
       );
+    },
+    workflowAuthorityTimeout,
+  );
+
+  it(
+    "persists authored branch and commit launch context fields through workflow mutation",
+    async () => {
+      const authorization = createTestAuthorizationContext();
+      const { authority, fixture } =
+        await createTestWebAppAuthorityWithWorkflowFixture(authorization);
+
+      const branch = await executeWorkflowMutation(authority, authorization, {
+        action: "updateBranch",
+        branchId: fixture.branchId,
+        context: "Use the branch record as the top-level workflow launch context.",
+        references:
+          "lib/graph-module-workflow/doc/workflow-model.md\nnote: branch context is authored",
+      });
+
+      expect(branch).toMatchObject({
+        action: "updateBranch",
+        created: false,
+        summary: {
+          entity: "branch",
+          id: fixture.branchId,
+          context: "Use the branch record as the top-level workflow launch context.",
+          references:
+            "lib/graph-module-workflow/doc/workflow-model.md\nnote: branch context is authored",
+        },
+      });
+
+      const commit = await executeWorkflowMutation(authority, authorization, {
+        action: "createCommit",
+        branchId: fixture.branchId,
+        title: "Assemble workflow context from records",
+        commitKey: "commit:assemble-workflow-context-from-records",
+        context: "Launch sessions from explicit commit context instead of generated fallback text.",
+        references:
+          "lib/cli/src/browser-agent/server.ts\nlib/app/src/web/lib/workflow-session-history.ts",
+        order: 0,
+        state: "ready",
+      });
+
+      expect(commit).toMatchObject({
+        action: "createCommit",
+        created: true,
+        summary: {
+          entity: "commit",
+          context:
+            "Launch sessions from explicit commit context instead of generated fallback text.",
+          references:
+            "lib/cli/src/browser-agent/server.ts\nlib/app/src/web/lib/workflow-session-history.ts",
+        },
+      });
+
+      const graph = readProductGraph(authority, authorization);
+      expect(graph.branch.get(fixture.branchId)).toMatchObject({
+        context: "Use the branch record as the top-level workflow launch context.",
+        references:
+          "lib/graph-module-workflow/doc/workflow-model.md\nnote: branch context is authored",
+      });
+      expect(graph.commit.get(commit.summary.id)).toMatchObject({
+        context: "Launch sessions from explicit commit context instead of generated fallback text.",
+        references:
+          "lib/cli/src/browser-agent/server.ts\nlib/app/src/web/lib/workflow-session-history.ts",
+      });
     },
     workflowAuthorityTimeout,
   );
@@ -487,8 +554,10 @@ describe("workflow authority", () => {
       const created = await executeWorkflowMutation(authority, authorization, {
         action: "createSession",
         commitId: commit.summary.id,
+        context: "Plan the browser launch path using the persisted workflow session contract.",
         kind: "Plan",
         name: "Workflow plan session",
+        references: "note: session context should survive retained append writes",
         sessionKey: "session:workflow-plan-01",
         threadId: "thread:workflow-plan-01",
         turnId: "turn:workflow-plan-01",
@@ -504,7 +573,9 @@ describe("workflow authority", () => {
           repositoryId: fixture.repositoryId,
           branchId: fixture.branchId,
           commitId: commit.summary.id,
+          context: "Plan the browser launch path using the persisted workflow session contract.",
           kind: "Plan",
+          references: "note: session context should survive retained append writes",
           status: "Open",
           sessionKey: "session:workflow-plan-01",
           title: "Workflow plan session",
@@ -516,8 +587,10 @@ describe("workflow authority", () => {
 
       const updated = await executeWorkflowMutation(authority, authorization, {
         action: "updateSession",
+        context: "Planning is complete; keep the authored session context on the workflow record.",
         sessionId: created.summary.id,
         name: "Workflow plan session complete",
+        references: "note: updated session context should remain inspectable",
         status: "Done",
         threadId: null,
         endedAt: "2026-03-30T11:00:00.000Z",
@@ -529,7 +602,10 @@ describe("workflow authority", () => {
         summary: {
           entity: "session",
           id: created.summary.id,
+          context:
+            "Planning is complete; keep the authored session context on the workflow record.",
           kind: "Plan",
+          references: "note: updated session context should remain inspectable",
           status: "Done",
           title: "Workflow plan session complete",
           endedAt: "2026-03-30T11:00:00.000Z",
@@ -546,8 +622,10 @@ describe("workflow authority", () => {
         branch: fixture.branchId,
         commit: commit.summary.id,
         kind: workflow.agentSessionKind.values.planning.id,
+        context: "Planning is complete; keep the authored session context on the workflow record.",
         runtimeState: workflow.agentSessionRuntimeState.values.completed.id,
         name: "Workflow plan session complete",
+        references: "note: updated session context should remain inspectable",
         turnId: "turn:workflow-plan-01",
         workerId: "worker-plan-01",
       });
@@ -558,7 +636,7 @@ describe("workflow authority", () => {
   );
 
   it(
-    "sets and clears the user-review gate through workflow mutation",
+    "requests and clears the user-review gate through workflow mutation",
     async () => {
       const authorization = createTestAuthorizationContext();
       const { authority, fixture } =
@@ -581,7 +659,7 @@ describe("workflow authority", () => {
       });
 
       const gated = await executeWorkflowMutation(authority, authorization, {
-        action: "setCommitUserReviewGate",
+        action: "requestCommitUserReview",
         commitId: commit.summary.id,
         reason: "Await manual review before implementation resumes.",
         requestedAt: "2026-03-30T12:00:00.000Z",
@@ -589,29 +667,55 @@ describe("workflow authority", () => {
       });
 
       expect(gated).toMatchObject({
-        action: "setCommitUserReviewGate",
+        action: "requestCommitUserReview",
         created: false,
         summary: {
           entity: "commit",
           id: commit.summary.id,
-          state: "blocked",
+          state: "ready",
           gate: "UserReview",
           gateReason: "Await manual review before implementation resumes.",
           gateRequestedAt: "2026-03-30T12:00:00.000Z",
           gateRequestedBySessionId: session.summary.id,
         },
       });
-      expect(readProductGraph(authority, authorization).commit.get(commit.summary.id).state).toBe(
-        workflow.commitState.values.blocked.id,
+      expect(
+        readProductGraph(authority, authorization).commit.get(commit.summary.id),
+      ).toMatchObject({
+        gate: workflow.commitGate.values.UserReview.id,
+        state: workflow.commitState.values.ready.id,
+        gateReason: "Await manual review before implementation resumes.",
+        gateRequestedBySessionId: session.summary.id,
+      });
+      expect(
+        readProductGraph(authority, authorization).commit.get(commit.summary.id).gateRequestedAt,
+      ).toEqual(new Date("2026-03-30T12:00:00.000Z"));
+      const persistedDecision = readProductGraph(authority, authorization)
+        .decision.list()
+        .map((decision) => readProductGraph(authority, authorization).decision.get(decision.id))
+        .find((decision) => decision.session === session.summary.id);
+      expect(persistedDecision).toMatchObject({
+        branch: fixture.branchId,
+        commit: commit.summary.id,
+        kind: workflow.decisionKind.values.blocker.id,
+        name: "Review requested",
+        session: session.summary.id,
+      });
+      expect(persistedDecision?.details).toContain('Pause commit "Gate workflow commit"');
+      expect(persistedDecision?.details).toContain(
+        'Requested by session "Workflow review session" (session:workflow-review-01).',
+      );
+      expect(persistedDecision?.details).toContain(
+        "Gate reason: Await manual review before implementation resumes.",
       );
 
       const cleared = await executeWorkflowMutation(authority, authorization, {
-        action: "clearCommitUserReviewGate",
+        action: "clearCommitUserReview",
         commitId: commit.summary.id,
       });
 
       expect(cleared).toMatchObject({
-        action: "clearCommitUserReviewGate",
+        action: "clearCommitUserReview",
         created: false,
         summary: {
           entity: "commit",
@@ -620,9 +724,22 @@ describe("workflow authority", () => {
         },
       });
       expect("gate" in cleared.summary).toBe(false);
-      expect(readProductGraph(authority, authorization).commit.get(commit.summary.id).state).toBe(
-        workflow.commitState.values.ready.id,
-      );
+      expect(
+        readProductGraph(authority, authorization).commit.get(commit.summary.id),
+      ).toMatchObject({
+        gate: workflow.commitGate.values.None.id,
+        state: workflow.commitState.values.ready.id,
+      });
+      expect(
+        readProductGraph(authority, authorization).commit.get(commit.summary.id).gateReason,
+      ).toBeUndefined();
+      expect(
+        readProductGraph(authority, authorization).commit.get(commit.summary.id).gateRequestedAt,
+      ).toBeUndefined();
+      expect(
+        readProductGraph(authority, authorization).commit.get(commit.summary.id)
+          .gateRequestedBySessionId,
+      ).toBeUndefined();
     },
     workflowAuthorityTimeout,
   );

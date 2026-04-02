@@ -201,6 +201,204 @@ function parseActor(value: unknown, label: string): CodexSessionLaunchRequest["a
   };
 }
 
+function parseWorkflowLaunchContextRecord(
+  value: unknown,
+  label: string,
+): {
+  readonly context: string;
+  readonly references: string;
+} {
+  if (!isObjectRecord(value)) {
+    throw new Error(`${label} must be an object.`);
+  }
+
+  return {
+    context: requireString(value.context, `${label}.context`),
+    references: requireString(value.references, `${label}.references`),
+  };
+}
+
+function parseWorkflowLaunchPayload(
+  value: unknown,
+): NonNullable<CodexSessionLaunchRequest["workflow"]> {
+  if (!isObjectRecord(value)) {
+    throw new Error('Launch request "workflow" must be an object.');
+  }
+  if (!isObjectRecord(value.selection)) {
+    throw new Error('Launch request "workflow.selection" must be an object.');
+  }
+  if (!isObjectRecord(value.context)) {
+    throw new Error('Launch request "workflow.context" must be an object.');
+  }
+
+  const strategy = requireString(
+    value.selection.strategy,
+    'Launch request "workflow.selection.strategy"',
+  );
+  if (strategy !== "selected-commit-next-runnable") {
+    throw new Error(
+      'Launch request "workflow.selection.strategy" must be "selected-commit-next-runnable".',
+    );
+  }
+
+  const source = requireString(
+    value.selection.source,
+    'Launch request "workflow.selection.source"',
+  );
+  if (
+    source !== "active-commit" &&
+    source !== "planned-commit" &&
+    source !== "ready-commit" &&
+    source !== "retained-open-session"
+  ) {
+    throw new Error(
+      'Launch request "workflow.selection.source" must be "active-commit", "planned-commit", "ready-commit", or "retained-open-session".',
+    );
+  }
+
+  const workflowSessionKind = requireString(
+    value.selection.workflowSessionKind,
+    'Launch request "workflow.selection.workflowSessionKind"',
+  );
+  if (
+    workflowSessionKind !== "Plan" &&
+    workflowSessionKind !== "Review" &&
+    workflowSessionKind !== "Implement"
+  ) {
+    throw new Error(
+      'Launch request "workflow.selection.workflowSessionKind" must be "Plan", "Review", or "Implement".',
+    );
+  }
+
+  const context = value.context;
+  const sessionContext = parseWorkflowLaunchContextRecord(
+    isObjectRecord(context.session) ? context.session : context.session,
+    'Launch request "workflow.context.session"',
+  );
+  const sessionKind = requireString(
+    isObjectRecord(context.session) ? context.session.kind : undefined,
+    'Launch request "workflow.context.session.kind"',
+  );
+  if (sessionKind !== "Plan" && sessionKind !== "Review" && sessionKind !== "Implement") {
+    throw new Error(
+      'Launch request "workflow.context.session.kind" must be "Plan", "Review", or "Implement".',
+    );
+  }
+  if (sessionKind !== workflowSessionKind) {
+    throw new Error(
+      'Launch request "workflow.context.session.kind" must match "workflow.selection.workflowSessionKind".',
+    );
+  }
+
+  const local =
+    value.local === undefined
+      ? undefined
+      : (() => {
+          if (!isObjectRecord(value.local)) {
+            throw new Error('Launch request "workflow.local" must be an object.');
+          }
+          return {
+            ...(typeof value.local.repositoryRoot === "string"
+              ? {
+                  repositoryRoot: requireString(
+                    value.local.repositoryRoot,
+                    'Launch request "workflow.local.repositoryRoot"',
+                  ),
+                }
+              : {}),
+            ...(typeof value.local.worktreePath === "string"
+              ? {
+                  worktreePath: requireString(
+                    value.local.worktreePath,
+                    'Launch request "workflow.local.worktreePath"',
+                  ),
+                }
+              : {}),
+            ...(typeof value.local.gitBranchName === "string"
+              ? {
+                  gitBranchName: requireString(
+                    value.local.gitBranchName,
+                    'Launch request "workflow.local.gitBranchName"',
+                  ),
+                }
+              : {}),
+            ...(typeof value.local.headSha === "string"
+              ? {
+                  headSha: requireString(
+                    value.local.headSha,
+                    'Launch request "workflow.local.headSha"',
+                  ),
+                }
+              : {}),
+          };
+        })();
+
+  return {
+    context: {
+      branch: {
+        ...parseWorkflowLaunchContextRecord(
+          context.branch,
+          'Launch request "workflow.context.branch"',
+        ),
+        name: requireString(
+          isObjectRecord(context.branch) ? context.branch.name : undefined,
+          'Launch request "workflow.context.branch.name"',
+        ),
+        slug: requireString(
+          isObjectRecord(context.branch) ? context.branch.slug : undefined,
+          'Launch request "workflow.context.branch.slug"',
+        ),
+      },
+      commit: {
+        ...parseWorkflowLaunchContextRecord(
+          context.commit,
+          'Launch request "workflow.context.commit"',
+        ),
+        name: requireString(
+          isObjectRecord(context.commit) ? context.commit.name : undefined,
+          'Launch request "workflow.context.commit.name"',
+        ),
+        slug: requireString(
+          isObjectRecord(context.commit) ? context.commit.slug : undefined,
+          'Launch request "workflow.context.commit.slug"',
+        ),
+      },
+      session: {
+        ...sessionContext,
+        kind: sessionKind,
+        name: requireString(
+          isObjectRecord(context.session) ? context.session.name : undefined,
+          'Launch request "workflow.context.session.name"',
+        ),
+      },
+    },
+    ...(local && Object.keys(local).length > 0 ? { local } : {}),
+    selection: {
+      source,
+      strategy,
+      workflowSessionKind,
+    },
+  };
+}
+
+function validateWorkflowLaunchKind(
+  launchKind: CodexSessionLaunchRequest["kind"],
+  workflowSessionKind: NonNullable<
+    CodexSessionLaunchRequest["workflow"]
+  >["selection"]["workflowSessionKind"],
+  label: string,
+) {
+  const expectedLaunchKind =
+    workflowSessionKind === "Plan"
+      ? "planning"
+      : workflowSessionKind === "Review"
+        ? "review"
+        : "execution";
+  if (launchKind !== expectedLaunchKind) {
+    throw new Error(`${label} must match "workflow.selection.workflowSessionKind".`);
+  }
+}
+
 function parseLaunchRequest(value: unknown): CodexSessionLaunchRequest {
   if (!isObjectRecord(value)) {
     throw new Error("Launch request must be a JSON object.");
@@ -217,6 +415,7 @@ function parseLaunchRequest(value: unknown): CodexSessionLaunchRequest {
     projectId: string;
     selection?: CodexSessionLaunchRequest["selection"];
     subject: CodexSessionLaunchRequest["subject"];
+    workflow?: CodexSessionLaunchRequest["workflow"];
   } = {
     actor: parseActor(value.actor, 'Launch request "actor"'),
     kind,
@@ -265,6 +464,18 @@ function parseLaunchRequest(value: unknown): CodexSessionLaunchRequest {
     };
   }
 
+  if (value.workflow !== undefined) {
+    request.workflow = parseWorkflowLaunchPayload(value.workflow);
+    if (request.subject.kind !== "commit") {
+      throw new Error('Launch request "workflow" requires a commit-scoped subject.');
+    }
+    validateWorkflowLaunchKind(
+      request.kind,
+      request.workflow.selection.workflowSessionKind,
+      'Launch request "kind"',
+    );
+  }
+
   return request;
 }
 
@@ -284,6 +495,28 @@ function parseActiveSessionLookupRequest(value: unknown): BrowserAgentActiveSess
     kind,
     projectId: requireString(value.projectId, 'Active-session lookup request "projectId"'),
     subject: parseLaunchSubject(value.subject, 'Active-session lookup request "subject"'),
+    ...(value.workflow !== undefined
+      ? {
+          workflow: (() => {
+            const workflow = parseWorkflowLaunchPayload(value.workflow);
+            const subject = parseLaunchSubject(
+              value.subject,
+              'Active-session lookup request "subject"',
+            );
+            if (subject.kind !== "commit") {
+              throw new Error(
+                'Active-session lookup request "workflow" requires a commit-scoped subject.',
+              );
+            }
+            validateWorkflowLaunchKind(
+              kind,
+              workflow.selection.workflowSessionKind,
+              'Active-session lookup request "kind"',
+            );
+            return workflow;
+          })(),
+        }
+      : {}),
   };
 }
 

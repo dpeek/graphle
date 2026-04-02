@@ -11,6 +11,7 @@ import {
   createTestWebAppAuthorityWithWorkflowFixture,
   executeTestAgentSessionAppend,
 } from "./authority-test-helpers.js";
+import { webAppPolicyVersion } from "./policy-version.js";
 import type { WebAuthorityCommand } from "./authority.js";
 import { handleWebCommandRequest } from "./server-routes.js";
 
@@ -23,7 +24,7 @@ function createTestAuthorizationContext(
   return {
     ...createAnonymousAuthorizationContext({
       graphId: "graph:test",
-      policyVersion: 0,
+      policyVersion: webAppPolicyVersion,
     }),
     principalId: "principal:authority",
     principalKind: "service",
@@ -43,16 +44,24 @@ function readProductGraph(
 
 function createAppendRequest(input: {
   readonly branchId: string;
+  readonly context?: string;
   readonly kind?: "execution" | "planning" | "review";
   readonly projectId: string;
+  readonly references?: string;
   readonly repositoryId?: string;
   readonly sessionKey?: string;
 }): AgentSessionAppendRequest {
   return {
     session: {
+      context:
+        input.context ??
+        "Resume the retained workflow execution session with explicit authored context.",
       mode: "create",
       kind: input.kind ?? "execution",
       projectId: input.projectId,
+      references:
+        input.references ??
+        "lib/app/src/web/lib/workflow-session-history.ts\nnote: retained session writes keep launch context inspectable",
       ...(input.repositoryId ? { repositoryId: input.repositoryId } : {}),
       retainedSession: {
         externalSessionId: "worker:workflow-authority:1",
@@ -158,8 +167,11 @@ describe("workflow session history authority", () => {
         .map((event) => graph.agentSessionEvent.get(event.id));
 
       expect(persistedSession).toMatchObject({
+        context: "Resume the retained workflow execution session with explicit authored context.",
         name: "Workflow authority execution",
         project: fixture.projectId,
+        references:
+          "lib/app/src/web/lib/workflow-session-history.ts\nnote: retained session writes keep launch context inspectable",
         repository: fixture.repositoryId,
         branch: fixture.branchId,
         sessionKey: "session:workflow-authority-execution-01",

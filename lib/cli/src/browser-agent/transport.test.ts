@@ -117,6 +117,118 @@ describe("browser-agent transport", () => {
     expect(response).toEqual(payload);
   });
 
+  it("posts explicit commit workflow payloads for the next runnable session", async () => {
+    await requestBrowserAgentLaunch(
+      {
+        actor: {
+          principalId: "principal:1",
+          sessionId: "session:web:1",
+          surface: "browser",
+        },
+        kind: "planning",
+        projectId: "project:1",
+        subject: {
+          kind: "commit",
+          branchId: "branch:1",
+          commitId: "commit:1",
+        },
+        workflow: {
+          context: {
+            branch: {
+              context: "Primary branch startup memory.",
+              name: "Workflow runtime",
+              references: "workflow.branch.key=branch:workflow-runtime",
+              slug: "workflow-runtime",
+            },
+            commit: {
+              context: "Carry the explicit workflow launch payload through the browser.",
+              name: "Define workflow launch contract",
+              references: "workflow.commit.key=commit:workflow-runtime-contract",
+              slug: "workflow-runtime-contract",
+            },
+            session: {
+              context:
+                'Run the planning session for commit "Define workflow launch contract" on branch "Workflow runtime".',
+              kind: "Plan",
+              name: "Plan Define workflow launch contract",
+              references: "workflow.session.kind=Plan",
+            },
+          },
+          local: {
+            gitBranchName: "workflow/runtime",
+            headSha: "abc1234",
+            repositoryRoot: "/workspace/io",
+            worktreePath: "/tmp/worktree-1",
+          },
+          selection: {
+            source: "planned-commit",
+            strategy: "selected-commit-next-runnable",
+            workflowSessionKind: "Plan",
+          },
+        },
+      },
+      {
+        fetch: async (_input, init) => {
+          expect(JSON.parse(String(init?.body))).toEqual({
+            actor: {
+              principalId: "principal:1",
+              sessionId: "session:web:1",
+              surface: "browser",
+            },
+            kind: "planning",
+            projectId: "project:1",
+            subject: {
+              kind: "commit",
+              branchId: "branch:1",
+              commitId: "commit:1",
+            },
+            workflow: {
+              context: {
+                branch: {
+                  context: "Primary branch startup memory.",
+                  name: "Workflow runtime",
+                  references: "workflow.branch.key=branch:workflow-runtime",
+                  slug: "workflow-runtime",
+                },
+                commit: {
+                  context: "Carry the explicit workflow launch payload through the browser.",
+                  name: "Define workflow launch contract",
+                  references: "workflow.commit.key=commit:workflow-runtime-contract",
+                  slug: "workflow-runtime-contract",
+                },
+                session: {
+                  context:
+                    'Run the planning session for commit "Define workflow launch contract" on branch "Workflow runtime".',
+                  kind: "Plan",
+                  name: "Plan Define workflow launch contract",
+                  references: "workflow.session.kind=Plan",
+                },
+              },
+              local: {
+                gitBranchName: "workflow/runtime",
+                headSha: "abc1234",
+                repositoryRoot: "/workspace/io",
+                worktreePath: "/tmp/worktree-1",
+              },
+              selection: {
+                source: "planned-commit",
+                strategy: "selected-commit-next-runnable",
+                workflowSessionKind: "Plan",
+              },
+            },
+          });
+          return Response.json({
+            code: "local-bridge-unavailable",
+            message: "The local browser-agent runtime is unavailable.",
+            ok: false,
+            retryable: true,
+            source: "browser",
+          } satisfies CodexSessionLaunchResult);
+        },
+      },
+    );
+  });
+
   it("posts active-session lookups to the local runtime", async () => {
     const payload = {
       ok: true,
@@ -169,6 +281,103 @@ describe("browser-agent transport", () => {
     );
 
     expect(response).toEqual(payload);
+  });
+
+  it("posts active-session lookups with the explicit workflow payload when commit launch selection is known", async () => {
+    await requestBrowserAgentActiveSessionLookup(
+      {
+        actor: {
+          principalId: "principal:1",
+          sessionId: "session:web:1",
+          surface: "browser",
+        },
+        kind: "execution",
+        projectId: "project:1",
+        subject: {
+          kind: "commit",
+          branchId: "branch:1",
+          commitId: "commit:1",
+        },
+        workflow: {
+          context: {
+            branch: {
+              context: "Primary branch startup memory.",
+              name: "Workflow runtime",
+              references: "workflow.branch.key=branch:workflow-runtime",
+              slug: "workflow-runtime",
+            },
+            commit: {
+              context: "Carry the explicit workflow launch payload through the browser.",
+              name: "Define workflow launch contract",
+              references: "workflow.commit.key=commit:workflow-runtime-contract",
+              slug: "workflow-runtime-contract",
+            },
+            session: {
+              context:
+                'Resume the implementation session for commit "Define workflow launch contract" on branch "Workflow runtime".',
+              kind: "Implement",
+              name: "Implement Define workflow launch contract",
+              references: "workflow.session.kind=Implement",
+            },
+          },
+          selection: {
+            source: "retained-open-session",
+            strategy: "selected-commit-next-runnable",
+            workflowSessionKind: "Implement",
+          },
+        },
+      },
+      {
+        fetch: async (_input, init) => {
+          expect(JSON.parse(String(init?.body))).toEqual({
+            actor: {
+              principalId: "principal:1",
+              sessionId: "session:web:1",
+              surface: "browser",
+            },
+            kind: "execution",
+            projectId: "project:1",
+            subject: {
+              kind: "commit",
+              branchId: "branch:1",
+              commitId: "commit:1",
+            },
+            workflow: {
+              context: {
+                branch: {
+                  context: "Primary branch startup memory.",
+                  name: "Workflow runtime",
+                  references: "workflow.branch.key=branch:workflow-runtime",
+                  slug: "workflow-runtime",
+                },
+                commit: {
+                  context: "Carry the explicit workflow launch payload through the browser.",
+                  name: "Define workflow launch contract",
+                  references: "workflow.commit.key=commit:workflow-runtime-contract",
+                  slug: "workflow-runtime-contract",
+                },
+                session: {
+                  context:
+                    'Resume the implementation session for commit "Define workflow launch contract" on branch "Workflow runtime".',
+                  kind: "Implement",
+                  name: "Implement Define workflow launch contract",
+                  references: "workflow.session.kind=Implement",
+                },
+              },
+              selection: {
+                source: "retained-open-session",
+                strategy: "selected-commit-next-runnable",
+                workflowSessionKind: "Implement",
+              },
+            },
+          });
+          return Response.json({
+            found: false,
+            ok: true,
+          } satisfies BrowserAgentActiveSessionLookupResult);
+        },
+      },
+    );
   });
 
   it("streams local session events from the browser-agent runtime", async () => {

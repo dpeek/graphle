@@ -6,8 +6,8 @@ was extracted into `@op/cli`.
 ## Docs
 
 - `./doc/web-overview.md`: current app-owned browser and Worker runtime map, including installed-module activation-driven authority bootstrap
-- `./doc/workflow-web.md`: current browser workflow surface and browser-agent
-  boundary
+- `./doc/workflow-web.md`: current browser workflow surface, selected-commit
+  launch contract, and browser-agent boundary
 - `./doc/auth-store.md`: Better Auth store, Worker runtime, and migration path
 - `./doc/local-bootstrap.md`: localhost-only instant onboarding contract
 - `./doc/authority-storage.md`: SQLite-backed Durable Object authority storage,

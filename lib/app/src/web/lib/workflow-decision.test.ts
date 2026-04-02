@@ -17,6 +17,7 @@ import {
   executeTestWorkflowDecisionWrite,
   executeTestWorkflowMutation,
 } from "./authority-test-helpers.js";
+import { webAppPolicyVersion } from "./policy-version.js";
 import type { WebAuthorityCommand } from "./authority.js";
 import { handleWebCommandRequest } from "./server-routes.js";
 
@@ -29,7 +30,7 @@ function createTestAuthorizationContext(
   return {
     ...createAnonymousAuthorizationContext({
       graphId: "graph:test",
-      policyVersion: 0,
+      policyVersion: webAppPolicyVersion,
     }),
     principalId: "principal:authority",
     principalKind: "service",
@@ -153,6 +154,7 @@ describe("workflow decision authority", () => {
           repositoryId: fixture.repositoryId,
           branchId: fixture.branchId,
           sessionId,
+          sessionKey: "session:workflow-branch-decision-01",
           kind: "plan",
           summary: "Persist the branch plan as workflow memory",
           createdAt: expect.any(String),
@@ -213,6 +215,7 @@ describe("workflow decision authority", () => {
           branchId: fixture.branchId,
           commitId: commit.summary.id,
           sessionId,
+          sessionKey: "session:workflow-commit-decision-01",
           kind: "blocker",
           summary: "Await repository review",
           details: "The execution session is blocked until the branch owner reviews the plan.",
@@ -303,11 +306,16 @@ describe("workflow decision authority", () => {
       );
 
       expect(response.status).toBe(201);
-      expect((await response.json()) as { decision: { sessionId: string } }).toMatchObject({
+      expect(
+        (await response.json()) as {
+          decision: { readonly sessionId: string; readonly sessionKey: string };
+        },
+      ).toMatchObject({
         decision: {
           branchId: fixture.branchId,
           kind: "question",
           sessionId,
+          sessionKey: "session:workflow-decision-command-01",
           summary: "Should the planning session split the branch?",
           details: "The current summary mixes schema and authority work.",
         },

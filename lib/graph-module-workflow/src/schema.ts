@@ -30,6 +30,7 @@ import {
   branch,
   branchState,
   commit,
+  commitGate,
   commitState,
   decision,
   decisionKind,
@@ -54,6 +55,7 @@ export type WorkflowSchema = {
   branch: typeof branch;
   branchState: typeof branchState;
   commit: typeof commit;
+  commitGate: typeof commitGate;
   commitState: typeof commitState;
   contextBundle: typeof contextBundle;
   contextBundleEntry: typeof contextBundleEntry;
@@ -73,6 +75,7 @@ export const workflowSchema: WorkflowSchema = {
   repository,
   branchState,
   branch,
+  commitGate,
   commitState,
   commit,
   repositoryCommitState,

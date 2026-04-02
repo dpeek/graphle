@@ -15,6 +15,7 @@ import {
   type WorkflowCommitGateValue,
   branchStateValues,
   commitStateValues,
+  workflowCommitGateValues,
   type WorkflowMutableSessionKind,
   type WorkflowMutableSessionStatus,
   type WorkflowCommitStateValue,
@@ -37,6 +38,13 @@ const branchStateIds = Object.fromEntries(
 const commitStateIds = Object.fromEntries(
   commitStateValues.map((value) => [value, resolvedEnumValue(workflow.commitState.values[value])]),
 ) as Record<WorkflowCommitStateValue, string>;
+
+const commitGateIds = Object.fromEntries(
+  workflowCommitGateValues.map((value) => [
+    value,
+    resolvedEnumValue(workflow.commitGate.values[value]),
+  ]),
+) as Record<WorkflowCommitGateValue, string>;
 
 const repositoryCommitStateIds = Object.fromEntries(
   repositoryCommitStateValues.map((value) => [
@@ -72,6 +80,7 @@ const agentSessionRuntimeStateIds = {
 
 const branchStateKeysById = invertRecord(branchStateIds);
 const commitStateKeysById = invertRecord(commitStateIds);
+const commitGateKeysById = invertRecord(commitGateIds);
 const repositoryCommitStateKeysById = invertRecord(repositoryCommitStateIds);
 const repositoryCommitLeaseStateKeysById = invertRecord(repositoryCommitLeaseStateIds);
 const agentSessionKindKeysById = invertRecord(agentSessionKindIds);
@@ -242,10 +251,15 @@ export function isWorkflowCommitTerminal(state: WorkflowCommitStateValue): boole
   return state === "committed" || state === "dropped";
 }
 
-export function deriveWorkflowCommitGate(
-  state: WorkflowCommitStateValue,
-): WorkflowCommitGateValue | undefined {
-  return state === "blocked" ? "UserReview" : undefined;
+function decodeWorkflowCommitGate(value: string | undefined): WorkflowCommitGateValue | undefined {
+  if (!value) {
+    return undefined;
+  }
+  const gate = commitGateKeysById[value];
+  if (!gate) {
+    throw new Error(`Unknown workflow commit gate id "${value}".`);
+  }
+  return gate;
 }
 
 export function requireWorkflowTransition<TState extends string>(
@@ -322,6 +336,8 @@ export function buildBranchSummary(
     projectId: entity.project,
     branchKey: entity.branchKey,
     state: decodeWorkflowBranchState(entity.state),
+    ...(entity.context ? { context: entity.context } : {}),
+    ...(entity.references ? { references: entity.references } : {}),
     ...(goalSummary ? { goalSummary } : {}),
     ...(entity.goalDocument ? { goalDocumentId: entity.goalDocument } : {}),
     ...(entity.contextDocument ? { contextDocumentId: entity.contextDocument } : {}),
@@ -332,7 +348,7 @@ export function buildBranchSummary(
 
 export function buildCommitSummary(entity: ReturnType<ProductGraphClient["commit"]["get"]>) {
   const state = decodeWorkflowCommitState(entity.state);
-  const gate = deriveWorkflowCommitGate(state);
+  const gate = decodeWorkflowCommitGate(entity.gate);
   return appendTimestampSummary(entity, {
     entity: "commit",
     id: entity.id,
@@ -340,7 +356,22 @@ export function buildCommitSummary(entity: ReturnType<ProductGraphClient["commit
     branchId: entity.branch,
     commitKey: entity.commitKey,
     state,
-    ...(gate ? { gate } : {}),
+    ...(entity.context ? { context: entity.context } : {}),
+    ...(entity.references ? { references: entity.references } : {}),
+    ...(gate === "UserReview"
+      ? {
+          gate,
+          ...(trimOptionalString(entity.gateReason)
+            ? { gateReason: trimOptionalString(entity.gateReason) }
+            : {}),
+          ...(entity.gateRequestedAt
+            ? { gateRequestedAt: entity.gateRequestedAt.toISOString() }
+            : {}),
+          ...(trimOptionalString(entity.gateRequestedBySessionId)
+            ? { gateRequestedBySessionId: trimOptionalString(entity.gateRequestedBySessionId) }
+            : {}),
+        }
+      : {}),
     order: entity.order,
     ...(entity.parentCommit ? { parentCommitId: entity.parentCommit } : {}),
     ...(entity.contextDocument ? { contextDocumentId: entity.contextDocument } : {}),
@@ -388,6 +419,8 @@ export function buildSessionSummary(
     kind: decodeStoredWorkflowSessionKind(entity.kind),
     status: decodeStoredWorkflowSessionStatus(entity.runtimeState),
     title: entity.name,
+    ...(entity.context ? { context: entity.context } : {}),
+    ...(entity.references ? { references: entity.references } : {}),
     workerId: entity.workerId,
     ...(entity.threadId ? { threadId: entity.threadId } : {}),
     ...(entity.turnId ? { turnId: entity.turnId } : {}),
@@ -449,4 +482,10 @@ export function normalizeRepositoryCommitLeaseState(
   return "unassigned";
 }
 
-export { repositoryCommitLeaseStateIds, repositoryCommitStateIds, branchStateIds, commitStateIds };
+export {
+  repositoryCommitLeaseStateIds,
+  repositoryCommitStateIds,
+  branchStateIds,
+  commitStateIds,
+  commitGateIds,
+};

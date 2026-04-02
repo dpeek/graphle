@@ -1,4 +1,7 @@
-import type { AgentSessionAppendEvent } from "@io/graph-module-workflow";
+import type {
+  AgentSessionAppendEvent,
+  WorkflowSessionLaunchPayload,
+} from "@io/graph-module-workflow";
 
 export const defaultBrowserAgentOrigin = "http://127.0.0.1:4317";
 export const browserAgentHealthPath = "/health";
@@ -55,6 +58,7 @@ export interface CodexSessionLaunchRequest {
     readonly projectId?: string;
   };
   readonly subject: CodexSessionLaunchSubject;
+  readonly workflow?: WorkflowSessionLaunchPayload;
 }
 
 export interface CodexSessionSummary {
@@ -148,6 +152,7 @@ export interface BrowserAgentActiveSessionLookupRequest {
   readonly kind: CodexSessionKind;
   readonly projectId: string;
   readonly subject: CodexSessionLaunchSubject;
+  readonly workflow?: WorkflowSessionLaunchPayload;
 }
 
 export type BrowserAgentActiveSessionLookupResult =

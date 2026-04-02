@@ -29,6 +29,7 @@ export interface WorkflowDecisionRecord {
   readonly projectId: string;
   readonly repositoryId?: string;
   readonly sessionId: string;
+  readonly sessionKey: string;
   readonly summary: string;
 }
 

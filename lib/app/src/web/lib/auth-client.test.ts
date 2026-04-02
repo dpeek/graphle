@@ -20,6 +20,7 @@ import {
   localhostBootstrapRedeemPath,
   type LocalhostBootstrapCredential,
 } from "./local-bootstrap.js";
+import { webAppPolicyVersion } from "./policy-version.js";
 
 function createBootstrapPayload(
   overrides: Partial<WebPrincipalBootstrapPayload> = {},
@@ -91,7 +92,7 @@ function createSyntheticReadyBootstrapPayload(
         sharedRead: false,
       },
       capabilityVersion: 0,
-      policyVersion: 0,
+      policyVersion: webAppPolicyVersion,
     },
     ...overrides,
   });
@@ -505,7 +506,7 @@ describe("web auth client helpers", () => {
           sharedRead: false,
         },
         capabilityVersion: 1,
-        policyVersion: 0,
+        policyVersion: webAppPolicyVersion,
       },
     });
     const calls: string[] = [];
@@ -606,7 +607,7 @@ describe("web auth client helpers", () => {
           sharedRead: false,
         },
         capabilityVersion: 1,
-        policyVersion: 0,
+        policyVersion: webAppPolicyVersion,
       },
     });
     const calls: string[] = [];

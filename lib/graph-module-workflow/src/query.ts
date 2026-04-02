@@ -19,10 +19,12 @@ import type {
 import {
   repositoryCommitLeaseStateValues,
   repositoryCommitStateValues,
+  workflowCommitGateValues,
   branchStateValues,
   commitStateValues,
 } from "./command.js";
 import { documentSchema } from "./document.js";
+import { resolveWorkflowCommitSessionLaunchCandidate } from "./launch.js";
 import { projectionMetadata } from "./projection.js";
 import {
   agentSession,
@@ -45,6 +47,7 @@ import {
   branch,
   branchState,
   commit,
+  commitGate,
   commitState,
   decision,
   decisionKind,
@@ -73,6 +76,7 @@ type ProjectionWorkflowSchemaInput = {
   branch: typeof branch;
   branchState: typeof branchState;
   commit: typeof commit;
+  commitGate: typeof commitGate;
   commitState: typeof commitState;
   contextBundle: typeof contextBundle;
   contextBundleEntry: typeof contextBundleEntry;
@@ -203,13 +207,16 @@ export interface CommitQueueScopeCommitRow {
 }
 
 export interface CommitQueueScopeSessionSummary {
+  readonly context?: string;
   readonly endedAt?: string;
   readonly id: string;
   readonly kind: CommitQueueScopeSessionKind;
+  readonly references?: string;
   readonly runtimeState: CommitQueueScopeSessionRuntimeState;
   readonly sessionKey: string;
   readonly startedAt: string;
   readonly subject: CommitQueueScopeSessionSubject;
+  readonly title?: string;
 }
 
 export interface CommitQueueScopeBranchDetail {
@@ -266,6 +273,7 @@ const projectionWorkflowSchema: ProjectionWorkflowSchema = applyGraphIdMap(workf
   repository,
   branchState,
   branch,
+  commitGate,
   commitState,
   commit,
   repositoryBranch,
@@ -392,6 +400,10 @@ const commitStateIds = Object.fromEntries(
   commitStateValues.map((value) => [value, resolvedEnumValue(commitState.values[value])]),
 ) as Record<(typeof commitStateValues)[number], string>;
 
+const commitGateIds = Object.fromEntries(
+  workflowCommitGateValues.map((value) => [value, resolvedEnumValue(commitGate.values[value])]),
+) as Record<(typeof workflowCommitGateValues)[number], string>;
+
 const repositoryCommitStateIds = Object.fromEntries(
   repositoryCommitStateValues.map((value) => [
     value,
@@ -426,6 +438,7 @@ const agentSessionSubjectKindIds = Object.fromEntries(
 
 const branchStateKeysById = invertRecord(branchStateIds);
 const commitStateKeysById = invertRecord(commitStateIds);
+const commitGateKeysById = invertRecord(commitGateIds);
 const repositoryCommitStateKeysById = invertRecord(repositoryCommitStateIds);
 const repositoryCommitLeaseStateKeysById = invertRecord(repositoryCommitLeaseStateIds);
 const agentSessionKindKeysById = invertRecord(agentSessionKindIds);
@@ -973,7 +986,9 @@ function createWorkflowProjectionIndexFromState(
       ? state.latestSessionByCommitId.get(selectedRow.commit.id)
       : undefined;
     const nextSessionKind =
-      selectedRow === undefined ? undefined : resolveNextSessionKind(selectedRow, latestSession);
+      selectedRow === undefined
+        ? undefined
+        : resolveNextSessionKind(branch, selectedRow, latestSession);
     const repository = state.repositoryByProjectId.get(query.projectId);
 
     return {
@@ -1403,27 +1418,18 @@ function resolveSelectedCommitRow(
   return rows[0];
 }
 
-function isOpenSessionRuntimeState(value: CommitQueueScopeSessionRuntimeState): boolean {
-  return value === "running" || value === "awaiting-user-input" || value === "blocked";
-}
-
 function resolveNextSessionKind(
+  branch: WorkflowBranchSummary,
   row: CommitQueueScopeCommitRow,
   latestSession: CommitQueueScopeSessionSummary | undefined,
 ): CommitQueueScopeSessionKind | undefined {
-  if (latestSession && isOpenSessionRuntimeState(latestSession.runtimeState)) {
-    return latestSession.kind;
-  }
-
-  switch (row.commit.state) {
-    case "planned":
-      return "planning";
-    case "ready":
-    case "active":
-      return "execution";
-    default:
-      return undefined;
-  }
+  const candidate = resolveWorkflowCommitSessionLaunchCandidate({
+    branch,
+    commit: row.commit,
+    latestSession,
+    repositoryCommit: row.repositoryCommit,
+  });
+  return candidate.status === "runnable" ? candidate.kind : undefined;
 }
 
 function sortWorkflowBranches(
@@ -1660,6 +1666,10 @@ function buildBranchSummary(
     projectId: entity.project,
     branchKey: entity.branchKey,
     state: decodeWorkflowBranchState(entity.state),
+    ...(trimOptionalString(entity.context) ? { context: trimOptionalString(entity.context) } : {}),
+    ...(trimOptionalString(entity.references)
+      ? { references: trimOptionalString(entity.references) }
+      : {}),
     ...(contextSummary ? { contextSummary } : {}),
     ...(goalSummary ? { goalSummary } : {}),
     ...(entity.goalDocument ? { goalDocumentId: entity.goalDocument } : {}),
@@ -1677,10 +1687,11 @@ function buildCommitSummary(
 ): WorkflowCommitSummary {
   const state = decodeWorkflowCommitState(entity.state);
   const contextSummary = readDocumentSummary(graph, entity.contextDocument);
+  const gate = decodeWorkflowCommitGate(entity.gate);
   const gateMetadata =
-    state === "blocked"
+    gate === "UserReview"
       ? {
-          gate: "UserReview" as const,
+          gate,
           ...(trimOptionalString(entity.gateReason)
             ? { gateReason: trimOptionalString(entity.gateReason) }
             : {}),
@@ -1699,6 +1710,10 @@ function buildCommitSummary(
     branchId: entity.branch,
     commitKey: entity.commitKey,
     state,
+    ...(trimOptionalString(entity.context) ? { context: trimOptionalString(entity.context) } : {}),
+    ...(trimOptionalString(entity.references)
+      ? { references: trimOptionalString(entity.references) }
+      : {}),
     ...(contextSummary ? { contextSummary } : {}),
     ...gateMetadata,
     order: entity.order,
@@ -1765,9 +1780,13 @@ function buildCommitQueueScopeSessionSummary(entity: AgentSessionEntity):
 
   return {
     branchId: entity.branch,
+    ...(trimOptionalString(entity.context) ? { context: trimOptionalString(entity.context) } : {}),
     id: entity.id,
     sessionKey: entity.sessionKey,
     kind: decodeAgentSessionKind(entity.kind),
+    ...(trimOptionalString(entity.references)
+      ? { references: trimOptionalString(entity.references) }
+      : {}),
     runtimeState: decodeAgentSessionRuntimeState(entity.runtimeState),
     subject:
       subjectKind === "commit"
@@ -1779,6 +1798,7 @@ function buildCommitQueueScopeSessionSummary(entity: AgentSessionEntity):
             kind: "branch",
           },
     startedAt: entity.startedAt.toISOString(),
+    ...(trimOptionalString(entity.name) ? { title: trimOptionalString(entity.name) } : {}),
     ...(entity.endedAt ? { endedAt: entity.endedAt.toISOString() } : {}),
   };
 }
@@ -1810,6 +1830,17 @@ function decodeWorkflowCommitState(value: string): WorkflowCommitSummary["state"
     throw new Error(`Unknown workflow commit state id "${value}".`);
   }
   return state;
+}
+
+function decodeWorkflowCommitGate(value: string | undefined): WorkflowCommitSummary["gate"] {
+  if (!value) {
+    return undefined;
+  }
+  const gate = commitGateKeysById[value];
+  if (!gate || gate === "None") {
+    return undefined;
+  }
+  return gate;
 }
 
 function decodeRepositoryCommitState(value: string): RepositoryCommitSummary["state"] {

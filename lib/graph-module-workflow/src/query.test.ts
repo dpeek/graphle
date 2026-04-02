@@ -459,10 +459,11 @@ describe("workflow projection query helpers", () => {
   it("retains user-review gate metadata in selected commit detail", () => {
     const { graph, ids } = createWorkflowQueryFixture();
     graph.commit.update(ids.commit2Id, {
+      gate: workflow.commitGate.values.UserReview.id,
       gateReason: "Await manual review before implementation resumes.",
       gateRequestedAt: date("2026-01-05T13:00:00.000Z"),
       gateRequestedBySessionId: ids.branchCommitSessionId,
-      state: workflow.commitState.values.blocked.id,
+      state: workflow.commitState.values.active.id,
       updatedAt: date("2026-01-05T13:00:00.000Z"),
     });
     graph.agentSession.update(ids.branchCommitSessionId, {
@@ -493,6 +494,7 @@ describe("workflow projection query helpers", () => {
         },
       },
     });
+    expect(result.selectedCommit?.nextSessionKind).toBeUndefined();
   });
 
   it("keeps workflow rows readable when repository observations are missing", () => {

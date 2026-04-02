@@ -7,6 +7,7 @@ import {
   commit,
   project,
   repository,
+  workflowV1Commit,
   workflowV1CommitGateValues,
 } from "./type.js";
 
@@ -35,6 +36,34 @@ export type WorkflowCommitStateValue = (typeof commitStateValues)[number];
 export const workflowCommitGateValues = workflowV1CommitGateValues;
 
 export type WorkflowCommitGateValue = (typeof workflowCommitGateValues)[number];
+
+export type WorkflowCommitUserReviewGateMetadataInput = {
+  readonly reason?: string | null;
+  readonly requestedAt?: string | null;
+  readonly requestedBySessionId?: string | null;
+};
+
+export const workflowCommitUserReviewContract = Object.freeze({
+  auditTrail: {
+    request: {
+      gateMutation: "requestCommitUserReview" as const,
+      retainedDecisionKind: "blocker" as const,
+    },
+    continueCommand: "workflow:decision-write",
+    requestChanges: {
+      decisionCommand: "workflow:decision-write",
+      followOnSessionMutation: "createSession",
+      gateMutation: "none",
+      retainedSessionHistoryCommand: "workflow:agent-session-append",
+    },
+  },
+  gate: "UserReview" as const,
+  metadataFields: workflowV1Commit.gateMetadataFields,
+  mutations: {
+    clear: "clearCommitUserReview" as const,
+    request: "requestCommitUserReview" as const,
+  },
+});
 
 // Session mutation stays aligned with retained AgentSession storage for the
 // first browser milestone, so the write surface keeps the v1 kinds that map
@@ -106,6 +135,8 @@ export type WorkflowRepositorySummary = WorkflowSummaryBase & {
 export type WorkflowBranchSummary = WorkflowSummaryBase & {
   readonly activeCommitId?: string;
   readonly branchKey: string;
+  readonly context?: string;
+  readonly references?: string;
   readonly contextSummary?: string;
   readonly entity: "branch";
   readonly contextDocumentId?: string;
@@ -119,6 +150,8 @@ export type WorkflowBranchSummary = WorkflowSummaryBase & {
 export type WorkflowCommitSummary = WorkflowSummaryBase & {
   readonly branchId: string;
   readonly commitKey: string;
+  readonly context?: string;
+  readonly references?: string;
   readonly contextSummary?: string;
   readonly contextDocumentId?: string;
   readonly entity: "commit";
@@ -134,6 +167,8 @@ export type WorkflowCommitSummary = WorkflowSummaryBase & {
 export type WorkflowSessionSummary = WorkflowSummaryBase & {
   readonly branchId: string;
   readonly commitId: string;
+  readonly context?: string;
+  readonly references?: string;
   readonly endedAt?: string;
   readonly entity: "session";
   readonly kind: WorkflowMutableSessionKind;
@@ -277,10 +312,12 @@ export type WorkflowRepositoryMutationAction =
 export type WorkflowCreateBranchAction = {
   readonly action: "createBranch";
   readonly branchKey: string;
+  readonly context?: string | null;
   readonly contextDocumentId?: string | null;
   readonly goalDocumentId?: string | null;
   readonly projectId: string;
   readonly queueRank?: number | null;
+  readonly references?: string | null;
   readonly state?: Extract<WorkflowBranchStateValue, "backlog" | "ready">;
   readonly title: string;
 };
@@ -289,9 +326,11 @@ export type WorkflowUpdateBranchAction = {
   readonly action: "updateBranch";
   readonly branchId: string;
   readonly branchKey?: string;
+  readonly context?: string | null;
   readonly contextDocumentId?: string | null;
   readonly goalDocumentId?: string | null;
   readonly queueRank?: number | null;
+  readonly references?: string | null;
   readonly title?: string;
 };
 
@@ -327,9 +366,11 @@ export type WorkflowCreateCommitAction = {
   readonly action: "createCommit";
   readonly branchId: string;
   readonly commitKey: string;
+  readonly context?: string | null;
   readonly contextDocumentId?: string | null;
   readonly order: number;
   readonly parentCommitId?: string | null;
+  readonly references?: string | null;
   readonly state?: Extract<WorkflowCommitStateValue, "planned" | "ready">;
   readonly title: string;
 };
@@ -338,9 +379,11 @@ export type WorkflowUpdateCommitAction = {
   readonly action: "updateCommit";
   readonly commitId: string;
   readonly commitKey?: string;
+  readonly context?: string | null;
   readonly contextDocumentId?: string | null;
   readonly order?: number;
   readonly parentCommitId?: string | null;
+  readonly references?: string | null;
   readonly title?: string;
 };
 
@@ -355,29 +398,28 @@ export type WorkflowCommitMutationAction =
   | WorkflowUpdateCommitAction
   | WorkflowSetCommitStateAction;
 
-export type WorkflowSetCommitUserReviewGateAction = {
-  readonly action: "setCommitUserReviewGate";
+export type WorkflowRequestCommitUserReviewAction = {
+  readonly action: "requestCommitUserReview";
   readonly commitId: string;
-  readonly reason?: string | null;
-  readonly requestedAt?: string | null;
-  readonly requestedBySessionId?: string | null;
-};
+} & WorkflowCommitUserReviewGateMetadataInput;
 
-export type WorkflowClearCommitUserReviewGateAction = {
-  readonly action: "clearCommitUserReviewGate";
+export type WorkflowClearCommitUserReviewAction = {
+  readonly action: "clearCommitUserReview";
   readonly commitId: string;
 };
 
 export type WorkflowCommitUserReviewGateMutationAction =
-  | WorkflowSetCommitUserReviewGateAction
-  | WorkflowClearCommitUserReviewGateAction;
+  | WorkflowRequestCommitUserReviewAction
+  | WorkflowClearCommitUserReviewAction;
 
 export type WorkflowCreateSessionAction = {
   readonly action: "createSession";
   readonly commitId: string;
+  readonly context?: string | null;
   readonly endedAt?: string | null;
   readonly kind: WorkflowMutableSessionKind;
   readonly name: string;
+  readonly references?: string | null;
   readonly sessionKey: string;
   readonly startedAt?: string;
   readonly status?: WorkflowMutableSessionStatus;
@@ -388,8 +430,10 @@ export type WorkflowCreateSessionAction = {
 
 export type WorkflowUpdateSessionAction = {
   readonly action: "updateSession";
+  readonly context?: string | null;
   readonly endedAt?: string | null;
   readonly name?: string;
+  readonly references?: string | null;
   readonly sessionId: string;
   readonly status?: WorkflowMutableSessionStatus;
   readonly threadId?: string | null;
@@ -453,14 +497,24 @@ export const workflowMutationCommand = {
       { predicateId: edgeId(project.fields.projectKey) },
       { predicateId: edgeId(repository.fields.repositoryKey) },
       { predicateId: edgeId(branch.fields.state) },
+      { predicateId: edgeId(branch.fields.context) },
+      { predicateId: edgeId(branch.fields.references) },
       { predicateId: edgeId(branch.fields.goalDocument) },
       { predicateId: edgeId(branch.fields.contextDocument) },
       { predicateId: edgeId(branch.fields.activeCommit) },
+      { predicateId: edgeId(commit.fields.context) },
+      { predicateId: edgeId(commit.fields.references) },
       { predicateId: edgeId(commit.fields.contextDocument) },
+      { predicateId: edgeId(commit.fields.gate) },
       { predicateId: edgeId(commit.fields.state) },
+      { predicateId: edgeId(commit.fields.gateReason) },
+      { predicateId: edgeId(commit.fields.gateRequestedAt) },
+      { predicateId: edgeId(commit.fields.gateRequestedBySessionId) },
       { predicateId: edgeId(agentSession.fields.sessionKey) },
       { predicateId: edgeId(agentSession.fields.kind) },
       { predicateId: edgeId(agentSession.fields.runtimeState) },
+      { predicateId: edgeId(agentSession.fields.context) },
+      { predicateId: edgeId(agentSession.fields.references) },
       { predicateId: edgeId(agentSession.fields.commit) },
     ],
   },

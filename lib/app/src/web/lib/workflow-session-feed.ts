@@ -44,6 +44,11 @@ const workflowCommitStateKeysById = invertRecord({
   ready: workflow.commitState.values.ready.id as string,
 } as const);
 
+const workflowCommitGateKeysById = invertRecord({
+  None: workflow.commitGate.values.None.id as string,
+  UserReview: workflow.commitGate.values.UserReview.id as string,
+} as const);
+
 const repositoryCommitStateKeysById = invertRecord({
   attached: workflow.repositoryCommitState.values.attached.id as string,
   committed: workflow.repositoryCommitState.values.committed.id as string,
@@ -163,6 +168,17 @@ function decodeWorkflowCommitState(value: string): WorkflowCommitSummary["state"
   return state;
 }
 
+function decodeWorkflowCommitGate(value: string | undefined): WorkflowCommitSummary["gate"] {
+  if (!value) {
+    return undefined;
+  }
+  const gate = workflowCommitGateKeysById[value];
+  if (!gate || gate === "None") {
+    return undefined;
+  }
+  return gate;
+}
+
 function decodeRepositoryCommitState(value: string): RepositoryCommitSummary["state"] {
   const state = repositoryCommitStateKeysById[value];
   if (!state) {
@@ -270,6 +286,7 @@ function buildWorkflowCommitSummary(
   graph: Pick<ProductGraphClient, "document">,
 ): WorkflowCommitSummary {
   const state = decodeWorkflowCommitState(entity.state);
+  const gate = decodeWorkflowCommitGate(entity.gate);
   const contextSummary = entity.contextDocument
     ? trimOptionalString(graph.document.get(entity.contextDocument).description)
     : undefined;
@@ -284,7 +301,20 @@ function buildWorkflowCommitSummary(
     order: entity.order,
     ...(entity.parentCommit ? { parentCommitId: entity.parentCommit } : {}),
     state,
-    ...(state === "blocked" ? { gate: "UserReview" as const } : {}),
+    ...(gate === "UserReview"
+      ? {
+          gate,
+          ...(trimOptionalString(entity.gateReason)
+            ? { gateReason: trimOptionalString(entity.gateReason) }
+            : {}),
+          ...(entity.gateRequestedAt
+            ? { gateRequestedAt: entity.gateRequestedAt.toISOString() }
+            : {}),
+          ...(trimOptionalString(entity.gateRequestedBySessionId)
+            ? { gateRequestedBySessionId: trimOptionalString(entity.gateRequestedBySessionId) }
+            : {}),
+        }
+      : {}),
     title: entity.name,
     updatedAt: entity.updatedAt.toISOString(),
   };
@@ -677,7 +707,7 @@ function buildReadyResult(
     decisions: graph.decision
       .list()
       .filter((decision) => decision.session === session.id)
-      .map((decision) => buildWorkflowDecisionRecord(graph.decision.get(decision.id)))
+      .map((decision) => buildWorkflowDecisionRecord(graph.decision.get(decision.id), graph))
       .sort(compareCreatedAscending),
     events: persistedEvents.events,
     finalization: resolveFinalizationState(query, persistedEvents.events),

@@ -27,7 +27,7 @@ import {
   coreCatalogModuleReadScope,
   coreGraphBootstrapOptions,
 } from "@io/graph-module-core";
-import { workflow } from "@io/graph-module-workflow";
+import { type AgentSessionAppendRequest, workflow } from "@io/graph-module-workflow";
 import {
   type RetainedWorkflowProjectionState,
   workflowBuiltInQuerySurfaceIds,
@@ -54,9 +54,11 @@ import {
   type SessionPrincipalLookupInput,
 } from "./auth-bridge.js";
 import {
+  executeTestAgentSessionAppend as executeAgentSessionAppend,
   createTestWebAppAuthority,
   createTestWorkflowFixture,
   createTestWebAppAuthorityWithWorkflowFixture,
+  executeTestWorkflowDecisionWrite as executeWorkflowDecisionWrite,
   executeTestWorkflowMutation as executeWorkflowMutation,
   type WorkflowFixture,
 } from "./authority-test-helpers.js";
@@ -311,7 +313,7 @@ function createBearerAuthorizationContext(
   return {
     ...createBearerShareAuthorizationContext({
       graphId: "graph:test",
-      policyVersion: 0,
+      policyVersion: webAppPolicyVersion,
       capabilityGrantIds,
     }),
     ...overrides,
@@ -690,6 +692,67 @@ function createLocalInstalledModuleRecord(
   });
 }
 
+function createCommitSessionAppendRequest(input: {
+  readonly branchId: string;
+  readonly commitId: string;
+  readonly projectId: string;
+  readonly repositoryId: string;
+  readonly sessionKey?: string;
+}): AgentSessionAppendRequest {
+  return {
+    session: {
+      context:
+        "Resume the launched workflow commit session from authoritative retained history after reload.",
+      kind: "execution",
+      mode: "create",
+      projectId: input.projectId,
+      references:
+        "lib/app/src/web/lib/workflow-session-feed.ts\nlib/app/src/web/lib/workflow-session-history.ts",
+      repositoryId: input.repositoryId,
+      retainedSession: {
+        externalSessionId: "browser-agent:workflow-commit:1",
+        issue: {
+          identifier: "OPE-667",
+          title:
+            "Session: Verify authoritative retained history and reload-safe recovery for the first launched workflow session",
+        },
+        parentSessionId: "supervisor",
+        retainedRole: "worker",
+        rootSessionId: "supervisor",
+        runtime: {
+          state: "running",
+        },
+        workspacePath: "/tmp/io-worktree",
+      },
+      sessionKey: input.sessionKey ?? "session:workflow-commit-execution-01",
+      subject: {
+        branchId: input.branchId,
+        commitId: input.commitId,
+        kind: "commit",
+      },
+      threadId: "thread:workflow-commit-01",
+      title: "Workflow commit execution",
+      turnId: "turn:workflow-commit-01",
+      workerId: "worker:workflow-commit-01",
+    },
+    events: [
+      {
+        phase: "started",
+        sequence: 1,
+        timestamp: "2026-04-01T10:00:00.000Z",
+        type: "session",
+      },
+      {
+        code: "ready",
+        format: "line",
+        sequence: 2,
+        text: "Running retained workflow session",
+        timestamp: "2026-04-01T10:00:05.000Z",
+        type: "status",
+      },
+    ],
+  };
+}
 function createSessionPrincipalLookupInput(
   overrides: {
     readonly graphId?: string;
@@ -2367,6 +2430,353 @@ describe("web authority", () => {
     expect(secondCommitPage.nextCursor).toBeUndefined();
   });
 
+  it("keeps commit-launched session recovery authoritative across restart", async () => {
+    const authorization = createAuthorityAuthorizationContext();
+    const { authority, fixture, storage } =
+      await createTestWebAppAuthorityWithWorkflowFixture(authorization);
+    const commit = await executeWorkflowMutation(authority, authorization, {
+      action: "createCommit",
+      branchId: fixture.branchId,
+      title: "Verify reload-safe browser session recovery",
+      commitKey: "commit:verify-reload-safe-browser-session-recovery",
+      order: 0,
+      state: "ready",
+    });
+    await executeWorkflowMutation(authority, authorization, {
+      action: "setCommitState",
+      commitId: commit.summary.id,
+      state: "active",
+    });
+    const repositoryCommit = await executeWorkflowMutation(authority, authorization, {
+      action: "createRepositoryCommit",
+      commitId: commit.summary.id,
+      repositoryBranchId: fixture.repositoryBranchId,
+      repositoryId: fixture.repositoryId,
+      state: "attached",
+      title: "Verify reload-safe browser session recovery",
+      worktree: {
+        branchName: "workflow-authority",
+        path: "/tmp/io-worktree",
+      },
+    });
+    const appendResult = await executeAgentSessionAppend(
+      authority,
+      authorization,
+      createCommitSessionAppendRequest({
+        branchId: fixture.branchId,
+        commitId: commit.summary.id,
+        projectId: fixture.projectId,
+        repositoryId: fixture.repositoryId,
+      }),
+    );
+
+    if (!appendResult.ok) {
+      throw new Error("Expected the commit-scoped retained session append to succeed.");
+    }
+
+    const beforeRestart = authority.readMainCommitWorkflowScope(
+      {
+        commitId: commit.summary.id,
+        projectId: fixture.projectId,
+      },
+      { authorization },
+    );
+    const beforeRestartFeed = authority.readWorkflowSessionFeed(
+      {
+        projectId: fixture.projectId,
+        session: {
+          kind: "latest-for-subject",
+        },
+        subject: {
+          branchId: fixture.branchId,
+          commitId: commit.summary.id,
+          kind: "commit",
+        },
+      },
+      { authorization },
+    );
+    const restarted = await createTestWebAppAuthority(storage.storage);
+    const afterRestart = restarted.readMainCommitWorkflowScope(
+      {
+        commitId: commit.summary.id,
+        projectId: fixture.projectId,
+      },
+      { authorization },
+    );
+    const afterRestartFeed = restarted.readWorkflowSessionFeed(
+      {
+        projectId: fixture.projectId,
+        session: {
+          kind: "latest-for-subject",
+        },
+        subject: {
+          branchId: fixture.branchId,
+          commitId: commit.summary.id,
+          kind: "commit",
+        },
+      },
+      { authorization },
+    );
+
+    expect(beforeRestart.selectedCommit).toMatchObject({
+      latestSession: {
+        id: appendResult.session.sessionId,
+        kind: "execution",
+        runtimeState: "running",
+        sessionKey: "session:workflow-commit-execution-01",
+      },
+      nextSessionKind: "execution",
+      row: {
+        commit: {
+          id: commit.summary.id,
+          state: "active",
+        },
+        repositoryCommit: {
+          id: repositoryCommit.summary.id,
+          state: "attached",
+        },
+      },
+    });
+    expect(afterRestart.selectedCommit).toMatchObject(beforeRestart.selectedCommit!);
+    expect(afterRestart.branch.latestSession).toMatchObject(beforeRestart.branch.latestSession!);
+
+    if (beforeRestartFeed.status !== "ready" || afterRestartFeed.status !== "ready") {
+      throw new Error(
+        "Expected the retained commit session feed to stay readable before and after restart.",
+      );
+    }
+
+    expect(beforeRestartFeed).toMatchObject({
+      finalization: {
+        reason: "graph-finalization-unavailable",
+        status: "unknown",
+      },
+      header: {
+        id: appendResult.session.sessionId,
+        kind: "execution",
+        sessionKey: "session:workflow-commit-execution-01",
+        title: "Workflow commit execution",
+      },
+      history: {
+        lastSequence: 2,
+        persistedEventCount: 2,
+        reason: "history-pending-append",
+        status: "partial",
+      },
+      runtime: {
+        startedAt: "2026-04-01T10:00:00.000Z",
+        state: "running",
+      },
+      subject: {
+        commit: {
+          id: commit.summary.id,
+        },
+        repository: {
+          id: fixture.repositoryId,
+        },
+        repositoryCommit: {
+          id: repositoryCommit.summary.id,
+          state: "attached",
+        },
+      },
+    });
+    expect(beforeRestartFeed.events).toEqual([
+      {
+        phase: "started",
+        sequence: 1,
+        timestamp: "2026-04-01T10:00:00.000Z",
+        type: "session",
+      },
+      {
+        code: "ready",
+        format: "line",
+        sequence: 2,
+        text: "Running retained workflow session",
+        timestamp: "2026-04-01T10:00:05.000Z",
+        type: "status",
+      },
+    ]);
+    expect(afterRestartFeed).toEqual(beforeRestartFeed);
+  });
+
+  it("keeps the gated review audit trail readable across restart when later sessions exist", async () => {
+    const authorization = createAuthorityAuthorizationContext();
+    const { authority, fixture, storage } =
+      await createTestWebAppAuthorityWithWorkflowFixture(authorization);
+    const commit = await executeWorkflowMutation(authority, authorization, {
+      action: "createCommit",
+      branchId: fixture.branchId,
+      title: "Keep review audit history authoritative",
+      commitKey: "commit:keep-review-audit-history-authoritative",
+      order: 0,
+      state: "ready",
+    });
+    const appendResult = await executeAgentSessionAppend(authority, authorization, {
+      events: [
+        {
+          phase: "started",
+          sequence: 1,
+          timestamp: "2026-04-01T10:00:00.000Z",
+          type: "session",
+        },
+      ],
+      session: {
+        context: "Request explicit operator review from the authoritative retained session.",
+        kind: "review",
+        mode: "create",
+        projectId: fixture.projectId,
+        references:
+          "lib/app/src/web/lib/workflow-session-feed.ts\nlib/app/src/web/components/workflow-review-page.tsx",
+        repositoryId: fixture.repositoryId,
+        retainedSession: {
+          externalSessionId: "browser-agent:workflow-review:1",
+          issue: {
+            identifier: "OPE-676",
+            title:
+              "Session: Record review decisions and verify an authoritative audit trail for stop and continue",
+          },
+          parentSessionId: "supervisor",
+          retainedRole: "worker",
+          rootSessionId: "supervisor",
+          runtime: {
+            state: "running",
+          },
+          workspacePath: "/tmp/io-worktree",
+        },
+        sessionKey: "session:workflow-review-gate-01",
+        subject: {
+          branchId: fixture.branchId,
+          commitId: commit.summary.id,
+          kind: "commit",
+        },
+        threadId: "thread:workflow-review-gate-01",
+        title: "Workflow review gate",
+        turnId: "turn:workflow-review-gate-01",
+        workerId: "worker:workflow-review-gate-01",
+      },
+    });
+
+    if (!appendResult.ok) {
+      throw new Error("Expected the review-gate retained session append to succeed.");
+    }
+
+    await executeWorkflowMutation(authority, authorization, {
+      action: "requestCommitUserReview",
+      commitId: commit.summary.id,
+      reason: "Await manual review before implementation resumes.",
+      requestedAt: "2026-04-01T10:05:00.000Z",
+      requestedBySessionId: appendResult.session.sessionId,
+    });
+    await executeWorkflowDecisionWrite(authority, authorization, {
+      sessionId: appendResult.session.sessionId,
+      decision: {
+        details:
+          'Keep commit "Keep review audit history authoritative" paused in the explicit user-review gate. Queue a follow-on review session.',
+        kind: "blocker",
+        summary: "Request changes",
+      },
+    });
+    const followOnSession = await executeWorkflowMutation(authority, authorization, {
+      action: "createSession",
+      commitId: commit.summary.id,
+      kind: "Review",
+      name: "Workflow review follow-up",
+      sessionKey: "session:workflow-review-follow-up-01",
+      workerId: "browser-review-gate",
+    });
+
+    const beforeRestart = authority.readMainCommitWorkflowScope(
+      {
+        commitId: commit.summary.id,
+        projectId: fixture.projectId,
+      },
+      { authorization },
+    );
+    const beforeRestartFeed = authority.readWorkflowSessionFeed(
+      {
+        projectId: fixture.projectId,
+        session: {
+          kind: "session-id",
+          sessionId: appendResult.session.sessionId,
+        },
+        subject: {
+          branchId: fixture.branchId,
+          commitId: commit.summary.id,
+          kind: "commit",
+        },
+      },
+      { authorization },
+    );
+    const restarted = await createTestWebAppAuthority(storage.storage);
+    const afterRestart = restarted.readMainCommitWorkflowScope(
+      {
+        commitId: commit.summary.id,
+        projectId: fixture.projectId,
+      },
+      { authorization },
+    );
+    const afterRestartFeed = restarted.readWorkflowSessionFeed(
+      {
+        projectId: fixture.projectId,
+        session: {
+          kind: "session-id",
+          sessionId: appendResult.session.sessionId,
+        },
+        subject: {
+          branchId: fixture.branchId,
+          commitId: commit.summary.id,
+          kind: "commit",
+        },
+      },
+      { authorization },
+    );
+
+    expect(beforeRestart.selectedCommit).toMatchObject({
+      latestSession: {
+        id: followOnSession.summary.id,
+        sessionKey: "session:workflow-review-follow-up-01",
+      },
+      row: {
+        commit: {
+          gate: "UserReview",
+          gateRequestedBySessionId: appendResult.session.sessionId,
+          id: commit.summary.id,
+        },
+      },
+    });
+    expect(afterRestart.selectedCommit).toMatchObject(beforeRestart.selectedCommit!);
+
+    if (beforeRestartFeed.status !== "ready" || afterRestartFeed.status !== "ready") {
+      throw new Error(
+        "Expected the retained review-gate session feed to stay readable before and after restart.",
+      );
+    }
+
+    expect(beforeRestartFeed.header).toMatchObject({
+      id: appendResult.session.sessionId,
+      kind: "review",
+      sessionKey: "session:workflow-review-gate-01",
+      title: "Workflow review gate",
+    });
+    expect(beforeRestartFeed.decisions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: "blocker",
+          sessionId: appendResult.session.sessionId,
+          sessionKey: "session:workflow-review-gate-01",
+          summary: "Review requested",
+        }),
+        expect.objectContaining({
+          kind: "blocker",
+          sessionId: appendResult.session.sessionId,
+          sessionKey: "session:workflow-review-gate-01",
+          summary: "Request changes",
+        }),
+      ]),
+    );
+    expect(afterRestartFeed).toEqual(beforeRestartFeed);
+  });
+
   it("executes serialized entity, neighborhood, and cross-module scope reads through the reusable authority seam", async () => {
     const authorization = createAuthorityAuthorizationContext();
     const { authority, fixture } =
@@ -3706,7 +4116,7 @@ describe("web authority", () => {
           sharedRead: false,
         },
         capabilityVersion: 1,
-        policyVersion: 0,
+        policyVersion: webAppPolicyVersion,
       },
     });
   });
@@ -3879,7 +4289,7 @@ describe("web authority", () => {
   it("bootstraps the first operator through explicit admission plus explicit role binding", async () => {
     const bootstrapAuthorization = createAnonymousAuthorizationContext({
       graphId: "graph:test",
-      policyVersion: 0,
+      policyVersion: webAppPolicyVersion,
     });
     const storage = createInMemoryTestWebAppAuthorityStorage();
     const authority = await createTestWebAppAuthority(storage.storage);

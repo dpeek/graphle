@@ -173,6 +173,12 @@ function createWorkflowBranch(
     project: project.id,
     branchKey,
     state: branchStateIds[requestedState],
+    ...(input.context !== undefined && input.context !== null
+      ? { context: requireString(input.context, "Branch context") }
+      : {}),
+    ...(input.references !== undefined && input.references !== null
+      ? { references: requireString(input.references, "Branch references") }
+      : {}),
     ...(input.goalDocumentId !== undefined && input.goalDocumentId !== null
       ? {
           goalDocument: requireDocument(
@@ -235,6 +241,20 @@ function updateWorkflowBranch(
         store,
         requireString(input.contextDocumentId, "Context document id"),
       ).id;
+    }
+  }
+  if (input.context !== undefined) {
+    if (input.context === null) {
+      clearSingleValue(store, branch.id, edgeId(workflow.branch.fields.context));
+    } else {
+      patch.context = requireString(input.context, "Branch context");
+    }
+  }
+  if (input.references !== undefined) {
+    if (input.references === null) {
+      clearSingleValue(store, branch.id, edgeId(workflow.branch.fields.references));
+    } else {
+      patch.references = requireString(input.references, "Branch references");
     }
   }
   if (input.queueRank !== undefined) {

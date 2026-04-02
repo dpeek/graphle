@@ -30,6 +30,11 @@ history.
   `resolveWorkflowReviewStartupState(...)`
 - the main page reads the implicit-main commit workflow contract through
   `main-commit-workflow-scope`
+- selected-commit launch and attach lookup follow one explicit next-session
+  rule: reuse a retained open session when one exists for the selected commit;
+  otherwise map `planned -> Plan` and `ready | active -> Implement`
+- blocked, committed, dropped, or `UserReview`-gated commits are intentionally
+  non-runnable until workflow state changes
 
 ## Current browser surface
 
@@ -41,8 +46,15 @@ The shipped browser route currently provides:
 - retained session-feed reads for the selected branch or commit
 - browser-owned launch and attach affordances wired to the local
   browser-agent runtime
+- explicit `workflow.selection` plus `workflow.context` launch payloads so
+  branch, commit, and session prompt fields stay aligned with the selected
+  commit
+- optional `workflow.local` hints for repository root, worktree path, git
+  branch name, and HEAD SHA when that metadata is already known
 - optional low-latency session-event streaming layered on top of retained
   history
+- pinned retained-session reads for review flows, so a `UserReview` blocker
+  trail stays readable even when later sessions exist for the same commit
 
 ## Current authority boundary
 

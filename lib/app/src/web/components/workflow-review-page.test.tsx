@@ -14,6 +14,7 @@ import {
   createBranchSessionActionModel,
   createCommitSessionActionModel,
   WorkflowReviewSurface,
+  resolveEffectiveWorkflowSearch,
   type WorkflowSessionFeedReadState,
   type WorkflowReviewReadState,
 } from "./workflow-review-page.js";
@@ -586,7 +587,7 @@ describe("workflow review page", () => {
         gateReason: "Await manual review before implementation resumes.",
         gateRequestedAt: "2026-03-26T10:01:00.000Z",
         gateRequestedBySessionId: "session:review:1",
-        state: "blocked" as const,
+        state: "active" as const,
       },
     };
 
@@ -612,6 +613,14 @@ describe("workflow review page", () => {
         })}
         commitActionState={undefined}
         commitLookupState={{ status: "idle" }}
+        commitReviewGateActionModel={{
+          continueAction: { availability: "available" },
+          requestChangesAction: {
+            availability: "available",
+            followOnKind: "Review",
+          },
+          requestingSessionLabel: "Review / blocked / session:workflow-review [session:review:1]",
+        }}
         onTriggerBranchSession={() => {}}
         onTriggerCommitSession={() => {}}
         readState={{
@@ -647,12 +656,15 @@ describe("workflow review page", () => {
     );
 
     expect(html).toContain("Continue workflow");
-    expect(html).toContain('data-workflow-continue-action="disabled"');
+    expect(html).toContain('data-workflow-continue-action="ready"');
+    expect(html).toContain("Request changes");
+    expect(html).toContain('data-workflow-request-changes-action="ready"');
     expect(html).toContain("UserReview");
     expect(html).toContain("No runnable session");
     expect(html).toContain("Await manual review before implementation resumes.");
-    expect(html).toContain("Requested by session");
-    expect(html).toContain("session:review:1");
+    expect(html).toContain("Requesting session");
+    expect(html).toContain("Review / blocked / session:workflow-review [session:review:1]");
+    expect(html).toContain("queues a follow-on review session");
     expect(html).toContain("No retained session recorded");
     expect(html).toContain("data-workflow-commit-session-reason");
   });
@@ -665,7 +677,7 @@ describe("workflow review page", () => {
         ...readState.commitQueue.rows[0]!.commit,
         gate: "UserReview" as const,
         gateReason: "Await manual review before implementation resumes.",
-        state: "blocked" as const,
+        state: "active" as const,
       },
     };
 
@@ -691,6 +703,34 @@ describe("workflow review page", () => {
 
     expect(action.availability).toBe("unavailable");
     expect(action.reason).toBe("Await manual review before implementation resumes.");
+  });
+
+  it("pins the retained session feed to the requesting session while user review is active", () => {
+    const selectedCommit = {
+      ...createCommitQueue().rows[0]!.commit,
+      gate: "UserReview" as const,
+      gateRequestedBySessionId: "session:review:1",
+    };
+
+    expect(resolveEffectiveWorkflowSearch({ project: "project-io" }, selectedCommit)).toEqual({
+      commit: selectedCommit.id,
+      project: "project-io",
+      session: "session:review:1",
+    });
+    expect(
+      resolveEffectiveWorkflowSearch(
+        {
+          commit: selectedCommit.id,
+          project: "project-io",
+          session: "session:explicit",
+        },
+        selectedCommit,
+      ),
+    ).toEqual({
+      commit: selectedCommit.id,
+      project: "project-io",
+      session: "session:explicit",
+    });
   });
 
   it("switches the branch action into attach mode when an active branch session exists", () => {
@@ -891,6 +931,48 @@ describe("workflow review page", () => {
 
     expect(action.label).toBe("Attach commit session");
     expect(action.preference).toEqual({ mode: "attach-existing" });
+  });
+
+  it("uses the next runnable planning session when the selected commit is still planned", () => {
+    const commitQueue = createCommitQueue();
+    const plannedRow: CommitQueueScopeResult["rows"][number] = {
+      ...commitQueue.rows[0]!,
+      commit: {
+        ...commitQueue.rows[0]!.commit,
+        state: "planned" as const,
+      },
+    };
+    const action = createCommitSessionActionModel({
+      authStatus: "ready",
+      commitQueue: {
+        ...commitQueue,
+        branch: {
+          ...commitQueue.branch,
+          activeCommit: commitQueue.branch.activeCommit
+            ? {
+                ...commitQueue.branch.activeCommit,
+                commit: plannedRow.commit,
+              }
+            : undefined,
+          latestSession: undefined,
+        },
+        rows: [plannedRow, ...commitQueue.rows.slice(1)],
+      },
+      lookupState: {
+        status: "idle",
+      },
+      runtime: createRuntimeState(),
+      selectedCommitDetail: {
+        nextSessionKind: "planning",
+        row: plannedRow,
+      },
+      selectedBranchState: "active",
+    });
+
+    expect(action.availability).toBe("available");
+    expect(action.description).toContain("planning session");
+    expect(action.label).toBe("Launch commit session");
+    expect(action.preference).toEqual({ mode: "attach-or-launch" });
   });
 
   it("keeps commit attach recovery explicit after reload when a reusable session is found", () => {
@@ -1198,6 +1280,52 @@ describe("workflow review page", () => {
     );
     expect(html).toContain("Still streaming locally");
     expect(html).toContain("transient");
+  });
+
+  it("keeps authoritative retained history primary when local reconnect drift appears", () => {
+    const html = renderToStaticMarkup(
+      <WorkflowReviewSurface
+        branchAction={createBranchActionOverrides()}
+        branchActionState={undefined}
+        branchLookupState={{ status: "idle" }}
+        commitAction={createCommitActionOverrides()}
+        commitActionState={undefined}
+        commitLookupState={{ status: "idle" }}
+        liveSessionState={{
+          browserAgentSessionId: "browser-agent:1",
+          events: [
+            createWorkflowSessionLiveEvent({
+              browserAgentSessionId: "browser-agent:1",
+              event: {
+                type: "status",
+                code: "ready",
+                format: "line",
+                sequence: 2,
+                text: "Local drifted update",
+                timestamp: "2026-03-26T02:00:01.000Z",
+              },
+              sessionId: "session:1",
+            }),
+          ],
+          sessionId: "session:1",
+          status: "streaming",
+        }}
+        onTriggerBranchSession={() => {}}
+        onTriggerCommitSession={() => {}}
+        readState={createReadyReadState()}
+        runtime={createRuntimeState()}
+        search={{ project: "project-io" }}
+        sessionFeedState={createSessionFeedState()}
+        startupState={createReadyStartupState()}
+      />,
+    );
+
+    expect(html).toContain("live drift");
+    expect(html).toContain(
+      "Local live reconciliation drifted from graph-backed history at sequence",
+    );
+    expect(html).toContain("Running");
+    expect(html).toContain("Local drifted update");
   });
 
   it("keeps the authoritative session feed visible when local live updates are unavailable", () => {

@@ -67,6 +67,8 @@ const requiredWorkflowExports = [
   "createWorkflowReviewInvalidationEvent",
   "evaluateDecisionWriteRequest",
   "evaluateAgentSessionAppendRequest",
+  "resolveWorkflowCommitSessionLaunchCandidate",
+  "resolveWorkflowSessionLaunchKind",
   "retainedAgentSessionKindToWorkflowSessionKind",
   "retainedAgentSessionRuntimeStateToWorkflowSessionStatus",
   "repositoryBranch",
@@ -79,6 +81,8 @@ const requiredWorkflowExports = [
   "branchState",
   "branchStateTypeModule",
   "commit",
+  "commitGate",
+  "commitGateTypeModule",
   "commitKeyPattern",
   "commitState",
   "commitStateTypeModule",
@@ -93,9 +97,12 @@ const requiredWorkflowExports = [
   "workflowReviewRetainedProjectionProviderRegistration",
   "workflowReviewScopeDependencyKey",
   "workflowReviewSyncScopeRequest",
+  "workflowCommitLaunchSelectionSources",
+  "workflowCommitLaunchSelectionStrategies",
   "workflowV1Branch",
   "workflowV1Commit",
   "workflowCommitGateValues",
+  "workflowCommitUserReviewContract",
   "workflowMutableSessionKindValues",
   "workflowMutableSessionStatusValues",
   "workflowV1CommitGateValues",
@@ -217,6 +224,7 @@ describe("workflow module entry surfaces", () => {
       repository,
       branchState: canonicalWorkflow.branchState,
       branch,
+      commitGate: canonicalWorkflow.commitGate,
       commitState: canonicalWorkflow.commitState,
       commit,
       repositoryCommitState: canonicalWorkflow.repositoryCommitState,
@@ -292,6 +300,27 @@ describe("workflow module entry surfaces", () => {
       gateValues: ["None", "UserReview"],
       requiredFields: ["slug", "name", "context", "references"],
       stateValues: ["Todo", "Open", "Done"],
+    });
+    expect(workflowExports.workflowCommitUserReviewContract).toEqual({
+      auditTrail: {
+        request: {
+          gateMutation: "requestCommitUserReview",
+          retainedDecisionKind: "blocker",
+        },
+        continueCommand: "workflow:decision-write",
+        requestChanges: {
+          decisionCommand: "workflow:decision-write",
+          followOnSessionMutation: "createSession",
+          gateMutation: "none",
+          retainedSessionHistoryCommand: "workflow:agent-session-append",
+        },
+      },
+      gate: "UserReview",
+      metadataFields: ["gateReason", "gateRequestedAt", "gateRequestedBySessionId"],
+      mutations: {
+        clear: "clearCommitUserReview",
+        request: "requestCommitUserReview",
+      },
     });
     expect(workflowExports.workflowV1Session).toEqual({
       createdByValues: ["system", "agent"],

@@ -9,7 +9,9 @@ import type {
   MainCommitWorkflowScopeSelectedCommit,
   ProjectBranchScopeRepositoryObservation,
   ProjectBranchScopeResult,
+  WorkflowCommitSessionLaunchCandidate,
 } from "@io/graph-module-workflow";
+import { resolveWorkflowCommitSessionLaunchCandidate } from "@io/graph-module-workflow";
 import {
   createWorkflowReviewLiveSync,
   createWorkflowSessionFeedContract,
@@ -56,6 +58,12 @@ import {
   reconcileWorkflowSessionLiveEvents,
   type WorkflowSessionLiveEvent,
 } from "../lib/workflow-session-live.js";
+import {
+  continueWorkflowCommitUserReview,
+  requestWorkflowCommitChanges,
+  resolveWorkflowReviewFollowOnSessionKind,
+  type WorkflowReviewFollowOnSessionKind,
+} from "../lib/workflow-review-actions.js";
 
 export type WorkflowReviewReadState =
   | { readonly status: "loading" }
@@ -122,6 +130,27 @@ type SessionActionRequestState = {
   readonly status: "failure" | "pending" | "success";
 };
 
+type CommitReviewGateAction = "continue" | "request-changes";
+
+type CommitReviewGateActionState = {
+  readonly action: CommitReviewGateAction;
+  readonly message: string;
+  readonly status: "failure" | "pending" | "success";
+};
+
+type CommitReviewGateActionDescriptor = {
+  readonly availability: "available" | "unavailable";
+  readonly reason?: string;
+};
+
+type CommitReviewGateActionModel = {
+  readonly continueAction: CommitReviewGateActionDescriptor;
+  readonly requestChangesAction: CommitReviewGateActionDescriptor & {
+    readonly followOnKind?: WorkflowReviewFollowOnSessionKind;
+  };
+  readonly requestingSessionLabel: string;
+};
+
 type SessionLiveState =
   | {
       readonly events: readonly WorkflowSessionLiveEvent[];
@@ -150,17 +179,30 @@ function buildWorkflowHref(search: WorkflowRouteSearch): string {
   return query.length > 0 ? `/workflow?${query}` : "/workflow";
 }
 
-function resolveEffectiveWorkflowSearch(
+export function resolveEffectiveWorkflowSearch(
   search: WorkflowRouteSearch,
-  selectedCommitId?: string,
+  selectedCommit?: Pick<
+    CommitQueueScopeCommitRow["commit"],
+    "gate" | "gateRequestedBySessionId" | "id"
+  >,
 ): WorkflowRouteSearch {
-  if (search.commit || search.session || !selectedCommitId) {
+  if (!selectedCommit) {
+    return search;
+  }
+
+  const requestedSessionId =
+    search.session || selectedCommit.gate !== "UserReview"
+      ? undefined
+      : selectedCommit.gateRequestedBySessionId;
+
+  if (!requestedSessionId && search.commit) {
     return search;
   }
 
   return {
     ...search,
-    commit: selectedCommitId,
+    ...(search.commit ? {} : { commit: selectedCommit.id }),
+    ...(requestedSessionId ? { session: requestedSessionId } : {}),
   };
 }
 
@@ -396,6 +438,50 @@ function resolveSelectedCommitRow(
   return commitQueue.rows.find((row) => row.commit.id === activeCommitId) ?? commitQueue.rows[0];
 }
 
+function resolveSelectedCommitLaunchCandidate(input: {
+  readonly commitQueue?: CommitQueueScopeResult;
+  readonly repository?: MainCommitWorkflowScopeResult["repository"];
+  readonly selectedCommitDetail?: MainCommitWorkflowScopeSelectedCommit;
+  readonly selectedCommitId?: string;
+}): WorkflowCommitSessionLaunchCandidate | undefined {
+  if (!input.commitQueue) {
+    return undefined;
+  }
+
+  const selectedCommit =
+    input.selectedCommitDetail?.row ??
+    resolveSelectedCommitRow(input.commitQueue, input.selectedCommitId);
+  if (!selectedCommit) {
+    return undefined;
+  }
+
+  return resolveWorkflowCommitSessionLaunchCandidate({
+    branch: input.commitQueue.branch.branch,
+    commit: selectedCommit.commit,
+    latestSession: input.selectedCommitDetail?.latestSession,
+    repository: input.repository,
+    repositoryBranch: input.commitQueue.branch.repositoryBranch?.repositoryBranch,
+    repositoryCommit: selectedCommit.repositoryCommit,
+  });
+}
+
+function formatWorkflowSessionActionSubject(
+  candidate: WorkflowCommitSessionLaunchCandidate,
+): string {
+  if (candidate.status !== "runnable") {
+    return "workflow";
+  }
+
+  switch (candidate.workflow.selection.workflowSessionKind) {
+    case "Implement":
+      return "implementation";
+    case "Plan":
+      return "planning";
+    case "Review":
+      return "review";
+  }
+}
+
 function createCommitQueueResult(input: MainCommitWorkflowScopeResult): CommitQueueScopeResult {
   return {
     branch: input.branch,
@@ -450,6 +536,104 @@ function formatBrowserAgentRequestError(error: unknown, fallback: string): strin
     return error.message;
   }
   return fallback;
+}
+
+function formatReviewGateRequestingSessionLabel(input: {
+  readonly selectedCommitDetail?: MainCommitWorkflowScopeSelectedCommit;
+  readonly sessionFeedState: WorkflowSessionFeedReadState;
+  readonly sessionId: string;
+}): string {
+  const latestSession = input.selectedCommitDetail?.latestSession;
+  if (latestSession?.id === input.sessionId) {
+    return `${formatEnumLabel(latestSession.kind)} / ${formatEnumLabel(latestSession.runtimeState)} / ${latestSession.sessionKey} [${input.sessionId}]`;
+  }
+
+  if (
+    input.sessionFeedState.status === "ready" &&
+    input.sessionFeedState.result.status === "ready"
+  ) {
+    const readyResult = input.sessionFeedState.result;
+    if (readyResult.header.id === input.sessionId) {
+      return `${formatEnumLabel(readyResult.header.kind)} / ${formatEnumLabel(readyResult.runtime.state)} / ${readyResult.header.sessionKey} [${input.sessionId}]`;
+    }
+  }
+
+  return input.sessionId;
+}
+
+function resolveReviewGateSessionDescriptor(input: {
+  readonly selectedCommitDetail?: MainCommitWorkflowScopeSelectedCommit;
+  readonly sessionFeedState: WorkflowSessionFeedReadState;
+}):
+  | {
+      readonly followOnKind: WorkflowReviewFollowOnSessionKind;
+      readonly id: string;
+      readonly label: string;
+    }
+  | undefined {
+  const sessionId = input.selectedCommitDetail?.row.commit.gateRequestedBySessionId;
+  if (!sessionId) {
+    return undefined;
+  }
+
+  let sessionKind: CommitQueueScopeSessionSummary["kind"] | undefined;
+  const latestSession = input.selectedCommitDetail?.latestSession;
+  if (latestSession?.id === sessionId) {
+    sessionKind = latestSession.kind;
+  } else if (
+    input.sessionFeedState.status === "ready" &&
+    input.sessionFeedState.result.status === "ready" &&
+    input.sessionFeedState.result.header.id === sessionId
+  ) {
+    sessionKind = input.sessionFeedState.result.header.kind;
+  }
+
+  return {
+    followOnKind: resolveWorkflowReviewFollowOnSessionKind(sessionKind),
+    id: sessionId,
+    label: formatReviewGateRequestingSessionLabel({
+      selectedCommitDetail: input.selectedCommitDetail,
+      sessionFeedState: input.sessionFeedState,
+      sessionId,
+    }),
+  };
+}
+
+function createCommitReviewGateActionModel(input: {
+  readonly authStatus: "booting" | "error" | "expired" | "ready" | "signed-out";
+  readonly selectedCommitDetail?: MainCommitWorkflowScopeSelectedCommit;
+  readonly sessionFeedState: WorkflowSessionFeedReadState;
+}): CommitReviewGateActionModel | undefined {
+  if (input.selectedCommitDetail?.row.commit.gate !== "UserReview") {
+    return undefined;
+  }
+
+  const sessionDescriptor = resolveReviewGateSessionDescriptor({
+    selectedCommitDetail: input.selectedCommitDetail,
+    sessionFeedState: input.sessionFeedState,
+  });
+  const unavailableReason =
+    input.authStatus !== "ready"
+      ? "Sign in before updating the workflow review gate."
+      : "The workflow review gate is missing the requesting session provenance.";
+
+  return {
+    continueAction:
+      input.authStatus === "ready" && sessionDescriptor
+        ? { availability: "available" }
+        : { availability: "unavailable", reason: unavailableReason },
+    requestChangesAction:
+      input.authStatus === "ready" && sessionDescriptor
+        ? {
+            availability: "available",
+            followOnKind: sessionDescriptor.followOnKind,
+          }
+        : { availability: "unavailable", reason: unavailableReason },
+    requestingSessionLabel:
+      sessionDescriptor?.label ??
+      input.selectedCommitDetail.row.commit.gateRequestedBySessionId ??
+      "No requesting session recorded.",
+  };
 }
 
 function resolveLiveSessionCandidate(input: {
@@ -578,10 +762,18 @@ export function createCommitSessionActionModel(input: {
   readonly selectedCommitId?: string;
   readonly selectedBranchState?: ProjectBranchScopeResult["rows"][number]["branch"]["state"];
 }): SessionActionModel {
-  const description = "Start a commit-scoped execution session from the selected workflow commit.";
   const selectedCommit =
     input.selectedCommitDetail?.row ??
     resolveSelectedCommitRow(input.commitQueue, input.selectedCommitId);
+  const launchCandidate = resolveSelectedCommitLaunchCandidate({
+    commitQueue: input.commitQueue,
+    selectedCommitDetail: input.selectedCommitDetail,
+    selectedCommitId: input.selectedCommitId,
+  });
+  const sessionSubject = formatWorkflowSessionActionSubject(
+    launchCandidate ?? { message: "", status: "not-runnable" },
+  );
+  const description = `Start the next ${sessionSubject} session from the selected workflow commit.`;
 
   if (input.authStatus !== "ready") {
     return {
@@ -616,18 +808,6 @@ export function createCommitSessionActionModel(input: {
       description,
       label: "Launch commit session",
       reason: "Select a workflow commit first.",
-    };
-  }
-
-  if (selectedCommit.commit.gate === "UserReview") {
-    return {
-      availability: "unavailable",
-      description:
-        "Commit execution is paused while the selected commit waits on explicit user review.",
-      label: "Launch commit session",
-      reason:
-        selectedCommit.commit.gateReason ??
-        "This commit is waiting on explicit user review before workflow can continue.",
     };
   }
 
@@ -670,19 +850,14 @@ export function createCommitSessionActionModel(input: {
     selectedBranchState === "done" ||
     selectedBranchState === "archived"
   ) {
-    reason = "The selected branch is not in a launchable state for commit execution.";
+    reason = "The selected branch is not in a launchable state for commit workflow sessions.";
   } else if (
     input.commitQueue.branch.branch.activeCommitId &&
     input.commitQueue.branch.branch.activeCommitId !== selectedCommit.commit.id
   ) {
-    reason = "Select the branch active commit to launch commit execution.";
-  } else if (selectedCommit.commit.state === "planned") {
-    reason = "Planned commits must be promoted before execution can launch.";
-  } else if (
-    selectedCommit.commit.state === "committed" ||
-    selectedCommit.commit.state === "dropped"
-  ) {
-    reason = "Committed and dropped commits do not accept execution sessions.";
+    reason = "Select the branch active commit to launch the selected commit workflow session.";
+  } else if (launchCandidate?.status === "not-runnable") {
+    reason = launchCandidate.message;
   } else if (runningBranchSession) {
     reason = "The selected branch already has a running branch-scoped session.";
   } else if (runningOtherCommitSession) {
@@ -705,7 +880,7 @@ export function createCommitSessionActionModel(input: {
   ) {
     return {
       availability: "available",
-      description: "Reuse the running commit-scoped session for the selected workflow commit.",
+      description: `Reuse the running ${sessionSubject} session for the selected workflow commit.`,
       label: "Attach commit session",
       preference: { mode: "attach-existing" },
     };
@@ -715,9 +890,9 @@ export function createCommitSessionActionModel(input: {
     availability: "available",
     description:
       input.lookupState.status === "checking"
-        ? "Check the local runtime for a reusable commit-scoped session before launching."
+        ? `Check the local runtime for a reusable ${sessionSubject} session before launching.`
         : hasRunningSession
-          ? "Reuse the running commit-scoped session for the selected workflow commit."
+          ? `Reuse the running ${sessionSubject} session for the selected workflow commit.`
           : description,
     label: hasRunningSession ? "Attach commit session" : "Launch commit session",
     preference: { mode: "attach-or-launch" },
@@ -1871,6 +2046,10 @@ function SelectedCommitPanel({
   commitActionState,
   commitLookupState,
   commitQueue,
+  commitReviewGateActionModel,
+  commitReviewGateActionState,
+  onContinueWorkflow,
+  onRequestChanges,
   onTriggerCommitSession,
   projectId,
   sessionFeedState,
@@ -1880,6 +2059,10 @@ function SelectedCommitPanel({
   readonly commitActionState?: SessionActionRequestState;
   readonly commitLookupState: SessionLookupState;
   readonly commitQueue?: CommitQueueScopeResult;
+  readonly commitReviewGateActionModel?: CommitReviewGateActionModel;
+  readonly commitReviewGateActionState?: CommitReviewGateActionState;
+  readonly onContinueWorkflow?: () => void;
+  readonly onRequestChanges?: () => void;
   readonly onTriggerCommitSession: () => void;
   readonly projectId?: string;
   readonly sessionFeedState: WorkflowSessionFeedReadState;
@@ -1923,7 +2106,7 @@ function SelectedCommitPanel({
   }
 
   const gate = selectedCommit.commit.gate ?? "None";
-  const showContinueAffordance = gate === "UserReview";
+  const showReviewGateAffordance = gate === "UserReview";
   const workflowStatus = resolveSelectedCommitWorkflowStatus(selectedCommitDetail);
   const retainedContext = resolveSelectedCommitRetainedContext(sessionFeedState);
 
@@ -1955,13 +2138,19 @@ function SelectedCommitPanel({
         <div className="grid gap-3 lg:grid-cols-2">
           <DetailField label="Next runnable session" value={workflowStatus.nextRunnableSession} />
           <DetailField label="Gate state" value={gate} />
+          {selectedCommit.commit.gateReason ? (
+            <DetailField label="Gate reason" value={selectedCommit.commit.gateReason} />
+          ) : null}
           {selectedCommit.commit.gateRequestedAt ? (
             <DetailField label="Gate requested" value={selectedCommit.commit.gateRequestedAt} />
           ) : null}
           {selectedCommit.commit.gateRequestedBySessionId ? (
             <DetailField
-              label="Requested by session"
-              value={selectedCommit.commit.gateRequestedBySessionId}
+              label="Requesting session"
+              value={
+                commitReviewGateActionModel?.requestingSessionLabel ??
+                selectedCommit.commit.gateRequestedBySessionId
+              }
             />
           ) : null}
         </div>
@@ -2006,28 +2195,76 @@ function SelectedCommitPanel({
         }
       />
 
-      {showContinueAffordance ? (
+      {showReviewGateAffordance ? (
         <div className="border-border/70 grid gap-3 rounded-lg border border-dashed px-3 py-3">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="space-y-1">
-              <div className="font-medium">Continue workflow</div>
+              <div className="font-medium">Review gate actions</div>
               <p className="text-muted-foreground text-sm">
                 {selectedCommit.commit.gateReason ??
                   "This commit is paused for explicit user review before workflow can continue."}
               </p>
             </div>
+            <Badge variant="outline">paused</Badge>
+          </div>
+          <div className="flex flex-wrap gap-3">
             <Button
-              data-workflow-continue-action="disabled"
-              disabled
+              data-workflow-continue-action={
+                commitReviewGateActionModel?.continueAction.availability === "available"
+                  ? "ready"
+                  : "disabled"
+              }
+              disabled={
+                commitReviewGateActionModel?.continueAction.availability !== "available" ||
+                commitReviewGateActionState?.status === "pending"
+              }
+              onClick={onContinueWorkflow}
               type="button"
               variant="outline"
             >
               Continue workflow
             </Button>
+            <Button
+              data-workflow-request-changes-action={
+                commitReviewGateActionModel?.requestChangesAction.availability === "available"
+                  ? "ready"
+                  : "disabled"
+              }
+              disabled={
+                commitReviewGateActionModel?.requestChangesAction.availability !== "available" ||
+                commitReviewGateActionState?.status === "pending"
+              }
+              onClick={onRequestChanges}
+              type="button"
+            >
+              Request changes
+            </Button>
           </div>
           <p className="text-muted-foreground text-sm">
-            Retained context: {retainedContext.session}
+            {commitReviewGateActionState?.message ??
+              (commitReviewGateActionModel?.requestChangesAction.followOnKind
+                ? `Request changes keeps the gate in place and queues a follow-on ${commitReviewGateActionModel.requestChangesAction.followOnKind.toLowerCase()} session.`
+                : `Retained context: ${retainedContext.session}`)}
           </p>
+          {commitReviewGateActionState ? (
+            <div
+              className={
+                commitReviewGateActionState.status === "failure"
+                  ? "border-destructive/20 bg-destructive/5 rounded-lg border px-3 py-3 text-sm"
+                  : commitReviewGateActionState.status === "success"
+                    ? "border-primary/20 bg-primary/5 rounded-lg border px-3 py-3 text-sm"
+                    : "border-border/70 bg-muted/20 rounded-lg border px-3 py-3 text-sm"
+              }
+              data-workflow-review-gate-state={commitReviewGateActionState.status}
+            >
+              {commitReviewGateActionState.message}
+            </div>
+          ) : null}
+          {commitReviewGateActionModel?.continueAction.reason ? (
+            <p className="text-muted-foreground text-sm" data-workflow-review-gate-reason="">
+              {commitReviewGateActionModel.continueAction.reason}
+            </p>
+          ) : null}
         </div>
       ) : null}
 
@@ -2049,7 +2286,11 @@ export function WorkflowReviewSurface({
   commitAction,
   commitActionState,
   commitLookupState,
+  commitReviewGateActionModel,
+  commitReviewGateActionState,
   liveSessionState = { events: [], status: "idle" },
+  onContinueWorkflow,
+  onRequestChanges,
   onTriggerBranchSession,
   onTriggerCommitSession,
   readState,
@@ -2064,7 +2305,11 @@ export function WorkflowReviewSurface({
   readonly commitAction: SessionActionModel;
   readonly commitActionState?: SessionActionRequestState;
   readonly commitLookupState: SessionLookupState;
+  readonly commitReviewGateActionModel?: CommitReviewGateActionModel;
+  readonly commitReviewGateActionState?: CommitReviewGateActionState;
   readonly liveSessionState?: SessionLiveState;
+  readonly onContinueWorkflow?: () => void;
+  readonly onRequestChanges?: () => void;
   readonly onTriggerBranchSession: () => void;
   readonly onTriggerCommitSession: () => void;
   readonly readState: WorkflowReviewReadState;
@@ -2163,6 +2408,10 @@ export function WorkflowReviewSurface({
               commitActionState={commitActionState}
               commitLookupState={commitLookupState}
               commitQueue={readState.status === "ready" ? readState.commitQueue : undefined}
+              commitReviewGateActionModel={commitReviewGateActionModel}
+              commitReviewGateActionState={commitReviewGateActionState}
+              onContinueWorkflow={onContinueWorkflow}
+              onRequestChanges={onRequestChanges}
               onTriggerCommitSession={onTriggerCommitSession}
               projectId={projectId}
               sessionFeedState={sessionFeedState}
@@ -2242,6 +2491,9 @@ export function WorkflowReviewPage({
   const [commitActionStates, setCommitActionStates] = useState<
     Readonly<Record<string, SessionActionRequestState>>
   >({});
+  const [commitReviewGateActionStates, setCommitReviewGateActionStates] = useState<
+    Readonly<Record<string, CommitReviewGateActionState>>
+  >({});
   const selectedBranchId =
     readState.status === "ready" ? readState.commitQueue.branch.branch.id : undefined;
   const selectedBranchState =
@@ -2266,9 +2518,21 @@ export function WorkflowReviewPage({
         resolveSelectedCommitRow(readState.commitQueue, search.commit))
       : undefined;
   const selectedCommitId = selectedCommit?.commit.id;
+  const selectedCommitLaunchCandidate = useMemo(
+    () =>
+      readState.status === "ready"
+        ? resolveSelectedCommitLaunchCandidate({
+            commitQueue: readState.commitQueue,
+            repository: readState.mainWorkflow.repository,
+            selectedCommitDetail: readState.mainWorkflow.selectedCommit,
+            selectedCommitId: search.commit,
+          })
+        : undefined,
+    [readState, search.commit],
+  );
   const effectiveSearch = useMemo(
-    () => resolveEffectiveWorkflowSearch(search, selectedCommitId),
-    [search, selectedCommitId],
+    () => resolveEffectiveWorkflowSearch(search, selectedCommit?.commit),
+    [search, selectedCommit],
   );
   const sessionFeedContract = useMemo(
     () => createWorkflowSessionFeedContract(effectiveSearch),
@@ -2281,8 +2545,6 @@ export function WorkflowReviewPage({
   const selectedProjectId = startupState.kind === "ready" ? startupState.project.id : undefined;
   const readyBranchBoardProjectId =
     readState.status === "ready" ? readState.branchBoard.project.id : undefined;
-  const readyCommitQueueBranchId =
-    readState.status === "ready" ? readState.commitQueue.branch.branch.id : undefined;
   const commitAction = useMemo(
     () =>
       createCommitSessionActionModel({
@@ -2298,6 +2560,19 @@ export function WorkflowReviewPage({
     [auth.status, commitLookupState, readState, runtimeState, search.commit, selectedBranchState],
   );
   const commitActionState = selectedCommitId ? commitActionStates[selectedCommitId] : undefined;
+  const commitReviewGateActionModel = useMemo(
+    () =>
+      createCommitReviewGateActionModel({
+        authStatus: auth.status,
+        selectedCommitDetail:
+          readState.status === "ready" ? readState.mainWorkflow.selectedCommit : undefined,
+        sessionFeedState,
+      }),
+    [auth.status, readState, sessionFeedState],
+  );
+  const commitReviewGateActionState = selectedCommitId
+    ? commitReviewGateActionStates[selectedCommitId]
+    : undefined;
   const liveSessionCandidate = useMemo(
     () =>
       resolveLiveSessionCandidate({
@@ -2409,16 +2684,12 @@ export function WorkflowReviewPage({
     }
 
     const commitQueue = readState.commitQueue;
-    const selectedCommit =
-      readState.mainWorkflow.selectedCommit?.row ?? resolveSelectedCommitRow(commitQueue);
-    if (!selectedCommit || !commitQueue) {
+    if (!commitQueue || selectedCommitLaunchCandidate?.status !== "runnable") {
       setCommitLookupState((current) => (current.status === "idle" ? current : { status: "idle" }));
       return;
     }
     const projectId = readyBranchBoardProjectId;
-    const branchId = readyCommitQueueBranchId;
-    const commitId = selectedCommitId;
-    if (!projectId || !branchId || !commitId) {
+    if (!projectId) {
       setCommitLookupState((current) => (current.status === "idle" ? current : { status: "idle" }));
       return;
     }
@@ -2433,13 +2704,10 @@ export function WorkflowReviewPage({
         sessionId: auth.sessionId,
         surface: "browser",
       },
-      kind: "execution",
+      kind: selectedCommitLaunchCandidate.kind,
       projectId,
-      subject: {
-        kind: "commit",
-        branchId,
-        commitId,
-      },
+      subject: selectedCommitLaunchCandidate.subject,
+      workflow: selectedCommitLaunchCandidate.workflow,
     })
       .then((result) => {
         if (!cancelled) {
@@ -2470,9 +2738,8 @@ export function WorkflowReviewPage({
     auth.status,
     readState.status,
     readyBranchBoardProjectId,
-    readyCommitQueueBranchId,
     runtimeState.status,
-    selectedCommitId,
+    selectedCommitLaunchCandidate,
   ]);
 
   useEffect(() => {
@@ -2750,6 +3017,16 @@ export function WorkflowReviewPage({
     }));
   }
 
+  function updateCommitReviewGateActionState(
+    commitId: string,
+    nextState: CommitReviewGateActionState,
+  ) {
+    setCommitReviewGateActionStates((current) => ({
+      ...current,
+      [commitId]: nextState,
+    }));
+  }
+
   function handleTriggerBranchSession() {
     if (
       auth.status !== "ready" ||
@@ -2824,7 +3101,8 @@ export function WorkflowReviewPage({
     if (
       auth.status !== "ready" ||
       readState.status !== "ready" ||
-      commitAction.availability !== "available"
+      commitAction.availability !== "available" ||
+      selectedCommitLaunchCandidate?.status !== "runnable"
     ) {
       return;
     }
@@ -2849,7 +3127,7 @@ export function WorkflowReviewPage({
         sessionId: auth.sessionId,
         surface: "browser",
       },
-      kind: "execution",
+      kind: selectedCommitLaunchCandidate.kind,
       preference: commitAction.preference,
       projectId: readState.mainWorkflow.project.id,
       selection: {
@@ -2857,11 +3135,8 @@ export function WorkflowReviewPage({
         commitId,
         projectId: readState.mainWorkflow.project.id,
       },
-      subject: {
-        kind: "commit",
-        branchId,
-        commitId,
-      },
+      subject: selectedCommitLaunchCandidate.subject,
+      workflow: selectedCommitLaunchCandidate.workflow,
     })
       .then((result) => {
         if (isLaunchFailure(result)) {
@@ -2898,6 +3173,101 @@ export function WorkflowReviewPage({
       });
   }
 
+  function handleContinueWorkflow() {
+    if (
+      auth.status !== "ready" ||
+      readState.status !== "ready" ||
+      commitReviewGateActionModel?.continueAction.availability !== "available"
+    ) {
+      return;
+    }
+
+    const selectedCommitDetail = readState.mainWorkflow.selectedCommit;
+    const sessionDescriptor = resolveReviewGateSessionDescriptor({
+      selectedCommitDetail,
+      sessionFeedState,
+    });
+    const commit = selectedCommitDetail?.row.commit;
+    if (!commit || commit.gate !== "UserReview" || !sessionDescriptor) {
+      return;
+    }
+
+    updateCommitReviewGateActionState(commit.id, {
+      action: "continue",
+      message: `Continue workflow requested for ${commit.commitKey}.`,
+      status: "pending",
+    });
+
+    void continueWorkflowCommitUserReview({
+      commit,
+      gateReason: commit.gateReason,
+      sessionId: sessionDescriptor.id,
+    })
+      .then(() => {
+        updateCommitReviewGateActionState(commit.id, {
+          action: "continue",
+          message: "Cleared the review gate and resumed workflow.",
+          status: "success",
+        });
+        setRefreshVersion((current) => current + 1);
+      })
+      .catch((error) => {
+        updateCommitReviewGateActionState(commit.id, {
+          action: "continue",
+          message: formatBrowserAgentRequestError(error, "Continue workflow failed."),
+          status: "failure",
+        });
+      });
+  }
+
+  function handleRequestChanges() {
+    if (
+      auth.status !== "ready" ||
+      readState.status !== "ready" ||
+      commitReviewGateActionModel?.requestChangesAction.availability !== "available"
+    ) {
+      return;
+    }
+
+    const selectedCommitDetail = readState.mainWorkflow.selectedCommit;
+    const sessionDescriptor = resolveReviewGateSessionDescriptor({
+      selectedCommitDetail,
+      sessionFeedState,
+    });
+    const commit = selectedCommitDetail?.row.commit;
+    if (!commit || commit.gate !== "UserReview" || !sessionDescriptor) {
+      return;
+    }
+
+    updateCommitReviewGateActionState(commit.id, {
+      action: "request-changes",
+      message: `Request changes requested for ${commit.commitKey}.`,
+      status: "pending",
+    });
+
+    void requestWorkflowCommitChanges({
+      commit,
+      followOnKind: sessionDescriptor.followOnKind,
+      gateReason: commit.gateReason,
+      sessionId: sessionDescriptor.id,
+    })
+      .then((result) => {
+        updateCommitReviewGateActionState(commit.id, {
+          action: "request-changes",
+          message: `Requested changes and queued ${result.session.kind.toLowerCase()} session ${result.session.sessionKey}.`,
+          status: "success",
+        });
+        setRefreshVersion((current) => current + 1);
+      })
+      .catch((error) => {
+        updateCommitReviewGateActionState(commit.id, {
+          action: "request-changes",
+          message: formatBrowserAgentRequestError(error, "Request changes failed."),
+          status: "failure",
+        });
+      });
+  }
+
   return (
     <WorkflowReviewSurface
       branchAction={branchAction}
@@ -2906,7 +3276,11 @@ export function WorkflowReviewPage({
       commitAction={commitAction}
       commitActionState={commitActionState}
       commitLookupState={commitLookupState}
+      commitReviewGateActionModel={commitReviewGateActionModel}
+      commitReviewGateActionState={commitReviewGateActionState}
       liveSessionState={sessionLiveState}
+      onContinueWorkflow={handleContinueWorkflow}
+      onRequestChanges={handleRequestChanges}
       onTriggerBranchSession={handleTriggerBranchSession}
       onTriggerCommitSession={handleTriggerCommitSession}
       readState={readState}

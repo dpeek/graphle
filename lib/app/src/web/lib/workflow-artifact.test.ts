@@ -17,6 +17,7 @@ import {
   executeTestWorkflowArtifactWrite,
   executeTestWorkflowMutation,
 } from "./authority-test-helpers.js";
+import { webAppPolicyVersion } from "./policy-version.js";
 import type { WebAuthorityCommand } from "./authority.js";
 import { handleWebCommandRequest } from "./server-routes.js";
 
@@ -29,7 +30,7 @@ function createTestAuthorizationContext(
   return {
     ...createAnonymousAuthorizationContext({
       graphId: "graph:test",
-      policyVersion: 0,
+      policyVersion: webAppPolicyVersion,
     }),
     principalId: "principal:authority",
     principalKind: "service",
