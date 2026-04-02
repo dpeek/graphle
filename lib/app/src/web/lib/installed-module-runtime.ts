@@ -1,5 +1,15 @@
-import { defineInstalledModuleRecord, type InstalledModuleRecord } from "@io/graph-authority";
-import type { GraphModuleManifest, GraphModuleSchemaContribution } from "@io/graph-module";
+import {
+  defineInstalledModuleRecord,
+  defineInstalledModuleTarget,
+  validateInstalledModuleCompatibility,
+  type InstalledModuleRecord,
+  type InstalledModuleRuntimeExpectation,
+} from "@io/graph-authority";
+import {
+  defineGraphModuleManifest,
+  type GraphModuleManifest,
+  type GraphModuleSchemaContribution,
+} from "@io/graph-module";
 import { core, coreManifest } from "@io/graph-module-core";
 import { workflow, workflowManifest } from "@io/graph-module-workflow";
 import type { AnyTypeOutput } from "@io/graph-kernel";
@@ -40,21 +50,6 @@ export function createBuiltInInstalledModuleRecord(
   });
 }
 
-function matchesManifestIdentity(
-  manifest: GraphModuleManifest,
-  record: InstalledModuleRecord,
-): boolean {
-  return (
-    record.moduleId === manifest.moduleId &&
-    record.version === manifest.version &&
-    record.source.kind === manifest.source.kind &&
-    record.source.specifier === manifest.source.specifier &&
-    record.source.exportName === manifest.source.exportName &&
-    record.compatibility.graph === manifest.compatibility.graph &&
-    record.compatibility.runtime === manifest.compatibility.runtime
-  );
-}
-
 function isActiveInstalledModuleRecord(record: InstalledModuleRecord): boolean {
   return record.installState === "installed" && record.activation.status === "active";
 }
@@ -67,20 +62,46 @@ function describeModuleRuntimeState(record: InstalledModuleRecord): string {
   return `${record.installState}/${record.activation.status}`;
 }
 
+export function createInstalledModuleContributionResolution(input: {
+  readonly manifest: GraphModuleManifest;
+  readonly record: InstalledModuleRecord;
+  readonly runtime?: InstalledModuleRuntimeExpectation | null;
+}): InstalledModuleContributionResolution {
+  const manifest = defineGraphModuleManifest(input.manifest);
+  const record = defineInstalledModuleRecord(input.record);
+  const compatibility = validateInstalledModuleCompatibility({
+    target: defineInstalledModuleTarget({
+      moduleId: manifest.moduleId,
+      version: manifest.version,
+      bundleDigest: record.bundleDigest,
+      source: manifest.source,
+      compatibility: manifest.compatibility,
+    }),
+    record,
+    runtime: input.runtime ?? null,
+  });
+
+  if (!compatibility.ok || compatibility.status !== "matches-record") {
+    throw new TypeError(
+      compatibility.ok
+        ? `Installed module "${record.moduleId}" does not match the current manifest identity or compatibility.`
+        : compatibility.message,
+    );
+  }
+
+  return Object.freeze({
+    manifest,
+    record,
+  });
+}
+
 export function resolveActiveInstalledModuleContributionResolutions(
   resolutions: readonly InstalledModuleContributionResolution[],
 ): readonly InstalledModuleContributionResolution[] {
   const activeResolutions: InstalledModuleContributionResolution[] = [];
 
   for (const resolution of resolutions) {
-    const manifest = resolution.manifest;
-    const record = defineInstalledModuleRecord(resolution.record);
-
-    if (!matchesManifestIdentity(manifest, record)) {
-      throw new TypeError(
-        `Installed module "${record.moduleId}" does not match the current manifest identity or compatibility.`,
-      );
-    }
+    const { manifest, record } = createInstalledModuleContributionResolution(resolution);
 
     if (isInactiveInstalledModuleRecord(record)) {
       continue;
@@ -103,10 +124,12 @@ export function resolveActiveInstalledModuleContributionResolutions(
 
 export function getBuiltInInstalledModuleContributionResolutions(): readonly InstalledModuleContributionResolution[] {
   return Object.freeze(
-    builtInInstalledModuleManifests.map((manifest) => ({
-      manifest,
-      record: createBuiltInInstalledModuleRecord(manifest),
-    })),
+    builtInInstalledModuleManifests.map((manifest) =>
+      createInstalledModuleContributionResolution({
+        manifest,
+        record: createBuiltInInstalledModuleRecord(manifest),
+      }),
+    ),
   );
 }
 

@@ -21,7 +21,7 @@ These are the canonical agent docs for package-specific behavior in
 - [`./doc/replication.md`](./doc/replication.md): transport visibility filtering, authority-owned read filtering, and write-scope enforcement
 - [`./doc/persistence.md`](./doc/persistence.md): persisted authority runtime, startup recovery, durable commit boundaries, and the Node JSON adapter
 - [`./doc/authorization.md`](./doc/authorization.md): request-bound policy evaluation, admission, share, and browser bootstrap contracts
-- [`./doc/installed-modules.md`](./doc/installed-modules.md): installed-module ledger validation and lifecycle planning
+- [`./doc/installed-modules.md`](./doc/installed-modules.md): installed-module ledger validation, lifecycle planning, and the current host-proof boundary
 - [`./doc/roadmap.md`](./doc/roadmap.md): retained-record storage and durable restore direction above the live authority graph
 
 Cross-package architecture now lives in `./doc/authority-stack.md`,

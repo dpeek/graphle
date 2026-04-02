@@ -1,7 +1,7 @@
 ---
 name: Graph authority installed modules
 description: "Installed-module ledger validation and lifecycle planning in @io/graph-authority."
-last_updated: 2026-04-03
+last_updated: 2026-04-07
 ---
 
 # Graph authority installed modules
@@ -18,6 +18,10 @@ last_updated: 2026-04-03
 - `../src/contracts.test.ts`: planner and compatibility examples
 - `../../graph-module/doc/module-stack.md`: cross-package manifest and
   built-in module ownership
+- `../../app/src/web/lib/installed-module-manifest-loader.ts`: current host
+  manifest-resolution proof for built-in and repo-local local modules
+- `../../app/src/web/lib/authority.ts`: app-owned authority rebuild from
+  active installed-module rows
 
 ## What this layer owns
 
@@ -81,6 +85,35 @@ Important planner rules:
 - `deactivate` applies only to the current installed bundle and stable rows
 - `update` handles replacements and may preserve the current active runtime until the replacement succeeds
 
+## Current host proof
+
+The shared planner stays host-neutral, but the current app/web runtime now
+consumes it through one explicit activation-driven proof.
+
+Current flow:
+
+1. `@io/app` resolves built-in manifest sources directly and resolves one
+   repo-local `./...` local source path under an explicit source root.
+2. Local exports are revalidated through `defineGraphModuleManifest(...)`
+   before the host lowers them into contribution resolutions.
+3. `createWebAppAuthority(...)` can boot from `installedModuleRecords`
+   instead of a preassembled graph.
+4. That host rebuild composes built-in schemas plus active installed-module
+   schemas and query-surface catalogs deterministically from those rows.
+5. Rebooting with the same active rows reproduces the same schema and catalog
+   set; deactivating a row removes its runtime contributions fail closed.
+
+Current limits:
+
+- only repo-local `./...` local sources under an explicit source root are
+  supported
+- the first proof rebuilds schema/bootstrap state plus query-surface catalogs;
+  command surfaces, object views, record surfaces, collection surfaces,
+  workflows, projections, and other runtime registries do not yet load through
+  installed-module activation
+- activation changes are still explicit row-driven rebuilds, not hot toggles,
+  uninstall cleanup, or installer UX
+
 ## Version transition semantics
 
 - The planner always reports `fromVersion`, `toVersion`, and `requiresMigration`.
@@ -93,3 +126,8 @@ Important planner rules:
 - Keep partial or in-flight rows fail-closed until the runtime has real resume semantics.
 - Treat compatibility mismatch as planner input failure, not as an invitation to guess a replacement path.
 - Keep authored manifest parsing in `@io/graph-module`; this package starts at the authoritative ledger seam.
+
+## Related docs
+
+- [`../../app/doc/web-overview.md`](../../app/doc/web-overview.md): current
+  app-owned installed-module activation and authority bootstrap proof

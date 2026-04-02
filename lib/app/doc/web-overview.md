@@ -13,11 +13,14 @@ last_updated: 2026-04-07
   packages
 - you are tracing how the browser shell boots auth, graph runtime, and the
   current query or workflow surfaces
+- you need the current installed-module activation proof in app/web
 
 ## What this doc owns
 
 - the current app-owned web and Worker runtime map
 - the shipped browser identity bootstrap contract
+- the current installed-module activation proof for authority bootstrap and
+  query-surface composition
 - the package boundary between app/web composition, shared browser primitives,
   and graph-owned runtime layers
 
@@ -70,6 +73,46 @@ Current path:
 
 Current details live in [`./local-bootstrap.md`](./local-bootstrap.md).
 
+## Installed-module activation proof
+
+The current app/web host now proves one activation-driven path from
+installed-module rows to runtime composition.
+
+Current flow:
+
+1. `installed-module-manifest-loader.ts` resolves built-in manifest sources
+   directly and resolves local sources only from repo-local `./...` specifiers
+   under `installedModuleLocalSourceRoot`.
+2. Local exports are imported dynamically and revalidated with
+   `defineGraphModuleManifest(...)`.
+3. `createWebAppAuthority(...)` accepts `installedModuleRecords`,
+   `installedModuleLocalSourceRoot`, and `installedModuleRuntime` instead of a
+   preassembled graph.
+4. When those options are present, authority bootstrap composes built-in and
+   active installed-module schemas, then derives the installed query-surface
+   registry and query-editor catalog from that same activation data.
+5. Saved-query writes validate against that activation-composed editor
+   catalog, and saved-query surface lookups resolve against that same registry.
+
+The first shipped proof stays intentionally small:
+
+- `local-module-proof.ts` contributes one repo-local schema namespace and one
+  query-surface catalog
+- active local rows add that catalog beside the built-in `workflow` and
+  `core` catalogs
+- restarting with the same active rows reproduces the same schema and catalog
+  set deterministically
+- deactivating the row removes that local catalog, and saved queries against
+  the removed surface fail closed
+
+Current limits:
+
+- only repo-local `./...` local sources are supported
+- the activation proof currently rebuilds schema/bootstrap state plus
+  query-surface catalogs; other runtime registries still stay out of scope
+- activation changes are row-driven authority rebuilds, not hot toggles or
+  installer UX
+
 ## Ownership boundary
 
 - keep reusable browser primitives in `@io/web`
@@ -94,6 +137,8 @@ or authority routing, it stays in app/web or the owning graph package.
 - `../src/web/worker/index.ts`
 - `../src/web/lib/auth-client.ts`
 - `../src/web/lib/authority.ts`
+- `../src/web/lib/installed-module-manifest-loader.ts`
+- `../src/web/lib/local-module-proof.ts`
 - `../src/web/lib/query-surface-registry.ts`
 - `../src/web/lib/local-bootstrap.ts`
 
@@ -107,5 +152,10 @@ or authority routing, it stays in app/web or the owning graph package.
 - [`./authority-storage.md`](./authority-storage.md): current SQLite-backed
   Durable Object authority storage adapter
 - [`./roadmap.md`](./roadmap.md): future Better Auth integration direction
+- [`../../graph-authority/doc/installed-modules.md`](../../graph-authority/doc/installed-modules.md):
+  installed-module lifecycle and host-proof boundary
+- [`../../graph-query/doc/installed-surfaces.md`](../../graph-query/doc/installed-surfaces.md):
+  installed query-surface registry and activation-fed editor-catalog
+  composition
 - [`../../web/README.md`](../../web/README.md): shared browser primitives owned
   by `@io/web`

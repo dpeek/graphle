@@ -8,7 +8,12 @@ import {
   type AnyTypeOutput,
   type GraphStoreSnapshot,
 } from "@io/app/graph";
-import { type AuthSubjectRef, type AuthorizationContext } from "@io/graph-authority";
+import {
+  defineInstalledModuleRecord,
+  type AuthSubjectRef,
+  type AuthorizationContext,
+  type InstalledModuleRecord,
+} from "@io/graph-authority";
 import {
   createSyncedGraphClient,
   createGraphClient,
@@ -70,16 +75,30 @@ import { webAppPolicyVersion } from "./policy-version.js";
 import {
   getInstalledModuleQueryEditorCatalog,
   getInstalledModuleQuerySurfaceRendererCompatibility,
+  loadInstalledModuleQueryEditorCatalog,
 } from "./query-surface-registry.js";
 import {
   handleWebCommandRequest,
   handleSyncRequest,
   handleTransactionRequest,
 } from "./server-routes.js";
+import {
+  localModuleProofManifest,
+  localProofCatalogScopeQuerySurface,
+  localProofGraph,
+} from "./local-module-proof.js";
+import { fileURLToPath } from "node:url";
 
 const productGraph = { ...core, ...workflow } as const;
 const browserGraph = { ...workflow } as const;
+const localProofAuthorityGraph = { ...productGraph, ...localProofGraph } as const;
 const createInstalledQueryEditorCatalog = getInstalledModuleQueryEditorCatalog;
+const localInstalledModuleSourceRoot = fileURLToPath(new URL(".", import.meta.url));
+const localInstalledModuleRuntimeExpectation = {
+  graph: localModuleProofManifest.compatibility.graph,
+  runtime: localModuleProofManifest.compatibility.runtime,
+  supportedSourceKinds: ["built-in", "local"] as const,
+};
 const envVarDescriptionPredicateId = edgeId(workflow.envVar.fields.description);
 const envVarSecretPredicateId = edgeId(workflow.envVar.fields.secret);
 const principalHomeGraphIdPredicateId = edgeId(core.principal.fields.homeGraphId);
@@ -623,6 +642,52 @@ function readNumberPredicateValue(
 
 function readProductGraph(authority: WebAppAuthority, authorization: AuthorizationContext) {
   return createProductMutationStore(authority.readSnapshot({ authorization })).mutationGraph;
+}
+
+function readLocalProofGraph(authority: WebAppAuthority, authorization: AuthorizationContext) {
+  return createMutationStoreForGraph(
+    authority.readSnapshot({ authorization }),
+    localProofAuthorityGraph,
+  ).mutationGraph;
+}
+
+function createLocalInstalledModuleRecord(
+  overrides?: Partial<InstalledModuleRecord> & {
+    readonly source?: Partial<InstalledModuleRecord["source"]>;
+  },
+): Readonly<InstalledModuleRecord> {
+  const activation = overrides?.activation;
+  const source = overrides?.source;
+
+  return defineInstalledModuleRecord({
+    moduleId: overrides?.moduleId ?? localModuleProofManifest.moduleId,
+    version: overrides?.version ?? localModuleProofManifest.version,
+    bundleDigest:
+      overrides?.bundleDigest ??
+      `sha256:${localModuleProofManifest.moduleId}:${localModuleProofManifest.version}`,
+    source: {
+      kind: source?.kind ?? localModuleProofManifest.source.kind,
+      specifier: source?.specifier ?? localModuleProofManifest.source.specifier,
+      exportName: source?.exportName ?? localModuleProofManifest.source.exportName,
+    },
+    compatibility: {
+      graph: overrides?.compatibility?.graph ?? localModuleProofManifest.compatibility.graph,
+      runtime: overrides?.compatibility?.runtime ?? localModuleProofManifest.compatibility.runtime,
+    },
+    installState: overrides?.installState ?? "installed",
+    activation: {
+      desired: "active",
+      status: "active",
+      changedAt: "2026-04-02T00:00:00.000Z",
+      ...activation,
+    },
+    grantedPermissionKeys: overrides?.grantedPermissionKeys ?? [],
+    installedAt: overrides?.installedAt ?? "2026-04-02T00:00:00.000Z",
+    updatedAt: overrides?.updatedAt ?? "2026-04-02T00:00:00.000Z",
+    ...(overrides?.lastSuccessfulMigrationVersion
+      ? { lastSuccessfulMigrationVersion: overrides.lastSuccessfulMigrationVersion }
+      : {}),
+  });
 }
 
 function createSessionPrincipalLookupInput(
@@ -5394,5 +5459,289 @@ describe("web authority", () => {
 
     expect(await restarted.getSavedQuery(savedQuery.id, { authorization })).toBeUndefined();
     expect(await restarted.getSavedView(savedView.id, { authorization })).toBeUndefined();
+  });
+
+  it("resolves a saved query against an activated local installed-module catalog and fails closed when the module is inactive", async () => {
+    const authorization = createAuthorityAuthorizationContext();
+    const storage = createInMemoryTestWebAppAuthorityStorage();
+    const activeOptions = {
+      installedModuleRecords: [createLocalInstalledModuleRecord()],
+      installedModuleLocalSourceRoot: localInstalledModuleSourceRoot,
+      installedModuleRuntime: localInstalledModuleRuntimeExpectation,
+    } as const;
+    const authority = await createTestWebAppAuthority(storage.storage, activeOptions);
+    const catalog = await loadInstalledModuleQueryEditorCatalog({
+      records: activeOptions.installedModuleRecords,
+      localSourceRoot: activeOptions.installedModuleLocalSourceRoot,
+      runtime: activeOptions.installedModuleRuntime,
+    });
+    const draft = createQueryEditorDraft(catalog, localProofCatalogScopeQuerySurface.surfaceId);
+    const savedQuery = await authority.saveSavedQuery(
+      createSavedQueryRecordInputFromDraft({
+        catalog,
+        draft,
+        name: "Local proof catalog scope",
+      }),
+      { authorization },
+    );
+    const resolved = await authority.resolveSavedQuery(
+      {
+        queryId: savedQuery.id,
+      },
+      { authorization },
+    );
+
+    expect(catalog.surfaces.map((surface) => surface.surfaceId)).toContain(
+      localProofCatalogScopeQuerySurface.surfaceId,
+    );
+    expect(savedQuery).toMatchObject({
+      catalogId: "probe.local-proof:query-surfaces",
+      catalogVersion: "query-catalog:probe.local-proof:v1",
+      surfaceId: localProofCatalogScopeQuerySurface.surfaceId,
+      surfaceVersion: localProofCatalogScopeQuerySurface.surfaceVersion,
+    });
+    expect(resolved.request.query).toMatchObject({
+      kind: "scope",
+      scopeId: localProofCatalogScopeQuerySurface.surfaceId,
+    });
+    expect(resolved.normalizedRequest.query).toMatchObject({
+      kind: "scope",
+      scopeId: localProofCatalogScopeQuerySurface.surfaceId,
+    });
+
+    const restarted = await createTestWebAppAuthority(storage.storage, activeOptions);
+    const restartedResolved = await restarted.resolveSavedQuery(
+      {
+        queryId: savedQuery.id,
+      },
+      { authorization },
+    );
+
+    expect(restartedResolved.request.query).toMatchObject({
+      kind: "scope",
+      scopeId: localProofCatalogScopeQuerySurface.surfaceId,
+    });
+
+    const inactiveAuthority = await createTestWebAppAuthority(storage.storage, {
+      installedModuleRecords: [
+        createLocalInstalledModuleRecord({
+          activation: {
+            desired: "inactive",
+            status: "inactive",
+            changedAt: "2026-04-02T00:00:00.000Z",
+          },
+        }),
+      ],
+      installedModuleLocalSourceRoot: localInstalledModuleSourceRoot,
+      installedModuleRuntime: localInstalledModuleRuntimeExpectation,
+    });
+
+    await expect(
+      inactiveAuthority.resolveSavedQuery(
+        {
+          queryId: savedQuery.id,
+        },
+        { authorization },
+      ),
+    ).rejects.toMatchObject({
+      message: `Saved query "${savedQuery.id}" references removed query surface "${localProofCatalogScopeQuerySurface.surfaceId}".`,
+      status: 409,
+    });
+  });
+
+  it("bootstraps, persists, and rebuilds the active local installed-module schema deterministically", async () => {
+    const authorization = createAuthorityAuthorizationContext();
+    const storage = createInMemoryTestWebAppAuthorityStorage();
+    const options = {
+      installedModuleRecords: [createLocalInstalledModuleRecord()],
+      installedModuleLocalSourceRoot: localInstalledModuleSourceRoot,
+      installedModuleRuntime: localInstalledModuleRuntimeExpectation,
+    } as const;
+    const authority = await createTestWebAppAuthority(storage.storage, options);
+
+    expect(JSON.stringify(authority.readSnapshot({ authorization }))).toContain(
+      "probe:localProofNode",
+    );
+
+    const { mutationGraph, mutationStore } = createMutationStoreForGraph(
+      authority.readSnapshot({ authorization }),
+      localProofAuthorityGraph,
+    );
+    const before = mutationStore.snapshot();
+    const localProofNodeId = mutationGraph.localProofNode.create({
+      name: "Installed local proof",
+      proofNote: "Activation-driven bootstrap proof",
+    });
+
+    await authority.applyTransaction(
+      buildGraphWriteTransaction(before, mutationStore.snapshot(), "tx:create-local-proof-node"),
+      { authorization },
+    );
+
+    expect(
+      readLocalProofGraph(authority, authorization).localProofNode.get(localProofNodeId),
+    ).toMatchObject({
+      name: "Installed local proof",
+      proofNote: "Activation-driven bootstrap proof",
+    });
+
+    const restarted = await createTestWebAppAuthority(storage.storage, options);
+
+    expect(JSON.stringify(restarted.readSnapshot({ authorization }))).toContain(
+      "probe:localProofNode",
+    );
+    expect(
+      readLocalProofGraph(restarted, authorization).localProofNode.get(localProofNodeId),
+    ).toMatchObject({
+      name: "Installed local proof",
+      proofNote: "Activation-driven bootstrap proof",
+    });
+  });
+
+  it("removes the local installed-module schema from the active authority bootstrap when deactivated", async () => {
+    const authorization = createAuthorityAuthorizationContext();
+    const authority = await createTestWebAppAuthority(
+      createInMemoryTestWebAppAuthorityStorage().storage,
+      {
+        installedModuleRecords: [
+          createLocalInstalledModuleRecord({
+            activation: {
+              desired: "inactive",
+              status: "inactive",
+              changedAt: "2026-04-02T00:00:00.000Z",
+            },
+          }),
+        ],
+        installedModuleLocalSourceRoot: localInstalledModuleSourceRoot,
+        installedModuleRuntime: localInstalledModuleRuntimeExpectation,
+      },
+    );
+
+    expect(JSON.stringify(authority.readSnapshot({ authorization }))).not.toContain(
+      "probe:localProofNode",
+    );
+
+    const { mutationGraph } = createMutationStoreForGraph(
+      authority.readSnapshot({ authorization }),
+      localProofAuthorityGraph,
+    );
+    expect(() =>
+      mutationGraph.localProofNode.create({
+        name: "Inactive local proof",
+      }),
+    ).toThrow();
+  });
+
+  it("keeps the first local-module lifecycle stable across install, restart, deactivate, and restart", async () => {
+    const authorization = createAuthorityAuthorizationContext();
+    const storage = createInMemoryTestWebAppAuthorityStorage();
+    const activeOptions = {
+      installedModuleRecords: [createLocalInstalledModuleRecord()],
+      installedModuleLocalSourceRoot: localInstalledModuleSourceRoot,
+      installedModuleRuntime: localInstalledModuleRuntimeExpectation,
+    } as const;
+    const inactiveOptions = {
+      installedModuleRecords: [
+        createLocalInstalledModuleRecord({
+          activation: {
+            desired: "inactive",
+            status: "inactive",
+            changedAt: "2026-04-02T00:00:00.000Z",
+          },
+        }),
+      ],
+      installedModuleLocalSourceRoot: localInstalledModuleSourceRoot,
+      installedModuleRuntime: localInstalledModuleRuntimeExpectation,
+    } as const;
+    const authority = await createTestWebAppAuthority(storage.storage, activeOptions);
+    const catalog = await loadInstalledModuleQueryEditorCatalog({
+      records: activeOptions.installedModuleRecords,
+      localSourceRoot: activeOptions.installedModuleLocalSourceRoot,
+      runtime: activeOptions.installedModuleRuntime,
+    });
+    const draft = createQueryEditorDraft(catalog, localProofCatalogScopeQuerySurface.surfaceId);
+    const savedQuery = await authority.saveSavedQuery(
+      createSavedQueryRecordInputFromDraft({
+        catalog,
+        draft,
+        name: "Local proof lifecycle scope",
+      }),
+      { authorization },
+    );
+    const { mutationGraph, mutationStore } = createMutationStoreForGraph(
+      authority.readSnapshot({ authorization }),
+      localProofAuthorityGraph,
+    );
+    const before = mutationStore.snapshot();
+    const localProofNodeId = mutationGraph.localProofNode.create({
+      name: "Installed local proof",
+      proofNote: "Lifecycle proof",
+    });
+
+    await authority.applyTransaction(
+      buildGraphWriteTransaction(before, mutationStore.snapshot(), "tx:local-proof-lifecycle"),
+      { authorization },
+    );
+
+    expect(catalog.surfaces.map((surface) => surface.surfaceId)).toContain(
+      localProofCatalogScopeQuerySurface.surfaceId,
+    );
+    expect(
+      readLocalProofGraph(authority, authorization).localProofNode.get(localProofNodeId),
+    ).toMatchObject({
+      name: "Installed local proof",
+      proofNote: "Lifecycle proof",
+    });
+
+    const restartedActive = await createTestWebAppAuthority(storage.storage, activeOptions);
+    const restartedResolved = await restartedActive.resolveSavedQuery(
+      {
+        queryId: savedQuery.id,
+      },
+      { authorization },
+    );
+
+    expect(restartedResolved.request.query).toMatchObject({
+      kind: "scope",
+      scopeId: localProofCatalogScopeQuerySurface.surfaceId,
+    });
+    expect(
+      readLocalProofGraph(restartedActive, authorization).localProofNode.get(localProofNodeId),
+    ).toMatchObject({
+      name: "Installed local proof",
+      proofNote: "Lifecycle proof",
+    });
+
+    const restartedInactive = await createTestWebAppAuthority(storage.storage, inactiveOptions);
+    const inactiveCatalog = await loadInstalledModuleQueryEditorCatalog({
+      records: inactiveOptions.installedModuleRecords,
+      localSourceRoot: inactiveOptions.installedModuleLocalSourceRoot,
+      runtime: inactiveOptions.installedModuleRuntime,
+    });
+
+    expect(inactiveCatalog.surfaces.map((surface) => surface.surfaceId)).not.toContain(
+      localProofCatalogScopeQuerySurface.surfaceId,
+    );
+    await expect(
+      restartedInactive.resolveSavedQuery(
+        {
+          queryId: savedQuery.id,
+        },
+        { authorization },
+      ),
+    ).rejects.toMatchObject({
+      message: `Saved query "${savedQuery.id}" references removed query surface "${localProofCatalogScopeQuerySurface.surfaceId}".`,
+      status: 409,
+    });
+
+    const { mutationGraph: inactiveMutationGraph } = createMutationStoreForGraph(
+      restartedInactive.readSnapshot({ authorization }),
+      localProofAuthorityGraph,
+    );
+    expect(() =>
+      inactiveMutationGraph.localProofNode.create({
+        name: "Inactive local proof",
+      }),
+    ).toThrow();
   });
 });

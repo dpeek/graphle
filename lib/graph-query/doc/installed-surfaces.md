@@ -1,7 +1,7 @@
 ---
 name: Graph query installed surfaces
 description: "Installed query-surface registry, renderer compatibility, and editor-catalog projection in @io/graph-query."
-last_updated: 2026-04-02
+last_updated: 2026-04-07
 ---
 
 # Graph query installed surfaces
@@ -18,6 +18,10 @@ last_updated: 2026-04-02
 - `../src/query-editor-catalog.ts`: installed-surface to query-editor catalog mapping
 - `../src/query-surface-registry.test.ts`: duplicate-id and compatibility coverage
 - `../../app/src/web/lib/query-surface-registry.ts`: app-owned activation and built-in catalog composition
+- `../../app/src/web/lib/installed-module-manifest-loader.ts`: app-owned
+  manifest loading for built-in and repo-local local modules
+- `../../app/src/web/lib/authority.ts`: authority-side saved-query validation
+  against the activation-composed registry
 - `./query-stack.md`: broader cross-package query ownership
 
 ## What this layer owns
@@ -60,8 +64,27 @@ That smaller contract is what query-container validation and saved-view compatib
 - installed catalog metadata stays attached so saved-query compatibility can compare current and stored versions later
 - the result stays React-free and can be used by root helpers or `react-dom`
 
+## Current app/web activation proof
+
+The generic registry stays host-neutral, but the current app/web proof now
+feeds it from installed-module activation instead of a fixed catalog list.
+
+Current behavior:
+
+- `@io/app` resolves built-in manifests plus one repo-local `./...` local
+  installed-module source under an explicit `localSourceRoot`
+- `query-surface-registry.ts` combines the built-in core/workflow catalogs
+  with the active installed-module rows and projects that same registry into
+  the shared query-editor catalog
+- `authority.ts` validates saved-query writes and surface lookups against that
+  same activation-composed registry and editor catalog, so removed or inactive
+  surfaces fail closed instead of widening silently
+
 ## Practical rules
 
 - Keep installed runtime metadata attached to surfaces all the way through the editor and saved-query layers.
 - Fail closed on duplicate or blank ids instead of letting ambiguity leak into execution or persistence.
 - Keep activation-driven composition in app code. The generic installed-surface runtime belongs here.
+- Keep activation-driven catalog composition, editor-catalog projection, and
+  authority-side saved-query validation on the same installed-surface registry
+  source.

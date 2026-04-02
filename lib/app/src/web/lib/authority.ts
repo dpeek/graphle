@@ -19,6 +19,8 @@ import {
   type ReplicationReadAuthorizer,
   validateShareGrant,
   type WebPrincipalSummary,
+  type InstalledModuleRecord,
+  type InstalledModuleRuntimeExpectation,
 } from "@io/graph-authority";
 import { bootstrap } from "@io/graph-bootstrap";
 import {
@@ -123,13 +125,16 @@ import type {
   SessionPrincipalProjection,
 } from "./auth-bridge.js";
 import { seedExampleGraph } from "./example-data.js";
+import { loadInstalledModuleGraph } from "./installed-module-manifest-loader.js";
 import { planRecordedMutation, planRecordedMutationAsync } from "./mutation-planning.js";
 import { webAppPolicyVersion } from "./policy-version.js";
 import {
+  createQueryEditorCatalogFromRegistry,
+  createQuerySurfaceRendererCompatibility,
   getInstalledModuleQueryEditorCatalog,
   getInstalledModuleQuerySurface,
-  getInstalledModuleQuerySurfaceRendererCompatibility,
   getInstalledModuleQuerySurfaceRegistry,
+  loadInstalledModuleQuerySurfaceRegistry,
 } from "./query-surface-registry.js";
 import { createWebAppSerializedQueryExecutorRegistry } from "./registered-serialized-query-executors.js";
 import {
@@ -553,6 +558,9 @@ export type WebAppAuthority = Omit<
 
 export type WebAppAuthorityOptions = {
   readonly graph?: WebAppAuthorityGraph;
+  readonly installedModuleRecords?: readonly InstalledModuleRecord[];
+  readonly installedModuleLocalSourceRoot?: string;
+  readonly installedModuleRuntime?: InstalledModuleRuntimeExpectation | null;
   readonly onWorkflowReviewInvalidation?: (invalidation: InvalidationEvent) => void;
   readonly policyVersion?: number;
   readonly retainedHistoryPolicy?: AuthoritativeGraphRetainedHistoryPolicy;
@@ -3588,7 +3596,34 @@ export async function createWebAppAuthority(
   options: WebAppAuthorityOptions = {},
 ): Promise<WebAppAuthority> {
   const authorityPolicyVersion = options.policyVersion ?? webAppPolicyVersion;
-  const graph = options.graph ?? webAppGraph;
+  if (options.graph && options.installedModuleRecords) {
+    throw new TypeError(
+      'Web app authority options must provide either "graph" or "installedModuleRecords", not both.',
+    );
+  }
+  const graph =
+    options.graph ??
+    (options.installedModuleRecords
+      ? ((await loadInstalledModuleGraph({
+          records: options.installedModuleRecords,
+          localSourceRoot: options.installedModuleLocalSourceRoot,
+          runtime: options.installedModuleRuntime ?? null,
+        })) as WebAppAuthorityGraph)
+      : webAppGraph);
+  const installedModuleQuerySurfaceRegistry = options.installedModuleRecords
+    ? await loadInstalledModuleQuerySurfaceRegistry({
+        records: options.installedModuleRecords,
+        localSourceRoot: options.installedModuleLocalSourceRoot,
+        runtime: options.installedModuleRuntime ?? null,
+      })
+    : getInstalledModuleQuerySurfaceRegistry();
+  const installedModuleQueryEditorCatalog = options.installedModuleRecords
+    ? createQueryEditorCatalogFromRegistry(installedModuleQuerySurfaceRegistry)
+    : getInstalledModuleQueryEditorCatalog();
+  function resolveInstalledModuleQuerySurfaceRendererCompatibility(surfaceId: string) {
+    const surface = getInstalledModuleQuerySurface(installedModuleQuerySurfaceRegistry, surfaceId);
+    return surface ? createQuerySurfaceRendererCompatibility(surface) : undefined;
+  }
   const { bootstrappedSnapshot, compiledFieldIndex, scalarByKey, typeByKey } =
     getCompiledGraphArtifacts(graph);
   const loadedPersistedState = await storage.load();
@@ -3661,7 +3696,7 @@ export async function createWebAppAuthority(
     ),
     seed() {
       if (options.seedExampleGraph !== false) {
-        seedExampleGraph(createGraphClient(store, webAppGraph));
+        seedExampleGraph(createGraphClient(store, graph));
       }
     },
     createCursorPrefix: createAuthorityCursorPrefix,
@@ -3988,35 +4023,40 @@ export async function createWebAppAuthority(
     };
   }
 
-  const serializedQueryExecutorRegistry = createWebAppSerializedQueryExecutorRegistry({
-    executeModuleScopeQuery({ options, surface }) {
-      const payload = createTotalSyncPayload({
-        authorization: options.authorization,
-        scope: {
-          kind: "module",
-          moduleId: surface.moduleId,
-          scopeId: surface.source.scopeId,
-        },
-      });
-      const store = createStore(payload.snapshot);
-      const subjectIds = [...new Set(payload.snapshot.edges.map((edge) => edge.s))].sort();
+  const serializedQueryExecutorRegistry = createWebAppSerializedQueryExecutorRegistry(
+    {
+      executeModuleScopeQuery({ options, surface }) {
+        const payload = createTotalSyncPayload({
+          authorization: options.authorization,
+          scope: {
+            kind: "module",
+            moduleId: surface.moduleId,
+            scopeId: surface.source.scopeId,
+          },
+        });
+        const store = createStore(payload.snapshot);
+        const subjectIds = [...new Set(payload.snapshot.edges.map((edge) => edge.s))].sort();
 
-      return {
-        kind: "scope",
-        items: subjectIds.map((subjectId) => buildEntityQueryItem(store, subjectId)),
-        freshness: {
-          completeness: payload.completeness,
-          freshness: payload.freshness,
-          scopeCursor: payload.cursor,
-        },
-      };
+        return {
+          kind: "scope",
+          items: subjectIds.map((subjectId) => buildEntityQueryItem(store, subjectId)),
+          freshness: {
+            completeness: payload.completeness,
+            freshness: payload.freshness,
+            scopeCursor: payload.cursor,
+          },
+        };
+      },
+      readCommitQueueScope,
+      readProjectBranchScope,
+      unsupported(message) {
+        return new UnsupportedSerializedQueryPlanError(message);
+      },
     },
-    readCommitQueueScope,
-    readProjectBranchScope,
-    unsupported(message) {
-      return new UnsupportedSerializedQueryPlanError(message);
+    {
+      surfaceRegistry: installedModuleQuerySurfaceRegistry,
     },
-  });
+  );
 
   function executeCollectionSerializedQuery(
     query: Extract<NormalizedQueryRequest["query"], { readonly kind: "collection" }>,
@@ -4220,7 +4260,6 @@ export async function createWebAppAuthority(
     options: WebAppAuthorityReadOptions,
   ): Promise<SavedQueryRecord> {
     const ownerId = requireSavedQueryOwnerId(options);
-    const installedModuleQueryEditorCatalog = getInstalledModuleQueryEditorCatalog();
     const compatibility = validateSavedQueryCompatibility(
       {
         ...input,
@@ -4233,7 +4272,7 @@ export async function createWebAppAuthority(
       throw createSavedQueryConflict(compatibility.message);
     }
     const installedSurface = getInstalledModuleQuerySurface(
-      getInstalledModuleQuerySurfaceRegistry(),
+      installedModuleQuerySurfaceRegistry,
       input.surfaceId,
     );
     if (!installedSurface?.moduleId) {
@@ -4268,7 +4307,6 @@ export async function createWebAppAuthority(
     options: WebAppAuthorityReadOptions,
   ): Promise<SavedViewRecord> {
     const ownerId = requireSavedQueryOwnerId(options);
-    const installedModuleQueryEditorCatalog = getInstalledModuleQueryEditorCatalog();
     const repository = createSavedQueryRepository(ownerId);
     const query = await repository.getSavedQuery(input.queryId);
     if (!query) {
@@ -4280,7 +4318,7 @@ export async function createWebAppAuthority(
     const compatibility = validateSavedViewCompatibility({
       catalog: installedModuleQueryEditorCatalog,
       query: deriveSavedQueryRecord(query),
-      resolveSurfaceCompatibility: getInstalledModuleQuerySurfaceRendererCompatibility,
+      resolveSurfaceCompatibility: resolveInstalledModuleQuerySurfaceRendererCompatibility,
       view: {
         ...input,
         id: input.id ?? "pending",
@@ -4320,7 +4358,6 @@ export async function createWebAppAuthority(
     options: WebAppAuthorityReadOptions,
   ): Promise<SavedQueryResolution> {
     const ownerId = requireSavedQueryOwnerId(options);
-    const installedModuleQueryEditorCatalog = getInstalledModuleQueryEditorCatalog();
     const query = await createSavedQueryRepository(ownerId).getSavedQuery(input.queryId);
     if (!query) {
       throw new WebAppAuthorityReadError(
@@ -4355,7 +4392,6 @@ export async function createWebAppAuthority(
     options: WebAppAuthorityReadOptions,
   ): Promise<SavedViewResolution> {
     const ownerId = requireSavedQueryOwnerId(options);
-    const installedModuleQueryEditorCatalog = getInstalledModuleQueryEditorCatalog();
     const repository = createSavedQueryRepository(ownerId);
     const view = await repository.getSavedView(input.viewId);
     if (!view) {
@@ -4380,7 +4416,7 @@ export async function createWebAppAuthority(
         ),
         params: input.params,
         query,
-        resolveSurfaceCompatibility: getInstalledModuleQuerySurfaceRendererCompatibility,
+        resolveSurfaceCompatibility: resolveInstalledModuleQuerySurfaceRendererCompatibility,
         view,
       });
     } catch (error) {

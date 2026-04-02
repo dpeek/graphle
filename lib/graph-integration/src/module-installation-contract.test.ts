@@ -325,14 +325,14 @@ describe("installed-module contract", () => {
     });
   });
 
-  it("uses the same contract surface for newly authored manifests", () => {
+  it("keeps the first local-module lifecycle explicit across install, deactivate, and restart planning", () => {
     const localManifest = defineGraphModuleManifest({
-      moduleId: "probe.local",
+      moduleId: "probe.local-proof",
       version: "0.0.1",
       source: {
         kind: "local",
-        specifier: "./modules/probe-local.ts",
-        exportName: "manifest",
+        specifier: "./local-module-proof.ts",
+        exportName: "localModuleProofManifest",
       },
       compatibility: {
         graph: "graph-schema:v1",
@@ -341,7 +341,7 @@ describe("installed-module contract", () => {
       runtime: {
         schemas: [
           {
-            key: "probe.local",
+            key: "probe.local-proof",
             namespace: {
               node: core.node,
             },
@@ -351,19 +351,110 @@ describe("installed-module contract", () => {
     });
 
     const target = createTargetFromManifest(localManifest, {
-      bundleDigest: "sha256:probe.local:0.0.1",
+      bundleDigest: "sha256:probe.local-proof:0.0.1",
     });
     const runtime = createRuntimeExpectationFromManifest(localManifest, {
       supportedSourceKinds: ["built-in", "local"],
     });
-    const record = createInstalledRecord(target, {
-      grantedPermissionKeys: ["probe.local.read"],
+    const installPlan = planInstalledModuleLifecycle({
+      action: "install",
+      target,
+      runtime,
+    });
+    const activeRecord = createInstalledRecord(target, {
+      grantedPermissionKeys: ["probe.local-proof.read"],
+    });
+    const deactivatePlan = planInstalledModuleLifecycle({
+      action: "deactivate",
+      target,
+      record: activeRecord,
+      runtime,
+    });
+    const inactiveRecord = createInstalledRecord(target, {
+      activation: {
+        desired: "inactive",
+        status: "inactive",
+        changedAt,
+      },
+      grantedPermissionKeys: ["probe.local-proof.read"],
+    });
+
+    expect(installPlan).toMatchObject({
+      ok: true,
+      action: "install",
+      disposition: "apply",
+      target,
+      compatibility: {
+        ok: true,
+        status: "new-install",
+      },
+      pending: {
+        installState: "installing",
+        activation: {
+          desired: "active",
+          status: "activating",
+        },
+      },
+      success: {
+        installState: "installed",
+        activation: {
+          desired: "active",
+          status: "active",
+        },
+      },
     });
 
     expect(
       validateInstalledModuleCompatibility({
         target,
-        record,
+        record: activeRecord,
+        runtime,
+      }),
+    ).toMatchObject({
+      ok: true,
+      status: "matches-record",
+      changes: {
+        versionChanged: false,
+        bundleDigestChanged: false,
+        sourceChanged: false,
+        compatibilityChanged: false,
+      },
+      target: {
+        source: {
+          kind: "local",
+          specifier: "./local-module-proof.ts",
+          exportName: "localModuleProofManifest",
+        },
+      },
+      record: {
+        grantedPermissionKeys: ["probe.local-proof.read"],
+      },
+    });
+
+    expect(deactivatePlan).toMatchObject({
+      ok: true,
+      action: "deactivate",
+      disposition: "apply",
+      pending: {
+        installState: "installed",
+        activation: {
+          desired: "inactive",
+          status: "deactivating",
+        },
+      },
+      success: {
+        installState: "installed",
+        activation: {
+          desired: "inactive",
+          status: "inactive",
+        },
+      },
+    });
+
+    expect(
+      validateInstalledModuleCompatibility({
+        target,
+        record: inactiveRecord,
         runtime,
       }),
     ).toMatchObject({
@@ -372,12 +463,43 @@ describe("installed-module contract", () => {
       target: {
         source: {
           kind: "local",
-          specifier: "./modules/probe-local.ts",
-          exportName: "manifest",
+          specifier: "./local-module-proof.ts",
+          exportName: "localModuleProofManifest",
         },
       },
       record: {
-        grantedPermissionKeys: ["probe.local.read"],
+        activation: {
+          desired: "inactive",
+          status: "inactive",
+        },
+        grantedPermissionKeys: ["probe.local-proof.read"],
+      },
+    });
+
+    expect(
+      planInstalledModuleLifecycle({
+        action: "activate",
+        target,
+        record: inactiveRecord,
+        runtime,
+      }),
+    ).toMatchObject({
+      ok: true,
+      action: "activate",
+      disposition: "apply",
+      pending: {
+        installState: "installed",
+        activation: {
+          desired: "active",
+          status: "activating",
+        },
+      },
+      success: {
+        installState: "installed",
+        activation: {
+          desired: "active",
+          status: "active",
+        },
       },
     });
   });

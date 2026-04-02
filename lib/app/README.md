@@ -5,7 +5,7 @@ was extracted into `@op/cli`.
 
 ## Docs
 
-- `./doc/web-overview.md`: current app-owned browser and Worker runtime map
+- `./doc/web-overview.md`: current app-owned browser and Worker runtime map, including installed-module activation-driven authority bootstrap
 - `./doc/workflow-web.md`: current browser workflow surface and browser-agent
   boundary
 - `./doc/auth-store.md`: Better Auth store, Worker runtime, and migration path
@@ -20,6 +20,9 @@ was extracted into `@op/cli`.
 - browser Worker, routes, and app-owned web composition on top of `@io/web`
 - app-owned web exports such as `@io/app/web/better-auth` and
   `@io/app/web/query-container`
+- app-owned installed-module manifest loading plus activation-driven authority
+  bootstrap and query-surface composition for built-in and repo-local local
+  modules
 - app-local web runtime config via `auth.ts`, `vite.config.ts`,
   `wrangler.jsonc`, and `index.html`
 - Better Auth D1 migrations under `migrations/auth-store`

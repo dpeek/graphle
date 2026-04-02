@@ -23,7 +23,7 @@ These are the canonical agent docs for package-specific behavior in
 `@io/graph-query`.
 
 - [`./doc/query-stack.md`](./doc/query-stack.md): cross-package ownership for transport, installed surfaces, durable saved queries, executor routing, and stale recovery
-- [`./doc/installed-surfaces.md`](./doc/installed-surfaces.md): installed query-surface registry, renderer compatibility, and editor-catalog projection
+- [`./doc/installed-surfaces.md`](./doc/installed-surfaces.md): installed query-surface registry, renderer compatibility, editor-catalog projection, and activation-fed host composition boundary
 - [`./doc/executor-registry.md`](./doc/executor-registry.md): installed-surface to executor resolution and fail-closed version checks
 - [`./doc/query-editor.md`](./doc/query-editor.md): editor catalog, draft lifecycle, serialization, normalization, and hydration limits
 - [`./doc/saved-queries.md`](./doc/saved-queries.md): graph-backed saved-query or saved-view records, compatibility, and source resolution
@@ -60,6 +60,8 @@ root graph docs when the question crosses package, module, or app boundaries.
   `@io/graph-query/react-dom`.
 - Installed query-surface registries fail closed on empty or duplicate
   `catalogId` and `surfaceId` values.
+- Host runtimes should derive installed-surface registry, editor catalog, and
+  saved-query compatibility checks from the same activation data.
 - The editor only hydrates and serializes collection and named-scope surfaces.
   Unsupported field kinds stay explicit and block authoring.
 - Saved-query compatibility is keyed by installed catalog and surface metadata:

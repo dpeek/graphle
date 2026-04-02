@@ -4,6 +4,7 @@ import { defineInstalledModuleRecord, type InstalledModuleRecord } from "@io/gra
 import type { GraphModuleManifest } from "@io/graph-module";
 import { coreBuiltInQuerySurfaceIds, coreManifest } from "@io/graph-module-core";
 import { workflowManifest } from "@io/graph-module-workflow";
+import { fileURLToPath } from "node:url";
 
 import {
   createBuiltInInstalledModuleQuerySurfaceRegistry,
@@ -14,8 +15,21 @@ import {
   getBuiltInInstalledModuleQuerySurfaceCatalogs,
   getInstalledModuleQuerySurfaceRegistry,
   getInstalledModuleQuerySurface,
+  loadInstalledModuleQuerySurfaceCatalogs,
+  loadInstalledModuleQuerySurfaceRegistry,
   resolveInstalledModuleQuerySurfaceCatalogs,
 } from "./query-surface-registry.js";
+import {
+  localModuleProofManifest,
+  localProofCatalogScopeQuerySurface,
+} from "./local-module-proof.js";
+
+const localSourceRoot = fileURLToPath(new URL(".", import.meta.url));
+const localRuntimeExpectation = {
+  graph: localModuleProofManifest.compatibility.graph,
+  runtime: localModuleProofManifest.compatibility.runtime,
+  supportedSourceKinds: ["built-in", "local"] as const,
+};
 
 function createInstalledRecordFromManifest(
   manifest: GraphModuleManifest,
@@ -39,6 +53,45 @@ function createInstalledRecordFromManifest(
     installedAt: "2026-04-02T00:00:00.000Z",
     updatedAt: "2026-04-02T00:00:00.000Z",
     ...overrides,
+  });
+}
+
+function createLocalInstalledRecord(
+  overrides?: Partial<InstalledModuleRecord> & {
+    readonly source?: Partial<InstalledModuleRecord["source"]>;
+  },
+): Readonly<InstalledModuleRecord> {
+  const activation = overrides?.activation;
+  const source = overrides?.source;
+
+  return defineInstalledModuleRecord({
+    moduleId: overrides?.moduleId ?? localModuleProofManifest.moduleId,
+    version: overrides?.version ?? localModuleProofManifest.version,
+    bundleDigest:
+      overrides?.bundleDigest ??
+      `sha256:${localModuleProofManifest.moduleId}:${localModuleProofManifest.version}`,
+    source: {
+      kind: source?.kind ?? localModuleProofManifest.source.kind,
+      specifier: source?.specifier ?? localModuleProofManifest.source.specifier,
+      exportName: source?.exportName ?? localModuleProofManifest.source.exportName,
+    },
+    compatibility: {
+      graph: overrides?.compatibility?.graph ?? localModuleProofManifest.compatibility.graph,
+      runtime: overrides?.compatibility?.runtime ?? localModuleProofManifest.compatibility.runtime,
+    },
+    installState: overrides?.installState ?? "installed",
+    activation: {
+      desired: "active",
+      status: "active",
+      changedAt: "2026-04-02T00:00:00.000Z",
+      ...activation,
+    },
+    grantedPermissionKeys: overrides?.grantedPermissionKeys ?? [],
+    installedAt: overrides?.installedAt ?? "2026-04-02T00:00:00.000Z",
+    updatedAt: overrides?.updatedAt ?? "2026-04-02T00:00:00.000Z",
+    ...(overrides?.lastSuccessfulMigrationVersion
+      ? { lastSuccessfulMigrationVersion: overrides.lastSuccessfulMigrationVersion }
+      : {}),
   });
 }
 
@@ -189,13 +242,83 @@ describe("query surface registry", () => {
     expect(catalogs.map((catalog) => catalog.catalogId)).toEqual(["workflow:query-surfaces"]);
   });
 
+  it("loads an active local module catalog through installed-module activation", async () => {
+    const catalogs = await loadInstalledModuleQuerySurfaceCatalogs({
+      records: [createLocalInstalledRecord()],
+      localSourceRoot,
+      runtime: localRuntimeExpectation,
+    });
+    const registry = await loadInstalledModuleQuerySurfaceRegistry({
+      records: [createLocalInstalledRecord()],
+      localSourceRoot,
+      runtime: localRuntimeExpectation,
+    });
+    const localSurface = getInstalledModuleQuerySurface(
+      registry,
+      localProofCatalogScopeQuerySurface.surfaceId,
+    );
+    const catalog = createQueryEditorCatalogFromRegistry(registry);
+
+    expect(catalogs.map((entry) => entry.catalogId)).toEqual([
+      "workflow:query-surfaces",
+      "core:query-surfaces",
+      "probe.local-proof:query-surfaces",
+    ]);
+    expect(localSurface).toMatchObject({
+      catalogId: "probe.local-proof:query-surfaces",
+      catalogVersion: "query-catalog:probe.local-proof:v1",
+      moduleId: "probe.local-proof",
+      queryKind: "scope",
+      source: {
+        kind: "scope",
+        scopeId: localProofCatalogScopeQuerySurface.source.scopeId,
+      },
+      surfaceId: localProofCatalogScopeQuerySurface.surfaceId,
+      surfaceVersion: localProofCatalogScopeQuerySurface.surfaceVersion,
+    });
+    expect(catalog.surfaces).toContainEqual(
+      expect.objectContaining({
+        catalogId: "probe.local-proof:query-surfaces",
+        catalogVersion: "query-catalog:probe.local-proof:v1",
+        moduleId: "probe.local-proof",
+        queryKind: "scope",
+        sourceKind: "scope",
+        surfaceId: localProofCatalogScopeQuerySurface.surfaceId,
+        surfaceVersion: localProofCatalogScopeQuerySurface.surfaceVersion,
+      }),
+    );
+  });
+
+  it("excludes inactive local module catalogs from activation-driven composition", async () => {
+    const catalogs = await loadInstalledModuleQuerySurfaceCatalogs({
+      records: [
+        createLocalInstalledRecord({
+          activation: {
+            desired: "inactive",
+            status: "inactive",
+            changedAt: "2026-04-02T00:00:00.000Z",
+          },
+        }),
+      ],
+      localSourceRoot,
+      runtime: localRuntimeExpectation,
+    });
+
+    expect(catalogs.map((entry) => entry.catalogId)).toEqual([
+      "workflow:query-surfaces",
+      "core:query-surfaces",
+    ]);
+  });
+
   it("fails closed when an active module does not publish query-surface catalogs", () => {
     expect(() =>
       resolveInstalledModuleQuerySurfaceCatalogs([
         {
           manifest: {
             ...workflowManifest,
-            runtime: {},
+            runtime: {
+              schemas: workflowManifest.runtime.schemas,
+            },
           },
           record: createInstalledRecordFromManifest(workflowManifest),
         },
