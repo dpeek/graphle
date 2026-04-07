@@ -698,6 +698,10 @@ registrations.
   installation state.
 - Browsers and external clients never execute install logic directly. They call
   install APIs and consume sanitized installed-module state.
+- Browser-shared route modules must not import deployment-local bundle loaders.
+  Repo-local path resolution and dynamic local manifest loading stay in
+  authority or deployment code, while browser routes consume only derived
+  registries.
 
 ### Authoritative versus derived state
 

@@ -7,6 +7,10 @@ import { workflowManifest } from "@io/graph-module-workflow";
 import { fileURLToPath } from "node:url";
 
 import {
+  loadInstalledModuleQuerySurfaceCatalogs,
+  loadInstalledModuleQuerySurfaceRegistry,
+} from "./installed-module-query-surface-loader.js";
+import {
   createBuiltInInstalledModuleQuerySurfaceRegistry,
   createInstalledModuleQuerySurfaceRegistry,
   createQueryEditorCatalogFromRegistry,
@@ -15,8 +19,6 @@ import {
   getBuiltInInstalledModuleQuerySurfaceCatalogs,
   getInstalledModuleQuerySurfaceRegistry,
   getInstalledModuleQuerySurface,
-  loadInstalledModuleQuerySurfaceCatalogs,
-  loadInstalledModuleQuerySurfaceRegistry,
   resolveInstalledModuleQuerySurfaceCatalogs,
 } from "./query-surface-registry.js";
 import {

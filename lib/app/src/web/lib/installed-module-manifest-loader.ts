@@ -82,7 +82,10 @@ async function importLocalInstalledModuleManifest(
 
   let moduleExports: Record<string, unknown>;
   try {
-    moduleExports = (await import(pathToFileURL(resolvedPath).href)) as Record<string, unknown>;
+    moduleExports = (await import(
+      /* @vite-ignore */
+      pathToFileURL(resolvedPath).href
+    )) as Record<string, unknown>;
   } catch (error) {
     throw new TypeError(
       `Local installed module source "${record.source.specifier}" could not be loaded from "${resolvedPath}": ${asErrorMessage(error)}`,

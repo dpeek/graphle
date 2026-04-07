@@ -17,7 +17,9 @@ last_updated: 2026-04-07
 - `../src/query-surface-registry.ts`: installed surface registry and renderer compatibility projection
 - `../src/query-editor-catalog.ts`: installed-surface to query-editor catalog mapping
 - `../src/query-surface-registry.test.ts`: duplicate-id and compatibility coverage
-- `../../app/src/web/lib/query-surface-registry.ts`: app-owned activation and built-in catalog composition
+- `../../app/src/web/lib/query-surface-registry.ts`: app-owned browser-safe built-in catalog composition
+- `../../app/src/web/lib/installed-module-query-surface-loader.ts`: app-owned
+  authority-side activation and installed-module catalog loading
 - `../../app/src/web/lib/installed-module-manifest-loader.ts`: app-owned
   manifest loading for built-in and repo-local local modules
 - `../../app/src/web/lib/authority.ts`: authority-side saved-query validation
@@ -73,9 +75,11 @@ Current behavior:
 
 - `@io/app` resolves built-in manifests plus one repo-local `./...` local
   installed-module source under an explicit `localSourceRoot`
-- `query-surface-registry.ts` combines the built-in core/workflow catalogs
-  with the active installed-module rows and projects that same registry into
-  the shared query-editor catalog
+- `installed-module-query-surface-loader.ts` combines the built-in
+  core/workflow catalogs with the active installed-module rows and projects
+  that same registry into the shared query-editor catalog
+- `query-surface-registry.ts` stays browser-safe and exposes the built-in
+  registry helpers consumed by client components
 - `authority.ts` validates saved-query writes and surface lookups against that
   same activation-composed registry and editor catalog, so removed or inactive
   surfaces fail closed instead of widening silently

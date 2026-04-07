@@ -90,9 +90,18 @@ Current flow:
    preassembled graph.
 4. When those options are present, authority bootstrap composes built-in and
    active installed-module schemas, then derives the installed query-surface
-   registry and query-editor catalog from that same activation data.
+   registry and query-editor catalog from that same activation data through the
+   server-only `installed-module-query-surface-loader.ts` seam.
 5. Saved-query writes validate against that activation-composed editor
    catalog, and saved-query surface lookups resolve against that same registry.
+
+Important boundary:
+
+- `query-surface-registry.ts` stays browser-safe and only exposes built-in
+  composition helpers used by client components.
+- `installed-module-manifest-loader.ts` and
+  `installed-module-query-surface-loader.ts` stay on the authority or test side
+  because they depend on repo-local path resolution and dynamic module loading.
 
 The first shipped proof stays intentionally small:
 
@@ -138,6 +147,7 @@ or authority routing, it stays in app/web or the owning graph package.
 - `../src/web/lib/auth-client.ts`
 - `../src/web/lib/authority.ts`
 - `../src/web/lib/installed-module-manifest-loader.ts`
+- `../src/web/lib/installed-module-query-surface-loader.ts`
 - `../src/web/lib/local-module-proof.ts`
 - `../src/web/lib/query-surface-registry.ts`
 - `../src/web/lib/local-bootstrap.ts`

@@ -1,4 +1,3 @@
-import type { InstalledModuleRecord, InstalledModuleRuntimeExpectation } from "@io/graph-authority";
 import type { ModuleQuerySurfaceCatalog } from "@io/graph-projection";
 import {
   createInstalledQuerySurfaceRegistry,
@@ -11,7 +10,6 @@ import {
   type QuerySurfaceRendererCompatibility,
 } from "@io/graph-query";
 
-import { loadInstalledModuleContributionResolutions } from "./installed-module-manifest-loader.js";
 import {
   getBuiltInInstalledModuleContributionResolutions,
   resolveActiveInstalledModuleContributionResolutions,
@@ -20,12 +18,6 @@ import {
 
 export type InstalledModuleQuerySurface = InstalledQuerySurface;
 export type InstalledModuleQuerySurfaceRegistry = InstalledQuerySurfaceRegistry;
-
-export type LoadedInstalledModuleQuerySurfaceOptions = {
-  readonly records: readonly InstalledModuleRecord[];
-  readonly localSourceRoot?: string;
-  readonly runtime?: InstalledModuleRuntimeExpectation | null;
-};
 
 export function resolveInstalledModuleQuerySurfaceCatalogs(
   resolutions: readonly InstalledModuleContributionResolution[],
@@ -93,35 +85,6 @@ export const builtInInstalledModuleQuerySurfaceCatalogs =
 
 export function createBuiltInInstalledModuleQuerySurfaceRegistry(): InstalledModuleQuerySurfaceRegistry {
   return createInstalledModuleQuerySurfaceRegistry(getBuiltInInstalledModuleQuerySurfaceCatalogs());
-}
-
-export async function loadInstalledModuleQuerySurfaceCatalogs(
-  input: LoadedInstalledModuleQuerySurfaceOptions,
-): Promise<readonly ModuleQuerySurfaceCatalog[]> {
-  const resolutions = await loadInstalledModuleContributionResolutions({
-    records: input.records,
-    localSourceRoot: input.localSourceRoot,
-    runtime: input.runtime ?? null,
-  });
-
-  return resolveInstalledModuleQuerySurfaceCatalogs([
-    ...getBuiltInInstalledModuleContributionResolutions(),
-    ...resolutions,
-  ]);
-}
-
-export async function loadInstalledModuleQuerySurfaceRegistry(
-  input: LoadedInstalledModuleQuerySurfaceOptions,
-): Promise<InstalledModuleQuerySurfaceRegistry> {
-  return createInstalledModuleQuerySurfaceRegistry(
-    await loadInstalledModuleQuerySurfaceCatalogs(input),
-  );
-}
-
-export async function loadInstalledModuleQueryEditorCatalog(
-  input: LoadedInstalledModuleQuerySurfaceOptions,
-): Promise<QueryEditorCatalog> {
-  return createQueryEditorCatalogFromRegistry(await loadInstalledModuleQuerySurfaceRegistry(input));
 }
 
 let installedModuleQuerySurfaceRegistryCache: InstalledModuleQuerySurfaceRegistry | undefined;

@@ -1,7 +1,7 @@
 ---
 name: Graph query stack
 description: "Cross-package ownership for transport, installed query surfaces, durable saved queries, and execution boundaries centered on @io/graph-query."
-last_updated: 2026-04-03
+last_updated: 2026-04-07
 ---
 
 # Graph query stack
@@ -26,8 +26,10 @@ last_updated: 2026-04-03
   surfaces, scope registrations, and invalidation planning
 - `../../graph-projection/src/index.ts`: scope, projection, invalidation, and
   query-surface catalog contracts
-- `../../app/src/web/lib/query-surface-registry.ts`: app-owned installed
-  catalog composition
+- `../../app/src/web/lib/query-surface-registry.ts`: app-owned browser-safe
+  installed catalog helpers
+- `../../app/src/web/lib/installed-module-query-surface-loader.ts`: app-owned
+  authority-side installed catalog composition
 - `../../app/src/web/lib/registered-serialized-query-executors.ts`: app-owned
   executor composition
 

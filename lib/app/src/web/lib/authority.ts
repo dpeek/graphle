@@ -126,6 +126,7 @@ import type {
 } from "./auth-bridge.js";
 import { seedExampleGraph } from "./example-data.js";
 import { loadInstalledModuleGraph } from "./installed-module-manifest-loader.js";
+import { loadInstalledModuleQuerySurfaceRegistry } from "./installed-module-query-surface-loader.js";
 import { planRecordedMutation, planRecordedMutationAsync } from "./mutation-planning.js";
 import { webAppPolicyVersion } from "./policy-version.js";
 import {
@@ -134,7 +135,6 @@ import {
   getInstalledModuleQueryEditorCatalog,
   getInstalledModuleQuerySurface,
   getInstalledModuleQuerySurfaceRegistry,
-  loadInstalledModuleQuerySurfaceRegistry,
 } from "./query-surface-registry.js";
 import { createWebAppSerializedQueryExecutorRegistry } from "./registered-serialized-query-executors.js";
 import {

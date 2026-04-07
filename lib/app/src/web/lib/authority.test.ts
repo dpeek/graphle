@@ -74,10 +74,10 @@ import {
   type WebAppAuthorityTransactionOptions,
 } from "./authority.js";
 import { webAppPolicyVersion } from "./policy-version.js";
+import { loadInstalledModuleQueryEditorCatalog } from "./installed-module-query-surface-loader.js";
 import {
   getInstalledModuleQueryEditorCatalog,
   getInstalledModuleQuerySurfaceRendererCompatibility,
-  loadInstalledModuleQueryEditorCatalog,
 } from "./query-surface-registry.js";
 import {
   handleWebCommandRequest,
