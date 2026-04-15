@@ -9,7 +9,7 @@ import {
   type GraphWriteScope,
   type GraphStore,
   type GraphStoreSnapshot,
-} from "../../graphle-kernel/src";
+} from "@dpeek/graphle-kernel";
 
 /** Sync completeness reported by a transport payload. */
 export type SyncCompleteness = "complete" | "incomplete";

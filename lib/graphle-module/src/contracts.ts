@@ -1,5 +1,5 @@
-import type { GraphCommandPolicy } from "../../graphle-authority/src";
-import type { DefinitionIconRef } from "../../graphle-kernel/src";
+import type { GraphCommandPolicy } from "@dpeek/graphle-authority";
+import type { DefinitionIconRef } from "@dpeek/graphle-kernel";
 
 /**
  * One field row inside an authored object-view section.

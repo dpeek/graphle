@@ -7,7 +7,6 @@
   ],
   "type": "module",
   "scripts": {
-    "check": "turbo check",
     "dev:clean": "turbo dev:clean --filter=@dpeek/graphle-app",
     "web:dev": "turbo dev --filter=@dpeek/graphle-app"
   },
