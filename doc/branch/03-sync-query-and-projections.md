@@ -93,12 +93,12 @@ without full resync.
 
 - `doc/index.md`
 - `doc/vision.md`
-- `lib/graph-sync/doc/sync-stack.md`
-- `lib/graph-query/doc/query-stack.md`
-- `lib/graph-projection/doc/module-read-scopes.md`
-- `lib/graph-projection/doc/projections-and-retained-state.md`
-- `lib/graph-projection/doc/dependency-keys-and-invalidation.md`
-- `lib/graph-kernel/doc/roadmap.md`
+- `lib/graphle-sync/doc/sync-stack.md`
+- `lib/graphle-query/doc/query-stack.md`
+- `lib/graphle-projection/doc/module-read-scopes.md`
+- `lib/graphle-projection/doc/projections-and-retained-state.md`
+- `lib/graphle-projection/doc/dependency-keys-and-invalidation.md`
+- `lib/graphle-kernel/doc/roadmap.md`
 
 ## 1. Purpose
 
@@ -512,7 +512,7 @@ Responsibilities:
 Lives as an authority-adjacent worker or queue-driven background runtime.
 The current extracted shared contract boundary for projection metadata,
 dependency keys, module read scopes, invalidation types, and retained
-projection compatibility lives in `@io/graph-projection`; workflow-specific
+projection compatibility lives in `@dpeek/graphle-projection`; workflow-specific
 projection manifests and host-specific storage adapters stay outside it.
 
 Responsibilities:
@@ -891,12 +891,12 @@ Current shipped workflow proof:
 
 ## 13. Recommended First Code Targets
 
-- `lib/graph-sync/src/contracts.ts` and `lib/graph-sync/doc/sync-stack.md`:
+- `lib/graphle-sync/src/contracts.ts` and `lib/graphle-sync/doc/sync-stack.md`:
   extend `SyncScope`, completeness, and fallback semantics beyond whole-graph
-- `lib/graph-client/src/http.ts` and `lib/app/src/web/lib/server-routes.ts`: add
+- `lib/graphle-client/src/http.ts` and `lib/app/src/web/lib/server-routes.ts`: add
   scoped bootstrap and scoped incremental pull transport shapes
-- `lib/graph-client/src/graph.ts`, `lib/graph-client/src/core.ts`, and
-  `lib/graph-client/src/query.ts`: keep typed local entity and neighborhood
+- `lib/graphle-client/src/graph.ts`, `lib/graphle-client/src/core.ts`, and
+  `lib/graphle-client/src/query.ts`: keep typed local entity and neighborhood
   reads, but separate them from projection-backed collection queries
 - `lib/app/src/web/lib/graph-authority-do.ts`: publish dependency-key invalidations and
   retain derived projection/checkpoint state beside the authority

@@ -1,0 +1,38 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "graphle",
+  "compatibility_date": "2026-02-12",
+  "compatibility_flags": ["nodejs_compat"],
+  "main": "./src/web/worker/index.ts",
+  "preview_urls": true,
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "GRAPH_AUTHORITY",
+        "class_name": "WebGraphAuthorityDurableObject",
+      },
+    ],
+  },
+  "d1_databases": [
+    {
+      "binding": "AUTH_DB",
+      "database_name": "graphle-better-auth",
+      // Populate the environment-specific database ids after provisioning the
+      // dedicated Better Auth store with `wrangler d1 create`.
+      "migrations_table": "better_auth_migrations",
+      "migrations_dir": "./migrations/auth-store",
+    },
+  ],
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["WebGraphAuthorityDurableObject"],
+    },
+  ],
+  "assets": {
+    // Keep API routes on the Worker and let static navigations fall back to
+    // the SPA entry for TanStack Router deep links.
+    "not_found_handling": "single-page-application",
+    "binding": "ASSETS",
+  },
+}

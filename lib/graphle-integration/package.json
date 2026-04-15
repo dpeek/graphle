@@ -1,0 +1,33 @@
+{
+  "name": "@dpeek/graphle-integration",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "check": "oxlint --type-aware --type-check --fix src --ignore-pattern '**/*.test.ts' && oxfmt && bun test ./src"
+  },
+  "dependencies": {
+    "@dpeek/graphle-authority": "workspace:*",
+    "@dpeek/graphle-bootstrap": "workspace:*",
+    "@dpeek/graphle-client": "workspace:*",
+    "@dpeek/graphle-kernel": "workspace:*",
+    "@dpeek/graphle-module": "workspace:*",
+    "@dpeek/graphle-module-core": "workspace:*",
+    "@dpeek/graphle-react": "workspace:*",
+    "@dpeek/graphle-sync": "workspace:*",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.3.9",
+    "@types/node": "^25.3.2",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@typescript/native-preview": "^7.0.0-dev.20260226.1",
+    "oxfmt": "^0.42.0",
+    "oxlint": "^1.57.0"
+  }
+}

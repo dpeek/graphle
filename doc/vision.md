@@ -1,14 +1,14 @@
 ---
-name: IO product vision
+name: Graphle product vision
 description: "Long-form repo-wide product vision for the personal graph platform direction."
 last_updated: 2026-04-07
 ---
 
-# IO Product Vision
+# Graphle Product Vision
 
 ## Purpose
 
-This document is the initial technical vision for turning the current `io`
+This document is the initial technical vision for turning the current `graphle`
 workspace into a deployable product: an open source personal graph platform
 that runs on Cloudflare, gives each user their own graph, allows graphs to
 link to each other under explicit policy, and lets agents operate directly on
@@ -1148,7 +1148,7 @@ Official references:
 
 ## 21. Recommendation
 
-Treat `io` as the beginning of an open source personal graph operating system:
+Treat `graphle` as the beginning of an open source personal graph operating system:
 
 - one logical graph per user
 - many physical shards under the hood

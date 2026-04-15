@@ -1,10 +1,10 @@
 ---
-name: IO docs index
+name: Graphle docs index
 description: "Repo entrypoint for root docs, package-owned current-state docs, and branch specs."
 last_updated: 2026-04-07
 ---
 
-# IO docs index
+# Graphle docs index
 
 ## Read this when
 
@@ -22,19 +22,19 @@ last_updated: 2026-04-07
 
 ## Repo overview
 
-`io` is a Bun workspaces repository coordinated by Turborepo. The repo root
+`graphle` is a Bun workspaces repository coordinated by Turborepo. The repo root
 owns shared project configuration, entrypoints, and root docs, while packages
 under `lib/*` own the operator runtime, graph engine, web surfaces, shared
 browser primitives, and shared utilities.
 
-The operator runtime now lives in `@op/cli`. `@io/app` stays focused on the
+The operator runtime now lives in `@dpeek/graphle-cli`. `@dpeek/graphle-app` stays focused on the
 curated graph helper surface plus app-specific web and Worker composition.
-`@io/web` owns reusable browser primitives. `@io/utils` owns shared env, log,
+`@dpeek/graphle-web` owns reusable browser primitives. `@dpeek/utils` owns shared env, log,
 and process helpers.
 
 ## Root docs
 
-- `../io.md`: repo-local execution guidance included in prompt context
+- `../graphle.md`: repo-local execution guidance included in prompt context
 - `./vision.md`: long-form product vision and platform thesis
 - `./agent/backlog.md`: stream, feature, and task planning plus backlog-editing contract
 - `./agent/review.md`: post-execution review contract and follow-up issue creation rules
@@ -76,24 +76,24 @@ The current dependency chain is:
   scheduler, workspace lifecycle, and retained runtime behavior
 - `../lib/cli/doc/agent-workflow.md`: workflow loading, issue routing, context
   assembly, and module-scoped doc selection
-- `../lib/cli/doc/command-surfaces.md`: current `io agent ...`,
-  `io browser-agent ...`, `io mcp ...`, and `io tui ...` command groups
+- `../lib/cli/doc/command-surfaces.md`: current `graphle agent ...`,
+  `graphle browser-agent ...`, `graphle mcp ...`, and `graphle tui ...` command groups
 - `../lib/cli/doc/legacy-agent-tui.md`: retained operator-facing session
-  monitor for `io agent tui ...`
+  monitor for `graphle agent tui ...`
 - `../lib/cli/doc/graph-mcp.md`: current graph MCP read surface and opt-in
   write gate
 - `../lib/cli/doc/roadmap.md`: future CLI and graph MCP direction
 - `../lib/cli/doc/tui.md`: terminal workflow product surface and the boundary
   against the legacy agent TUI
-- `../lib/graph-kernel/doc/runtime-stack.md`: graph workspace layout, current
+- `../lib/graphle-kernel/doc/runtime-stack.md`: graph workspace layout, current
   package boundaries, and the package-owned documentation rule
-- `../lib/graph-kernel/doc/roadmap.md`: graph-engine roadmap plus the package
+- `../lib/graphle-kernel/doc/roadmap.md`: graph-engine roadmap plus the package
   map for future-state docs
-- `../lib/graph-client/doc/roadmap.md`: computed-value and derived-read
+- `../lib/graphle-client/doc/roadmap.md`: computed-value and derived-read
   direction above typed refs
-- `../lib/graph-surface/doc/roadmap.md`: proposed graph-native record and
+- `../lib/graphle-surface/doc/roadmap.md`: proposed graph-native record and
   collection surfaces, edit-session semantics, and route-level UI direction
-- `../lib/graph-authority/doc/roadmap.md`: retained-record boundary and
+- `../lib/graphle-authority/doc/roadmap.md`: retained-record boundary and
   durable restore direction above the live authority graph
 - `../lib/app/doc/web-overview.md`: current app-owned browser and Worker runtime
   map
@@ -116,14 +116,14 @@ The current dependency chain is:
   root Turbo web-dev entrypoint, and app auth-migration proxy scripts
 - `../turbo.json`: repo task graph for `build`, `check`, `clean`, and `dev`
 - `../.oxlintrc.json`, `../.oxfmtrc.json`: repo-wide lint and formatting config
-- `../io.ts`: repo config, context registry, profiles, modules, and routing
-- `../lib/app/`: `@io/app`, the app package for graph helper exports plus the
+- `../graphle.ts`: repo config, context registry, profiles, modules, and routing
+- `../lib/app/`: `@dpeek/graphle-app`, the app package for graph helper exports plus the
   browser Worker, routes, and app-owned web composition
-- `../lib/cli/`: `@op/cli`, the operator shell package for command dispatch,
+- `../lib/cli/`: `@dpeek/graphle-cli`, the operator shell package for command dispatch,
   task execution, agent and browser-agent runtimes, MCP, TUI, and runtime config
-- `../lib/graph-*/`: extracted graph kernel, bootstrap, client, authority,
+- `../lib/graphle-*/`: extracted graph kernel, bootstrap, client, authority,
   sync, projection, query, workflow, and surface packages
-- `../lib/web/`: `@io/web`, the shared browser primitive package for reusable
+- `../lib/web/`: `@dpeek/graphle-web`, the shared browser primitive package for reusable
   controls, markdown, Monaco, and source-preview chrome
-- `../lib/utils/`: `@io/utils`, the shared runtime helper package for env,
+- `../lib/utils/`: `@dpeek/utils`, the shared runtime helper package for env,
   logging, and process helpers

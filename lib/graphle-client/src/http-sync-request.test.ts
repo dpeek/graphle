@@ -1,0 +1,61 @@
+import { describe, expect, it } from "bun:test";
+
+import { graphSyncScope } from "@dpeek/graphle-sync";
+
+import { applyHttpSyncRequest, readHttpSyncRequest } from "./http-sync-request";
+
+describe("http sync request transport", () => {
+  it("writes explicit graph scope requests", () => {
+    const url = new URL("http://graphle.localhost:1355/api/sync");
+
+    applyHttpSyncRequest(url, {
+      after: "graph:1",
+      scope: graphSyncScope,
+    });
+
+    expect(url.toString()).toBe(
+      "http://graphle.localhost:1355/api/sync?after=graph%3A1&scopeKind=graph",
+    );
+  });
+
+  it("writes module scope requests with module identity", () => {
+    const url = new URL("http://graphle.localhost:1355/api/sync");
+
+    applyHttpSyncRequest(url, {
+      after: "scope:1",
+      scope: {
+        kind: "module",
+        moduleId: "workflow",
+        scopeId: "scope:workflow:review",
+      },
+    });
+
+    expect(url.toString()).toBe(
+      "http://graphle.localhost:1355/api/sync?after=scope%3A1&scopeKind=module&moduleId=workflow&scopeId=scope%3Aworkflow%3Areview",
+    );
+  });
+
+  it("reads explicit graph scope requests", () => {
+    expect(
+      readHttpSyncRequest("http://graphle.localhost:1355/api/sync?after=graph%3A1&scopeKind=graph"),
+    ).toEqual({
+      after: "graph:1",
+      scope: graphSyncScope,
+    });
+  });
+
+  it("reads module scope requests", () => {
+    expect(
+      readHttpSyncRequest(
+        "http://graphle.localhost:1355/api/sync?after=scope%3A1&scopeKind=module&moduleId=workflow&scopeId=scope%3Aworkflow%3Areview",
+      ),
+    ).toEqual({
+      after: "scope:1",
+      scope: {
+        kind: "module",
+        moduleId: "workflow",
+        scopeId: "scope:workflow:review",
+      },
+    });
+  });
+});

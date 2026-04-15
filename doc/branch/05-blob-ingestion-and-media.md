@@ -86,9 +86,9 @@ view the extracted metadata or preview in the app.
 
 - `doc/index.md`
 - `doc/vision.md`
-- `lib/graph-kernel/doc/roadmap.md`
-- `lib/graph-module/doc/module-stack.md`
-- `lib/graph-authority/doc/roadmap.md`
+- `lib/graphle-kernel/doc/roadmap.md`
+- `lib/graphle-module/doc/module-stack.md`
+- `lib/graphle-authority/doc/roadmap.md`
 - `lib/app/doc/authority-storage.md`
 - `lib/app/doc/roadmap.md`
 
@@ -100,9 +100,9 @@ It is grounded in:
 
 - [`../vision.md`](../vision.md)
 - [`../index.md`](../index.md)
-- [`../../lib/graph-kernel/doc/roadmap.md`](../../lib/graph-kernel/doc/roadmap.md)
-- [`../../lib/graph-module/doc/module-stack.md`](../../lib/graph-module/doc/module-stack.md)
-- [`../../lib/graph-authority/doc/roadmap.md`](../../lib/graph-authority/doc/roadmap.md)
+- [`../../lib/graphle-kernel/doc/roadmap.md`](../../lib/graphle-kernel/doc/roadmap.md)
+- [`../../lib/graphle-module/doc/module-stack.md`](../../lib/graphle-module/doc/module-stack.md)
+- [`../../lib/graphle-authority/doc/roadmap.md`](../../lib/graphle-authority/doc/roadmap.md)
 - [`../../lib/app/doc/authority-storage.md`](../../lib/app/doc/authority-storage.md)
 - [`../../lib/app/doc/roadmap.md`](../../lib/app/doc/roadmap.md)
 

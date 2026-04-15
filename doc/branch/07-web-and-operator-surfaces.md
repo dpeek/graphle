@@ -89,7 +89,7 @@ and watch the scoped sync and explorer update coherently.
 - `lib/app/doc/web-overview.md`
 - `lib/app/doc/workflow-web.md`
 - `lib/app/doc/roadmap.md`
-- `lib/graph-surface/doc/ui-stack.md`
+- `lib/graphle-surface/doc/ui-stack.md`
 - `lib/cli/doc/tui.md`
 
 ## 1. Purpose
@@ -171,7 +171,7 @@ Branch 7 owns the surface model that sits between upstream platform contracts
 and concrete UI screens.
 
 Inference: the bootstrap and module-host interfaces below are still partly
-provisional. `lib/graph-authority/src/contracts.ts` now publishes the stable
+provisional. `lib/graphle-authority/src/contracts.ts` now publishes the stable
 Branch 2 minimum for identity bootstrap:
 
 - `WebPrincipalSession`
@@ -465,7 +465,7 @@ Contract rules:
 ### `WebPrincipalBootstrapPayload`
 
 The stable current-proof bootstrap contract is the minimal identity payload
-published from `lib/graph-authority/src/contracts.ts`.
+published from `lib/graphle-authority/src/contracts.ts`.
 
 Canonical shape:
 
@@ -519,7 +519,7 @@ Contract rules:
 - host-visible contributions must reference already-installed module versions;
   dangling references are registration errors, not lazy warnings
 - object, collection, and workflow surfaces should resolve the root-safe
-  authored contracts from `@io/graph-module` rather than inventing a
+  authored contracts from `@dpeek/graphle-module` rather than inventing a
   browser-only parallel schema
 - `ObjectViewSpec` remains the current compatibility record-view key, while
   `RecordSurfaceSpec` is the preferred authored record-surface contract for new

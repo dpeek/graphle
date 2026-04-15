@@ -21,7 +21,7 @@ When I say:
 
 ## Issues
 
-- Project "IO"
+- Project "Graphle"
 - Status "Todo"
 - No labels / dependencies
 

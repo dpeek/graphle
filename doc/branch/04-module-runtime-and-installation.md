@@ -88,15 +88,15 @@ up in the existing web shell.
 
 - `doc/index.md`
 - `doc/vision.md`
-- `lib/graph-module/doc/module-stack.md`
-- `lib/graph-module/doc/module-manifests.md`
-- `lib/graph-module/doc/authored-contracts.md`
-- `lib/graph-authority/doc/installed-modules.md`
-- `lib/graph-authority/doc/authority-stack.md`
+- `lib/graphle-module/doc/module-stack.md`
+- `lib/graphle-module/doc/module-manifests.md`
+- `lib/graphle-module/doc/authored-contracts.md`
+- `lib/graphle-authority/doc/installed-modules.md`
+- `lib/graphle-authority/doc/authority-stack.md`
 - `lib/app/doc/roadmap.md`
 
 The remainder of this document defines the implementation contract for
-installable modules in `io`.
+installable modules in `graphle`.
 
 Today the repo already has schema-local type modules, pure object-view,
 workflow, and command descriptors, and a web authority that hardcodes one graph
@@ -719,12 +719,12 @@ registrations.
 
 ### Current repo mapping
 
-- `@io/graph-authority` already provides root-safe
+- `@dpeek/graphle-authority` already provides root-safe
   `ModulePermissionRequest`, `ModulePermissionApprovalRecord`, and
   `InstalledModuleRecord`.
-- `@io/graph-module` already provides root-safe `ObjectViewSpec`,
+- `@dpeek/graphle-module` already provides root-safe `ObjectViewSpec`,
   `WorkflowSpec`, and `GraphCommandSpec`.
-- `@io/graph-module-core` and `@io/graph-module-workflow` already provide the
+- `@dpeek/graphle-module-core` and `@dpeek/graphle-module-workflow` already provide the
   built-in schema and catalog slices.
 - `lib/app/src/web/lib/authority.ts` currently hardcodes `{ ...core, ...pkm, ...ops }`
   into one runtime graph. Branch 4 replaces that hardcoded assembly with a
@@ -1070,11 +1070,11 @@ own fact storage itself.
 
 ## 13. Recommended First Code Targets
 
-- `lib/graph-authority/src/contracts.ts` and `lib/graph-module/src/definition-contracts.ts`
+- `lib/graphle-authority/src/contracts.ts` and `lib/graphle-module/src/definition-contracts.ts`
   Publish authority-owned permission contracts from `graph-authority`, and keep
   module-authored manifest or definition contracts in `graph-module` instead of
   reviving a mixed runtime bucket.
-- `lib/graph-module/src/index.ts` and `lib/app/src/graph/index.ts`
+- `lib/graphle-module/src/index.ts` and `lib/app/src/graph/index.ts`
   Keep module-definition authorship on `graph-module`, and keep the root graph
   surface curated instead of reintroducing a catch-all runtime barrel.
 - `lib/app/src/graph/modules/workflow/env-var/module.ts`

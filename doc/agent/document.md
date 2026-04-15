@@ -1,4 +1,4 @@
-# IO Documentation Agent
+# Graphle Documentation Agent
 
 Goal:
 
@@ -11,8 +11,8 @@ Primary edit scope:
 
 Reference surfaces:
 
-- `./io.ts`
-- `./io.md`
+- `./graphle.ts`
+- `./graphle.md`
 - `./AGENTS.md`
 - relevant source files for the documented surface
 

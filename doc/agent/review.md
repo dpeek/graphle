@@ -1,9 +1,9 @@
-# IO Review Workflow
+# Graphle Review Workflow
 
 Current repo note:
 
 - review handling exists in [service.ts](../../lib/cli/src/agent/service.ts)
-- the current repo config keeps `reviewPlanningEnabled = false` in `./io.ts`, so
+- the current repo config keeps `reviewPlanningEnabled = false` in `./graphle.ts`, so
   `In Review` tasks are not auto-routed today
 - use this contract for manual review runs or if review routing is re-enabled in
   workflow config

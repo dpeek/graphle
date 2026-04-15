@@ -1,0 +1,7 @@
+{
+  "name": "@dpeek/graphle",
+  "version": "0.0.0",
+  "description": "Distributed graph runtime",
+  "license": "UNLICENSED",
+  "repository": "https://github.com/dpeek/graphle"
+}

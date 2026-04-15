@@ -11,8 +11,8 @@ Last Updated: 2026-04-07
 - `../lib/app/src/web/components/create-entity-surface.tsx`
 - `../lib/app/src/web/components/explorer/create-draft-controller.ts`
 - `../lib/app/src/web/components/explorer/create-draft-plan.ts`
-- `../lib/graph-surface/src/react-dom/record-surface-mount.tsx`
-- `../lib/graph-surface/doc/record-surfaces.md`
+- `../lib/graphle-surface/src/react-dom/record-surface-mount.tsx`
+- `../lib/graphle-surface/doc/record-surfaces.md`
 - `../lib/app/doc/web-overview.md`
 
 ## Goal
@@ -45,7 +45,7 @@ of the current readonly `RecordSurfaceMount`.
 The current lower-level contracts remain:
 
 - `RecordSurfaceSpec` stays the durable authored layout contract
-- `@io/graph-surface` stays the generic readonly record-shell and section
+- `@dpeek/graphle-surface` stays the generic readonly record-shell and section
   rendering layer
 
 The new work happens above that layer:
@@ -284,7 +284,7 @@ Example:
 - Update docs:
   - add an app-owned entity-surface doc under `lib/app/doc/`
   - link it from `lib/app/doc/web-overview.md`
-  - update `lib/graph-surface/doc/record-surfaces.md` to restate that
+  - update `lib/graphle-surface/doc/record-surfaces.md` to restate that
     record-surface runtime remains readonly and is now consumed by a higher
     level interactive entity surface
 

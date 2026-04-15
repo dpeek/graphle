@@ -1,6 +1,6 @@
 # Utils
 
-`@io/utils` owns the generic runtime helpers that are shared across packages.
+`@dpeek/utils` owns the generic runtime helpers that are shared across packages.
 
 ## What It Owns
 
@@ -10,11 +10,11 @@
 
 ## What It Does Not Own
 
-- operator/runtime config loading, which stays in `@op/cli/config`
+- operator/runtime config loading, which stays in `@dpeek/graphle-cli/config`
 - graph or web application surfaces
 
 ## Validation
 
-Run `turbo check --filter=@io/utils` from the repo root, or `bun run check` in
+Run `turbo check --filter=@dpeek/utils` from the repo root, or `bun run check` in
 this package, for the package-local lint/format/type/test pass. Run
 `turbo check` from the repo root before landing repo-wide changes.

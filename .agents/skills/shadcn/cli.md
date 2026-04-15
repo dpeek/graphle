@@ -103,7 +103,7 @@ npx shadcn@latest add button --view
 npx shadcn@latest add button --view button.tsx
 
 # Works with URLs too.
-npx shadcn@latest add https://api.npoint.io/abc123 --dry-run
+npx shadcn@latest add https://api.npoint.graphle/abc123 --dry-run
 
 # CSS diffs.
 npx shadcn@latest add button --diff globals.css

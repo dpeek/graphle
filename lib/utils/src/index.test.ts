@@ -1,8 +1,8 @@
 import { describe, expect, it } from "bun:test";
 
-describe("@io/utils", () => {
+describe("@dpeek/utils", () => {
   it("exports the generic env, log, and process helpers", async () => {
-    const utils = await import("@io/utils");
+    const utils = await import("@dpeek/utils");
 
     expect(typeof utils.createLogger).toBe("function");
     expect(typeof utils.env).toBe("function");

@@ -62,7 +62,7 @@ model.
 
 ### Likely Repo Boundaries
 
-- `lib/graph-module-workflow/src/*`
+- `lib/graphle-module-workflow/src/*`
 - `lib/app/src/web/lib/workflow-authority*.ts`
 - `lib/app/src/web/lib/workflow-session-feed.ts`
 - `lib/app/src/web/components/workflow-review-page.tsx`
@@ -121,7 +121,7 @@ from the browser.
 - `lib/app/doc/workflow-web.md`
 - `lib/app/doc/roadmap.md`
 - `lib/cli/doc/roadmap.md`
-- `lib/graph-module-workflow/doc/workflow-stack.md`
+- `lib/graphle-module-workflow/doc/workflow-stack.md`
 - `lib/cli/doc/tui.md`
 
 ## 1. Purpose
@@ -537,7 +537,7 @@ The TUI remains useful, but its role changes.
 
 V1 rule:
 
-- `io tui` is a semantic reference surface and fallback operator surface
+- `graphle tui` is a semantic reference surface and fallback operator surface
 - it may keep broader branch-board affordances during the transition
 - it is not the release gate for the first browser-launched session
 - follow-on TUI work should reuse the same commit-first rules rather than

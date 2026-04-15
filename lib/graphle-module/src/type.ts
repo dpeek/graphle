@@ -1,0 +1,547 @@
+import type {
+  Cardinality,
+  EdgeInput,
+  EnumTypeOutput,
+  GraphFieldAuthority,
+  GraphFieldVisibility,
+  GraphFieldWritePolicy,
+  GraphSecretFieldAuthority,
+  PolicyCapabilityKey,
+  RangeRef,
+  ScalarTypeOutput,
+} from "../../graphle-kernel/src";
+
+type EnumOptionLike = { key: string; id?: string };
+type EnumTypeLike = { options: Record<string, EnumOptionLike> };
+type EnumOptionIdentity<Option extends EnumOptionLike> = Option extends {
+  id: infer Id extends string;
+}
+  ? Id
+  : Option["key"];
+type MetaDecoded<Meta extends TypeModuleMeta<any, any, any>> =
+  Meta extends TypeModuleMeta<infer Decoded, any, any> ? Decoded : never;
+type MetaDisplayKinds<Meta extends TypeModuleMeta<any, any, any>> =
+  Meta extends TypeModuleMeta<any, infer DisplayKinds, any> ? DisplayKinds : readonly string[];
+type MetaEditorKinds<Meta extends TypeModuleMeta<any, any, any>> =
+  Meta extends TypeModuleMeta<any, any, infer EditorKinds> ? EditorKinds : readonly string[];
+/**
+ * HTML input-mode hints that authoring metadata can attach to text editors.
+ */
+export type EditorInputMode =
+  | "decimal"
+  | "email"
+  | "none"
+  | "numeric"
+  | "search"
+  | "tel"
+  | "text"
+  | "url";
+type FilterKey<Filter extends { operators: Record<string, unknown> }> = Extract<
+  keyof Filter["operators"],
+  string
+>;
+type NormalizedMeta<Meta extends TypeModuleMeta<any, any, any>> = Omit<
+  TypeModuleMeta<MetaDecoded<Meta>, MetaDisplayKinds<Meta>, MetaEditorKinds<Meta>>,
+  "display" | "editor"
+> & {
+  display: Omit<
+    TypeModuleMeta<MetaDecoded<Meta>, MetaDisplayKinds<Meta>, MetaEditorKinds<Meta>>["display"],
+    "kind"
+  > & { kind: MetaDisplayKinds<Meta>[number] };
+  editor: Omit<
+    TypeModuleMeta<MetaDecoded<Meta>, MetaDisplayKinds<Meta>, MetaEditorKinds<Meta>>["editor"],
+    "kind"
+  > & { kind: MetaEditorKinds<Meta>[number] };
+};
+type NormalizedFilter<Filter extends { operators: Record<string, unknown> }> = {
+  defaultOperator: FilterKey<Filter>;
+  operators: Filter["operators"];
+};
+type FieldFilterOperators<
+  Filter extends { operators: Record<string, unknown> },
+  Allowed extends readonly FilterKey<Filter>[] | undefined,
+> = Allowed extends readonly FilterKey<Filter>[]
+  ? Pick<Filter["operators"], Allowed[number]>
+  : Filter["operators"];
+
+/**
+ * Host-neutral metadata that travels with one scalar or enum type module.
+ */
+export type TypeModuleMeta<
+  Decoded,
+  DisplayKinds extends readonly string[] = readonly string[],
+  EditorKinds extends readonly string[] = readonly string[],
+> = {
+  label?: string;
+  description?: string;
+  group?: string;
+  priority?: number;
+  searchable?: boolean;
+  collection?: {
+    kind: "ordered" | "unordered";
+  };
+  summary?: {
+    kind: "value" | "count";
+    format?: (value: Decoded) => string;
+  };
+  display: {
+    kind: DisplayKinds[number];
+    allowed: DisplayKinds;
+    format?: (value: Decoded) => string;
+  };
+  editor: {
+    kind: EditorKinds[number];
+    allowed: EditorKinds;
+    placeholder?: string;
+    multiline?: boolean;
+    inputType?: string;
+    inputMode?: EditorInputMode;
+    autocomplete?: string;
+    parse?: (raw: string) => Decoded;
+    format?: (value: Decoded) => string;
+  };
+};
+
+type TypeFilterEnumOperand<Operand> = unknown extends Operand
+  ? {
+      kind: "enum";
+      placeholder?: string;
+      selection: "one" | "many";
+    }
+  : Operand extends readonly unknown[]
+    ? {
+        kind: "enum";
+        placeholder?: string;
+        selection: "many";
+      }
+    : {
+        kind: "enum";
+        placeholder?: string;
+        selection: "one";
+      };
+
+/**
+ * Declarative operand shape that host layers can use to render one filter
+ * operator input.
+ */
+export type TypeFilterOperand<Operand> =
+  | {
+      kind: "string";
+      placeholder?: string;
+    }
+  | {
+      kind: "date";
+      placeholder?: string;
+    }
+  | {
+      kind: "number";
+      placeholder?: string;
+      inputMode?: "decimal" | "numeric";
+    }
+  | {
+      kind: "url";
+      placeholder?: string;
+    }
+  | {
+      kind: "boolean";
+    }
+  | TypeFilterEnumOperand<Operand>;
+
+/**
+ * One decoded-value filter operator authored for a type module.
+ */
+export type TypeFilterOperator<
+  Decoded,
+  Operand,
+  OperandShape extends TypeFilterOperand<Operand> = TypeFilterOperand<Operand>,
+> = {
+  label: string;
+  operand: OperandShape;
+  parse: (raw: string) => Operand;
+  format: (operand: Operand) => string;
+  test: (value: Decoded, operand: Operand) => boolean;
+};
+
+/**
+ * Named filter operators plus the default operator for one type module.
+ */
+export type TypeModuleFilter<
+  Decoded,
+  Operators extends Record<string, TypeFilterOperator<Decoded, any>> = Record<
+    string,
+    TypeFilterOperator<Decoded, any>
+  >,
+> = {
+  defaultOperator: Extract<keyof Operators, string>;
+  operators: Operators;
+};
+
+/**
+ * Resolves the decoded value type carried by one scalar type definition.
+ */
+export type ScalarModuleValue<Type extends ScalarTypeOutput<any, any>> =
+  Type extends ScalarTypeOutput<infer Decoded, any> ? Decoded : never;
+/**
+ * Resolves the authored value union carried by one enum type definition.
+ */
+export type EnumModuleValue<Type extends EnumTypeLike> = EnumOptionIdentity<
+  Type["options"][keyof Type["options"]]
+>;
+/**
+ * Resolves the authored value type for either a scalar or enum definition.
+ */
+export type TypeModuleValue<Type extends ScalarTypeOutput<any, any> | EnumTypeLike> =
+  Type extends ScalarTypeOutput<any, any>
+    ? ScalarModuleValue<Type>
+    : Type extends EnumTypeLike
+      ? EnumModuleValue<Type>
+      : never;
+
+/**
+ * Field-local metadata overrides layered on top of a type module's defaults.
+ */
+export type FieldMetaOverride<Meta extends TypeModuleMeta<any, any, any>> = Omit<
+  Partial<Meta>,
+  "display" | "editor"
+> & {
+  display?: Omit<Partial<Meta["display"]>, "allowed" | "kind"> & {
+    kind?: Meta["display"]["allowed"][number];
+  };
+  editor?: Omit<Partial<Meta["editor"]>, "allowed" | "kind"> & {
+    kind?: Meta["editor"]["allowed"][number];
+  };
+};
+
+/**
+ * Field-local filter narrowing layered on top of a type module's defaults.
+ */
+export type FieldFilterOverride<
+  Filter extends { operators: Record<string, unknown>; defaultOperator: string },
+  Allowed extends readonly FilterKey<Filter>[] | undefined = undefined,
+> = {
+  operators?: Allowed;
+  defaultOperator?: Allowed extends readonly FilterKey<Filter>[]
+    ? Allowed[number]
+    : FilterKey<Filter>;
+};
+
+/**
+ * Frozen field contract produced by `TypeModule.field(...)`.
+ */
+export type TypeModuleFieldInput<
+  Type extends ScalarTypeOutput<any, any> | EnumTypeOutput<any, any>,
+  Meta extends TypeModuleMeta<any, any, any>,
+  Filter extends { operators: Record<string, unknown>; defaultOperator: string },
+  Card extends Cardinality,
+  Allowed extends readonly FilterKey<Filter>[] | undefined = undefined,
+  CreateOptional extends boolean = false,
+> = Omit<
+  EdgeInput<
+    Type,
+    {
+      authority?: GraphFieldAuthority;
+      meta: NormalizedMeta<Meta>;
+      filter: {
+        defaultOperator: Allowed extends readonly FilterKey<Filter>[]
+          ? Allowed[number]
+          : FilterKey<Filter>;
+        operators: FieldFilterOperators<Filter, Allowed>;
+      };
+    }
+  >,
+  "createOptional"
+> &
+  (CreateOptional extends true ? { createOptional: true } : {}) & { cardinality: Card };
+
+/**
+ * Base reference-field contract accepted by `defineReferenceField(...)`.
+ */
+export type ReferenceFieldInput<
+  Range extends RangeRef = RangeRef,
+  Extra extends object = {},
+  Card extends Cardinality = Cardinality,
+  CreateOptional extends boolean = false,
+> = Omit<EdgeInput<Range>, "cardinality" | "createOptional"> &
+  Extra &
+  (CreateOptional extends true ? { createOptional: true } : {}) & {
+    cardinality: Card;
+  };
+
+/**
+ * Reusable type-module authoring object returned by `defineScalarModule(...)`
+ * and `defineEnumModule(...)`.
+ */
+export type TypeModule<
+  Type extends ScalarTypeOutput<any, any> | EnumTypeOutput<any, any>,
+  Meta extends TypeModuleMeta<any, any, any>,
+  Filter extends TypeModuleFilter<any, any>,
+> = {
+  /**
+   * Canonical scalar or enum type definition owned by this type module.
+   */
+  type: Type;
+  /**
+   * Normalized default metadata applied to fields built from this type module.
+   */
+  meta: NormalizedMeta<Meta>;
+  /**
+   * Normalized default filter contract applied to fields built from this type
+   * module.
+   */
+  filter: NormalizedFilter<Filter>;
+  /**
+   * Freezes one field definition against the module's type, metadata defaults,
+   * and filter defaults.
+   */
+  field<
+    Card extends Cardinality,
+    Allowed extends readonly FilterKey<NormalizedFilter<Filter>>[] | undefined = undefined,
+    CreateOptional extends boolean = false,
+  >(
+    input: TypeModuleFieldConfig<Meta, Filter, Type, Card, Allowed, CreateOptional>,
+  ): TypeModuleFieldInput<
+    Type,
+    NormalizedMeta<Meta>,
+    NormalizedFilter<Filter>,
+    Card,
+    Allowed,
+    CreateOptional
+  >;
+};
+
+type TypeModuleFieldConfig<
+  Meta extends TypeModuleMeta<any, any, any>,
+  Filter extends TypeModuleFilter<any, any>,
+  Type extends ScalarTypeOutput<any, any> | EnumTypeOutput<any, any>,
+  Card extends Cardinality,
+  Allowed extends readonly FilterKey<NormalizedFilter<Filter>>[] | undefined = undefined,
+  CreateOptional extends boolean = false,
+> = Omit<EdgeInput<Type>, "cardinality" | "createOptional" | "range"> & {
+  authority?: GraphFieldAuthority;
+  cardinality: Card;
+  createOptional?: CreateOptional extends true ? true : never;
+  meta?: FieldMetaOverride<NormalizedMeta<Meta>>;
+  filter?: FieldFilterOverride<NormalizedFilter<Filter>, Allowed>;
+};
+
+function composeMeta<Meta extends TypeModuleMeta<any, any, any>>(
+  defaults: NormalizedMeta<Meta>,
+  override?: FieldMetaOverride<NormalizedMeta<Meta>>,
+): NormalizedMeta<Meta> {
+  if (!override) return defaults;
+  return {
+    ...defaults,
+    ...override,
+    display: {
+      ...defaults.display,
+      ...override.display,
+    },
+    editor: {
+      ...defaults.editor,
+      ...override.editor,
+    },
+  };
+}
+
+function composeFilter<
+  Filter extends { operators: Record<string, unknown>; defaultOperator: string },
+  Allowed extends readonly FilterKey<Filter>[] | undefined = undefined,
+>(
+  defaults: NormalizedFilter<Filter>,
+  override?: FieldFilterOverride<NormalizedFilter<Filter>, Allowed>,
+): {
+  defaultOperator: Allowed extends readonly FilterKey<Filter>[]
+    ? Allowed[number]
+    : FilterKey<Filter>;
+  operators: FieldFilterOperators<Filter, Allowed>;
+} {
+  if (!override?.operators?.length) {
+    return {
+      defaultOperator: (override?.defaultOperator ??
+        defaults.defaultOperator) as Allowed extends readonly FilterKey<Filter>[]
+        ? Allowed[number]
+        : FilterKey<Filter>,
+      operators: defaults.operators as FieldFilterOperators<Filter, Allowed>,
+    };
+  }
+
+  const operators = Object.fromEntries(
+    override.operators.map((key) => [key, defaults.operators[key]]),
+  ) as FieldFilterOperators<Filter, Allowed>;
+  const defaultOperator =
+    override.defaultOperator ??
+    (override.operators.includes(defaults.defaultOperator as FilterKey<Filter>)
+      ? defaults.defaultOperator
+      : override.operators[0]);
+
+  if (!defaultOperator) {
+    throw new Error("Field filter overrides must include at least one operator");
+  }
+
+  return {
+    defaultOperator: defaultOperator as Allowed extends readonly FilterKey<Filter>[]
+      ? Allowed[number]
+      : FilterKey<Filter>,
+    operators,
+  };
+}
+
+function createTypeModule<
+  Type extends ScalarTypeOutput<any, any> | EnumTypeOutput<any, any>,
+  Meta extends TypeModuleMeta<any, any, any>,
+  Filter extends TypeModuleFilter<any, any>,
+>(input: { type: Type; meta: Meta; filter: Filter }): TypeModule<Type, Meta, Filter> {
+  const moduleMeta = input.meta as NormalizedMeta<Meta>;
+  const moduleFilter = input.filter as unknown as NormalizedFilter<Filter>;
+
+  return {
+    type: input.type,
+    meta: moduleMeta,
+    filter: moduleFilter,
+    field<
+      Card extends Cardinality,
+      Allowed extends readonly FilterKey<NormalizedFilter<Filter>>[] | undefined = undefined,
+      CreateOptional extends boolean = false,
+    >({
+      cardinality,
+      createOptional,
+      filter,
+      icon,
+      key,
+      meta,
+      onCreate,
+      onUpdate,
+      validate,
+      authority,
+    }: TypeModuleFieldConfig<Meta, Filter, Type, Card, Allowed, CreateOptional>) {
+      return {
+        ...(key ? { key } : {}),
+        range: input.type,
+        cardinality,
+        ...(createOptional ? { createOptional } : {}),
+        ...(icon ? { icon } : {}),
+        ...(onCreate ? { onCreate } : {}),
+        ...(onUpdate ? { onUpdate } : {}),
+        ...(validate ? { validate } : {}),
+        ...(authority ? { authority } : {}),
+        meta: composeMeta(moduleMeta, meta),
+        filter: composeFilter(moduleFilter, filter),
+      } as unknown as TypeModuleFieldInput<
+        Type,
+        NormalizedMeta<Meta>,
+        NormalizedFilter<Filter>,
+        Card,
+        Allowed,
+        CreateOptional
+      >;
+    },
+  };
+}
+
+/**
+ * Defines a reusable type module for one scalar type definition.
+ */
+export function defineScalarModule<
+  const Type extends ScalarTypeOutput<any, any>,
+  const Meta extends TypeModuleMeta<ScalarModuleValue<Type>, any, any>,
+  const Filter extends TypeModuleFilter<ScalarModuleValue<Type>, any>,
+>(input: { type: Type; meta: Meta; filter: Filter }): TypeModule<Type, Meta, Filter> {
+  return createTypeModule(input);
+}
+
+/**
+ * Freezes an authored reference-field definition without adding runtime
+ * behavior.
+ */
+export function defineReferenceField<
+  const Range extends RangeRef,
+  const Extra extends object = {},
+  const Card extends Cardinality = Cardinality,
+  const CreateOptional extends boolean = false,
+>(
+  input: ReferenceFieldInput<Range, Extra, Card, CreateOptional>,
+): ReferenceFieldInput<Range, Extra, Card, CreateOptional> {
+  return input;
+}
+
+/**
+ * Input contract for `defineSecretField(...)`.
+ */
+export type SecretFieldInput = {
+  range: RangeRef;
+  cardinality: Cardinality;
+  authority?: Omit<GraphFieldAuthority, "secret">;
+  metadataVisibility?: GraphFieldVisibility;
+  revealCapability?: PolicyCapabilityKey;
+  rotateCapability?: PolicyCapabilityKey;
+} & Record<string, unknown>;
+
+const defaultSecretFieldAuthority = {
+  visibility: "replicated",
+  write: "server-command",
+} as const satisfies Pick<GraphFieldAuthority, "visibility" | "write">;
+
+/**
+ * Authors a secret-backed reference field using the shared sealed-handle
+ * authority contract.
+ *
+ * The returned field always carries a concrete `authority.secret` payload and
+ * defaults to replicated visibility plus `server-command` writes unless the
+ * caller narrows those values explicitly.
+ */
+export function defineSecretField<const Input extends SecretFieldInput>(
+  input: Input,
+): Omit<Input, "authority" | "metadataVisibility" | "revealCapability" | "rotateCapability"> & {
+  authority: GraphFieldAuthority & {
+    visibility: GraphFieldVisibility;
+    write: GraphFieldWritePolicy;
+    secret: GraphSecretFieldAuthority;
+  };
+} {
+  const { authority, metadataVisibility, revealCapability, rotateCapability, ...rest } = input;
+
+  const secret = {
+    kind: "sealed-handle",
+    metadataVisibility:
+      metadataVisibility ?? authority?.visibility ?? defaultSecretFieldAuthority.visibility,
+    ...(revealCapability ? { revealCapability } : {}),
+    ...(rotateCapability ? { rotateCapability } : {}),
+  } satisfies GraphSecretFieldAuthority;
+
+  const resolvedAuthority = {
+    ...defaultSecretFieldAuthority,
+    ...authority,
+    secret,
+  } satisfies GraphFieldAuthority & {
+    visibility: GraphFieldVisibility;
+    write: GraphFieldWritePolicy;
+    secret: GraphSecretFieldAuthority;
+  };
+
+  const field = {
+    ...rest,
+    authority: resolvedAuthority,
+  } as unknown as ReferenceFieldInput<RangeRef, Record<string, unknown>, Cardinality>;
+
+  return defineReferenceField(field) as unknown as Omit<
+    Input,
+    "authority" | "metadataVisibility" | "revealCapability" | "rotateCapability"
+  > & {
+    authority: GraphFieldAuthority & {
+      visibility: GraphFieldVisibility;
+      write: GraphFieldWritePolicy;
+      secret: GraphSecretFieldAuthority;
+    };
+  };
+}
+
+/**
+ * Defines a reusable type module for one enum type definition.
+ */
+export function defineEnumModule<
+  const Type extends EnumTypeOutput<any, any>,
+  const Meta extends TypeModuleMeta<EnumModuleValue<Type>, any, any>,
+  const Filter extends TypeModuleFilter<EnumModuleValue<Type>, any>,
+>(input: { type: Type; meta: Meta; filter: Filter }): TypeModule<Type, Meta, Filter> {
+  return createTypeModule(input);
+}

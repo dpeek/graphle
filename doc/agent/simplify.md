@@ -1,4 +1,4 @@
-# IO Simplification Agent
+# Graphle Simplification Agent
 
 Goal:
 

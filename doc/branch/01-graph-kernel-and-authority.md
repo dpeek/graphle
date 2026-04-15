@@ -97,11 +97,11 @@ fields reload correctly without replay drift.
 
 - `doc/index.md`
 - `doc/vision.md`
-- `lib/graph-kernel/doc/runtime-stack.md`
-- `lib/graph-kernel/doc/roadmap.md`
-- `lib/graph-authority/doc/authority-stack.md`
-- `lib/graph-authority/doc/roadmap.md`
-- `lib/graph-sync/doc/sync-stack.md`
+- `lib/graphle-kernel/doc/runtime-stack.md`
+- `lib/graphle-kernel/doc/roadmap.md`
+- `lib/graphle-authority/doc/authority-stack.md`
+- `lib/graphle-authority/doc/roadmap.md`
+- `lib/graphle-sync/doc/sync-stack.md`
 - `lib/app/doc/authority-storage.md`
 
 ## 1. Purpose
@@ -923,13 +923,13 @@ commands target.
 
 ## 13. Recommended First Code Targets
 
-- `lib/app/src/graph/runtime/identity.ts`, `lib/graph-module-core/src/core/bootstrap.ts`, and
-  `lib/graph-bootstrap/src/index.ts` to lock stable schema-id and bootstrap
+- `lib/app/src/graph/runtime/identity.ts`, `lib/graphle-module-core/src/core/bootstrap.ts`, and
+  `lib/graphle-bootstrap/src/index.ts` to lock stable schema-id and bootstrap
   behavior in code comments and tests
-- `lib/graph-sync/src/contracts.ts`, `lib/graph-authority/src/session.ts`, and
-  `lib/graph-authority/src/replication.ts` to freeze tx, cursor, replay, and
+- `lib/graphle-sync/src/contracts.ts`, `lib/graphle-authority/src/session.ts`, and
+  `lib/graphle-authority/src/replication.ts` to freeze tx, cursor, replay, and
   replicated-field semantics
-- `lib/graph-authority/src/persisted-authority.ts` to keep the durable storage
+- `lib/graphle-authority/src/persisted-authority.ts` to keep the durable storage
   boundary small and explicit
 - `lib/app/src/web/lib/graph-authority-do.ts` to harden the SQLite-backed single-graph
   authority proof

@@ -91,16 +91,16 @@ visible predicate set changes according to policy.
 
 - `doc/index.md`
 - `doc/vision.md`
-- `lib/graph-authority/doc/authority-stack.md`
-- `lib/graph-authority/doc/authorization.md`
-- `lib/graph-authority/doc/replication.md`
+- `lib/graphle-authority/doc/authority-stack.md`
+- `lib/graphle-authority/doc/authorization.md`
+- `lib/graphle-authority/doc/replication.md`
 - `lib/app/doc/auth-store.md`
 - `lib/app/doc/roadmap.md`
-- `lib/graph-module/doc/module-stack.md`
+- `lib/graphle-module/doc/module-stack.md`
 
 The remainder of this document is the implementation contract for
 identity, authorization policy, capability grants, and first-cut sharing in the
-io platform. It is grounded in the current graph authority contracts, the
+graphle platform. It is grounded in the current graph authority contracts, the
 existing `GraphFieldAuthority` and command policy surfaces, and the roadmap
 direction toward Better Auth, principal-scoped sync, and capability-bounded
 sharing.
@@ -605,7 +605,7 @@ Contract rules:
 - `authorizeCommand(...)` uses command policy plus predicate policy; either may
   deny
 - `ModulePermissionRequest` is published once from
-  `lib/graph-authority/src/contracts.ts`; Branch 2 does not define a second
+  `lib/graphle-authority/src/contracts.ts`; Branch 2 does not define a second
   install request shape
 - `ModulePermissionRequest.key` is the stable permission identifier used for
   install plans, durable grants, approval UI state, and revocation
@@ -1056,20 +1056,20 @@ Important failure modes:
 
 ## 13. Recommended First Code Targets
 
-- `lib/graph-kernel/src/schema.ts`: keep `GraphFieldAuthority` stable and add
+- `lib/graphle-kernel/src/schema.ts`: keep `GraphFieldAuthority` stable and add
   the principal-aware policy descriptor surface beside it rather than inside
   route code
-- `lib/graph-authority/src/contracts.ts`: publish the canonical
+- `lib/graphle-authority/src/contracts.ts`: publish the canonical
   `AdmissionPolicy` contract beside the existing auth and grant vocabulary
-- `lib/graph-authority/src/contracts.ts`: publish the canonical
+- `lib/graphle-authority/src/contracts.ts`: publish the canonical
   `ModulePermissionRequest` plus the command-policy vocabulary it lowers
   through
-- `lib/graph-authority/src/replication.ts`: add principal-aware filtering
+- `lib/graphle-authority/src/replication.ts`: add principal-aware filtering
   on top of the existing replication visibility rules
 - `lib/app/src/web/lib/authority.ts`: introduce request-bound `AuthorizationContext`
   evaluation and final read or write enforcement
 - `lib/app/src/web/lib/auth-bridge.ts`: add the Better Auth session-to-principal
   projection seam
-- `lib/graph-module-core/src/core/`: add core principal, role, capability, and share
+- `lib/graphle-module-core/src/core/`: add core principal, role, capability, and share
   graph types that downstream branches can reference, including
   `core:admissionPolicy`
