@@ -13,7 +13,13 @@ import {
   type ValidationIssue,
   type ValidationIssueAggregate,
 } from "@dpeek/graphle-react";
-import { Field, FieldContent, FieldDescription, FieldError, FieldTitle } from "@dpeek/graphle-web/field";
+import {
+  Field,
+  FieldContent,
+  FieldDescription,
+  FieldError,
+  FieldTitle,
+} from "@dpeek/graphle-web/field";
 import type { ReactNode } from "react";
 
 export type AnyFieldProps = PredicateFieldProps<any, any>;

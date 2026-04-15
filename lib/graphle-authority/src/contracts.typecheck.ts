@@ -1,4 +1,4 @@
-import type { PredicatePolicyDescriptor } from "../../graphle-kernel/src/index.js";
+import type { PredicatePolicyDescriptor } from "@dpeek/graphle-kernel";
 
 import type {
   AdmissionPolicy,

@@ -90,7 +90,7 @@ and watch the scoped sync and explorer update coherently.
 - `lib/app/doc/workflow-web.md`
 - `lib/app/doc/roadmap.md`
 - `lib/graphle-surface/doc/ui-stack.md`
-- `lib/cli/doc/tui.md`
+- `lib/graphle-cli/doc/tui.md`
 
 ## 1. Purpose
 
@@ -540,7 +540,7 @@ Contract rules:
 
 ### `OperatorSessionFeed`
 
-Inference: the current live and retained TUI is CLI-owned in `lib/cli/src/agent`, but
+Inference: the current live and retained TUI is CLI-owned in `lib/graphle-cli/src/agent`, but
 the branch brief requires operator surfaces as downstream product contracts.
 
 Canonical shape:
@@ -638,8 +638,8 @@ Current repo anchors:
 - `lib/app/src/web/lib/graph-authority-do.ts`
 - `lib/app/src/web/lib/authority.ts`
 - `lib/app/src/web/worker/index.ts`
-- `lib/cli/src/agent/tui-runtime.ts`
-- `lib/cli/src/agent/server.ts`
+- `lib/graphle-cli/src/agent/tui-runtime.ts`
+- `lib/graphle-cli/src/agent/server.ts`
 
 Responsibilities:
 
@@ -1059,5 +1059,5 @@ Rules:
   surfaces through the same host contract
 - `lib/app/src/web/lib/server-routes.ts` and `lib/app/src/web/worker/index.ts`: split future
   bootstrap/session delivery from raw graph sync and mutation routes
-- `lib/cli/src/agent/tui/` plus future workflow operator routes: adapt retained or
+- `lib/graphle-cli/src/agent/tui/` plus future workflow operator routes: adapt retained or
   graph-native session feeds into the branch-owned operator-surface contract

@@ -69,7 +69,9 @@ function createWorkflowResult(): ValidationResult<Workflow> {
 
 describe("browser-agent server", () => {
   it("parses host, port, and workflow path CLI arguments", () => {
-    expect(parseBrowserAgentCliArgs(["./graphle.ts", "--host", "0.0.0.0", "--port", "8123"])).toEqual({
+    expect(
+      parseBrowserAgentCliArgs(["./graphle.ts", "--host", "0.0.0.0", "--port", "8123"]),
+    ).toEqual({
       help: false,
       host: "0.0.0.0",
       port: 8123,

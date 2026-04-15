@@ -1,4 +1,4 @@
-import { defaultHttpGraphUrl } from "../../../graphle-client/src/index.js";
+import { defaultHttpGraphUrl } from "@dpeek/graphle-client";
 
 import { normalizeGraphMcpUrl, startGraphMcpServer, type GraphMcpStartOptions } from "./graph.js";
 

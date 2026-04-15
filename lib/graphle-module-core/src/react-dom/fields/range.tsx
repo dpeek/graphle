@@ -1,6 +1,12 @@
 import { performValidatedMutation, usePredicateField } from "@dpeek/graphle-react";
 import { Field, FieldContent, FieldError, FieldGroup, FieldTitle } from "@dpeek/graphle-web/field";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@dpeek/graphle-web/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@dpeek/graphle-web/select";
 import { useEffect, useState } from "react";
 
 import { normalizeRangeInput, type RangeValue } from "../../core/range.js";

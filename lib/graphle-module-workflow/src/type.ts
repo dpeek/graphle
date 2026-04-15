@@ -1,6 +1,6 @@
-import { defineEnum, defineType } from "../../graphle-module/src/index.js";
-import { existingEntityReferenceField } from "../../graphle-module/src/index.js";
-import { defineDefaultEnumTypeModule } from "../../graphle-module/src/index.js";
+import { defineEnum, defineType } from "@dpeek/graphle-module";
+import { existingEntityReferenceField } from "@dpeek/graphle-module";
+import { defineDefaultEnumTypeModule } from "@dpeek/graphle-module";
 import {
   booleanTypeModule,
   core,
@@ -8,7 +8,7 @@ import {
   jsonTypeModule,
   numberTypeModule,
   stringTypeModule,
-} from "../../graphle-module-core/src/index.js";
+} from "@dpeek/graphle-module-core";
 
 import { document } from "./document.js";
 

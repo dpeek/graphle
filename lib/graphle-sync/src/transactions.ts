@@ -4,7 +4,7 @@ import {
   type GraphStore,
   type GraphStoreSnapshot,
   type GraphWriteTransaction,
-} from "../../graphle-kernel/src";
+} from "@dpeek/graphle-kernel";
 
 import { isObjectRecord, type GraphSyncValidationResult } from "./contracts";
 import { createGraphSyncValidationIssue, invalidGraphWriteTransactionResult } from "./validation";

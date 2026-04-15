@@ -1,4 +1,4 @@
-import type { AnyTypeOutput, EdgeOutput } from "../../../graphle-kernel/src/index.js";
+import type { AnyTypeOutput, EdgeOutput } from "@dpeek/graphle-kernel";
 import {
   FilterOperandEditor as GraphFilterOperandEditor,
   compileGraphFilterQuery,

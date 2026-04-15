@@ -1,4 +1,4 @@
-import type { GraphIconSeedRecord } from "../../../graphle-kernel/src";
+import type { GraphIconSeedRecord } from "@dpeek/graphle-kernel";
 
 export type GraphIconSeed = GraphIconSeedRecord;
 

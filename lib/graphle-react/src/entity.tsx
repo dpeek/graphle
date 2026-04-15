@@ -4,13 +4,13 @@ import {
   type PredicateRangeTypeOf,
   type PredicateRef,
   type PredicateValueOf,
-} from "../../graphle-client/src/index.js";
+} from "@dpeek/graphle-client";
 import {
   isEntityType,
   type AnyTypeOutput,
   type EdgeOutput,
   type TypeOutput,
-} from "../../graphle-kernel/src/index.js";
+} from "@dpeek/graphle-kernel";
 import { Fragment, useMemo, type ReactNode } from "react";
 
 import { usePredicateValue } from "./predicate.js";

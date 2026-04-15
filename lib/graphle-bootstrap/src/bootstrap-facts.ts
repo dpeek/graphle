@@ -1,9 +1,4 @@
-import {
-  edgeId,
-  isScalarType,
-  type AnyTypeOutput,
-  type GraphStore,
-} from "../../graphle-kernel/src/index.js";
+import { edgeId, isScalarType, type AnyTypeOutput, type GraphStore } from "@dpeek/graphle-kernel";
 
 import type { GraphBootstrapCoreSchema } from "./core-schema.js";
 

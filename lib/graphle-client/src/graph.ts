@@ -1,7 +1,7 @@
-import { requireGraphBootstrapCoreSchema } from "../../graphle-bootstrap/src";
-import type { GraphStore } from "../../graphle-kernel/src";
-import { edgeId, typeId } from "../../graphle-kernel/src";
-import type { AnyTypeOutput, EdgeOutput, TypeOutput } from "../../graphle-kernel/src";
+import { requireGraphBootstrapCoreSchema } from "@dpeek/graphle-bootstrap";
+import type { GraphStore } from "@dpeek/graphle-kernel";
+import { edgeId, typeId } from "@dpeek/graphle-kernel";
+import type { AnyTypeOutput, EdgeOutput, TypeOutput } from "@dpeek/graphle-kernel";
 
 import {
   collectEnumValueIds,

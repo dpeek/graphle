@@ -2,7 +2,7 @@ import {
   GraphValidationError,
   type GraphValidationIssue,
   type GraphValidationResult,
-} from "../../graphle-client/src/index.js";
+} from "@dpeek/graphle-client";
 import {
   cloneAuthoritativeGraphRetainedHistoryPolicy,
   cloneAuthoritativeGraphWriteResult,
@@ -18,7 +18,7 @@ import {
   type GraphWriteTransaction,
   sameGraphWriteTransaction,
   unboundedAuthoritativeGraphRetainedHistoryPolicy,
-} from "../../graphle-kernel/src/index.js";
+} from "@dpeek/graphle-kernel";
 import {
   classifyIncrementalSyncFallbackReason,
   cloneSyncDiagnostics,
@@ -33,8 +33,8 @@ import {
   type SyncFreshness,
   type SyncScope,
   type TotalSyncPayload,
-} from "../../graphle-sync/src/index.js";
-import { materializeGraphWriteTransactionSnapshot } from "../../graphle-sync/src/index.js";
+} from "@dpeek/graphle-sync";
+import { materializeGraphWriteTransactionSnapshot } from "@dpeek/graphle-sync";
 
 import {
   readAuthoritativeNodeTypePredicateId,

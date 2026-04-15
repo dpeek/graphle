@@ -1,7 +1,7 @@
 import type {
   CommitQueueScopeResult,
   ProjectBranchScopeRepositoryObservation,
-} from "../../../graphle-module-workflow/src/index.js";
+} from "@dpeek/graphle-module-workflow";
 
 import type {
   WorkflowTuiActionModel,

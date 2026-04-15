@@ -1,5 +1,5 @@
-import { defineGraphModuleManifest } from "../../graphle-module/src/index.js";
-import { applyGraphIdMap, type ResolvedGraphNamespace } from "../../graphle-kernel/src/index.js";
+import { defineGraphModuleManifest } from "@dpeek/graphle-module";
+import { applyGraphIdMap, type ResolvedGraphNamespace } from "@dpeek/graphle-kernel";
 
 export * from "./schema.js";
 export * from "./env-var.js";

@@ -5,10 +5,10 @@ import {
   defaultHttpGraphUrl,
   type FetchImpl,
   type SyncedGraphClient,
-} from "../../../graphle-client/src/index.js";
-import { isEntityType, type AnyTypeOutput } from "../../../graphle-kernel/src/index.js";
-import { core, coreGraphBootstrapOptions } from "../../../graphle-module-core/src/index.js";
-import { workflow } from "../../../graphle-module-workflow/src/index.js";
+} from "@dpeek/graphle-client";
+import { isEntityType, type AnyTypeOutput } from "@dpeek/graphle-kernel";
+import { core, coreGraphBootstrapOptions } from "@dpeek/graphle-module-core";
+import { workflow } from "@dpeek/graphle-module-workflow";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import * as z from "zod/v4";

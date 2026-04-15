@@ -1,12 +1,12 @@
-import { type PredicateRef } from "../../graphle-client/src";
+import { type PredicateRef } from "@dpeek/graphle-client";
 import {
   isEnumType,
   type AnyTypeOutput,
   type EdgeOutput,
   type ResolvedAnyTypeOutput,
   typeId,
-} from "../../graphle-kernel/src";
-import type { TypeFilterOperator } from "../../graphle-module/src";
+} from "@dpeek/graphle-kernel";
+import type { TypeFilterOperator } from "@dpeek/graphle-module";
 import type { ComponentType, ReactNode } from "react";
 
 type FieldFilterContract = {

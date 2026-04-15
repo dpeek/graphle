@@ -3,7 +3,7 @@ import {
   createGraphStore,
   type AnyTypeOutput,
   type GraphStoreSnapshot,
-} from "../../graphle-kernel/src/index.js";
+} from "@dpeek/graphle-kernel";
 
 import { bootstrap } from "./bootstrap.js";
 import type { GraphBootstrapOptions } from "./contracts.js";

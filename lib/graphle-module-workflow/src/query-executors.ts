@@ -1,5 +1,5 @@
-import type { QueryResultPage } from "../../graphle-client/src/index.js";
-import type { NormalizedQueryRequest } from "../../graphle-client/src/index.js";
+import type { QueryResultPage } from "@dpeek/graphle-client";
+import type { NormalizedQueryRequest } from "@dpeek/graphle-client";
 
 import { branchStateValues } from "./command.js";
 import {

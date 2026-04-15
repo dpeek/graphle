@@ -16,7 +16,7 @@ import {
   type QueryOrderDirection,
   type QueryParameterType,
   type ReadQuery,
-} from "../../graphle-client/src";
+} from "@dpeek/graphle-client";
 import {
   createModuleSyncScope,
   createModuleSyncScopeRequest,
@@ -26,7 +26,7 @@ import {
   type ModuleSyncScopeRequest,
   type SyncScope,
   type SyncScopeRequest,
-} from "../../graphle-sync/src";
+} from "@dpeek/graphle-sync";
 
 export const projectionSourceScopeKinds = [
   "graph",

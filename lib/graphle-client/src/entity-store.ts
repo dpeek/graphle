@@ -1,6 +1,11 @@
-import type { GraphStore } from "../../graphle-kernel/src";
-import { edgeId, typeId } from "../../graphle-kernel/src";
-import type { AnyTypeOutput, EdgeOutput, ScalarTypeOutput, TypeOutput } from "../../graphle-kernel/src";
+import type { GraphStore } from "@dpeek/graphle-kernel";
+import { edgeId, typeId } from "@dpeek/graphle-kernel";
+import type {
+  AnyTypeOutput,
+  EdgeOutput,
+  ScalarTypeOutput,
+  TypeOutput,
+} from "@dpeek/graphle-kernel";
 
 import {
   clearFieldValue,

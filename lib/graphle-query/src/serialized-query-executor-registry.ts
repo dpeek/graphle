@@ -1,4 +1,4 @@
-import type { NormalizedQueryRequest, QueryResultPage } from "../../graphle-client/src/index.js";
+import type { NormalizedQueryRequest, QueryResultPage } from "@dpeek/graphle-client";
 
 import type {
   InstalledQuerySurface,

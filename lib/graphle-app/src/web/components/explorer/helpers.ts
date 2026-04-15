@@ -1,6 +1,16 @@
-import { edgeId, isEntityType, type AnyTypeOutput, type GraphStore, typeId } from "@dpeek/graphle-app/graph";
+import {
+  edgeId,
+  isEntityType,
+  type AnyTypeOutput,
+  type GraphStore,
+  typeId,
+} from "@dpeek/graphle-app/graph";
 import { formatValidationPath, GraphValidationError } from "@dpeek/graphle-client";
-import { core, resolvePredicateDefinitionIconId, unknownIconSeed } from "@dpeek/graphle-module-core";
+import {
+  core,
+  resolvePredicateDefinitionIconId,
+  unknownIconSeed,
+} from "@dpeek/graphle-module-core";
 import { format as formatDate } from "date-fns";
 
 import type { WriteSecretFieldWebAuthorityCommand } from "../../lib/authority.js";

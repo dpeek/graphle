@@ -1,5 +1,5 @@
-import { defineType } from "../../../graphle-module/src/index.js";
-import { defineReferenceField } from "../../../graphle-module/src/index.js";
+import { defineType } from "@dpeek/graphle-module";
+import { defineReferenceField } from "@dpeek/graphle-module";
 
 import { defineCoreIconSeed } from "../icon/seed.js";
 import { node } from "./node.js";

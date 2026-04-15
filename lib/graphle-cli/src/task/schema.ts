@@ -9,7 +9,7 @@ import {
   createGraphIdMap as createIdMap,
   extractGraphSchemaKeys as extractSchemaKeys,
   findDuplicateGraphIds as findDuplicateIds,
-} from "../../../graphle-kernel/src";
+} from "@dpeek/graphle-kernel";
 
 type TypeNamespace = Record<string, AnyTypeOutput>;
 

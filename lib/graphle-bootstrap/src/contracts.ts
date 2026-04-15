@@ -1,8 +1,4 @@
-import type {
-  AnyTypeOutput,
-  EdgeOutput,
-  GraphIconSeedRecord,
-} from "../../graphle-kernel/src/index.js";
+import type { AnyTypeOutput, EdgeOutput, GraphIconSeedRecord } from "@dpeek/graphle-kernel";
 
 import type { GraphBootstrapCoreSchema } from "./core-schema.js";
 

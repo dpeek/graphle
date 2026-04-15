@@ -5,7 +5,7 @@ import {
   type ModuleQuerySurfaceCatalog,
   type ModuleReadScopeDefinition,
   type ProjectionSpec,
-} from "../../graphle-projection/src/index.js";
+} from "@dpeek/graphle-projection";
 
 import type {
   CollectionSurfaceSpec,

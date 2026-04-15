@@ -2,7 +2,11 @@ import { describe, expect, it } from "bun:test";
 
 import { bootstrap } from "@dpeek/graphle-bootstrap";
 import { createGraphClient } from "@dpeek/graphle-client";
-import { core, coreGraphBootstrapOptions, defaultMoneyCurrencyKey } from "@dpeek/graphle-module-core";
+import {
+  core,
+  coreGraphBootstrapOptions,
+  defaultMoneyCurrencyKey,
+} from "@dpeek/graphle-module-core";
 
 import {
   createStore,

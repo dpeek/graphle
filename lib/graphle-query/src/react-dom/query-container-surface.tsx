@@ -17,7 +17,7 @@ import {
   type QuerySurfaceRendererCompatibility,
   validateQueryContainer,
 } from "../query-container.js";
-import { requestSerializedQuery } from "../../../graphle-client/src/index.js";
+import { requestSerializedQuery } from "@dpeek/graphle-client";
 import {
   builtInQueryRendererRegistry,
   createQueryRendererCapabilityMap,

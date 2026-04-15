@@ -1,4 +1,10 @@
-import { edgeId, isEntityType, type AnyTypeOutput, type GraphStore, typeId } from "@dpeek/graphle-app/graph";
+import {
+  edgeId,
+  isEntityType,
+  type AnyTypeOutput,
+  type GraphStore,
+  typeId,
+} from "@dpeek/graphle-app/graph";
 import { isFieldGroupRef, type GraphMutationValidationResult } from "@dpeek/graphle-client";
 import {
   core,

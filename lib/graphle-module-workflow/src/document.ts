@@ -4,7 +4,7 @@ import {
   defineType,
   entityReferenceComboboxEditorKind,
   existingEntityReferenceField,
-} from "../../graphle-module/src";
+} from "@dpeek/graphle-module";
 import {
   booleanTypeModule,
   core,
@@ -12,7 +12,7 @@ import {
   numberTypeModule,
   slugTypeModule,
   stringTypeModule,
-} from "../../graphle-module-core/src";
+} from "@dpeek/graphle-module-core";
 
 function validateRequiredString(label: string, value: unknown) {
   return typeof value === "string" && value.trim().length > 0

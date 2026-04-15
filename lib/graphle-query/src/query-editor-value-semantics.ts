@@ -1,5 +1,5 @@
-import type { QueryFilterOperator, QueryLiteral, QueryParameterType } from "../../graphle-client/src";
-import type { AnyTypeOutput } from "../../graphle-kernel/src";
+import type { QueryFilterOperator, QueryLiteral, QueryParameterType } from "@dpeek/graphle-client";
+import type { AnyTypeOutput } from "@dpeek/graphle-kernel";
 import {
   booleanTypeModule,
   colorTypeModule,
@@ -35,8 +35,8 @@ import {
   rateTypeModule,
   stringTypeModule,
   urlTypeModule,
-} from "../../graphle-module-core/src";
-import type { QuerySurfaceFieldKind } from "../../graphle-projection/src";
+} from "@dpeek/graphle-module-core";
+import type { QuerySurfaceFieldKind } from "@dpeek/graphle-projection";
 
 type QueryEditorFieldModule = {
   readonly meta: Record<string, unknown>;

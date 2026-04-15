@@ -1,6 +1,6 @@
-import type { EnumOptionInput } from "../../../graphle-module/src/index.js";
-import { defineEnum } from "../../../graphle-module/src/index.js";
-import { defineDefaultEnumTypeModule } from "../../../graphle-module/src/index.js";
+import type { EnumOptionInput } from "@dpeek/graphle-module";
+import { defineEnum } from "@dpeek/graphle-module";
+import { defineDefaultEnumTypeModule } from "@dpeek/graphle-module";
 
 import { defineCoreIconSeed } from "../icon/seed.js";
 

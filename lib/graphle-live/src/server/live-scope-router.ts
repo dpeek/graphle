@@ -1,4 +1,7 @@
-import { isInvalidationEventCompatibleWithTarget, type DependencyKey } from "@dpeek/graphle-projection";
+import {
+  isInvalidationEventCompatibleWithTarget,
+  type DependencyKey,
+} from "@dpeek/graphle-projection";
 
 import type {
   LiveScopeInvalidation,

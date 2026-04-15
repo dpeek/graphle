@@ -1,4 +1,4 @@
-import { isEnumType } from "../../../../graphle-kernel/src/index.js";
+import { isEnumType } from "@dpeek/graphle-kernel";
 import {
   getPredicateEnumOptions,
   performValidatedMutation,

@@ -1,12 +1,12 @@
-import type { GraphBootstrapOptions } from "../../graphle-bootstrap/src";
+import type { GraphBootstrapOptions } from "@dpeek/graphle-bootstrap";
 import type {
   AuthoritativeGraphWriteResult,
   GraphStoreSnapshot,
   GraphWriteTransaction,
-} from "../../graphle-kernel/src";
-import { createGraphId } from "../../graphle-kernel/src";
-import type { AnyTypeOutput } from "../../graphle-kernel/src";
-import type { SyncPayload, SyncScopeRequest, SyncState } from "../../graphle-sync/src";
+} from "@dpeek/graphle-kernel";
+import { createGraphId } from "@dpeek/graphle-kernel";
+import type { AnyTypeOutput } from "@dpeek/graphle-kernel";
+import type { SyncPayload, SyncScopeRequest, SyncState } from "@dpeek/graphle-sync";
 
 import { applyHttpSyncRequest } from "./http-sync-request";
 import {

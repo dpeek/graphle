@@ -18,8 +18,8 @@ import {
   type ReadQuery,
   type SerializedQueryNormalizationOptions,
   type SerializedQueryRequest,
-} from "../../../graphle-client/src/index.js";
-import type { QuerySurfaceFieldKind } from "../../../graphle-projection/src/index.js";
+} from "@dpeek/graphle-client";
+import type { QuerySurfaceFieldKind } from "@dpeek/graphle-projection";
 
 import {
   coerceQueryEditorFieldLiteralValue,

@@ -2,7 +2,7 @@ import type {
   AuthoritativeGraphWriteResult,
   GraphStore,
   GraphWriteTransaction,
-} from "../../../graphle-kernel/src/index.js";
+} from "@dpeek/graphle-kernel";
 
 import type { WorkflowMutationAction, WorkflowMutationResult } from "../command.js";
 

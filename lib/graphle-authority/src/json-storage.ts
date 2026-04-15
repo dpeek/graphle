@@ -10,8 +10,8 @@ import {
   type GraphStore,
   type GraphStoreSnapshot,
   unboundedAuthoritativeGraphRetainedHistoryPolicy,
-} from "../../graphle-kernel/src/index.js";
-import { graphSyncScope, type TotalSyncPayload } from "../../graphle-sync/src/index.js";
+} from "@dpeek/graphle-kernel";
+import { graphSyncScope, type TotalSyncPayload } from "@dpeek/graphle-sync";
 
 import { resolveAuthoritativeDefinitions } from "./definitions.js";
 import {

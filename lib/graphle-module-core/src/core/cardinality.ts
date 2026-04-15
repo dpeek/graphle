@@ -1,5 +1,5 @@
-import { defineEnum } from "../../../graphle-module/src";
-import { defineDefaultEnumTypeModule } from "../../../graphle-module/src";
+import { defineEnum } from "@dpeek/graphle-module";
+import { defineDefaultEnumTypeModule } from "@dpeek/graphle-module";
 
 export const cardinality = defineEnum({
   values: { key: "core:cardinality", name: "Cardinality" },

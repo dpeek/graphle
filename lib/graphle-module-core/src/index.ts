@@ -1,4 +1,4 @@
-import { defineGraphModuleManifest } from "../../graphle-module/src/index.js";
+import { defineGraphModuleManifest } from "@dpeek/graphle-module";
 
 import { core } from "./core.js";
 import { coreCatalogModuleReadScope, coreModuleId, coreQuerySurfaceCatalog } from "./query.js";

@@ -1,4 +1,4 @@
-import type { QueryResultPage } from "../../graphle-client/src/index.js";
+import type { QueryResultPage } from "@dpeek/graphle-client";
 
 import { coreBuiltInQuerySurfaces, type CoreBuiltInQuerySurfaceSpec } from "./query.js";
 

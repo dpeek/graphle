@@ -678,7 +678,9 @@ test("AgentTuiRetainedReader supplements partial events.log with retained workfl
       "Session scheduled | graphle/ope-174 | /repo/tmp/workspace/tree/ope-174",
     );
     expect(snapshot.sessions[1]?.body).toContain("Session started");
-    expect(snapshot.sessions[1]?.body).toContain(`OPE-174: committed ${commitSha} on graphle/ope-174`);
+    expect(snapshot.sessions[1]?.body).toContain(
+      `OPE-174: committed ${commitSha} on graphle/ope-174`,
+    );
     expect(snapshot.sessions[1]?.body).toContain(
       "Session completed | commit abc1234 | graphle/ope-174 | /repo/tmp/workspace/tree/ope-174",
     );

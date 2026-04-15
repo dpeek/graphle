@@ -1,4 +1,7 @@
-import type { InstalledModuleRecord, InstalledModuleRuntimeExpectation } from "@dpeek/graphle-authority";
+import type {
+  InstalledModuleRecord,
+  InstalledModuleRuntimeExpectation,
+} from "@dpeek/graphle-authority";
 import type { ModuleQuerySurfaceCatalog } from "@dpeek/graphle-projection";
 import type { QueryEditorCatalog } from "@dpeek/graphle-query";
 

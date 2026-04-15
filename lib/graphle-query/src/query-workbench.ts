@@ -10,7 +10,7 @@ import {
   type QueryLiteral,
   type QueryParameterDefinition,
   type SerializedQueryRequest,
-} from "../../graphle-client/src/index.js";
+} from "@dpeek/graphle-client";
 
 import {
   createQueryContainerRuntime,
@@ -21,7 +21,7 @@ import {
   type QuerySurfaceRendererCompatibility,
 } from "./query-container.js";
 import type { QueryRendererCapability } from "./query-container.js";
-import { requestSerializedQuery } from "../../graphle-client/src/index.js";
+import { requestSerializedQuery } from "@dpeek/graphle-client";
 import {
   createSavedQueryRecordInputFromDraft,
   createSavedQuerySourceResolver,

@@ -1,5 +1,16 @@
-import { InputGroup, InputGroupAddon, InputGroupInput, InputGroupText } from "@dpeek/graphle-web/input-group";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@dpeek/graphle-web/select";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput,
+  InputGroupText,
+} from "@dpeek/graphle-web/input-group";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@dpeek/graphle-web/select";
 
 import {
   convertDurationAmount,

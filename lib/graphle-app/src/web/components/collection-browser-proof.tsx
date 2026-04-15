@@ -7,7 +7,10 @@ import type { CollectionSurfaceSpec, GraphCommandSurfaceSpec } from "@dpeek/grap
 import { core, coreGraphBootstrapOptions } from "@dpeek/graphle-module-core";
 import { workflow } from "@dpeek/graphle-module-workflow";
 import type { QueryContainerPageExecutor, SavedQueryRecord } from "@dpeek/graphle-query";
-import type { CollectionCommandBinding, CollectionSurfaceRecordLookup } from "@dpeek/graphle-surface";
+import type {
+  CollectionCommandBinding,
+  CollectionSurfaceRecordLookup,
+} from "@dpeek/graphle-surface";
 import { Badge } from "@dpeek/graphle-web/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@dpeek/graphle-web/card";
 import { useState } from "react";

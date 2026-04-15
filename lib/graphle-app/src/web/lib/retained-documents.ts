@@ -1,4 +1,9 @@
-import { createStore, edgeId, type GraphStore, type GraphStoreSnapshot } from "@dpeek/graphle-app/graph";
+import {
+  createStore,
+  edgeId,
+  type GraphStore,
+  type GraphStoreSnapshot,
+} from "@dpeek/graphle-app/graph";
 import type { PersistedAuthoritativeGraphRetainedRecord } from "@dpeek/graphle-authority";
 import { createEntityWithId, createGraphClient, type GraphClient } from "@dpeek/graphle-client";
 import { type GraphWriteTransaction } from "@dpeek/graphle-kernel";

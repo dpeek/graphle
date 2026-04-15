@@ -12,7 +12,10 @@ async function mkdtempInRepo(prefix: string) {
 }
 
 async function writeIoTsConfig(root: string, config: Record<string, unknown>) {
-  await writeFile(resolve(root, "graphle.ts"), `export default ${JSON.stringify(config, null, 2)};\n`);
+  await writeFile(
+    resolve(root, "graphle.ts"),
+    `export default ${JSON.stringify(config, null, 2)};\n`,
+  );
 }
 
 test("loadWorkflowFile loads graphle.ts and graphle.md by default", async () => {

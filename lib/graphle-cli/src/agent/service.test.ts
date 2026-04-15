@@ -191,7 +191,10 @@ async function writeServiceTestRepo(root: string, overrides: Record<string, unkn
 }
 
 async function writeIoTsConfig(root: string, config: Record<string, unknown>) {
-  await writeFile(resolve(root, "graphle.ts"), `export default ${JSON.stringify(config, null, 2)};\n`);
+  await writeFile(
+    resolve(root, "graphle.ts"),
+    `export default ${JSON.stringify(config, null, 2)};\n`,
+  );
 }
 
 test("normalizeLinearIssue lowercases labels and fills defaults", () => {
@@ -3751,7 +3754,9 @@ Refs:
     expect(output).toContain("6. context.entrypoint [entrypoint]");
     expect(output).toContain("7. ./graphle/context/linked.md [repo-path]");
     expect(output).toContain("8. issue.context [synthesized]");
-    expect(output).toContain("warning: Unresolved issue doc reference: ./graphle/context/missing.md");
+    expect(output).toContain(
+      "warning: Unresolved issue doc reference: ./graphle/context/missing.md",
+    );
   } finally {
     globalThis.fetch = originalFetch;
     await rm(root, { force: true, recursive: true });

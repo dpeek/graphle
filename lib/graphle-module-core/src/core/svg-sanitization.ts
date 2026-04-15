@@ -1,4 +1,4 @@
-import type { ValidationIssueInput } from "../../../graphle-kernel/src";
+import type { ValidationIssueInput } from "@dpeek/graphle-kernel";
 
 type SvgValidationIssue = ValidationIssueInput;
 

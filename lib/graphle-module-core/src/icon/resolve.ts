@@ -3,7 +3,7 @@ import {
   type AnyTypeOutput,
   type DefinitionIconRef,
   type EdgeOutput,
-} from "../../../graphle-kernel/src/index.js";
+} from "@dpeek/graphle-kernel";
 
 import { predicate } from "../core/predicate.js";
 import { tag } from "../core/tag.js";

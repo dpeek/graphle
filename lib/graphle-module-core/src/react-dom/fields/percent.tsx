@@ -4,7 +4,12 @@ import {
   performValidatedMutation,
   usePredicateField,
 } from "@dpeek/graphle-react";
-import { InputGroup, InputGroupAddon, InputGroupInput, InputGroupText } from "@dpeek/graphle-web/input-group";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput,
+  InputGroupText,
+} from "@dpeek/graphle-web/input-group";
 import { useEffect, useState } from "react";
 
 import {

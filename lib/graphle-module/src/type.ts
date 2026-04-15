@@ -9,7 +9,7 @@ import type {
   PolicyCapabilityKey,
   RangeRef,
   ScalarTypeOutput,
-} from "../../graphle-kernel/src";
+} from "@dpeek/graphle-kernel";
 
 type EnumOptionLike = { key: string; id?: string };
 type EnumTypeLike = { options: Record<string, EnumOptionLike> };

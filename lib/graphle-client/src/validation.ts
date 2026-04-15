@@ -1,9 +1,9 @@
 import {
   requireGraphBootstrapCoreSchema,
   type GraphBootstrapCoreSchema,
-} from "../../graphle-bootstrap/src";
-import { createGraphStore, type GraphStore } from "../../graphle-kernel/src";
-import { edgeId, isEntityType, isEnumType, typeId } from "../../graphle-kernel/src";
+} from "@dpeek/graphle-bootstrap";
+import { createGraphStore, type GraphStore } from "@dpeek/graphle-kernel";
+import { edgeId, isEntityType, isEnumType, typeId } from "@dpeek/graphle-kernel";
 import type {
   AnyTypeOutput,
   EdgeOutput,
@@ -12,7 +12,7 @@ import type {
   ValidationEvent,
   ValidationIssueInput,
   ValidationPhase,
-} from "../../graphle-kernel/src";
+} from "@dpeek/graphle-kernel";
 
 import {
   clearFieldValue,

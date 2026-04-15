@@ -1,6 +1,12 @@
 import { performValidatedMutation, usePredicateField } from "@dpeek/graphle-react";
 import { InputGroup, InputGroupInput } from "@dpeek/graphle-web/input-group";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@dpeek/graphle-web/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@dpeek/graphle-web/select";
 import { useEffect, useState } from "react";
 
 import {

@@ -18,7 +18,7 @@ import {
   type GraphWriteTransaction,
   type ResolvedEdgeOutput,
   typeId,
-} from "../../graphle-kernel/src/index.js";
+} from "@dpeek/graphle-kernel";
 
 import { readAuthoritativeNodeTypePredicateId } from "./definitions.js";
 import type { ReplicationReadAuthorizer } from "./session-contracts.js";

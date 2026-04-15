@@ -1,11 +1,11 @@
-import { type GraphClientSyncController } from "../../../graphle-client/src/index.js";
+import { type GraphClientSyncController } from "@dpeek/graphle-client";
 import {
   createModuleLiveScopeRefreshController,
   type LiveScopeClientOptions,
   type ModuleLiveScopeRefreshAction,
   type ModuleLiveScopeRefreshController,
   type ModuleLiveScopeRefreshResult,
-} from "../../../graphle-live/src/index.js";
+} from "@dpeek/graphle-live";
 
 import { workflowReviewModuleReadScope } from "../projection.js";
 

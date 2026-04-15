@@ -1,6 +1,6 @@
-import type { AnyTypeOutput } from "../../../graphle-kernel/src/index.js";
-import type { QueryFilterOperator, QueryLiteral, QueryParameterType } from "../../../graphle-client/src/index.js";
-import type { QuerySurfaceFieldKind } from "../../../graphle-projection/src/index.js";
+import type { AnyTypeOutput } from "@dpeek/graphle-kernel";
+import type { QueryFilterOperator, QueryLiteral, QueryParameterType } from "@dpeek/graphle-client";
+import type { QuerySurfaceFieldKind } from "@dpeek/graphle-projection";
 
 import { booleanTypeModule } from "../core/boolean.js";
 import { colorTypeModule, parseColor } from "../core/color.js";

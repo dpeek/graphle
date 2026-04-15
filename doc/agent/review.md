@@ -2,7 +2,7 @@
 
 Current repo note:
 
-- review handling exists in [service.ts](../../lib/cli/src/agent/service.ts)
+- review handling exists in [service.ts](../../lib/graphle-cli/src/agent/service.ts)
 - the current repo config keeps `reviewPlanningEnabled = false` in `./graphle.ts`, so
   `In Review` tasks are not auto-routed today
 - use this contract for manual review runs or if review routing is re-enabled in
@@ -20,7 +20,7 @@ What to read first:
 - the current task issue
 - the parent feature and stream issues
 - linked docs from the task, feature, and stream
-- [CLI agent workflow](../../lib/cli/doc/agent-workflow.md)
+- [CLI agent workflow](../../lib/graphle-cli/doc/agent-workflow.md)
 - [Backlog Workflow](./backlog.md)
 - repo docs directly relevant to the changed surface
 

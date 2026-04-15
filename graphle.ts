@@ -19,10 +19,10 @@ export default defineIoConfig({
     entrypoint: "./graphle.md",
     docs: {
       "project.backlog": "./doc/agent/backlog.md",
-      "project.mcp": "./lib/cli/doc/graph-mcp.md",
+      "project.mcp": "./lib/graphle-cli/doc/graph-mcp.md",
       "project.overview": "./doc/index.md",
       "project.review": "./doc/agent/review.md",
-      "project.workflow": "./lib/cli/doc/agent-workflow.md",
+      "project.workflow": "./lib/graphle-cli/doc/agent-workflow.md",
     },
     profiles: {
       backlog: {
@@ -64,9 +64,9 @@ export default defineIoConfig({
   },
   modules: {
     agent: {
-      allowedSharedPaths: ["./lib/cli/src"],
-      docs: ["./lib/cli/doc/agent-runtime.md", "./lib/cli/doc/agent-workflow.md"],
-      path: "./lib/cli/src/agent",
+      allowedSharedPaths: ["./lib/graphle-cli/src"],
+      docs: ["./lib/graphle-cli/doc/agent-runtime.md", "./lib/graphle-cli/doc/agent-workflow.md"],
+      path: "./lib/graphle-cli/src/agent",
     },
     graph: {
       allowedSharedPaths: ["./lib/app/src"],

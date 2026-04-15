@@ -1,6 +1,6 @@
-import { createHttpGraphClient } from "../../../graphle-client/src";
-import { core, coreGraphBootstrapOptions } from "../../../graphle-module-core/src";
-import { workflow } from "../../../graphle-module-workflow/src";
+import { createHttpGraphClient } from "@dpeek/graphle-client";
+import { core, coreGraphBootstrapOptions } from "@dpeek/graphle-module-core";
+import { workflow } from "@dpeek/graphle-module-workflow";
 
 export async function run() {
   const client = await createHttpGraphClient(workflow, {

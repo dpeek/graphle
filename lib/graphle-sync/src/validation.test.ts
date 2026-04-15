@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
-import { createGraphStore } from "../../graphle-kernel/src";
+import { createGraphStore } from "@dpeek/graphle-kernel";
 
 import { createModuleSyncScope, graphSyncScope } from "./contracts";
 import { createTotalSyncPayload } from "./session";

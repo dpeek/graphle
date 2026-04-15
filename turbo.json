@@ -3,6 +3,11 @@
   "envMode": "loose",
   "tasks": {
     "clean": {
+      "cache": false,
+      "outputLogs": "none"
+    },
+    "//#clean": {
+      "cache": false,
       "outputLogs": "none"
     },
     "build": {

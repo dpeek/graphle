@@ -1,11 +1,14 @@
-import type { WorkflowBranchStateValue, WorkflowCommitStateValue } from "../../../graphle-module-workflow/src/index.js";
+import type {
+  WorkflowBranchStateValue,
+  WorkflowCommitStateValue,
+} from "@dpeek/graphle-module-workflow";
 import type {
   CommitQueueScopeResult,
   CommitQueueScopeSessionSummary,
   ProjectBranchScopeQuery,
   ProjectBranchScopeResult,
   WorkflowProjectionIndex,
-} from "../../../graphle-module-workflow/src/index.js";
+} from "@dpeek/graphle-module-workflow";
 
 import {
   createDefaultWorkflowTuiStartupContract,

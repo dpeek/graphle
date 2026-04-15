@@ -1,4 +1,4 @@
-import type { EnumTypeOutput } from "../../graphle-kernel/src/index.js";
+import type { EnumTypeOutput } from "@dpeek/graphle-kernel";
 
 import {
   defineEnumModule,

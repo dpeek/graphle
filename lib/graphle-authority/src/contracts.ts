@@ -1,4 +1,4 @@
-import type { PolicyCapabilityKey, PredicatePolicyDescriptor } from "../../graphle-kernel/src";
+import type { PolicyCapabilityKey, PredicatePolicyDescriptor } from "@dpeek/graphle-kernel";
 
 /**
  * Stable graph-owned principal kinds.

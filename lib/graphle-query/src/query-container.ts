@@ -8,8 +8,8 @@ import {
   type QueryResultPage,
   type ReadQuery,
   type SerializedQueryRequest,
-} from "../../graphle-client/src";
-import type { QuerySurfaceFieldKind } from "../../graphle-projection/src";
+} from "@dpeek/graphle-client";
+import type { QuerySurfaceFieldKind } from "@dpeek/graphle-projection";
 
 export const queryContainerPaginationModeValues = ["paged", "infinite"] as const;
 

@@ -1,4 +1,4 @@
-import { type GraphClientSyncController } from "../../graphle-client/src/index.js";
+import { type GraphClientSyncController } from "@dpeek/graphle-client";
 import {
   matchesModuleReadScopeRequest,
   type ModuleReadScopeDefinition,

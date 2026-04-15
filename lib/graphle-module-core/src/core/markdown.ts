@@ -1,6 +1,6 @@
-import type { TypeModuleMeta } from "../../../graphle-module/src/index.js";
-import { defineScalar } from "../../../graphle-module/src/index.js";
-import { defineScalarModule } from "../../../graphle-module/src/index.js";
+import type { TypeModuleMeta } from "@dpeek/graphle-module";
+import { defineScalar } from "@dpeek/graphle-module";
+import { defineScalarModule } from "@dpeek/graphle-module";
 
 import { defineCoreIconSeed } from "../icon/seed.js";
 import { expectStringInput } from "./input.js";

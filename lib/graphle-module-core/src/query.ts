@@ -6,7 +6,7 @@ import {
   defineModuleReadScopeDefinition,
   defineProjectionSpec,
   type ModuleQuerySurfaceSpec,
-} from "../../graphle-projection/src/index.js";
+} from "@dpeek/graphle-projection";
 
 import { savedQueryKindValues } from "./core/saved-query.js";
 

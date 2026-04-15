@@ -1,12 +1,12 @@
-import type { GraphStore } from "../../graphle-kernel/src";
-import { fieldTreeKey, isEntityType } from "../../graphle-kernel/src";
+import type { GraphStore } from "@dpeek/graphle-kernel";
+import { fieldTreeKey, isEntityType } from "@dpeek/graphle-kernel";
 import type {
   AnyTypeOutput,
   EdgeOutput,
   FieldsOutput,
   ScalarTypeOutput,
   TypeOutput,
-} from "../../graphle-kernel/src";
+} from "@dpeek/graphle-kernel";
 
 import {
   isEdgeOutput,

@@ -7,8 +7,8 @@ import {
   type WorkflowProjectionIndex,
   type WorkflowProjectionIndexOptions,
   projectionSchema,
-} from "../../../graphle-module-workflow/src";
-import { useGraphQuery, type GraphRuntime } from "../../../graphle-react/src";
+} from "@dpeek/graphle-module-workflow";
+import { useGraphQuery, type GraphRuntime } from "@dpeek/graphle-react";
 import { useMemo } from "react";
 
 type WorkflowProjectionSchema = typeof projectionSchema;

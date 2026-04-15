@@ -2,7 +2,12 @@
 
 import { type LucideIcon } from "lucide-react";
 
-import { SidebarGroup, SidebarMenu, SidebarMenuButton, SidebarMenuItem } from "@dpeek/graphle-web/sidebar";
+import {
+  SidebarGroup,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+} from "@dpeek/graphle-web/sidebar";
 import { Link } from "@tanstack/react-router";
 
 type NavItem = {

@@ -3,7 +3,10 @@ import { describe, expect, it } from "bun:test";
 
 import type { RetainedWorkflowProjectionState } from "@dpeek/graphle-module-workflow";
 import { projectionMetadata } from "@dpeek/graphle-module-workflow";
-import type { CommitQueueScopeCommitRow, WorkflowBranchSummary } from "@dpeek/graphle-module-workflow";
+import type {
+  CommitQueueScopeCommitRow,
+  WorkflowBranchSummary,
+} from "@dpeek/graphle-module-workflow";
 
 import type { DurableObjectSqlStorageLike } from "./graph-authority-sql-startup.js";
 import {

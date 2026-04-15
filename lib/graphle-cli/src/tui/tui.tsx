@@ -374,8 +374,8 @@ export function createWorkflowTui(options?: WorkflowTuiOptions): WorkflowTui {
           exitOnCtrlC: false,
           stdin: input,
           stdout: output,
-          useAlternateScreen: true,
-          useConsole: false,
+          screenMode: "alternate-screen",
+          consoleMode: "disabled",
           useMouse: false,
         });
       }

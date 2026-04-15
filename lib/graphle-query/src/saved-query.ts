@@ -5,7 +5,7 @@ import {
   type QueryIdentityExecutionContext,
   type QueryLiteral,
   type SerializedQueryRequest,
-} from "../../graphle-client/src/index.js";
+} from "@dpeek/graphle-client";
 import {
   createSavedQueryDefinition,
   createSavedViewDefinition,
@@ -19,7 +19,7 @@ import {
   type SavedQuerySurfaceBinding,
   type SavedViewDefinition,
   type SavedViewDefinitionInput,
-} from "../../graphle-module-core/src/index.js";
+} from "@dpeek/graphle-module-core";
 import {
   describeQueryEditorSurfaceAuthoringExclusions,
   getQueryEditorSurface,

@@ -1,5 +1,8 @@
 import { type GraphStore } from "@dpeek/graphle-app/graph";
-import { type AuthoritativeGraphWriteResult, type GraphWriteTransaction } from "@dpeek/graphle-kernel";
+import {
+  type AuthoritativeGraphWriteResult,
+  type GraphWriteTransaction,
+} from "@dpeek/graphle-kernel";
 import {
   createAgentSessionAppendEventFingerprint,
   evaluateAgentSessionAppendRequest,

@@ -6,8 +6,8 @@ import type {
   GraphStoreSnapshot,
   GraphWriteScope,
   GraphWriteTransaction,
-} from "../../graphle-kernel/src";
-import type { IncrementalSyncResult, SyncFreshness } from "../../graphle-sync/src";
+} from "@dpeek/graphle-kernel";
+import type { IncrementalSyncResult, SyncFreshness } from "@dpeek/graphle-sync";
 
 /**
  * One predicate candidate considered for authority-side replication output.

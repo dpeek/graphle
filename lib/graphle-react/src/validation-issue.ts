@@ -1,4 +1,4 @@
-import type { GraphValidationIssue } from "../../graphle-client/src/index.js";
+import type { GraphValidationIssue } from "@dpeek/graphle-client";
 
 import type { EditSessionPath } from "./edit-session.js";
 

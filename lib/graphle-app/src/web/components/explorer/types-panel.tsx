@@ -4,9 +4,19 @@ import { GraphIcon } from "@dpeek/graphle-module-core/react-dom";
 import { Badge } from "@dpeek/graphle-web/badge";
 import { Button } from "@dpeek/graphle-web/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@dpeek/graphle-web/card";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@dpeek/graphle-web/collapsible";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@dpeek/graphle-web/collapsible";
 import { Empty, EmptyDescription } from "@dpeek/graphle-web/empty";
-import { Item, ItemActions, ItemContent, ItemDescription, ItemTitle } from "@dpeek/graphle-web/item";
+import {
+  Item,
+  ItemActions,
+  ItemContent,
+  ItemDescription,
+  ItemTitle,
+} from "@dpeek/graphle-web/item";
 import { cn } from "@dpeek/graphle-web/utils";
 import { useState, type ReactNode } from "react";
 

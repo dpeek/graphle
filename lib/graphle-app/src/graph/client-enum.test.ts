@@ -2,7 +2,11 @@ import { describe, expect, it } from "bun:test";
 
 import { createStore } from "@dpeek/graphle-app/graph";
 import { bootstrap } from "@dpeek/graphle-bootstrap";
-import { createGraphClient, GraphValidationError, formatValidationPath } from "@dpeek/graphle-client";
+import {
+  createGraphClient,
+  GraphValidationError,
+  formatValidationPath,
+} from "@dpeek/graphle-client";
 import { core, coreGraphBootstrapOptions } from "@dpeek/graphle-module-core";
 
 import { kitchenSink } from "./testing/kitchen-sink.js";

@@ -1,4 +1,4 @@
-import type { EdgeOutput } from "../../graphle-kernel/src";
+import type { EdgeOutput } from "@dpeek/graphle-kernel";
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   if (!value || typeof value !== "object") return false;

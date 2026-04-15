@@ -1,4 +1,4 @@
-import { createGraphClient, type GraphClient } from "../../graphle-client/src/index.js";
+import { createGraphClient, type GraphClient } from "@dpeek/graphle-client";
 import {
   type AnyTypeOutput,
   type GraphStore,
@@ -10,8 +10,8 @@ import {
   type AuthoritativeGraphWriteResult,
   type GraphWriteScope,
   type GraphWriteTransaction,
-} from "../../graphle-kernel/src/index.js";
-import { type IncrementalSyncResult, type SyncFreshness } from "../../graphle-sync/src/index.js";
+} from "@dpeek/graphle-kernel";
+import { type IncrementalSyncResult, type SyncFreshness } from "@dpeek/graphle-sync";
 
 import { resolveAuthoritativeDefinitions } from "./definitions.js";
 import type { ReplicationReadAuthorizer } from "./session-contracts.js";

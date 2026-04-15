@@ -1,4 +1,4 @@
-import { applyGraphIdMap, createGraphIdMap, defineType } from "../../graphle-kernel/src/index.js";
+import { applyGraphIdMap, createGraphIdMap, defineType } from "@dpeek/graphle-kernel";
 
 import type {
   JsonPersistedAuthoritativeGraphOptions,

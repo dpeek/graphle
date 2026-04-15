@@ -1,6 +1,10 @@
 import { describe, expect, it } from "bun:test";
 
-import type { CollectionSurfaceSpec, ObjectViewSpec, RecordSurfaceSpec } from "../../graphle-module/src/index.js";
+import type {
+  CollectionSurfaceSpec,
+  ObjectViewSpec,
+  RecordSurfaceSpec,
+} from "@dpeek/graphle-module";
 
 import { adaptObjectViewToRecordSurface, resolveRecordSurfaceBinding } from "./record-surface.js";
 

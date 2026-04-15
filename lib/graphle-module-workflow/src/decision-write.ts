@@ -1,5 +1,5 @@
-import { edgeId } from "../../graphle-kernel/src/index.js";
-import type { GraphCommandSpec } from "../../graphle-module/src/index.js";
+import { edgeId } from "@dpeek/graphle-kernel";
+import type { GraphCommandSpec } from "@dpeek/graphle-module";
 
 import { decision, decisionKind } from "./type.js";
 

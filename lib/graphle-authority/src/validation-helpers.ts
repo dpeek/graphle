@@ -1,16 +1,16 @@
-import type { GraphValidationIssue, GraphValidationResult } from "../../graphle-client/src";
+import type { GraphValidationIssue, GraphValidationResult } from "@dpeek/graphle-client";
 import {
   cloneAuthoritativeGraphWriteResult,
   cloneGraphWriteTransaction,
   type AuthoritativeGraphWriteResult,
   type GraphWriteTransaction,
-} from "../../graphle-kernel/src";
+} from "@dpeek/graphle-kernel";
 import {
   cloneIncrementalSyncResult,
   cloneTotalSyncPayload,
   type IncrementalSyncResult,
   type TotalSyncPayload,
-} from "../../graphle-sync/src";
+} from "@dpeek/graphle-sync";
 
 const totalSyncPayloadValidationKey = "$sync:payload";
 const incrementalSyncValidationKey = "$sync:incremental";

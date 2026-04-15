@@ -2,7 +2,11 @@ import { describe, expect, it } from "bun:test";
 
 import { createStore, applyIdMap, edgeId } from "@dpeek/graphle-app/graph";
 import { bootstrap } from "@dpeek/graphle-bootstrap";
-import { createGraphClient, GraphValidationError, formatValidationPath } from "@dpeek/graphle-client";
+import {
+  createGraphClient,
+  GraphValidationError,
+  formatValidationPath,
+} from "@dpeek/graphle-client";
 import { defineReferenceField, defineType } from "@dpeek/graphle-module";
 import { core, coreGraphBootstrapOptions, stringTypeModule } from "@dpeek/graphle-module-core";
 

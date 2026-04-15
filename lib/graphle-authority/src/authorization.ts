@@ -1,4 +1,8 @@
-import type { PolicyAudience, PolicyCapabilityKey, PolicyMutationMode } from "../../graphle-kernel/src/index.js";
+import type {
+  PolicyAudience,
+  PolicyCapabilityKey,
+  PolicyMutationMode,
+} from "@dpeek/graphle-kernel";
 
 import type {
   AuthorizationCommandTouchedPredicate,

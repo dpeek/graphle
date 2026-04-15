@@ -7,6 +7,7 @@
   ],
   "type": "module",
   "scripts": {
+    "clean": "rm -rf .turbo/cache lib/*/.turbo lib/*/out",
     "dev:clean": "turbo dev:clean --filter=@dpeek/graphle-app",
     "web:dev": "turbo dev --filter=@dpeek/graphle-app"
   },

@@ -3,20 +3,20 @@ import {
   type PredicateRangeTypeOf,
   type PredicateRef,
   type PredicateValueOf,
-} from "../../graphle-client/src";
+} from "@dpeek/graphle-client";
 import {
   isEntityType,
   isEnumType,
   type AnyTypeOutput,
   type EdgeOutput,
   type GraphStore,
-} from "../../graphle-kernel/src";
+} from "@dpeek/graphle-kernel";
 import {
   entityReferenceComboboxEditorKind,
   entityReferenceListDisplayKind,
   type EditorInputMode,
   type ExistingEntityReferencePolicy,
-} from "../../graphle-module/src";
+} from "@dpeek/graphle-module";
 import { useMemo, useRef, useSyncExternalStore } from "react";
 
 export type PredicateFieldMeta<T extends EdgeOutput> = T extends { meta: infer Meta }

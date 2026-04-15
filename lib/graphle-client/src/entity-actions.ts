@@ -1,6 +1,6 @@
-import { requireGraphBootstrapCoreSchema } from "../../graphle-bootstrap/src";
-import type { GraphStore } from "../../graphle-kernel/src";
-import type { AnyTypeOutput, ScalarTypeOutput, TypeOutput } from "../../graphle-kernel/src";
+import { requireGraphBootstrapCoreSchema } from "@dpeek/graphle-bootstrap";
+import type { GraphStore } from "@dpeek/graphle-kernel";
+import type { AnyTypeOutput, ScalarTypeOutput, TypeOutput } from "@dpeek/graphle-kernel";
 
 import {
   assertValidResult,

@@ -3,7 +3,7 @@ import type {
   ObjectViewRelatedSpec,
   ObjectViewSpec,
   RecordSurfaceSpec,
-} from "../../graphle-module/src";
+} from "@dpeek/graphle-module";
 
 type Awaitable<T> = Promise<T> | T;
 

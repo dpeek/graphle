@@ -1,7 +1,7 @@
 ---
 name: Graphle docs index
 description: "Repo entrypoint for root docs, package-owned current-state docs, and branch specs."
-last_updated: 2026-04-07
+last_updated: 2026-04-15
 ---
 
 # Graphle docs index
@@ -72,18 +72,18 @@ The current dependency chain is:
 
 ## Package docs
 
-- `../lib/cli/doc/agent-runtime.md`: issue-driven automation runtime,
+- `../lib/graphle-cli/doc/agent-runtime.md`: issue-driven automation runtime,
   scheduler, workspace lifecycle, and retained runtime behavior
-- `../lib/cli/doc/agent-workflow.md`: workflow loading, issue routing, context
+- `../lib/graphle-cli/doc/agent-workflow.md`: workflow loading, issue routing, context
   assembly, and module-scoped doc selection
-- `../lib/cli/doc/command-surfaces.md`: current `graphle agent ...`,
+- `../lib/graphle-cli/doc/command-surfaces.md`: current `graphle agent ...`,
   `graphle browser-agent ...`, `graphle mcp ...`, and `graphle tui ...` command groups
-- `../lib/cli/doc/legacy-agent-tui.md`: retained operator-facing session
+- `../lib/graphle-cli/doc/legacy-agent-tui.md`: retained operator-facing session
   monitor for `graphle agent tui ...`
-- `../lib/cli/doc/graph-mcp.md`: current graph MCP read surface and opt-in
+- `../lib/graphle-cli/doc/graph-mcp.md`: current graph MCP read surface and opt-in
   write gate
-- `../lib/cli/doc/roadmap.md`: future CLI and graph MCP direction
-- `../lib/cli/doc/tui.md`: terminal workflow product surface and the boundary
+- `../lib/graphle-cli/doc/roadmap.md`: future CLI and graph MCP direction
+- `../lib/graphle-cli/doc/tui.md`: terminal workflow product surface and the boundary
   against the legacy agent TUI
 - `../lib/graphle-kernel/doc/runtime-stack.md`: graph workspace layout, current
   package boundaries, and the package-owned documentation rule
@@ -112,14 +112,15 @@ The current dependency chain is:
 
 ## Layout
 
-- `../package.json`: Bun workspaces, the pinned package manager version, the
-  root Turbo web-dev entrypoint, and app auth-migration proxy scripts
+- `../package.json`: Bun workspaces, the pinned package manager version, root
+  Turbo clean and web-dev entrypoints, and app auth-migration proxy scripts
 - `../turbo.json`: repo task graph for `build`, `check`, `clean`, and `dev`
+  where `clean` is uncached and removes local Turbo build artifacts
 - `../.oxlintrc.json`, `../.oxfmtrc.json`: repo-wide lint and formatting config
 - `../graphle.ts`: repo config, context registry, profiles, modules, and routing
 - `../lib/app/`: `@dpeek/graphle-app`, the app package for graph helper exports plus the
   browser Worker, routes, and app-owned web composition
-- `../lib/cli/`: `@dpeek/graphle-cli`, the operator shell package for command dispatch,
+- `../lib/graphle-cli/`: `@dpeek/graphle-cli`, the operator shell package for command dispatch,
   task execution, agent and browser-agent runtimes, MCP, TUI, and runtime config
 - `../lib/graphle-*/`: extracted graph kernel, bootstrap, client, authority,
   sync, projection, query, workflow, and surface packages

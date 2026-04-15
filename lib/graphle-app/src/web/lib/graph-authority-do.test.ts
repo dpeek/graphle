@@ -38,7 +38,10 @@ import {
   workflowReviewModuleReadScope,
   workflowReviewSyncScopeRequest,
 } from "@dpeek/graphle-module-workflow";
-import { webWorkflowReadPath, type WorkflowReadResponse } from "@dpeek/graphle-module-workflow/client";
+import {
+  webWorkflowReadPath,
+  type WorkflowReadResponse,
+} from "@dpeek/graphle-module-workflow/client";
 
 import {
   createBearerShareAuthorizationContext,

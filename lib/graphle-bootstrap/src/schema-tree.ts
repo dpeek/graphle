@@ -6,7 +6,7 @@ import {
   type AnyTypeOutput,
   type EdgeOutput,
   type FieldsOutput,
-} from "../../graphle-kernel/src";
+} from "@dpeek/graphle-kernel";
 
 type SchemaTree = FieldsOutput;
 

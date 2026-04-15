@@ -1,5 +1,5 @@
-import { defineEnum } from "../../../graphle-module/src/index.js";
-import { defineDefaultEnumTypeModule } from "../../../graphle-module/src/index.js";
+import { defineEnum } from "@dpeek/graphle-module";
+import { defineDefaultEnumTypeModule } from "@dpeek/graphle-module";
 
 import { defineCoreIconSeed } from "../icon/seed.js";
 import { country } from "./country.js";

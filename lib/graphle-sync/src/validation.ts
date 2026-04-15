@@ -10,7 +10,7 @@ import {
   type GraphWriteScope,
   type GraphStoreSnapshot,
   type GraphWriteTransaction,
-} from "../../graphle-kernel/src";
+} from "@dpeek/graphle-kernel";
 
 import {
   cloneIncrementalSyncResult,

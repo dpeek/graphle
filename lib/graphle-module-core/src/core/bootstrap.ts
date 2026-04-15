@@ -1,4 +1,4 @@
-import type { GraphBootstrapOptions } from "../../../graphle-bootstrap/src/index.js";
+import type { GraphBootstrapOptions } from "@dpeek/graphle-bootstrap";
 
 import { core } from "../core.js";
 import { resolvePredicateDefinitionIconId, resolveTypeDefinitionIconId } from "../icon/resolve.js";

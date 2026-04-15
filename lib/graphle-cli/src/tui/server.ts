@@ -1,13 +1,13 @@
 import { handleExit } from "@dpeek/utils";
-import { createHttpGraphClient } from "../../../graphle-client/src/index.js";
-import { coreGraphBootstrapOptions } from "../../../graphle-module-core/src/index.js";
+import { createHttpGraphClient } from "@dpeek/graphle-client";
+import { coreGraphBootstrapOptions } from "@dpeek/graphle-module-core";
 import {
   createWorkflowProjectionIndex,
   WorkflowProjectionQueryError,
   type WorkflowProjectionGraphClient,
   type WorkflowProjectionIndex,
-} from "../../../graphle-module-workflow/src/index.js";
-import { projectionSchema } from "../../../graphle-module-workflow/src/index.js";
+} from "@dpeek/graphle-module-workflow";
+import { projectionSchema } from "@dpeek/graphle-module-workflow";
 
 import { loadWorkflowFile } from "../agent/workflow.js";
 import { createWorkflowTuiWorkflowModel, type WorkflowTuiWorkflowSurfaceModel } from "./model.js";

@@ -37,7 +37,7 @@ export {
   type ScalarTypeInput,
   type ScalarTypeOutput,
   type ValidationIssueInput,
-} from "../../graphle-kernel/src/index.js";
+} from "@dpeek/graphle-kernel";
 
 export * from "./type.js";
 export * from "./reference.js";

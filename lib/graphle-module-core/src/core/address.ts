@@ -1,4 +1,4 @@
-import { defineType } from "../../../graphle-module/src/index.js";
+import { defineType } from "@dpeek/graphle-module";
 
 import { countryTypeModule } from "./country.js";
 import { stringTypeModule } from "./string.js";

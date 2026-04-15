@@ -2,7 +2,11 @@
 
 import { createIdMap, createStore, applyIdMap } from "@dpeek/graphle-app/graph";
 import { bootstrap } from "@dpeek/graphle-bootstrap";
-import { createGraphClient, serializedQueryVersion, type PredicateRef } from "@dpeek/graphle-client";
+import {
+  createGraphClient,
+  serializedQueryVersion,
+  type PredicateRef,
+} from "@dpeek/graphle-client";
 import { defineType } from "@dpeek/graphle-module";
 import {
   core,

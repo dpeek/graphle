@@ -4,7 +4,7 @@ import {
   type AuthoritativeGraphWriteResult,
   type GraphStore,
   type GraphStoreSnapshot,
-} from "../../graphle-kernel/src/index.js";
+} from "@dpeek/graphle-kernel";
 import {
   createGraphSyncValidationIssue,
   invalidAuthoritativeGraphWriteResult,
@@ -17,7 +17,7 @@ import {
   type GraphSyncValidationResult,
   type TotalSyncPayload,
   type TotalSyncPayloadValidator,
-} from "../../graphle-sync/src/index.js";
+} from "@dpeek/graphle-sync";
 
 import {
   GraphValidationError,

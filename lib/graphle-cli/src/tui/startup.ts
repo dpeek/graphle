@@ -1,5 +1,5 @@
-import { defaultHttpGraphUrl } from "../../../graphle-client/src/index.js";
-import { workflowReviewSyncScopeRequest } from "../../../graphle-module-workflow/src/index.js";
+import { defaultHttpGraphUrl } from "@dpeek/graphle-client";
+import { workflowReviewSyncScopeRequest } from "@dpeek/graphle-module-workflow";
 
 import type { Workflow } from "../agent/types.js";
 

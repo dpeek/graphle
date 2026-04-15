@@ -11,8 +11,8 @@ import {
   type FieldsOutput,
   type GraphFieldWritePolicy,
   type TypeOutput,
-} from "../../../graphle-kernel/src";
-import { core } from "../../../graphle-module-core/src";
+} from "@dpeek/graphle-kernel";
+import { core } from "@dpeek/graphle-module-core";
 
 type GraphMcpNamespace = Record<string, AnyTypeOutput>;
 type GraphTypeKind = AnyTypeOutput["kind"] | "unknown";

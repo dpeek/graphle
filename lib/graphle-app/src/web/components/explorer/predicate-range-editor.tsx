@@ -1,5 +1,11 @@
 import { performValidatedMutation, usePredicateField } from "@dpeek/graphle-react";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@dpeek/graphle-web/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@dpeek/graphle-web/select";
 
 import { getDefinitionDisplayLabel } from "./helpers.js";
 import type { MutableOptionalPredicateRef, TypeCatalogEntry } from "./model.js";

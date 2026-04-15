@@ -178,11 +178,13 @@ test("WorkspaceManager lands detached issue commits onto the local stream branch
     const completion = await manager.complete(workspace, activeIssue);
 
     expect(completion.commitSha).toHaveLength(40);
-    expect(await run(["git", "branch", "--list", "graphle/ope-43"], repoRoot)).toContain("graphle/ope-43");
-    expect(await run(["git", "rev-parse", "graphle/ope-43"], repoRoot)).toBe(completion.commitSha);
-    expect(await run(["git", "--git-dir", remoteRoot, "branch", "--list", "graphle/ope-43"], root)).toBe(
-      "",
+    expect(await run(["git", "branch", "--list", "graphle/ope-43"], repoRoot)).toContain(
+      "graphle/ope-43",
     );
+    expect(await run(["git", "rev-parse", "graphle/ope-43"], repoRoot)).toBe(completion.commitSha);
+    expect(
+      await run(["git", "--git-dir", remoteRoot, "branch", "--list", "graphle/ope-43"], root),
+    ).toBe("");
     expect(await readIssueRuntimeState(runtimeRoot, "OPE-43")).toMatchObject({
       branchName: "graphle/ope-43",
       commitSha: completion.commitSha,
@@ -266,7 +268,9 @@ test("WorkspaceManager lands task work onto the latest parent feature branch", a
 
     expect(workspace.branchName).toBe("graphle/ope-12");
     expect(workspace.baseBranchName).toBe("graphle/ope-1");
-    expect(await run(["git", "branch", "--list", "graphle/ope-1"], repoRoot)).toContain("graphle/ope-1");
+    expect(await run(["git", "branch", "--list", "graphle/ope-1"], repoRoot)).toContain(
+      "graphle/ope-1",
+    );
     expect(await run(["git", "merge-base", "graphle/ope-1", "graphle/ope-12"], repoRoot)).toBe(
       await run(["git", "rev-parse", "graphle/ope-1"], repoRoot),
     );
@@ -398,7 +402,9 @@ test("WorkspaceManager coordinates feature branch finalization through the share
     });
 
     const streamHead = await run(["git", "rev-parse", "graphle/ope-121"], repoRoot);
-    expect(await run(["git", "show", "graphle/ope-121:feature.txt"], repoRoot)).toBe("feature change");
+    expect(await run(["git", "show", "graphle/ope-121:feature.txt"], repoRoot)).toBe(
+      "feature change",
+    );
     expect(await run(["git", "branch", "--list", "graphle/ope-167"], repoRoot)).toBe("");
     expect(transitions).toEqual(["task-171:Done"]);
     expect(finalization.issueState).toMatchObject({
@@ -418,12 +424,12 @@ test("WorkspaceManager coordinates feature branch finalization through the share
       status: "completed",
       streamIssueIdentifier: "OPE-121",
     });
-    expect(await run(["git", "log", "--format=%s%n%b", "-1", "graphle/ope-121"], repoRoot)).toContain(
-      "OPE-167 Tighten feature finalization",
-    );
-    expect(await run(["git", "log", "--format=%s%n%b", "-1", "graphle/ope-121"], repoRoot)).toContain(
-      "- OPE-171 Land task work",
-    );
+    expect(
+      await run(["git", "log", "--format=%s%n%b", "-1", "graphle/ope-121"], repoRoot),
+    ).toContain("OPE-167 Tighten feature finalization");
+    expect(
+      await run(["git", "log", "--format=%s%n%b", "-1", "graphle/ope-121"], repoRoot),
+    ).toContain("- OPE-171 Land task work");
   } finally {
     await rm(root, { force: true, recursive: true });
   }

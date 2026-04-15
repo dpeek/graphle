@@ -1,13 +1,13 @@
-import { requireGraphBootstrapCoreSchema } from "../../graphle-bootstrap/src";
-import type { GraphStore } from "../../graphle-kernel/src";
-import { edgeId, isEntityType } from "../../graphle-kernel/src";
+import { requireGraphBootstrapCoreSchema } from "@dpeek/graphle-bootstrap";
+import type { GraphStore } from "@dpeek/graphle-kernel";
+import { edgeId, isEntityType } from "@dpeek/graphle-kernel";
 import type {
   AnyTypeOutput,
   EdgeOutput,
   FieldsOutput,
   ScalarTypeOutput,
   TypeOutput,
-} from "../../graphle-kernel/src";
+} from "@dpeek/graphle-kernel";
 
 import {
   assertValidResult,

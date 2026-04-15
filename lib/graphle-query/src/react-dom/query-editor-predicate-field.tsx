@@ -1,9 +1,9 @@
-import type { EntityRef, GraphMutationValidationResult, PredicateRef } from "../../../graphle-client/src/index.js";
-import { defineEnum, defineType, type AnyTypeOutput } from "../../../graphle-kernel/src/index.js";
-import { existingEntityReferenceFieldMeta } from "../../../graphle-module/src/index.js";
-import type { QueryLiteral } from "../../../graphle-client/src/index.js";
-import type { QuerySurfaceFieldKind } from "../../../graphle-projection/src/index.js";
-import { PredicateFieldEditor } from "../../../graphle-module-core/src/react-dom/index.js";
+import type { EntityRef, GraphMutationValidationResult, PredicateRef } from "@dpeek/graphle-client";
+import { defineEnum, defineType, type AnyTypeOutput } from "@dpeek/graphle-kernel";
+import { existingEntityReferenceFieldMeta } from "@dpeek/graphle-module";
+import type { QueryLiteral } from "@dpeek/graphle-client";
+import type { QuerySurfaceFieldKind } from "@dpeek/graphle-projection";
+import { PredicateFieldEditor } from "@dpeek/graphle-module-core/react-dom";
 import { useRef } from "react";
 
 import {

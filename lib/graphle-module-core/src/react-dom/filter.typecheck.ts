@@ -1,4 +1,4 @@
-import { defineDefaultEnumTypeModule, defineEnum, defineType } from "../../../graphle-module/src/index.js";
+import { defineDefaultEnumTypeModule, defineEnum, defineType } from "@dpeek/graphle-module";
 import { core, durationTypeModule } from "@dpeek/graphle-module-core";
 import type { FilterOperandEditorProps } from "./index.js";
 import { defaultWebFilterResolver } from "./index.js";

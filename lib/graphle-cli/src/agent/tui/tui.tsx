@@ -344,8 +344,8 @@ export function createAgentTui(options: AgentTuiOptions = {}): AgentTui {
           exitOnCtrlC: false,
           stdin: input,
           stdout: output,
-          useAlternateScreen: true,
-          useConsole: false,
+          screenMode: "alternate-screen",
+          consoleMode: "disabled",
           useMouse: false,
         });
       }

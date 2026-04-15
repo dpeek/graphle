@@ -67,7 +67,10 @@ describe("workflow review startup contract", () => {
 
   it("resolves the singleton project without requiring a branch inventory step", () => {
     const contract = createWorkflowReviewStartupContract();
-    const state = resolveWorkflowReviewStartupState([{ id: "project:graphle", title: "Graphle" }], contract);
+    const state = resolveWorkflowReviewStartupState(
+      [{ id: "project:graphle", title: "Graphle" }],
+      contract,
+    );
 
     expect(state).toEqual({
       contract,

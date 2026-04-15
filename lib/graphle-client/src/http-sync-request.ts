@@ -1,4 +1,4 @@
-import { graphSyncScope, type SyncScopeRequest } from "../../graphle-sync/src";
+import { graphSyncScope, type SyncScopeRequest } from "@dpeek/graphle-sync";
 
 export type HttpSyncRequest = {
   readonly after?: string;

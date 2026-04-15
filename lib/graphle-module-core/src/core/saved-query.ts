@@ -5,9 +5,9 @@ import {
   type QueryParameterDefinition,
   type QueryParameterType,
   type SerializedQueryRequest,
-} from "../../../graphle-client/src/index.js";
-import { existingEntityReferenceField } from "../../../graphle-module/src/index.js";
-import { defineType } from "../../../graphle-module/src/index.js";
+} from "@dpeek/graphle-client";
+import { existingEntityReferenceField } from "@dpeek/graphle-module";
+import { defineType } from "@dpeek/graphle-module";
 
 import { booleanTypeModule } from "./boolean.js";
 import { jsonTypeModule } from "./json.js";

@@ -1,5 +1,8 @@
-import { defineType } from "../../../graphle-module/src/index.js";
-import { entityReferenceComboboxEditorKind, existingEntityReferenceField } from "../../../graphle-module/src/index.js";
+import { defineType } from "@dpeek/graphle-module";
+import {
+  entityReferenceComboboxEditorKind,
+  existingEntityReferenceField,
+} from "@dpeek/graphle-module";
 
 import { defineCoreIconSeed } from "../icon/seed.js";
 import { node } from "./node.js";

@@ -1,4 +1,4 @@
-import { isSecretBackedField } from "../../graphle-kernel/src/index.js";
+import { isSecretBackedField } from "@dpeek/graphle-kernel";
 
 import {
   type CollectionSurfaceSpec,

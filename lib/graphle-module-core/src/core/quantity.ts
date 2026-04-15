@@ -1,7 +1,7 @@
-import { defineScalar } from "../../../graphle-module/src/index.js";
-import type { TypeModuleFilter } from "../../../graphle-module/src/index.js";
-import type { TypeModuleMeta } from "../../../graphle-module/src/index.js";
-import { defineScalarModule } from "../../../graphle-module/src/index.js";
+import { defineScalar } from "@dpeek/graphle-module";
+import type { TypeModuleFilter } from "@dpeek/graphle-module";
+import type { TypeModuleMeta } from "@dpeek/graphle-module";
+import { defineScalarModule } from "@dpeek/graphle-module";
 
 import { expectNumberInput, expectRecordInput, expectStringInput } from "./input.js";
 import { numberType } from "./number.js";

@@ -5,7 +5,10 @@ import {
   type GraphStoreSnapshot,
 } from "@dpeek/graphle-app/graph";
 import { createGraphClient, type GraphClient } from "@dpeek/graphle-client";
-import { canonicalizeGraphWriteTransaction, type GraphWriteTransaction } from "@dpeek/graphle-kernel";
+import {
+  canonicalizeGraphWriteTransaction,
+  type GraphWriteTransaction,
+} from "@dpeek/graphle-kernel";
 
 function createRecordingStore(snapshot: GraphStoreSnapshot): {
   readonly store: GraphStore;

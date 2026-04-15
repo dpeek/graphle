@@ -5,7 +5,7 @@ import {
   type AnyTypeOutput,
   type GraphStore,
   typeId,
-} from "../../graphle-kernel/src/index.js";
+} from "@dpeek/graphle-kernel";
 
 import {
   assertBootstrapManagedTimestampsOnce,

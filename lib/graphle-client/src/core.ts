@@ -1,5 +1,5 @@
-import type { GraphBootstrapCoreSchema } from "../../graphle-bootstrap/src";
-import { createGraphId } from "../../graphle-kernel/src";
+import type { GraphBootstrapCoreSchema } from "@dpeek/graphle-bootstrap";
+import { createGraphId } from "@dpeek/graphle-kernel";
 import {
   edgeId,
   fieldTreeId,
@@ -8,8 +8,8 @@ import {
   isFieldsOutput,
   isScalarType,
   typeId,
-} from "../../graphle-kernel/src";
-import type { fieldTreeMeta } from "../../graphle-kernel/src";
+} from "@dpeek/graphle-kernel";
+import type { fieldTreeMeta } from "@dpeek/graphle-kernel";
 import type {
   AnyTypeOutput,
   Cardinality,
@@ -19,8 +19,8 @@ import type {
   TypeOutput,
   ValidationEvent,
   ValidationPhase,
-} from "../../graphle-kernel/src";
-import type { PredicateSlotListener, GraphStore } from "../../graphle-kernel/src";
+} from "@dpeek/graphle-kernel";
+import type { PredicateSlotListener, GraphStore } from "@dpeek/graphle-kernel";
 
 export type TypeByKey<Defs extends Record<string, AnyTypeOutput>, K extends string> = Extract<
   Defs[keyof Defs],

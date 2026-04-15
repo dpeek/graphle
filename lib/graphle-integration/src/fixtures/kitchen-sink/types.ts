@@ -1,5 +1,8 @@
 import { defineType } from "@dpeek/graphle-module";
-import { entityReferenceComboboxEditorKind, existingEntityReferenceField } from "@dpeek/graphle-module";
+import {
+  entityReferenceComboboxEditorKind,
+  existingEntityReferenceField,
+} from "@dpeek/graphle-module";
 import { defineSecretField } from "@dpeek/graphle-module";
 import {
   booleanTypeModule,

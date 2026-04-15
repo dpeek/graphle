@@ -164,7 +164,9 @@ Important refs:
       "./graphle/context/linked.md",
       "issue.context",
     ]);
-    expect(resolved.warnings).toEqual(["Unresolved issue doc reference: ./graphle/context/missing.md"]);
+    expect(resolved.warnings).toEqual([
+      "Unresolved issue doc reference: ./graphle/context/missing.md",
+    ]);
     expect(rendered).toContain("You are the Graphle Execution Agent.");
     expect(rendered).not.toContain("You are the Graphle Backlog Agent.");
     expect(rendered).toContain("LOCAL execute execute");
@@ -192,7 +194,10 @@ test("resolveIssueContext supports doc-id overrides and profile entrypoint opt-o
   await mkdir(resolve(root, "graphle", "context"), { recursive: true });
   await writeFile(resolve(root, "graphle.md"), "LOCAL {{ issue.identifier }}\n");
   await writeFile(resolve(root, "graphle", "context", "architecture.md"), "ARCHITECTURE DOC\n");
-  await writeFile(resolve(root, "graphle", "context", "architecture-override.md"), "OVERRIDDEN DOC\n");
+  await writeFile(
+    resolve(root, "graphle", "context", "architecture-override.md"),
+    "OVERRIDDEN DOC\n",
+  );
 
   try {
     const workflow = createWorkflow(root, resolve(root, "graphle.md"));
@@ -358,8 +363,15 @@ test("resolveIssueContext assembles the graph module bundle and keeps refs withi
     const workflow = createWorkflow(root, promptPath);
     workflow.modules = {
       graph: {
-        allowedSharedPaths: [resolve(root, "graphle", "project"), resolve(root, "graphle", "graph")],
-        docs: ["./graphle/graph/overview.md", "./graphle/graph/overview.md", "./graphle/graph/architecture.md"],
+        allowedSharedPaths: [
+          resolve(root, "graphle", "project"),
+          resolve(root, "graphle", "graph"),
+        ],
+        docs: [
+          "./graphle/graph/overview.md",
+          "./graphle/graph/overview.md",
+          "./graphle/graph/architecture.md",
+        ],
         id: "graph",
         path: resolve(root, "graph"),
       },

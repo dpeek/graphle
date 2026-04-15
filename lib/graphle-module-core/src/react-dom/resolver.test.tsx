@@ -1,9 +1,9 @@
 import { describe, expect, it } from "bun:test";
 
-import { bootstrap } from "../../../graphle-bootstrap/src/index.js";
-import { createGraphClient } from "../../../graphle-client/src/index.js";
-import { createGraphStore as createStore } from "../../../graphle-kernel/src/index.js";
-import { defineDefaultEnumTypeModule, defineEnum, defineType } from "../../../graphle-module/src/index.js";
+import { bootstrap } from "@dpeek/graphle-bootstrap";
+import { createGraphClient } from "@dpeek/graphle-client";
+import { createGraphStore as createStore } from "@dpeek/graphle-kernel";
+import { defineDefaultEnumTypeModule, defineEnum, defineType } from "@dpeek/graphle-module";
 import {
   aggregateValidationIssues,
   createPathValidationIssue,

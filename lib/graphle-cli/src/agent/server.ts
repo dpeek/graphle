@@ -83,7 +83,9 @@ function parseRetainedTuiOptions(
     if (value === "--delay-ms") {
       const next = args[index + 1];
       if (!next || next.startsWith("--")) {
-        throw new Error("Usage: graphle agent tui replay <issue> [entrypointPath] [--delay-ms <ms>]");
+        throw new Error(
+          "Usage: graphle agent tui replay <issue> [entrypointPath] [--delay-ms <ms>]",
+        );
       }
       const parsed = Number.parseInt(next, 10);
       if (!Number.isFinite(parsed) || parsed < 0) {

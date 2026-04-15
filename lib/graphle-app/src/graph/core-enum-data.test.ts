@@ -1,6 +1,11 @@
 import { describe, expect, it } from "bun:test";
 
-import { country, countryTypeModule, currency, currencyTypeModule } from "@dpeek/graphle-module-core";
+import {
+  country,
+  countryTypeModule,
+  currency,
+  currencyTypeModule,
+} from "@dpeek/graphle-module-core";
 
 describe("core enum data modules", () => {
   it("keeps country members on the existing enum export", () => {

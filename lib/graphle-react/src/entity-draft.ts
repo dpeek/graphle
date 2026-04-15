@@ -4,7 +4,7 @@ import {
   type FieldGroupRef,
   type GraphMutationValidationResult,
   type PredicateRef,
-} from "../../graphle-client/src/index.js";
+} from "@dpeek/graphle-client";
 import {
   edgeId,
   isEntityType,
@@ -12,7 +12,7 @@ import {
   typeId,
   type AnyTypeOutput,
   type EdgeOutput,
-} from "../../graphle-kernel/src/index.js";
+} from "@dpeek/graphle-kernel";
 
 import type {
   EditSessionController,

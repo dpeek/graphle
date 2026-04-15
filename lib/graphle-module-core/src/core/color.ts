@@ -1,5 +1,5 @@
-import { defineScalar, defineScalarModule } from "../../../graphle-module/src/index.js";
-import type { TypeModuleFilter, TypeModuleMeta } from "../../../graphle-module/src/index.js";
+import { defineScalar, defineScalarModule } from "@dpeek/graphle-module";
+import type { TypeModuleFilter, TypeModuleMeta } from "@dpeek/graphle-module";
 
 import { defineCoreIconSeed } from "../icon/seed.js";
 

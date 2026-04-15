@@ -3,7 +3,7 @@ import {
   type AnyTypeOutput,
   type EdgeOutput,
   type EntityTypeOutput,
-} from "../../graphle-kernel/src";
+} from "@dpeek/graphle-kernel";
 
 type AuthoritativeCoreNode = EntityTypeOutput & {
   readonly fields: {

@@ -2,14 +2,14 @@ import type {
   GraphClientSyncController,
   GraphClientSyncState,
   SyncedGraphClient,
-} from "../../graphle-client/src/index.js";
-import type { AnyTypeOutput } from "../../graphle-kernel/src/index.js";
+} from "@dpeek/graphle-client";
+import type { AnyTypeOutput } from "@dpeek/graphle-kernel";
 import {
   sameSyncActivity,
   sameSyncDiagnostics,
   sameSyncScope,
   sameSyncScopeRequest,
-} from "../../graphle-sync/src/index.js";
+} from "@dpeek/graphle-sync";
 import {
   createContext,
   useContext,

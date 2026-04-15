@@ -148,7 +148,9 @@ export function parseBrowserAgentCliArgs(args: string[]): BrowserAgentCliOptions
       options.workflowPath = value;
       continue;
     }
-    throw new Error("Usage: graphle browser-agent [entrypointPath] [--host <host>] [--port <port>]");
+    throw new Error(
+      "Usage: graphle browser-agent [entrypointPath] [--host <host>] [--port <port>]",
+    );
   }
 
   return options;

@@ -1,7 +1,7 @@
 import type {
   AgentSessionAppendRequest,
   AgentSessionAppendResult,
-} from "../../../graphle-module-workflow/src/index.js";
+} from "@dpeek/graphle-module-workflow";
 
 import {
   createAgentSessionAppendRequestFromRetainedEvents,

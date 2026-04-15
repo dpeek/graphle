@@ -1,10 +1,17 @@
 "use client";
 
-import type { QueryResultItem, QueryResultPage, ReadQuery } from "../../../graphle-client/src/index.js";
+import type { QueryResultItem, QueryResultPage, ReadQuery } from "@dpeek/graphle-client";
 import { Badge } from "@dpeek/graphle-web/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@dpeek/graphle-web/card";
 import { Checkbox } from "@dpeek/graphle-web/checkbox";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@dpeek/graphle-web/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@dpeek/graphle-web/table";
 import { cn } from "@dpeek/graphle-web/utils";
 import { useEffect, useState, type ComponentType, type ReactNode } from "react";
 

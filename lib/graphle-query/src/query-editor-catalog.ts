@@ -1,4 +1,4 @@
-import type { ModuleQuerySurfaceSpec, QuerySurfaceFieldKind } from "../../graphle-projection/src/index.js";
+import type { ModuleQuerySurfaceSpec, QuerySurfaceFieldKind } from "@dpeek/graphle-projection";
 
 import {
   createQueryEditorCatalog,

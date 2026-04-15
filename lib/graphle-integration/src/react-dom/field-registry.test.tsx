@@ -1,9 +1,13 @@
 import { describe, expect, it } from "bun:test";
 
-import { bootstrap } from "../../../graphle-bootstrap/src/index.js";
-import { createGraphClient } from "../../../graphle-client/src/index.js";
+import { bootstrap } from "@dpeek/graphle-bootstrap";
+import { createGraphClient } from "@dpeek/graphle-client";
 import { createGraphStore as createStore } from "@dpeek/graphle-kernel";
-import { core, coreGraphBootstrapOptions, defaultMoneyCurrencyKey } from "@dpeek/graphle-module-core";
+import {
+  core,
+  coreGraphBootstrapOptions,
+  defaultMoneyCurrencyKey,
+} from "@dpeek/graphle-module-core";
 import {
   PredicateField,
   PredicateFieldControl,

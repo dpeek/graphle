@@ -1,11 +1,11 @@
-import { type GraphClient } from "../../graphle-client/src/index.js";
-import { applyGraphIdMap, type ResolvedGraphNamespace } from "../../graphle-kernel/src/index.js";
-import { core } from "../../graphle-module-core/src/index.js";
+import { type GraphClient } from "@dpeek/graphle-client";
+import { applyGraphIdMap, type ResolvedGraphNamespace } from "@dpeek/graphle-kernel";
+import { core } from "@dpeek/graphle-module-core";
 import {
   findRetainedProjectionRecord,
   type RetainedProjectionCheckpointRecord,
   type RetainedProjectionRowRecord,
-} from "../../graphle-projection/src/index.js";
+} from "@dpeek/graphle-projection";
 
 import type {
   RepositoryBranchSummary,

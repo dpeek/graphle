@@ -1,4 +1,4 @@
-import { applyGraphIdMap } from "../../graphle-kernel/src/index.js";
+import { applyGraphIdMap } from "@dpeek/graphle-kernel";
 
 import coreIdMap from "./core.json";
 import { booleanTypeModule } from "./core/boolean.js";

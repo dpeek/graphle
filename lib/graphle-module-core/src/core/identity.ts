@@ -1,6 +1,6 @@
-import { defineEnum, defineType } from "../../../graphle-module/src/index.js";
-import { defineReferenceField } from "../../../graphle-module/src/index.js";
-import { defineDefaultEnumTypeModule } from "../../../graphle-module/src/index.js";
+import { defineEnum, defineType } from "@dpeek/graphle-module";
+import { defineReferenceField } from "@dpeek/graphle-module";
+import { defineDefaultEnumTypeModule } from "@dpeek/graphle-module";
 
 import { dateTypeModule } from "./date.js";
 import { node } from "./node.js";

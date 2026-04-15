@@ -1,5 +1,5 @@
-import type { PredicateRef } from "../../graphle-client/src/index.js";
-import type { AnyTypeOutput, EdgeOutput } from "../../graphle-kernel/src/index.js";
+import type { PredicateRef } from "@dpeek/graphle-client";
+import type { AnyTypeOutput, EdgeOutput } from "@dpeek/graphle-kernel";
 import type { ComponentType, ReactNode } from "react";
 
 import { getPredicateDisplayKind, getPredicateEditorKind } from "./predicate.js";

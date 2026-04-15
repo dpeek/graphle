@@ -1,4 +1,4 @@
-import { createBootstrappedSnapshot, type GraphBootstrapOptions } from "../../graphle-bootstrap/src";
+import { createBootstrappedSnapshot, type GraphBootstrapOptions } from "@dpeek/graphle-bootstrap";
 import {
   cloneGraphWriteTransaction,
   createGraphStore,
@@ -7,8 +7,8 @@ import {
   type GraphStore,
   type GraphStoreSnapshot,
   type GraphWriteTransaction,
-} from "../../graphle-kernel/src";
-import type { AnyTypeOutput } from "../../graphle-kernel/src";
+} from "@dpeek/graphle-kernel";
+import type { AnyTypeOutput } from "@dpeek/graphle-kernel";
 import {
   cloneSyncState as clonePackageSyncState,
   applyGraphWriteTransaction,
@@ -26,7 +26,7 @@ import {
   type SyncSource,
   type SyncState as PackageSyncState,
   type SyncStatus as PackageSyncStatus,
-} from "../../graphle-sync/src";
+} from "@dpeek/graphle-sync";
 
 import {
   GraphValidationError,

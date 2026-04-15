@@ -3,7 +3,7 @@ import {
   validateGraphStore,
   type GraphValidationIssue,
   type GraphValidationResult,
-} from "../../graphle-client/src/index.js";
+} from "@dpeek/graphle-client";
 import {
   cloneAuthoritativeGraphRetainedHistoryPolicy,
   cloneAuthoritativeGraphWriteResult,
@@ -18,7 +18,7 @@ import {
   type GraphStoreSnapshot,
   type GraphWriteScope,
   type GraphWriteTransaction,
-} from "../../graphle-kernel/src/index.js";
+} from "@dpeek/graphle-kernel";
 import {
   cloneSyncDiagnostics,
   cloneSyncScope,
@@ -41,12 +41,12 @@ import {
   type SyncScope,
   type TotalSyncPayload,
   type TotalSyncPayloadValidator,
-} from "../../graphle-sync/src/index.js";
+} from "@dpeek/graphle-sync";
 import {
   logicalFactKey,
   materializeGraphWriteTransactionSnapshot,
   prepareGraphWriteTransaction,
-} from "../../graphle-sync/src/index.js";
+} from "@dpeek/graphle-sync";
 
 import { resolveAuthoritativeDefinitions } from "./definitions.js";
 import { validateAuthoritativeFieldWritePolicies } from "./replication.js";

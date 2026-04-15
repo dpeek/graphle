@@ -1,5 +1,5 @@
-import type { TypeModuleFilter } from "../../../graphle-module/src/index.js";
-import { defineValidatedStringTypeModule } from "../../../graphle-module/src/index.js";
+import type { TypeModuleFilter } from "@dpeek/graphle-module";
+import { defineValidatedStringTypeModule } from "@dpeek/graphle-module";
 
 import { defineCoreIconSeed } from "../icon/seed.js";
 

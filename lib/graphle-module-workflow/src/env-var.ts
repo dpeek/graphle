@@ -1,6 +1,6 @@
-import { defineType } from "../../graphle-module/src";
-import { defineSecretField } from "../../graphle-module/src";
-import { core, secretHandle, stringTypeModule } from "../../graphle-module-core/src";
+import { defineType } from "@dpeek/graphle-module";
+import { defineSecretField } from "@dpeek/graphle-module";
+import { core, secretHandle, stringTypeModule } from "@dpeek/graphle-module-core";
 
 export const envVarNamePattern = /^[A-Z][A-Z0-9_]*$/;
 

@@ -1,4 +1,4 @@
-import { defineScalar, type DefinitionIconRef } from "../../graphle-kernel/src/index.js";
+import { defineScalar, type DefinitionIconRef } from "@dpeek/graphle-kernel";
 
 import {
   defineScalarModule,

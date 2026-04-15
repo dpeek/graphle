@@ -1,5 +1,5 @@
-import { defineType } from "../../../graphle-module/src/index.js";
-import { defineReferenceField } from "../../../graphle-module/src/index.js";
+import { defineType } from "@dpeek/graphle-module";
+import { defineReferenceField } from "@dpeek/graphle-module";
 
 import { dateTypeModule } from "./date.js";
 import { stringTypeModule } from "./string.js";

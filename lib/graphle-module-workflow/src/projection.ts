@@ -13,7 +13,7 @@ import {
   type DependencyKey,
   type InvalidationEvent,
   type ModuleQuerySurfaceSpec,
-} from "../../graphle-projection/src/index.js";
+} from "@dpeek/graphle-projection";
 
 import { branchStateValues } from "./command.js";
 import { document } from "./document.js";

@@ -1,5 +1,8 @@
 import type { Cardinality, RangeRef } from "@dpeek/graphle-module";
-import { existingEntityReferenceField, type EntityReferenceEditorKind } from "@dpeek/graphle-module";
+import {
+  existingEntityReferenceField,
+  type EntityReferenceEditorKind,
+} from "@dpeek/graphle-module";
 
 export function kitchenSinkReferenceField<
   const Range extends RangeRef,

@@ -66,9 +66,9 @@ model.
 - `lib/app/src/web/lib/workflow-authority*.ts`
 - `lib/app/src/web/lib/workflow-session-feed.ts`
 - `lib/app/src/web/components/workflow-review-page.tsx`
-- `lib/cli/src/browser-agent/*`
-- `lib/cli/src/tui/*`
-- `lib/cli/src/agent/*` for retained session append and prompt-context assembly
+- `lib/graphle-cli/src/browser-agent/*`
+- `lib/graphle-cli/src/tui/*`
+- `lib/graphle-cli/src/agent/*` for retained session append and prompt-context assembly
 
 ### Dependencies
 
@@ -120,9 +120,9 @@ from the browser.
 
 - `lib/app/doc/workflow-web.md`
 - `lib/app/doc/roadmap.md`
-- `lib/cli/doc/roadmap.md`
+- `lib/graphle-cli/doc/roadmap.md`
 - `lib/graphle-module-workflow/doc/workflow-stack.md`
-- `lib/cli/doc/tui.md`
+- `lib/graphle-cli/doc/tui.md`
 
 ## 1. Purpose
 

@@ -1,4 +1,4 @@
-import type { Cardinality, RangeRef } from "../../graphle-kernel/src/index.js";
+import type { Cardinality, RangeRef } from "@dpeek/graphle-kernel";
 
 import type { ReferenceFieldInput } from "./type.js";
 import { defineReferenceField } from "./type.js";

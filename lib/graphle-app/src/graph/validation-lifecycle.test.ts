@@ -3,7 +3,11 @@ import { describe, expect, it } from "bun:test";
 import { createStore, applyIdMap, edgeId } from "@dpeek/graphle-app/graph";
 import { createAuthoritativeGraphWriteSession as createResolvedAuthoritativeGraphWriteSession } from "@dpeek/graphle-authority";
 import { bootstrap } from "@dpeek/graphle-bootstrap";
-import { createSyncedGraphClient, createGraphClient, GraphValidationError } from "@dpeek/graphle-client";
+import {
+  createSyncedGraphClient,
+  createGraphClient,
+  GraphValidationError,
+} from "@dpeek/graphle-client";
 import { defineScalar, defineType } from "@dpeek/graphle-module";
 import { core, coreGraphBootstrapOptions, stringTypeModule } from "@dpeek/graphle-module-core";
 import { createTotalSyncPayload } from "@dpeek/graphle-sync";

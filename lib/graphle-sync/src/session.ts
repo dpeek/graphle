@@ -3,7 +3,7 @@ import {
   type AuthoritativeGraphWriteResult,
   type GraphStore,
   type GraphStoreSnapshot,
-} from "../../graphle-kernel/src";
+} from "@dpeek/graphle-kernel";
 
 import {
   appendSyncActivity,

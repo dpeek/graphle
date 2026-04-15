@@ -1,4 +1,4 @@
-import type { AnyTypeOutput, EdgeOutput, EntityTypeOutput } from "../../graphle-kernel/src";
+import type { AnyTypeOutput, EdgeOutput, EntityTypeOutput } from "@dpeek/graphle-kernel";
 
 export type GraphBootstrapCoreSchema = {
   readonly cardinality: {

@@ -1,4 +1,4 @@
-import { GraphValidationError, type GraphMutationValidationResult } from "../../graphle-client/src";
+import { GraphValidationError, type GraphMutationValidationResult } from "@dpeek/graphle-client";
 
 export type MutationValidation = GraphMutationValidationResult | false;
 
