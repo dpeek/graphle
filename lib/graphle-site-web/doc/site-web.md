@@ -1,7 +1,7 @@
 ---
 name: Graphle site web
 description: "Assembled personal-site browser app, feature registration, and package-owned client assets for @dpeek/graphle-site-web."
-last_updated: 2026-04-15
+last_updated: 2026-04-16
 ---
 
 # Graphle Site Web
@@ -17,7 +17,8 @@ last_updated: 2026-04-15
 
 `@dpeek/graphle-site-web` builds the browser app that `@dpeek/graphle-local`
 serves from package assets. The package imports `@dpeek/graphle-web-shell` for
-generic shell composition and `@dpeek/graphle-web-ui` for browser primitives.
+generic shell composition, `@dpeek/graphle-web-ui` for browser primitives, and
+browser-safe item helpers from `@dpeek/graphle-module-site`.
 
 The first screen is the current website route preview. The app loads:
 
@@ -29,24 +30,25 @@ Those payloads drive shell status badges, the public preview, and local admin
 visibility. When `/api/session` reports an authenticated local admin session,
 the app also loads:
 
-- `GET /api/site/pages`
-- `GET /api/site/posts`
+- `GET /api/site/items`
 
-Authenticated sessions see inline page and post controls on the same public
-route. Editors use browser-safe primitives from `@dpeek/graphle-web-ui`: inputs,
-textareas, buttons, badges, and markdown rendering. Page and post lists live in
-the inline authoring panel; there is no `/admin`, `/authoring`, or other
-product route namespace.
+The first screen is still the website preview, with a flat searchable item
+sidebar. URL-only items use their external URL, while path-backed items navigate
+to exact local routes. Authenticated sessions see one inline item editor on the
+same public route. UI presets for page, post, link, bookmark, and social link
+only prefill fields; they do not persist an item kind. Editors use browser-safe
+primitives from `@dpeek/graphle-web-ui`: inputs, textareas, native selects,
+buttons, badges, checkboxes, and markdown rendering. There is no `/admin`,
+`/authoring`, or other product route namespace.
 
 Mutation helpers call only the local `/api/site/*` endpoints:
 
-- `POST /api/site/pages`
-- `PATCH /api/site/pages/:id`
-- `POST /api/site/posts`
-- `PATCH /api/site/posts/:id`
+- `POST /api/site/items`
+- `PATCH /api/site/items/:id`
 
-Publish and unpublish commands are represented as `status` changes in the same
-patch payloads. `@dpeek/graphle-site-web` does not mutate graph state directly.
+Visibility, tags, pins, sort order, URL, path, excerpt, and markdown body are
+represented as item fields in the same payloads. `@dpeek/graphle-site-web` does
+not mutate graph state directly.
 
 ## Built Assets
 

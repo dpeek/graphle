@@ -15,17 +15,14 @@ body {
 .graphle-site-workspace {
   display: grid;
   min-width: 0;
-  grid-template-columns: minmax(0, 1fr) minmax(320px, 420px);
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 340px) minmax(320px, 420px);
   gap: 24px;
   align-items: start;
 }
 
 .graphle-site-preview {
   min-width: 0;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--card);
-  padding: clamp(24px, 5vw, 56px);
+  padding: clamp(20px, 4vw, 48px) 0;
 }
 
 .graphle-site-preview-article {
@@ -44,6 +41,12 @@ body {
   font-size: 0.82rem;
 }
 
+.graphle-site-item-markers {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
 .graphle-site-preview-article h2 {
   max-width: 760px;
   margin: 0;
@@ -51,6 +54,7 @@ body {
   font-size: clamp(2.3rem, 7vw, 5.2rem);
   line-height: 1;
   letter-spacing: 0;
+  overflow-wrap: anywhere;
 }
 
 .graphle-site-excerpt {
@@ -59,6 +63,28 @@ body {
   color: color-mix(in oklch, var(--foreground) 76%, var(--muted-foreground));
   font-size: 1.15rem;
   line-height: 1.6;
+}
+
+.graphle-site-outbound {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 720px;
+  align-items: center;
+  gap: 8px;
+  overflow-wrap: anywhere;
+  color: #145b7e;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.graphle-site-outbound svg {
+  flex: 0 0 auto;
+}
+
+.graphle-site-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .graphle-site-markdown {
@@ -92,12 +118,64 @@ body {
   overflow-x: auto;
 }
 
+.graphle-site-sidebar,
 .graphle-site-authoring {
   display: grid;
   min-width: 0;
-  gap: 18px;
+  gap: 16px;
   border-left: 1px solid var(--border);
   padding-left: 24px;
+}
+
+.graphle-site-search {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+}
+
+.graphle-site-search svg {
+  color: var(--muted-foreground);
+}
+
+.graphle-site-sidebar ul,
+.graphle-site-content-lists ul {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.graphle-site-sidebar li {
+  display: grid;
+  min-width: 0;
+  gap: 8px;
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+
+.graphle-site-sidebar a {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+  color: var(--foreground);
+  text-decoration: none;
+}
+
+.graphle-site-sidebar a span,
+.graphle-site-content-lists button span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-weight: 700;
+}
+
+.graphle-site-sidebar small,
+.graphle-site-sidebar-tags {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--muted-foreground);
+  font-size: 0.78rem;
 }
 
 .graphle-site-editor,
@@ -149,6 +227,12 @@ body {
   font-weight: 600;
 }
 
+.graphle-site-field-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
 .graphle-site-select {
   min-height: 36px;
   width: 100%;
@@ -159,8 +243,17 @@ body {
   padding: 0 10px;
 }
 
-.graphle-site-editor textarea,
-.graphle-site-create-form textarea {
+.graphle-site-checkbox {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  gap: 8px;
+  color: var(--foreground);
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+
+.graphle-site-editor textarea {
   min-height: 86px;
   resize: vertical;
 }
@@ -169,7 +262,16 @@ body {
   min-height: 260px;
 }
 
-.graphle-site-editor-actions {
+.graphle-site-markdown-preview {
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--background);
+  padding: 12px;
+}
+
+.graphle-site-editor-actions,
+.graphle-site-presets {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
@@ -181,49 +283,47 @@ body {
   font-size: 0.88rem;
 }
 
-.graphle-site-create-grid {
-  display: grid;
-  gap: 12px;
-}
-
-.graphle-site-content-lists {
-  display: grid;
-  gap: 12px;
-}
-
-.graphle-site-content-lists ul {
-  display: grid;
-  gap: 8px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.graphle-site-content-lists li {
-  display: flex;
+.graphle-site-content-lists button {
+  display: inline-flex;
   min-width: 0;
+  width: 100%;
   align-items: center;
-  justify-content: space-between;
-  gap: 10px;
+  gap: 8px;
+  border: 0;
+  background: transparent;
+  color: var(--foreground);
+  padding: 0;
+  text-align: left;
 }
 
-.graphle-site-content-lists a {
-  min-width: 0;
-  overflow-wrap: anywhere;
-  color: #145b7e;
-  font-weight: 600;
-  text-decoration: none;
+.graphle-site-content-lists button svg {
+  flex: 0 0 auto;
+  color: var(--muted-foreground);
 }
 
-@media (max-width: 1120px) {
+@media (max-width: 1280px) {
+  .graphle-site-workspace {
+    grid-template-columns: minmax(0, 1fr) minmax(260px, 340px);
+  }
+
+  .graphle-site-authoring {
+    grid-column: 1 / -1;
+    border-left: 0;
+    border-top: 1px solid var(--border);
+    padding-top: 24px;
+    padding-left: 0;
+  }
+}
+
+@media (max-width: 860px) {
   .graphle-site-workspace {
     grid-template-columns: 1fr;
   }
 
-  .graphle-site-authoring {
+  .graphle-site-sidebar {
     border-left: 0;
     border-top: 1px solid var(--border);
-    padding-top: 24px;
+    padding-top: 20px;
     padding-left: 0;
   }
 }
@@ -234,7 +334,7 @@ body {
   }
 
   .graphle-site-preview {
-    padding: 22px;
+    padding: 22px 0;
   }
 
   .graphle-site-preview-article {
@@ -243,5 +343,9 @@ body {
 
   .graphle-site-preview-article h2 {
     font-size: 2.35rem;
+  }
+
+  .graphle-site-field-row {
+    grid-template-columns: 1fr;
   }
 }

@@ -3,23 +3,18 @@ import { GraphleShell, type GraphleShellHostStatus } from "@dpeek/graphle-web-sh
 
 import { createGraphleSiteFeature, type GraphleSiteStatusState } from "./site-feature.js";
 import {
-  createGraphleSitePage,
-  createGraphleSitePost,
+  createGraphleSiteItem,
   loadGraphleSiteStatus,
-  updateGraphleSitePage,
-  updateGraphleSitePost,
-  type GraphleSitePageInput,
-  type GraphleSitePostInput,
+  updateGraphleSiteItem,
+  type GraphleSiteItemInput,
 } from "./status.js";
 
 export interface GraphleSiteShellProps {
   readonly path?: string;
   readonly status: GraphleSiteStatusState;
   readonly onRefresh?: () => void;
-  readonly onCreatePage?: (input: GraphleSitePageInput) => Promise<void>;
-  readonly onUpdatePage?: (id: string, input: GraphleSitePageInput) => Promise<void>;
-  readonly onCreatePost?: (input: GraphleSitePostInput) => Promise<void>;
-  readonly onUpdatePost?: (id: string, input: GraphleSitePostInput) => Promise<void>;
+  readonly onCreateItem?: (input: GraphleSiteItemInput) => Promise<void>;
+  readonly onUpdateItem?: (id: string, input: GraphleSiteItemInput) => Promise<void>;
 }
 
 function createShellStatus(status: GraphleSiteStatusState): Partial<GraphleShellHostStatus> {
@@ -63,18 +58,14 @@ export function GraphleSiteShell({
   path = "/",
   status,
   onRefresh,
-  onCreatePage,
-  onUpdatePage,
-  onCreatePost,
-  onUpdatePost,
+  onCreateItem,
+  onUpdateItem,
 }: GraphleSiteShellProps) {
   const feature = createGraphleSiteFeature({
     status,
     onRefresh,
-    onCreatePage,
-    onUpdatePage,
-    onCreatePost,
-    onUpdatePost,
+    onCreateItem,
+    onUpdateItem,
   });
 
   return (
@@ -124,10 +115,8 @@ export function GraphleSiteApp() {
       path={path}
       status={status}
       onRefresh={refresh}
-      onCreatePage={(input) => mutate(() => createGraphleSitePage(input))}
-      onUpdatePage={(id, input) => mutate(() => updateGraphleSitePage(id, input))}
-      onCreatePost={(input) => mutate(() => createGraphleSitePost(input))}
-      onUpdatePost={(id, input) => mutate(() => updateGraphleSitePost(id, input))}
+      onCreateItem={(input) => mutate(() => createGraphleSiteItem(input))}
+      onUpdateItem={(id, input) => mutate(() => updateGraphleSiteItem(id, input))}
     />
   );
 }

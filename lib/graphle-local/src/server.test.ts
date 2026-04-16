@@ -183,7 +183,7 @@ describe("local server routes", () => {
     await withServer(async ({ server, initToken }) => {
       const cookie = await redeemAdminCookie(server, initToken);
       const response = await server.fetch(
-        new Request("http://127.0.0.1:4318/posts/example", {
+        new Request("http://127.0.0.1:4318/missing", {
           headers: {
             cookie,
           },
@@ -224,8 +224,8 @@ describe("local server routes", () => {
             recovery: "none",
           },
           records: {
-            pages: 1,
-            posts: 1,
+            items: 4,
+            tags: 1,
           },
         },
       });
@@ -235,14 +235,39 @@ describe("local server routes", () => {
     });
   });
 
-  it("exposes site route, list, create, update, and draft visibility APIs", async () => {
+  it("exposes site route, list, create, update, URL-only, and visibility APIs", async () => {
     await withGraphServer(async ({ server, initToken }) => {
-      const unauthenticatedPages = await server.fetch(
-        new Request("http://127.0.0.1:4318/api/site/pages"),
+      const unauthenticatedItems = await server.fetch(
+        new Request("http://127.0.0.1:4318/api/site/items"),
       );
       const cookie = await redeemAdminCookie(server, initToken);
-      const createdPage = await server.fetch(
-        new Request("http://127.0.0.1:4318/api/site/pages", {
+      const unauthenticatedWrite = await server.fetch(
+        new Request("http://127.0.0.1:4318/api/site/items", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            title: "No auth",
+            body: "No auth.",
+          }),
+        }),
+      );
+      const invalidPublicItem = await server.fetch(
+        new Request("http://127.0.0.1:4318/api/site/items", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            cookie,
+          },
+          body: JSON.stringify({
+            title: "Empty public item",
+            visibility: "public",
+          }),
+        }),
+      );
+      const createdItem = await server.fetch(
+        new Request("http://127.0.0.1:4318/api/site/items", {
           method: "POST",
           headers: {
             "content-type": "application/json",
@@ -251,25 +276,26 @@ describe("local server routes", () => {
           body: JSON.stringify({
             title: "Work",
             path: "/work",
-            body: "# Work\n\nDraft page.",
-            status: "draft",
+            body: "# Work\n\nPrivate item.",
+            visibility: "private",
+            tags: ["work"],
           }),
         }),
       );
-      const createdPagePayload = (await createdPage.json()) as {
-        readonly page: { readonly id: string };
+      const createdItemPayload = (await createdItem.json()) as {
+        readonly item: { readonly id: string };
       };
-      const unauthenticatedDraft = await server.fetch(
+      const unauthenticatedPrivate = await server.fetch(
         new Request("http://127.0.0.1:4318/api/site/route?path=%2Fwork"),
       );
-      const authenticatedDraft = await server.fetch(
+      const authenticatedPrivate = await server.fetch(
         new Request("http://127.0.0.1:4318/api/site/route?path=%2Fwork", {
           headers: { cookie },
         }),
       );
-      const publishedPage = await server.fetch(
+      const publishedItem = await server.fetch(
         new Request(
-          `http://127.0.0.1:4318/api/site/pages/${encodeURIComponent(createdPagePayload.page.id)}`,
+          `http://127.0.0.1:4318/api/site/items/${encodeURIComponent(createdItemPayload.item.id)}`,
           {
             method: "PATCH",
             headers: {
@@ -279,8 +305,10 @@ describe("local server routes", () => {
             body: JSON.stringify({
               title: "Work",
               path: "/work",
-              body: "# Work\n\nPublished page.",
-              status: "published",
+              body: "# Work\n\nPublic item.",
+              visibility: "public",
+              pinned: true,
+              sortOrder: 2,
             }),
           },
         ),
@@ -288,48 +316,162 @@ describe("local server routes", () => {
       const routeAfterPublish = await server.fetch(
         new Request("http://127.0.0.1:4318/api/site/route?path=%2Fwork"),
       );
-      const createdPost = await server.fetch(
-        new Request("http://127.0.0.1:4318/api/site/posts", {
+      const createdLink = await server.fetch(
+        new Request("http://127.0.0.1:4318/api/site/items", {
           method: "POST",
           headers: {
             "content-type": "application/json",
             cookie,
           },
           body: JSON.stringify({
-            title: "Launch notes",
-            slug: "launch-notes",
-            body: "# Launch notes",
-            excerpt: "What changed in the launch.",
-            status: "published",
+            title: "Public link",
+            url: "https://example.com/public-link",
+            excerpt: "A URL-only public link.",
+            visibility: "public",
+            tags: ["links"],
           }),
         }),
       );
-      const postRoute = await server.fetch(new Request("http://127.0.0.1:4318/posts/launch-notes"));
+      const workPage = await server.fetch(new Request("http://127.0.0.1:4318/work"));
+      const publicHomeRoute = await server.fetch(
+        new Request("http://127.0.0.1:4318/api/site/route?path=%2F"),
+      );
 
-      expect(unauthenticatedPages.status).toBe(401);
-      expect(createdPage.status).toBe(200);
-      expect(await unauthenticatedDraft.json()).toMatchObject({
-        kind: "not-found",
+      expect(unauthenticatedItems.status).toBe(401);
+      expect(unauthenticatedWrite.status).toBe(401);
+      expect(invalidPublicItem.status).toBe(400);
+      expect(await invalidPublicItem.json()).toMatchObject({
+        code: "site.validation_failed",
       });
-      expect(await authenticatedDraft.json()).toMatchObject({
-        kind: "page",
-        page: {
-          title: "Work",
-          status: "draft",
+      expect(createdItem.status).toBe(200);
+      expect(await unauthenticatedPrivate.json()).toMatchObject({
+        route: {
+          kind: "not-found",
         },
       });
-      expect(publishedPage.status).toBe(200);
+      expect(await authenticatedPrivate.json()).toMatchObject({
+        route: {
+          kind: "item",
+          item: {
+            title: "Work",
+            visibility: "private",
+          },
+        },
+      });
+      expect(publishedItem.status).toBe(200);
       expect(await routeAfterPublish.json()).toMatchObject({
-        kind: "page",
-        page: {
-          title: "Work",
-          status: "published",
+        route: {
+          kind: "item",
+          item: {
+            title: "Work",
+            visibility: "public",
+            pinned: true,
+            tags: [
+              {
+                key: "work",
+              },
+            ],
+          },
         },
       });
-      expect(createdPost.status).toBe(200);
-      expect(postRoute.status).toBe(200);
-      expect(await postRoute.text()).toContain("Launch notes");
+      expect(createdLink.status).toBe(200);
+      expect(workPage.status).toBe(200);
+      expect(await workPage.text()).toContain("Public item.");
+      expect(await publicHomeRoute.json()).toMatchObject({
+        route: {
+          kind: "item",
+          item: {
+            title: "Home",
+          },
+        },
+        items: expect.arrayContaining([
+          expect.objectContaining({
+            title: "Public link",
+            url: "https://example.com/public-link",
+          }),
+        ]),
+      });
     });
+  });
+
+  it("keeps item edits durable across local authority reopen", async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "graphle-local-server-persist-"));
+    const project = await prepareLocalProject({
+      cwd,
+      generateAuthSecret: () => "secret",
+      generateProjectId: () => "project-1",
+    });
+    const firstSqlite = await openGraphleSqlite({ path: project.databasePath });
+    const firstAuthority = await openLocalSiteAuthority({
+      sqlite: firstSqlite,
+      now: () => new Date("2026-04-15T00:00:00.000Z"),
+    });
+    const auth = createLocalAuthController({
+      authSecret: project.authSecret,
+      projectId: project.projectId,
+      initToken: "init-token",
+      now: () => new Date("2026-04-15T00:00:00.000Z"),
+    });
+    const firstServer = createGraphleLocalServer({
+      project,
+      sqlite: firstSqlite,
+      auth,
+      siteAuthority: firstAuthority,
+      now: () => new Date("2026-04-15T00:00:00.000Z"),
+    });
+
+    try {
+      const cookie = await redeemAdminCookie(firstServer, auth.initToken);
+      const created = await firstServer.fetch(
+        new Request("http://127.0.0.1:4318/api/site/items", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            cookie,
+          },
+          body: JSON.stringify({
+            title: "Durable item",
+            path: "/durable",
+            body: "Survives reopen.",
+            visibility: "public",
+          }),
+        }),
+      );
+      expect(created.status).toBe(200);
+    } finally {
+      firstSqlite.close();
+    }
+
+    const secondSqlite = await openGraphleSqlite({ path: project.databasePath });
+    const secondAuthority = await openLocalSiteAuthority({
+      sqlite: secondSqlite,
+      now: () => new Date("2026-04-15T00:00:00.000Z"),
+    });
+    const secondServer = createGraphleLocalServer({
+      project,
+      sqlite: secondSqlite,
+      auth,
+      siteAuthority: secondAuthority,
+      now: () => new Date("2026-04-15T00:00:00.000Z"),
+    });
+
+    try {
+      const route = await secondServer.fetch(
+        new Request("http://127.0.0.1:4318/api/site/route?path=%2Fdurable"),
+      );
+
+      expect(await route.json()).toMatchObject({
+        route: {
+          kind: "item",
+          item: {
+            title: "Durable item",
+          },
+        },
+      });
+    } finally {
+      secondSqlite.close();
+      await rm(cwd, { force: true, recursive: true });
+    }
   });
 
   it("serves package-owned browser assets and keeps the graph-backed host fallback", async () => {

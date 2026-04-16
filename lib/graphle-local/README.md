@@ -14,14 +14,14 @@ personal-site product path.
 - idempotent project-local `.env` creation
 - generated `GRAPHLE_AUTH_SECRET` and `GRAPHLE_PROJECT_ID` values
 - local `graphle.sqlite` opening through `@dpeek/graphle-sqlite`
-- opening the persisted local site authority over `minimalCore` plus `site`
-  definitions
-- first-run seed content for one home page and one example post
+- opening the persisted local site authority over `minimalCore`, `core:tag`,
+  `core:color`, and `site` definitions
+- first-run seed content for public and private `site:item` records
 - the Bun HTTP request handler for `/api/health`, `/api/session`, `/api/init`,
-  `/api/site/*` page/post read-write routes, unknown `/api/*` JSON 404s,
+  item-based `/api/site/*` read-write routes, unknown `/api/*` JSON 404s,
   package-owned browser assets, and the site host document with graph-backed
   fallback HTML
-- public route resolution for `/`, exact page paths, and `/posts/:slug`
+- public route resolution for exact `site:item.path` values
 - signed local admin cookies and process-local init-token redemption
 - `graphle dev` CLI option parsing and browser opening
 
@@ -29,7 +29,7 @@ personal-site product path.
 
 - packaged browser source or Vite dev-server ownership
 - Better Auth or `AUTH_DB` migrations
-- site page/post schema ownership, browser editor UI, deploy, or sync
+- site item schema ownership, browser editor UI, deploy, or sync
 - the existing operator CLI package
 
 ## Validation

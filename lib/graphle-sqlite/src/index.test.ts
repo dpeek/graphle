@@ -8,7 +8,7 @@ import { describe, expect, it } from "bun:test";
 import { createBootstrappedSnapshot } from "@dpeek/graphle-bootstrap";
 import { createGraphClient } from "@dpeek/graphle-client";
 import { createGraphStore, createGraphWriteTransactionFromSnapshots } from "@dpeek/graphle-kernel";
-import { minimalCore } from "@dpeek/graphle-module-core";
+import { colorType, minimalCore, tag } from "@dpeek/graphle-module-core";
 import { site } from "@dpeek/graphle-module-site";
 
 import {
@@ -18,7 +18,7 @@ import {
   type GraphleSqliteHandle,
 } from "./index.js";
 
-const siteDefinitions = { ...minimalCore, ...site } as const;
+const siteDefinitions = { ...minimalCore, color: colorType, tag, ...site } as const;
 
 async function withTempDir<T>(run: (path: string) => Promise<T>): Promise<T> {
   const path = await mkdtemp(join(tmpdir(), "graphle-sqlite-"));
@@ -45,11 +45,11 @@ async function openSiteAuthority(handle: GraphleSqliteHandle, seedCalls?: string
     definitions: siteDefinitions,
     seed(graph) {
       seedCalls?.push("seed");
-      graph.page.create({
+      graph.item.create({
         title: "Home",
         path: "/",
         body: "# Home",
-        status: site.status.values.published.id,
+        visibility: site.visibility.values.public.id,
       });
     },
   });
@@ -88,14 +88,14 @@ describe("graphle sqlite", () => {
       const first = await openSiteAuthority(firstHandle, seedCalls);
 
       expect(seedCalls).toEqual(["seed"]);
-      expect(first.graph.page.list()).toHaveLength(1);
+      expect(first.graph.item.list()).toHaveLength(1);
       firstHandle.close();
 
       const secondHandle = await openGraphleSqlite({ path });
       const second = await openSiteAuthority(secondHandle, seedCalls);
       try {
         expect(seedCalls).toEqual(["seed"]);
-        expect(second.graph.page.list()).toEqual([
+        expect(second.graph.item.list()).toEqual([
           expect.objectContaining({
             title: "Home",
             path: "/",
@@ -122,11 +122,11 @@ describe("graphle sqlite", () => {
       const draftStore = createGraphStore(before);
       const draftGraph = createGraphClient(draftStore, site, siteDefinitions);
 
-      draftGraph.page.create({
+      draftGraph.item.create({
         title: "Work",
         path: "/work",
         body: "# Work",
-        status: site.status.values.published.id,
+        visibility: site.visibility.values.public.id,
       });
 
       await first.applyTransaction(
@@ -142,9 +142,9 @@ describe("graphle sqlite", () => {
       const second = await openSiteAuthority(secondHandle);
       try {
         expect(
-          second.graph.page
+          second.graph.item
             .list()
-            .map((page) => page.path)
+            .map((item) => item.path)
             .sort(),
         ).toEqual(["/", "/work"]);
         expect(second.getChangesAfter().changes).toHaveLength(1);
@@ -160,13 +160,13 @@ describe("graphle sqlite", () => {
       const firstHandle = await openGraphleSqlite({ path });
       const first = await openSiteAuthority(firstHandle);
 
-      first.graph.post.create({
-        title: "Example post",
-        slug: "example-post",
+      first.graph.item.create({
+        title: "Example item",
+        path: "/example",
         body: "# Example",
         excerpt: "A short example post.",
         publishedAt: new Date("2026-04-15T00:00:00.000Z"),
-        status: site.status.values.published.id,
+        visibility: site.visibility.values.public.id,
       });
       await first.persist();
       firstHandle.close();
@@ -174,10 +174,13 @@ describe("graphle sqlite", () => {
       const secondHandle = await openGraphleSqlite({ path });
       const second = await openSiteAuthority(secondHandle);
       try {
-        expect(second.graph.post.list()).toEqual([
+        expect(second.graph.item.list()).toEqual([
           expect.objectContaining({
-            title: "Example post",
-            slug: "example-post",
+            title: "Home",
+          }),
+          expect.objectContaining({
+            title: "Example item",
+            path: "/example",
             excerpt: "A short example post.",
           }),
         ]);

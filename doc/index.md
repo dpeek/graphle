@@ -85,8 +85,8 @@ The current dependency chain is:
   routes, and browser opening
 - `../lib/graphle-sqlite/doc/sqlite-bootstrap.md`: local `graphle.sqlite`
   creation, metadata bootstrap, persisted-authority storage, and health summary
-- `../lib/graphle-module-site/doc/site-schema.md`: built-in `site:` schema for
-  personal-site pages, posts, status, and paths
+- `../lib/graphle-module-site/doc/site-schema.md`: built-in `site:item` schema,
+  visibility, icon presets, tag references, paths, and browser-safe item helpers
 - `../lib/graphle-web-ui/doc/browser-primitives.md`: browser primitive package
   boundary, root export, component subpaths, and global CSS
 - `../lib/graphle-web-shell/doc/web-shell.md`: generic browser shell
@@ -148,7 +148,7 @@ The current dependency chain is:
 - `../lib/graphle-sqlite/`: `@dpeek/graphle-sqlite`, the local
   `graphle.sqlite` open/bootstrap helper and persisted authority adapter
 - `../lib/graphle-module-site/`: `@dpeek/graphle-module-site`, the built-in
-  `site:` namespace for page and post records in the personal-site MVP
+  `site:` namespace for flat `site:item` records in the personal-site MVP
 - `../lib/graphle-web-ui/`: `@dpeek/graphle-web-ui`, the shared browser
   primitive package for reusable controls, markdown, Monaco, and
   source-preview chrome

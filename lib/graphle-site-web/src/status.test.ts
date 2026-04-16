@@ -3,7 +3,7 @@ import { describe, expect, it } from "bun:test";
 import { loadGraphleSiteStatus, type GraphleSiteStatusFetcher } from "./status.js";
 
 describe("loadGraphleSiteStatus", () => {
-  it("loads health and session from existing local API routes", async () => {
+  it("loads health, session, route items, and authenticated authoring items", async () => {
     const paths: string[] = [];
     const fetcher: GraphleSiteStatusFetcher = async (input) => {
       const path = String(input);
@@ -14,7 +14,7 @@ describe("loadGraphleSiteStatus", () => {
           ok: true,
           service: { name: "graphle-local", status: "ok" },
           project: { id: "project-1" },
-          graph: { status: "ok", records: { pages: 1, posts: 1 } },
+          graph: { status: "ok", records: { items: 2, tags: 1 } },
         });
       }
 
@@ -27,45 +27,47 @@ describe("loadGraphleSiteStatus", () => {
 
       if (path === "/api/site/route?path=%2F") {
         return Response.json({
-          kind: "page",
-          path: "/",
-          page: {
-            id: "page-1",
-            title: "Home",
+          route: {
+            kind: "item",
             path: "/",
-            body: "# Home",
-            status: "published",
-            updatedAt: "2026-04-15T00:00:00.000Z",
-          },
-        });
-      }
-
-      if (path === "/api/site/pages") {
-        return Response.json({
-          pages: [
-            {
-              id: "page-1",
+            item: {
+              id: "item-1",
               title: "Home",
               path: "/",
               body: "# Home",
-              status: "published",
+              visibility: "public",
+              tags: [],
+              pinned: true,
+              createdAt: "2026-04-15T00:00:00.000Z",
               updatedAt: "2026-04-15T00:00:00.000Z",
             },
-          ],
+          },
+          items: [],
         });
       }
 
-      if (path === "/api/site/posts") {
+      if (path === "/api/site/items") {
         return Response.json({
-          posts: [
+          items: [
             {
-              id: "post-1",
-              title: "Example post",
-              slug: "example-post",
-              body: "# Example",
-              excerpt: "A short example post.",
-              publishedAt: "2026-04-15T00:00:00.000Z",
-              status: "published",
+              id: "item-1",
+              title: "Home",
+              path: "/",
+              body: "# Home",
+              visibility: "public",
+              tags: [],
+              pinned: true,
+              createdAt: "2026-04-15T00:00:00.000Z",
+              updatedAt: "2026-04-15T00:00:00.000Z",
+            },
+            {
+              id: "item-2",
+              title: "Private bookmark",
+              url: "https://example.com/",
+              visibility: "private",
+              tags: [{ id: "tag-1", key: "links", name: "Links", color: "#2563eb" }],
+              pinned: false,
+              createdAt: "2026-04-15T00:00:00.000Z",
               updatedAt: "2026-04-15T00:00:00.000Z",
             },
           ],
@@ -83,15 +85,14 @@ describe("loadGraphleSiteStatus", () => {
     expect(paths.sort()).toEqual([
       "/api/health",
       "/api/session",
-      "/api/site/pages",
-      "/api/site/posts",
+      "/api/site/items",
       "/api/site/route?path=%2F",
     ]);
     expect(snapshot.loadedAt).toBe("2026-04-15T00:00:00.000Z");
     expect(snapshot.session.authenticated).toBe(true);
-    expect(snapshot.health.graph?.records?.pages).toBe(1);
-    expect(snapshot.route.kind).toBe("page");
-    expect(snapshot.pages).toHaveLength(1);
-    expect(snapshot.posts).toHaveLength(1);
+    expect(snapshot.health.graph?.records?.items).toBe(2);
+    expect(snapshot.route.kind).toBe("item");
+    expect(snapshot.items).toHaveLength(2);
+    expect(snapshot.items[1]?.visibility).toBe("private");
   });
 });

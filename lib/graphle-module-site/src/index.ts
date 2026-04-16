@@ -4,14 +4,18 @@ import {
   defineEnum,
   defineType,
   defineValidatedStringTypeModule,
+  existingEntityReferenceField,
   type TypeModuleFilter,
 } from "@dpeek/graphle-module";
 import { applyGraphIdMap, type ResolvedGraphNamespace } from "@dpeek/graphle-kernel";
 import {
+  booleanTypeModule,
   dateTypeModule,
   markdownTypeModule,
-  slugTypeModule,
+  numberTypeModule,
   stringTypeModule,
+  tag,
+  urlTypeModule,
 } from "@dpeek/graphle-module-core";
 
 import siteIds from "./site.json";
@@ -19,8 +23,41 @@ import siteIds from "./site.json";
 export const siteModuleId = "site";
 
 export const sitePathPattern = /^\/(?:[a-z0-9]+(?:-[a-z0-9]+)*(?:\/[a-z0-9]+(?:-[a-z0-9]+)*)*)?$/;
-export const siteSlugPattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
-export const sitePublicationStatuses = ["draft", "published"] as const;
+export const siteVisibilities = ["private", "public"] as const;
+export const siteIconPresets = [
+  "link",
+  "website",
+  "github",
+  "x",
+  "linkedin",
+  "rss",
+  "email",
+  "book",
+  "note",
+] as const;
+
+export type SiteVisibility = (typeof siteVisibilities)[number];
+export type SiteIconPreset = (typeof siteIconPresets)[number];
+
+export interface SiteItemSearchTag {
+  readonly key?: string;
+  readonly name?: string;
+}
+
+export interface SiteItemSearchTarget {
+  readonly title: string;
+  readonly path?: string;
+  readonly url?: string;
+  readonly body?: string;
+  readonly excerpt?: string;
+  readonly visibility?: SiteVisibility;
+  readonly icon?: SiteIconPreset;
+  readonly tags?: readonly SiteItemSearchTag[];
+  readonly pinned?: boolean;
+  readonly sortOrder?: number;
+  readonly publishedAt?: string;
+  readonly updatedAt?: string;
+}
 
 export function parseSitePath(raw: string): string {
   const value = raw.trim();
@@ -30,26 +67,24 @@ export function parseSitePath(raw: string): string {
   return value;
 }
 
-function normalizeSiteSlug(raw: string): string {
-  return raw
-    .trim()
-    .toLowerCase()
-    .replace(/[_\s]+/g, "-")
-    .replace(/-+/g, "-");
-}
-
-export function parseSiteSlug(raw: string): string {
-  const value = normalizeSiteSlug(raw);
-  if (!siteSlugPattern.test(value)) {
-    throw new Error(`Invalid site slug "${raw}"`);
-  }
-  return value;
-}
-
 function parseSitePathPrefix(raw: string): string {
   const value = raw.trim();
   if (value === "/" || /^\/[a-z0-9/-]*$/.test(value)) return value;
   throw new Error(`Invalid site path prefix "${raw}"`);
+}
+
+export function parseSiteAbsoluteUrl(raw: string): string {
+  const value = raw.trim();
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new Error(`Invalid site URL "${raw}"`);
+  }
+  if (url.protocol.length === 0) {
+    throw new Error(`Invalid site URL "${raw}"`);
+  }
+  return url.toString();
 }
 
 function requiredString(label: string, value: unknown) {
@@ -66,7 +101,9 @@ function enumOptionId(option: { readonly key: string; readonly id?: string }): s
 }
 
 function shouldTouchUpdatedAt(changedPredicateKeys: ReadonlySet<string>): boolean {
-  return [...changedPredicateKeys].some((key) => !key.endsWith(":updatedAt"));
+  return [...changedPredicateKeys].some(
+    (key) => !key.endsWith(":createdAt") && !key.endsWith(":updatedAt"),
+  );
 }
 
 const sitePathFilter = {
@@ -104,19 +141,33 @@ export const sitePathTypeModule = defineValidatedStringTypeModule({
 
 export const sitePath = sitePathTypeModule.type;
 
-export const siteStatus = defineEnum({
-  values: { key: "site:status", name: "Site Status" },
+export const siteVisibility = defineEnum({
+  values: { key: "site:visibility", name: "Site Visibility" },
   options: {
-    draft: {
-      name: "Draft",
+    private: {
+      name: "Private",
     },
-    published: {
-      name: "Published",
+    public: {
+      name: "Public",
     },
   },
 });
 
-export const siteStatusTypeModule = defineDefaultEnumTypeModule(siteStatus);
+export const siteVisibilityTypeModule = defineDefaultEnumTypeModule(siteVisibility);
+
+export const siteIconPreset = defineEnum({
+  values: { key: "site:icon", name: "Site Icon Preset" },
+  options: Object.fromEntries(
+    siteIconPresets.map((preset) => [
+      preset,
+      {
+        name: preset,
+      },
+    ]),
+  ) as Record<SiteIconPreset, { name: string }>,
+});
+
+export const siteIconPresetTypeModule = defineDefaultEnumTypeModule(siteIconPreset);
 
 function titleField(label: string) {
   return stringTypeModule.field({
@@ -132,9 +183,26 @@ function titleField(label: string) {
   });
 }
 
-function bodyField(label: string) {
+function optionalStringField(label: string) {
+  return stringTypeModule.field({
+    cardinality: "one?",
+    meta: {
+      label,
+      editor: {
+        kind: "textarea",
+        multiline: true,
+      },
+    },
+    filter: {
+      operators: ["contains", "equals"] as const,
+      defaultOperator: "contains",
+    },
+  });
+}
+
+function optionalBodyField(label: string) {
   return markdownTypeModule.field({
-    cardinality: "one",
+    cardinality: "one?",
     meta: {
       label,
       editor: {
@@ -149,11 +217,11 @@ function bodyField(label: string) {
   });
 }
 
-function statusField(label: string) {
+function visibilityField(label: string) {
   return {
-    ...siteStatusTypeModule.field({
+    ...siteVisibilityTypeModule.field({
       cardinality: "one",
-      onCreate: ({ incoming }) => incoming ?? enumOptionId(siteStatus.values.draft),
+      onCreate: ({ incoming }) => incoming ?? enumOptionId(siteVisibility.values.private),
       meta: {
         label,
         display: {
@@ -163,6 +231,19 @@ function statusField(label: string) {
       filter: {
         operators: ["is", "oneOf"] as const,
         defaultOperator: "is",
+      },
+    }),
+    createOptional: true as const,
+  };
+}
+
+function createdAtField() {
+  return {
+    ...dateTypeModule.field({
+      cardinality: "one",
+      onCreate: ({ incoming, now }) => incoming ?? now,
+      meta: {
+        label: "Created at",
       },
     }),
     createOptional: true as const,
@@ -184,111 +265,102 @@ function updatedAtField() {
   };
 }
 
-export const sitePage = defineGraphPageType();
-
-export const sitePost = defineGraphPostType();
-
-function defineGraphPageType() {
-  return defineType({
-    values: { key: "site:page", name: "Page" },
-    fields: {
-      title: titleField("Title"),
-      path: sitePathTypeModule.field({
+export const siteItem = defineType({
+  values: { key: "site:item", name: "Item" },
+  fields: {
+    title: titleField("Title"),
+    path: sitePathTypeModule.field({
+      cardinality: "one?",
+      meta: {
+        label: "Path",
+      },
+      filter: {
+        operators: ["equals", "prefix"] as const,
+        defaultOperator: "equals",
+      },
+    }),
+    url: urlTypeModule.field({
+      cardinality: "one?",
+      meta: {
+        label: "URL",
+      },
+      filter: {
+        operators: ["equals", "host"] as const,
+        defaultOperator: "equals",
+      },
+    }),
+    body: optionalBodyField("Body"),
+    excerpt: optionalStringField("Excerpt"),
+    visibility: visibilityField("Visibility"),
+    icon: siteIconPresetTypeModule.field({
+      cardinality: "one?",
+      meta: {
+        label: "Icon",
+        display: {
+          kind: "badge",
+        },
+      },
+      filter: {
+        operators: ["is", "oneOf"] as const,
+        defaultOperator: "is",
+      },
+    }),
+    tags: existingEntityReferenceField(tag, {
+      cardinality: "many",
+      collection: "ordered",
+      create: true,
+      editorKind: "entity-reference-combobox",
+      label: "Tags",
+    }),
+    pinned: {
+      ...booleanTypeModule.field({
         cardinality: "one",
+        onCreate: ({ incoming }) => incoming ?? false,
         meta: {
-          label: "Path",
+          label: "Pinned",
         },
         filter: {
-          operators: ["equals", "prefix"] as const,
-          defaultOperator: "equals",
+          operators: ["is"] as const,
+          defaultOperator: "is",
         },
       }),
-      body: bodyField("Body"),
-      status: statusField("Status"),
-      updatedAt: updatedAtField(),
+      createOptional: true as const,
     },
-  });
-}
-
-function defineGraphPostType() {
-  return defineType({
-    values: { key: "site:post", name: "Post" },
-    fields: {
-      title: titleField("Title"),
-      slug: slugTypeModule.field({
-        cardinality: "one",
-        meta: {
-          label: "Slug",
-        },
-        filter: {
-          operators: ["equals", "prefix"] as const,
-          defaultOperator: "equals",
-        },
-      }),
-      body: bodyField("Body"),
-      excerpt: stringTypeModule.field({
-        cardinality: "one",
-        validate: ({ value }) => requiredString("Excerpt", value),
-        meta: {
-          label: "Excerpt",
-          editor: {
-            kind: "textarea",
-            multiline: true,
-          },
-        },
-        filter: {
-          operators: ["contains", "equals"] as const,
-          defaultOperator: "contains",
-        },
-      }),
-      publishedAt: dateTypeModule.field({
-        cardinality: "one?",
-        meta: {
-          label: "Published at",
-        },
-      }),
-      status: statusField("Status"),
-      updatedAt: updatedAtField(),
-    },
-  });
-}
+    sortOrder: numberTypeModule.field({
+      cardinality: "one?",
+      meta: {
+        label: "Sort order",
+      },
+      filter: {
+        operators: ["equals", "lt", "gt"] as const,
+        defaultOperator: "equals",
+      },
+    }),
+    publishedAt: dateTypeModule.field({
+      cardinality: "one?",
+      meta: {
+        label: "Published at",
+      },
+    }),
+    createdAt: createdAtField(),
+    updatedAt: updatedAtField(),
+  },
+});
 
 const siteSchemaInput = {
   path: sitePath,
-  status: siteStatus,
-  page: sitePage,
-  post: sitePost,
+  visibility: siteVisibility,
+  iconPreset: siteIconPreset,
+  item: siteItem,
 };
 
 export type SiteNamespace = ResolvedGraphNamespace<typeof siteSchemaInput>;
 
 export const site: SiteNamespace = applyGraphIdMap(siteIds, siteSchemaInput);
 
-export type SitePublicationStatus = (typeof sitePublicationStatuses)[number];
-
-export interface SitePublicPageRoute {
-  readonly kind: "page";
+export interface SiteItemRoute {
+  readonly kind: "item";
   readonly path: string;
-}
-
-export interface SitePublicPostRoute {
-  readonly kind: "post";
-  readonly slug: string;
-}
-
-export type SitePublicRoute = SitePublicPageRoute | SitePublicPostRoute;
-
-export type SiteRouteResultKind = "page" | "post" | "not-found";
-
-export interface SiteRoutePageResult {
-  readonly kind: "page";
-  readonly path: string;
-}
-
-export interface SiteRoutePostResult {
-  readonly kind: "post";
-  readonly path: string;
-  readonly slug: string;
 }
 
 export interface SiteRouteNotFoundResult {
@@ -296,37 +368,95 @@ export interface SiteRouteNotFoundResult {
   readonly path: string;
 }
 
-export type SiteRouteResult = SiteRoutePageResult | SiteRoutePostResult | SiteRouteNotFoundResult;
+export type SiteRouteResult = SiteItemRoute | SiteRouteNotFoundResult;
 
-export function parseSitePublicationStatus(raw: unknown): SitePublicationStatus {
-  if (raw === "draft" || raw === "published") return raw;
-  throw new Error(`Invalid site status "${String(raw)}"`);
+export function parseSiteVisibility(raw: unknown): SiteVisibility {
+  if (raw === "private" || raw === "public") return raw;
+  throw new Error(`Invalid site visibility "${String(raw)}"`);
 }
 
-export function siteStatusIdFor(status: SitePublicationStatus): string {
-  return site.status.values[status].id;
+export function siteVisibilityIdFor(visibility: SiteVisibility): string {
+  return site.visibility.values[visibility].id;
 }
 
-export function siteStatusForId(id: string): SitePublicationStatus | undefined {
-  if (id === site.status.values.draft.id) return "draft";
-  if (id === site.status.values.published.id) return "published";
+export function siteVisibilityForId(id: string): SiteVisibility | undefined {
+  if (id === site.visibility.values.private.id) return "private";
+  if (id === site.visibility.values.public.id) return "public";
   return undefined;
 }
 
-export function parseSitePublicRoute(path: string): SitePublicRoute {
-  const value = parseSitePath(path);
-  const postMatch = /^\/posts\/([^/]+)$/.exec(value);
-  if (postMatch?.[1]) {
-    return {
-      kind: "post",
-      slug: parseSiteSlug(postMatch[1]),
-    };
-  }
+export function parseSiteIconPreset(raw: unknown): SiteIconPreset {
+  if (siteIconPresets.includes(raw as SiteIconPreset)) return raw as SiteIconPreset;
+  throw new Error(`Invalid site icon preset "${String(raw)}"`);
+}
 
+export function siteIconPresetIdFor(icon: SiteIconPreset): string {
+  return site.iconPreset.values[icon].id;
+}
+
+export function siteIconPresetForId(id: string): SiteIconPreset | undefined {
+  return siteIconPresets.find((preset) => site.iconPreset.values[preset].id === id);
+}
+
+export function parseSitePublicRoute(path: string): SiteItemRoute {
   return {
-    kind: "page",
-    path: value,
+    kind: "item",
+    path: parseSitePath(path),
   };
+}
+
+function searchableUrlParts(value: string | undefined): string[] {
+  if (!value) return [];
+  try {
+    const url = new URL(value);
+    return [url.toString(), url.host, url.pathname].filter(Boolean);
+  } catch {
+    return [value];
+  }
+}
+
+export function siteItemMatchesSearch(item: SiteItemSearchTarget, rawQuery: string): boolean {
+  const query = rawQuery.trim().toLowerCase();
+  if (query.length === 0) return true;
+
+  const haystack = [
+    item.title,
+    item.path,
+    ...searchableUrlParts(item.url),
+    item.excerpt,
+    item.body,
+    item.visibility,
+    item.icon,
+    ...(item.tags ?? []).flatMap((tag) => [tag.key, tag.name]),
+  ]
+    .filter((value): value is string => typeof value === "string" && value.length > 0)
+    .join("\n")
+    .toLowerCase();
+
+  return haystack.includes(query);
+}
+
+function optionalNumber(value: number | undefined): number {
+  return value ?? Number.POSITIVE_INFINITY;
+}
+
+function optionalDate(value: string | undefined): string {
+  return value ?? "";
+}
+
+export function compareSiteItems(left: SiteItemSearchTarget, right: SiteItemSearchTarget): number {
+  if (left.pinned !== right.pinned) return left.pinned ? -1 : 1;
+
+  const sortOrder = optionalNumber(left.sortOrder) - optionalNumber(right.sortOrder);
+  if (sortOrder !== 0) return sortOrder;
+
+  const publishedAt = optionalDate(right.publishedAt).localeCompare(optionalDate(left.publishedAt));
+  if (publishedAt !== 0) return publishedAt;
+
+  const updatedAt = optionalDate(right.updatedAt).localeCompare(optionalDate(left.updatedAt));
+  if (updatedAt !== 0) return updatedAt;
+
+  return left.title.localeCompare(right.title);
 }
 
 export const siteManifest = defineGraphModuleManifest({

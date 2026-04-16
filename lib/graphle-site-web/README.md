@@ -14,8 +14,9 @@ generic shell and browser primitives.
 - personal-site feature registration for the generic shell
 - local status loading from `/api/health` and `/api/session`
 - route loading from `/api/site/route`
-- inline page and post authoring controls that appear only for authenticated
-  local admin sessions
+- a flat searchable item sidebar using shared site item search/sort helpers
+- one inline `site:item` editor that appears only for authenticated local admin
+  sessions
 - site-specific public preview presentation for the current local host route
 
 ## What It Does Not Own

@@ -1,7 +1,7 @@
 ---
 name: Graph module site schema
 description: "Personal-site MVP site namespace ownership for @dpeek/graphle-module-site."
-last_updated: 2026-04-15
+last_updated: 2026-04-16
 ---
 
 # Graph Module Site Schema
@@ -9,7 +9,7 @@ last_updated: 2026-04-15
 ## Read This When
 
 - you are changing the `site:` graph schema
-- you are changing first-run page or post seed expectations
+- you are changing first-run item seed expectations
 - you need the boundary between site definitions and local runtime persistence
 
 ## Current Contract
@@ -19,10 +19,12 @@ the personal-site MVP:
 
 - `site:path`: scalar for absolute site paths such as `/`, `/about`, and
   `/work/example`
-- `site:status`: enum with `draft` and `published`
-- `site:page`: title, path, markdown body, status, and updated-at timestamp
-- `site:post`: title, slug, markdown body, excerpt, optional published-at
-  timestamp, status, and updated-at timestamp
+- `site:visibility`: enum with `private` and `public`
+- `site:icon`: named icon presets for common personal-site links
+- `site:item`: title, optional path, optional absolute URL, optional markdown
+  body, optional excerpt, visibility, optional icon preset, `core:tag`
+  references, pinned state, optional sort order, optional published-at
+  timestamp, created-at timestamp, and updated-at timestamp
 
 The package exports the resolved `site` namespace and `siteManifest`. Stable ids
 live in `../src/site.json`; package-local tests fail when authored schema keys
@@ -32,20 +34,23 @@ The package also exports browser-safe helpers used by the local runtime and
 site browser app:
 
 - `parseSitePath`: validates exact public page paths
-- `parseSiteSlug`: normalizes and validates post slugs
-- `parseSitePublicationStatus`: accepts only `draft` or `published`
-- `parseSitePublicRoute`: maps `/posts/:slug` to post routes and all other
-  valid public paths to page routes
-- `siteStatusIdFor` and `siteStatusForId`: translate between public status keys
-  and resolved graph enum ids
+- `parseSiteAbsoluteUrl`: validates absolute URLs for item links
+- `parseSiteVisibility`: accepts only `private` or `public`
+- `parseSiteIconPreset`: accepts only the named icon preset set
+- `parseSitePublicRoute`: validates exact item route paths
+- `siteVisibilityIdFor` and `siteVisibilityForId`: translate between
+  visibility keys and resolved graph enum ids
+- `siteIconPresetIdFor` and `siteIconPresetForId`: translate between icon
+  preset keys and resolved graph enum ids
+- `siteItemMatchesSearch` and `compareSiteItems`: implement the flat sidebar
+  search and deterministic item ordering rules
 
 ## Minimal Core Dependency
 
-The site module is booted with `minimalCore` from `@dpeek/graphle-module-core`.
-That path includes only the core schema anchors and scalar contracts needed to
-materialize typed records for this MVP. It intentionally avoids icon, SVG,
-saved-query/view, workflow, identity, admission, share, capability, and
-installed-module records.
+The site module references `core:tag` for item tags. Local site boot widens the
+minimal core slice with `core:tag` and the `core:color` scalar required by tag
+records. It still avoids saved-query/view, workflow, identity, admission,
+share, capability, and installed-module records.
 
 ## Boundary
 

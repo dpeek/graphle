@@ -1,7 +1,7 @@
 ---
 name: Graphle local dev runtime
 description: "Local dev runtime, project bootstrap, persisted site authority, auth, routes, and browser opening owned by @dpeek/graphle-local."
-last_updated: 2026-04-15
+last_updated: 2026-04-16
 ---
 
 # Graphle Local Dev Runtime
@@ -34,14 +34,18 @@ Generated secret values are never logged.
 ## Local Site Authority
 
 Startup opens a persisted authority in `graphle.sqlite` before serving
-requests. The authority boots `minimalCore` from `@dpeek/graphle-module-core`
-plus the `site` namespace from `@dpeek/graphle-module-site`, then uses the
+requests. The authority boots `minimalCore` from `@dpeek/graphle-module-core`,
+widened with `core:tag` and the `core:color` scalar tags require, plus the
+`site:item` namespace from `@dpeek/graphle-module-site`. It then uses the
 SQLite persisted-authority adapter from `@dpeek/graphle-sqlite`.
 
 When storage is empty, the seed callback creates:
 
-- one published home page at `/`
-- one published example post with slug `example-post`
+- a public home item at `/`
+- a public path-backed markdown item
+- a public URL-only item
+- a private URL-only bookmark
+- at least one `core:tag` referenced by site items
 
 Reopening the same SQLite file loads the persisted authority state and does not
 seed duplicate records.
@@ -54,17 +58,15 @@ seed duplicate records.
   diagnostics
 - `GET /api/session`: local admin session status
 - `GET /api/init?token=<token>`: one-time local admin cookie bootstrap
-- `GET /api/site/route?path=<path>`: resolves a page or post route from the
-  persisted `site:` graph; unauthenticated requests see published records only,
-  while a valid local admin cookie can preview drafts
-- `GET /api/site/pages`: authenticated page list for inline authoring
-- `POST /api/site/pages`: authenticated page creation
-- `PATCH /api/site/pages/:id`: authenticated page updates and publish state
-  changes
-- `GET /api/site/posts`: authenticated post list for inline authoring
-- `POST /api/site/posts`: authenticated post creation
-- `PATCH /api/site/posts/:id`: authenticated post updates plus publish and
-  unpublish behavior through `site:status` and `publishedAt`
+- `GET /api/site/route?path=<path>`: resolves an exact `site:item.path` route
+  and returns the sidebar items visible to the request; unauthenticated
+  requests see public items only, while a valid local admin cookie can preview
+  private routed items
+- `GET /api/site/items`: authenticated item list for inline authoring
+- `POST /api/site/items`: authenticated item creation with inline tag
+  creation/reuse
+- `PATCH /api/site/items/:id`: authenticated item updates, visibility changes,
+  pinning, sorting, and tag replacement
 - unknown `/api/*`: JSON 404
 
 Static browser files are served from the package-built
@@ -72,12 +74,13 @@ Static browser files are served from the package-built
 plain 404 and do not fall through to the website route.
 
 All other non-API routes are website routes resolved from the persisted site
-authority. `/` renders the page whose `site:page.path` is `/`, exact page paths
-render matching page records, and `/posts/:slug` renders matching post records.
-Draft records are visible only to requests with a valid local admin cookie.
-Missing routes return a useful 404 host document while still loading the package
-browser app. The host document includes graph-backed title, body, and excerpt
-content inside `#root` before the browser bundle mounts.
+authority. `/` renders the item whose `site:item.path` is `/`; every other path
+is an exact item-path lookup. URL-only items appear in sidebar data but do not
+resolve to internal pages. Private items are visible only to requests with a
+valid local admin cookie. Missing routes return a useful 404 host document while
+still loading the package browser app. The host document includes graph-backed
+title, body, excerpt, outbound URL, tags, and item sidebar content inside
+`#root` before the browser bundle mounts.
 
 Create and update helpers use the typed graph client over the persisted
 authority and then rewrite the authority baseline through the SQLite adapter.

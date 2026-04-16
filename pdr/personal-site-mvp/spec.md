@@ -28,13 +28,17 @@ Ship the smallest end-to-end Graphle product slice: a user can run one command
 from an empty directory, author a personal website locally, and deploy that
 website to Cloudflare from the web UI.
 
-The first concrete target is replacing the current `https://dpeek.com` shape:
+The first concrete target is replacing the current `https://dpeek.com` shape
+with the flat item model defined in [`./site-item-prd.md`](./site-item-prd.md):
 
-- a home page at `/`
-- markdown-authored pages
-- markdown-authored posts
-- automatic public post routes at `/posts/:slug`
-- a simple authoring UI for pages and posts
+- a home item at `/`
+- markdown-authored internal items
+- external link and bookmark items
+- annotated link items with markdown
+- optional public social links
+- tags backed by `core:tag`
+- a flat searchable item sidebar
+- one authoring UI for all items
 - local graph state that survives restarts
 - remote graph state on Cloudflare after deploy
 - sync between the local graph and the remote graph
@@ -98,7 +102,7 @@ The new product path is:
    `graphle.sqlite`, starts the local HTTP server, and opens the browser.
 4. The server mounts the generic shell and the site web surfaces.
 5. The local authority uses core bootstrap plus the site module only.
-6. The browser authoring surface writes page and post records through graph
+6. The browser authoring surface writes `site:item` records through graph
    transactions.
 7. The public preview route renders from the same local graph.
 8. Deploy provisions Cloudflare resources and pushes the local graph baseline to
@@ -139,29 +143,26 @@ The MVP graph is:
 - website content records
 - deploy/sync metadata only when required
 
-The site module owns the website schema:
+The site module owns the website schema. The MVP site content model is
+`site:item`, as defined in [`./site-item-prd.md`](./site-item-prd.md).
 
-- `site:page`
-  - `title`
-  - `path`
-  - `body`
-  - `status`
-  - `updatedAt`
-- `site:post`
-  - `title`
-  - `slug`
-  - `body`
-  - `excerpt`
-  - `publishedAt`
-  - `status`
-  - `updatedAt`
+`site:item` covers internal pages, posts, external links, bookmarks, social
+links, and annotated links. There is no separate page type, post type, status
+type, or stored kind. Visibility is `private | public`.
+
+The item model uses `core:tag` for tags. The minimal site boot path may widen
+the current minimal core slice enough to include `core:tag` and its required
+scalar fields, but it should not pull in saved queries, workflow, identity,
+admission, share, capability, or installed-module records.
 
 The initial routing contract is:
 
-- `site:page.path === "/"` renders the home page
-- other pages render by exact path
-- published posts render at `/posts/:slug`
-- draft records are visible in authoring and local preview only
+- `site:item.path === "/"` renders the home page
+- any public item with `path` renders by exact path
+- an item with only `url` appears in item lists but has no internal route
+- an item with both `path` and `url` renders an internal page with an outbound
+  link
+- private items are visible in authoring and local preview only
 
 ### Web UI kit and web shell
 
@@ -226,9 +227,8 @@ Default runtime route ownership:
   deploy, and sync
 - `/api/init`: first-run and bootstrap endpoint that may set an HttpOnly admin
   cookie and redirect back to the site
-- `/`: public home page rendered from the graph
-- `/posts/:slug`: public post route rendered from the graph
-- other public page paths: exact `site:page.path` matches
+- `/`: public home item rendered from the graph
+- other public paths: exact `site:item.path` matches
 
 All non-API routes belong to the user's website. The browser app renders the
 public site and reveals inline authoring controls when the request has a valid
@@ -385,9 +385,12 @@ Tasks:
 
 - define the minimal core contract for the MVP boot path
 - make icon/SVG bootstrap optional or move it out of the required core schema
-- add `site:page` and `site:post`
+- add `site:item`
+- include `core:tag` and the required scalar support for item tags without
+  pulling in non-MVP core records
 - add stable id-map generation/check workflow for the site module
-- seed a default home page and example post on first run
+- seed a default home item and a few useful public/private item examples on
+  first run
 - verify writes persist in `graphle.sqlite`
 
 Success criteria:
@@ -450,22 +453,28 @@ Primary packages:
 
 Tasks:
 
-- add page list, page editor, post list, and post editor
+- add one flat item sidebar and one item editor
 - build and publish the assembled site browser app bundle
 - add markdown editing and preview
-- render public routes for pages and posts
-- expose inline edit, create, publish, and preview controls for authenticated
-  local admins
-- add status handling for draft and published records
+- render public routes for items with a public `path`
+- expose inline edit, create, visibility, and preview controls for
+  authenticated local admins
+- add private/public visibility handling
+- support URL-only public items in the sidebar/list
+- support item tags through `core:tag`
+- support named icon presets
 - seed or import enough content to match the current `dpeek.com` shape
 
 Success criteria:
 
 - home page can be rendered publicly and edited inline at `/` when logged in
-- a post can be created, edited, published, and rendered at `/posts/:slug`
+- an item can be created, edited, made public, and rendered at its path
+- a URL-only public item can be created, edited, and opened from the flat
+  sidebar/list without getting its own public page
+- private items remain hidden from public visitors
 - the authoring UI survives server restart because data comes from
   `graphle.sqlite`
-- the public renderer does not require admin auth for published content
+- the public renderer does not require admin auth for public content
 
 ### Phase 5: Cloudflare deploy
 
@@ -494,8 +503,9 @@ Tasks:
 Success criteria:
 
 - a user can deploy from the web UI
-- the deployed Worker serves the home page and post routes from remote graph
-  state
+- the deployed Worker serves public `site:item` routes from remote graph state
+- the deployed Worker includes URL-only public items in the public sidebar/list
+- private items and private-only tags are not deployed as public content
 - deploy can be re-run without creating duplicate resources
 
 ### Phase 6: Local/remote sync
@@ -566,11 +576,12 @@ Success criteria:
   session before redirecting there.
 - First-run local admin auth is automatic and does not use Better Auth.
 - The shell is generic and site-agnostic.
-- The site feature can create, edit, publish, and render pages and posts with
-  inline authoring controls when logged in.
+- The site feature can create, edit, search, make public/private, and render
+  `site:item` records with inline authoring controls when logged in.
 - The current `dpeek.com` content shape can be represented with the MVP schema.
 - Cloudflare deploy can be initiated from the web shell.
-- The deployed site serves public pages and posts from the remote graph.
+- The deployed site serves public `site:item` routes and public URL-only items
+  from the remote graph.
 - Local and remote graph state can sync after deploy.
 - The MVP path does not import or boot `@dpeek/graphle-app`.
 - `@dpeek/graphle-module-core` is reduced on the MVP path to basic scalars and

@@ -16,8 +16,8 @@ export interface GraphleSiteHealth {
   readonly graph?: {
     readonly status?: string;
     readonly records?: {
-      readonly pages?: number;
-      readonly posts?: number;
+      readonly items?: number;
+      readonly tags?: number;
     };
     readonly startupDiagnostics?: {
       readonly recovery?: string;
@@ -33,38 +33,48 @@ export interface GraphleSiteSession {
   } | null;
 }
 
-export type GraphleSitePublicationStatus = "draft" | "published";
+export type GraphleSiteVisibility = "private" | "public";
 
-export interface GraphleSitePage {
+export type GraphleSiteIconPreset =
+  | "link"
+  | "website"
+  | "github"
+  | "x"
+  | "linkedin"
+  | "rss"
+  | "email"
+  | "book"
+  | "note";
+
+export interface GraphleSiteTag {
   readonly id: string;
-  readonly title: string;
-  readonly path: string;
-  readonly body: string;
-  readonly status: GraphleSitePublicationStatus;
-  readonly updatedAt: string;
+  readonly key: string;
+  readonly name: string;
+  readonly color: string;
 }
 
-export interface GraphleSitePost {
+export interface GraphleSiteItem {
   readonly id: string;
   readonly title: string;
-  readonly slug: string;
-  readonly body: string;
-  readonly excerpt: string;
+  readonly path?: string;
+  readonly url?: string;
+  readonly body?: string;
+  readonly excerpt?: string;
+  readonly visibility: GraphleSiteVisibility;
+  readonly icon?: GraphleSiteIconPreset;
+  readonly tags: readonly GraphleSiteTag[];
+  readonly pinned: boolean;
+  readonly sortOrder?: number;
   readonly publishedAt?: string;
-  readonly status: GraphleSitePublicationStatus;
+  readonly createdAt: string;
   readonly updatedAt: string;
 }
 
 export type GraphleSiteRoute =
   | {
-      readonly kind: "page";
+      readonly kind: "item";
       readonly path: string;
-      readonly page: GraphleSitePage;
-    }
-  | {
-      readonly kind: "post";
-      readonly path: string;
-      readonly post: GraphleSitePost;
+      readonly item: GraphleSiteItem;
     }
   | {
       readonly kind: "not-found";
@@ -72,13 +82,17 @@ export type GraphleSiteRoute =
       readonly message: string;
     };
 
+export interface GraphleSiteRoutePayload {
+  readonly route: GraphleSiteRoute;
+  readonly items: readonly GraphleSiteItem[];
+}
+
 export interface GraphleSiteStatusSnapshot {
   readonly loadedAt: string;
   readonly health: GraphleSiteHealth;
   readonly session: GraphleSiteSession;
   readonly route: GraphleSiteRoute;
-  readonly pages: readonly GraphleSitePage[];
-  readonly posts: readonly GraphleSitePost[];
+  readonly items: readonly GraphleSiteItem[];
 }
 
 export type GraphleSiteStatusFetcher = (
@@ -115,9 +129,13 @@ async function writeJson<T>(
     body: JSON.stringify(body),
   });
 
-  const payload = (await response.json().catch(() => ({}))) as { readonly error?: string };
+  const payload = (await response.json().catch(() => ({}))) as {
+    readonly error?: string;
+    readonly issues?: readonly { readonly path?: string; readonly message?: string }[];
+  };
   if (!response.ok) {
-    throw new Error(payload.error ?? `${path} returned HTTP ${response.status}`);
+    const issue = payload.issues?.find((candidate) => candidate.message);
+    throw new Error(issue?.message ?? payload.error ?? `${path} returned HTTP ${response.status}`);
   }
 
   return payload as T;
@@ -129,29 +147,17 @@ function routePath(path: string): string {
   return `/api/site/route?${params.toString()}`;
 }
 
-async function loadAuthoringLists(
+async function loadAuthoringItems(
   fetcher: GraphleSiteStatusFetcher,
   session: GraphleSiteSession,
-): Promise<{
-  readonly pages: readonly GraphleSitePage[];
-  readonly posts: readonly GraphleSitePost[];
-}> {
-  if (!session.authenticated) {
-    return {
-      pages: [],
-      posts: [],
-    };
-  }
-
-  const [pagePayload, postPayload] = await Promise.all([
-    readJson<{ readonly pages: readonly GraphleSitePage[] }>(fetcher, "/api/site/pages"),
-    readJson<{ readonly posts: readonly GraphleSitePost[] }>(fetcher, "/api/site/posts"),
-  ]);
-
-  return {
-    pages: pagePayload.pages,
-    posts: postPayload.posts,
-  };
+  routeItems: readonly GraphleSiteItem[],
+): Promise<readonly GraphleSiteItem[]> {
+  if (!session.authenticated) return routeItems;
+  const payload = await readJson<{ readonly items: readonly GraphleSiteItem[] }>(
+    fetcher,
+    "/api/site/items",
+  );
+  return payload.items;
 }
 
 export async function loadGraphleSiteStatus({
@@ -163,88 +169,59 @@ export async function loadGraphleSiteStatus({
   readonly now?: () => Date;
   readonly path?: string;
 } = {}): Promise<GraphleSiteStatusSnapshot> {
-  const [health, session, route] = await Promise.all([
+  const [health, session, routePayload] = await Promise.all([
     readJson<GraphleSiteHealth>(fetcher, "/api/health"),
     readJson<GraphleSiteSession>(fetcher, "/api/session"),
-    readJson<GraphleSiteRoute>(fetcher, routePath(path)),
+    readJson<GraphleSiteRoutePayload>(fetcher, routePath(path)),
   ]);
-  const { pages, posts } = await loadAuthoringLists(fetcher, session);
+  const items = await loadAuthoringItems(fetcher, session, routePayload.items);
 
   return {
     loadedAt: now().toISOString(),
     health,
     session,
-    route,
-    pages,
-    posts,
+    route: routePayload.route,
+    items,
   };
 }
 
-export interface GraphleSitePageInput {
+export interface GraphleSiteItemInput {
   readonly title: string;
-  readonly path: string;
-  readonly body: string;
-  readonly status: GraphleSitePublicationStatus;
+  readonly path?: string;
+  readonly url?: string;
+  readonly body?: string;
+  readonly excerpt?: string;
+  readonly visibility: GraphleSiteVisibility;
+  readonly icon?: GraphleSiteIconPreset;
+  readonly tags: readonly string[];
+  readonly pinned: boolean;
+  readonly sortOrder?: number;
+  readonly publishedAt?: string;
 }
 
-export interface GraphleSitePostInput {
-  readonly title: string;
-  readonly slug: string;
-  readonly body: string;
-  readonly excerpt: string;
-  readonly status: GraphleSitePublicationStatus;
-}
-
-export async function createGraphleSitePage(
-  input: GraphleSitePageInput,
+export async function createGraphleSiteItem(
+  input: GraphleSiteItemInput,
   fetcher: GraphleSiteStatusFetcher = fetch,
-): Promise<GraphleSitePage> {
-  const payload = await writeJson<{ readonly page: GraphleSitePage }>(
+): Promise<GraphleSiteItem> {
+  const payload = await writeJson<{ readonly item: GraphleSiteItem }>(
     fetcher,
-    "/api/site/pages",
+    "/api/site/items",
     "POST",
     input,
   );
-  return payload.page;
+  return payload.item;
 }
 
-export async function updateGraphleSitePage(
+export async function updateGraphleSiteItem(
   id: string,
-  input: GraphleSitePageInput,
+  input: GraphleSiteItemInput,
   fetcher: GraphleSiteStatusFetcher = fetch,
-): Promise<GraphleSitePage> {
-  const payload = await writeJson<{ readonly page: GraphleSitePage }>(
+): Promise<GraphleSiteItem> {
+  const payload = await writeJson<{ readonly item: GraphleSiteItem }>(
     fetcher,
-    `/api/site/pages/${encodeURIComponent(id)}`,
+    `/api/site/items/${encodeURIComponent(id)}`,
     "PATCH",
     input,
   );
-  return payload.page;
-}
-
-export async function createGraphleSitePost(
-  input: GraphleSitePostInput,
-  fetcher: GraphleSiteStatusFetcher = fetch,
-): Promise<GraphleSitePost> {
-  const payload = await writeJson<{ readonly post: GraphleSitePost }>(
-    fetcher,
-    "/api/site/posts",
-    "POST",
-    input,
-  );
-  return payload.post;
-}
-
-export async function updateGraphleSitePost(
-  id: string,
-  input: GraphleSitePostInput,
-  fetcher: GraphleSiteStatusFetcher = fetch,
-): Promise<GraphleSitePost> {
-  const payload = await writeJson<{ readonly post: GraphleSitePost }>(
-    fetcher,
-    `/api/site/posts/${encodeURIComponent(id)}`,
-    "PATCH",
-    input,
-  );
-  return payload.post;
+  return payload.item;
 }

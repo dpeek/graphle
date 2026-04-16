@@ -22,6 +22,7 @@
     "check": "oxlint --type-aware --type-check --fix src vite.config.ts --ignore-pattern '**/*.test.ts' --ignore-pattern '**/*.test.tsx' && oxfmt && bun test"
   },
   "dependencies": {
+    "@dpeek/graphle-module-site": "workspace:*",
     "@dpeek/graphle-web-shell": "workspace:*",
     "@dpeek/graphle-web-ui": "workspace:*",
     "lucide-react": "^0.577.0",

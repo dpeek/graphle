@@ -1,15 +1,21 @@
 import { createBootstrappedSnapshot } from "@dpeek/graphle-bootstrap";
 import { createGraphStore } from "@dpeek/graphle-kernel";
-import { minimalCore } from "@dpeek/graphle-module-core";
+import { colorType, minimalCore, tag } from "@dpeek/graphle-module-core";
 import {
+  compareSiteItems,
+  parseSiteAbsoluteUrl,
+  parseSiteIconPreset,
   parseSitePath,
   parseSitePublicRoute,
-  parseSitePublicationStatus,
-  parseSiteSlug,
+  parseSiteVisibility,
   site,
-  siteStatusForId,
-  siteStatusIdFor,
-  type SitePublicationStatus,
+  siteIconPresetForId,
+  siteIconPresetIdFor,
+  siteItemMatchesSearch,
+  siteVisibilityForId,
+  siteVisibilityIdFor,
+  type SiteIconPreset,
+  type SiteVisibility,
 } from "@dpeek/graphle-module-site";
 import {
   createGraphleSqlitePersistedAuthoritativeGraph,
@@ -18,7 +24,9 @@ import {
 
 export const graphleLocalSiteAuthorityId = "site";
 
-const localSiteGraphDefinitions = { ...minimalCore, ...site } as const;
+const localSiteGraphNamespace = { ...site, tag } as const;
+const localSiteGraphDefinitions = { ...minimalCore, color: colorType, tag, ...site } as const;
+const defaultTagColor = "#2563eb";
 
 export type LocalSiteStartupDiagnostics = {
   readonly recovery: "none" | "repair" | "reset-baseline";
@@ -26,98 +34,101 @@ export type LocalSiteStartupDiagnostics = {
   readonly resetReasons: readonly string[];
 };
 
-export type LocalSitePage = {
+export interface LocalSiteTag {
   readonly id: string;
-  readonly title: string;
-  readonly path: string;
-  readonly body: string;
-  readonly status: SitePublicationStatus;
-  readonly updatedAt: string;
-};
+  readonly key: string;
+  readonly name: string;
+  readonly color: string;
+}
 
-export type LocalSitePost = {
+export interface LocalSiteItem {
   readonly id: string;
   readonly title: string;
-  readonly slug: string;
-  readonly body: string;
-  readonly excerpt: string;
+  readonly path?: string;
+  readonly url?: string;
+  readonly body?: string;
+  readonly excerpt?: string;
+  readonly visibility: SiteVisibility;
+  readonly icon?: SiteIconPreset;
+  readonly tags: readonly LocalSiteTag[];
+  readonly pinned: boolean;
+  readonly sortOrder?: number;
   readonly publishedAt?: string;
-  readonly status: SitePublicationStatus;
+  readonly createdAt: string;
   readonly updatedAt: string;
+}
+
+type LocalSiteRawTag = {
+  readonly id: string;
+  readonly name: string;
+  readonly key: string;
+  readonly color: string;
 };
 
-type LocalSiteRawPage = {
+type LocalSiteRawItem = {
   readonly id: string;
   readonly title: string;
-  readonly path: string;
-  readonly body: string;
-  readonly status: string;
-  readonly updatedAt?: Date | string;
-};
-
-type LocalSiteRawPost = {
-  readonly id: string;
-  readonly title: string;
-  readonly slug: string;
-  readonly body: string;
-  readonly excerpt: string;
+  readonly path?: string;
+  readonly url?: URL | string;
+  readonly body?: string;
+  readonly excerpt?: string;
+  readonly visibility: string;
+  readonly icon?: string;
+  readonly tags?: string[];
+  readonly pinned?: boolean;
+  readonly sortOrder?: number;
   readonly publishedAt?: Date | string;
-  readonly status: string;
+  readonly createdAt?: Date | string;
   readonly updatedAt?: Date | string;
 };
 
-type LocalSiteRawPageCreate = {
+type LocalSiteRawItemCreate = {
   readonly title: string;
-  readonly path: string;
-  readonly body: string;
-  readonly status: string;
-  readonly updatedAt: Date;
-};
-
-type LocalSiteRawPostCreate = {
-  readonly title: string;
-  readonly slug: string;
-  readonly body: string;
-  readonly excerpt: string;
+  readonly path?: string;
+  readonly url?: URL;
+  readonly body?: string;
+  readonly excerpt?: string;
+  readonly visibility: string;
+  readonly icon?: string;
+  readonly tags?: string[];
+  readonly pinned?: boolean;
+  readonly sortOrder?: number;
   readonly publishedAt?: Date;
-  readonly status: string;
+  readonly createdAt: Date;
   readonly updatedAt: Date;
 };
 
-type LocalSiteRawPagePatch = {
+type LocalSiteRawItemPatch = {
   title?: string;
   path?: string;
-  body?: string;
-  status?: string;
-  updatedAt?: Date;
-};
-
-type LocalSiteRawPostPatch = {
-  title?: string;
-  slug?: string;
+  url?: URL;
   body?: string;
   excerpt?: string;
+  visibility?: string;
+  icon?: string;
+  tags?: string[];
+  pinned?: boolean;
+  sortOrder?: number;
   publishedAt?: Date;
-  status?: string;
   updatedAt?: Date;
 };
 
 export type LocalSiteRouteResult =
   | {
-      readonly kind: "page";
+      readonly kind: "item";
       readonly path: string;
-      readonly page: LocalSitePage;
-    }
-  | {
-      readonly kind: "post";
-      readonly path: string;
-      readonly post: LocalSitePost;
+      readonly item: LocalSiteItem;
     }
   | {
       readonly kind: "not-found";
       readonly path: string;
       readonly message: string;
     };
+
+export interface LocalSiteRoutePayload {
+  readonly route: LocalSiteRouteResult;
+  readonly items: readonly LocalSiteItem[];
+}
 
 export interface LocalSiteValidationIssue {
   readonly path: string;
@@ -138,8 +149,8 @@ export class LocalSiteValidationError extends Error {
 export class LocalSiteNotFoundError extends Error {
   readonly code = "site.record_not_found";
 
-  constructor(kind: "page" | "post", id: string) {
-    super(`Site ${kind} "${id}" was not found.`);
+  constructor(id: string) {
+    super(`Site item "${id}" was not found.`);
     this.name = "LocalSiteNotFoundError";
   }
 }
@@ -147,15 +158,18 @@ export class LocalSiteNotFoundError extends Error {
 export interface LocalSiteAuthority {
   readonly startupDiagnostics: LocalSiteStartupDiagnostics;
   readonly graph: {
-    readonly page: {
-      create(input: LocalSiteRawPageCreate): string;
-      update(id: string, patch: LocalSiteRawPagePatch): LocalSiteRawPage;
-      list(): readonly LocalSiteRawPage[];
+    readonly item: {
+      create(input: LocalSiteRawItemCreate): string;
+      update(id: string, patch: LocalSiteRawItemPatch): LocalSiteRawItem;
+      list(): readonly LocalSiteRawItem[];
     };
-    readonly post: {
-      create(input: LocalSiteRawPostCreate): string;
-      update(id: string, patch: LocalSiteRawPostPatch): LocalSiteRawPost;
-      list(): readonly LocalSiteRawPost[];
+    readonly tag: {
+      create(input: {
+        readonly name: string;
+        readonly key: string;
+        readonly color: string;
+      }): string;
+      list(): readonly LocalSiteRawTag[];
     };
   };
   persist(): Promise<void>;
@@ -169,6 +183,26 @@ export interface OpenLocalSiteAuthorityOptions {
 export interface LocalSiteHomePage {
   readonly title: string;
   readonly body: string;
+}
+
+interface NormalizedTagInput {
+  readonly key: string;
+  readonly name: string;
+  readonly color?: string;
+}
+
+interface NormalizedItemInput {
+  readonly title?: string;
+  readonly path?: string;
+  readonly url?: URL;
+  readonly body?: string;
+  readonly excerpt?: string;
+  readonly visibility?: SiteVisibility;
+  readonly icon?: SiteIconPreset;
+  readonly tags?: readonly NormalizedTagInput[];
+  readonly pinned?: boolean;
+  readonly sortOrder?: number;
+  readonly publishedAt?: Date;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -187,90 +221,197 @@ function validationIssue(
   return { path, message, code };
 }
 
+function throwIssue(path: string, message: string, code?: string): never {
+  throw new LocalSiteValidationError([validationIssue(path, message, code)]);
+}
+
 function requireInputObject(input: unknown): Record<string, unknown> {
   if (isRecord(input)) return input;
-  throw new LocalSiteValidationError([
-    validationIssue("body", "Request body must be a JSON object.", "site.body_invalid"),
-  ]);
+  throwIssue("body", "Request body must be a JSON object.", "site.body_invalid");
 }
 
 function readStringField(
   input: Record<string, unknown>,
   path: string,
-  options: { readonly required: boolean; readonly nonBlank?: boolean },
+  options: {
+    readonly required: boolean;
+    readonly nonBlank?: boolean;
+    readonly emptyAsUndefined?: boolean;
+  },
 ): string | undefined {
   if (!hasOwn(input, path)) {
-    if (options.required) {
-      throw new LocalSiteValidationError([
-        validationIssue(path, `${path} is required.`, "site.field_required"),
-      ]);
-    }
+    if (options.required) throwIssue(path, `${path} is required.`, "site.field_required");
     return undefined;
   }
 
   const value = input[path];
+  if (value === null && !options.required) return undefined;
   if (typeof value !== "string") {
-    throw new LocalSiteValidationError([
-      validationIssue(path, `${path} must be a string.`, "site.field_type"),
-    ]);
+    throwIssue(path, `${path} must be a string.`, "site.field_type");
   }
-  if (options.nonBlank && value.trim().length === 0) {
-    throw new LocalSiteValidationError([
-      validationIssue(path, `${path} must not be blank.`, "site.field_blank"),
-    ]);
+
+  const trimmed = value.trim();
+  if (options.emptyAsUndefined && trimmed.length === 0) return undefined;
+  if (options.nonBlank && trimmed.length === 0) {
+    throwIssue(path, `${path} must not be blank.`, "site.field_blank");
   }
 
   return value;
 }
 
-function readStatusField(
-  input: Record<string, unknown>,
-  fallback: SitePublicationStatus,
-): SitePublicationStatus {
-  if (!hasOwn(input, "status")) return fallback;
-  try {
-    return parseSitePublicationStatus(input.status);
-  } catch (error) {
-    throw new LocalSiteValidationError([
-      validationIssue(
-        "status",
-        error instanceof Error ? error.message : "status is invalid.",
-        "site.status_invalid",
-      ),
-    ]);
+function readBooleanField(input: Record<string, unknown>, path: string): boolean | undefined {
+  if (!hasOwn(input, path)) return undefined;
+  const value = input[path];
+  if (typeof value !== "boolean") {
+    throwIssue(path, `${path} must be a boolean.`, "site.field_type");
   }
+  return value;
 }
 
-function readPathField(input: Record<string, unknown>, options: { readonly required: boolean }) {
-  const raw = readStringField(input, "path", { required: options.required, nonBlank: true });
+function readNumberField(input: Record<string, unknown>, path: string): number | undefined {
+  if (!hasOwn(input, path)) return undefined;
+  const value = input[path];
+  if (value === null || value === "") return undefined;
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    throwIssue(path, `${path} must be a finite number.`, "site.field_type");
+  }
+  return value;
+}
+
+function readPathField(input: Record<string, unknown>): string | undefined {
+  const raw = readStringField(input, "path", {
+    required: false,
+    nonBlank: false,
+    emptyAsUndefined: true,
+  });
   if (raw === undefined) return undefined;
   try {
     return parseSitePath(raw);
   } catch (error) {
-    throw new LocalSiteValidationError([
-      validationIssue(
-        "path",
-        error instanceof Error ? error.message : "path is invalid.",
-        "site.path_invalid",
-      ),
-    ]);
+    throwIssue(
+      "path",
+      error instanceof Error ? error.message : "path is invalid.",
+      "site.path_invalid",
+    );
   }
 }
 
-function readSlugField(input: Record<string, unknown>, options: { readonly required: boolean }) {
-  const raw = readStringField(input, "slug", { required: options.required, nonBlank: true });
+function readUrlField(input: Record<string, unknown>): URL | undefined {
+  const raw = readStringField(input, "url", {
+    required: false,
+    nonBlank: false,
+    emptyAsUndefined: true,
+  });
   if (raw === undefined) return undefined;
   try {
-    return parseSiteSlug(raw);
+    return new URL(parseSiteAbsoluteUrl(raw));
   } catch (error) {
-    throw new LocalSiteValidationError([
-      validationIssue(
-        "slug",
-        error instanceof Error ? error.message : "slug is invalid.",
-        "site.slug_invalid",
-      ),
-    ]);
+    throwIssue(
+      "url",
+      error instanceof Error ? error.message : "url is invalid.",
+      "site.url_invalid",
+    );
   }
+}
+
+function readVisibilityField(input: Record<string, unknown>): SiteVisibility | undefined {
+  if (!hasOwn(input, "visibility")) return undefined;
+  try {
+    return parseSiteVisibility(input.visibility);
+  } catch (error) {
+    throwIssue(
+      "visibility",
+      error instanceof Error ? error.message : "visibility is invalid.",
+      "site.visibility_invalid",
+    );
+  }
+}
+
+function readIconField(input: Record<string, unknown>): SiteIconPreset | undefined {
+  if (!hasOwn(input, "icon")) return undefined;
+  const value = input.icon;
+  if (value === null || value === "") return undefined;
+  try {
+    return parseSiteIconPreset(value);
+  } catch (error) {
+    throwIssue(
+      "icon",
+      error instanceof Error ? error.message : "icon is invalid.",
+      "site.icon_invalid",
+    );
+  }
+}
+
+function readDateField(input: Record<string, unknown>, path: string): Date | undefined {
+  if (!hasOwn(input, path)) return undefined;
+  const value = input[path];
+  if (value === null || value === "") return undefined;
+  if (typeof value !== "string") {
+    throwIssue(path, `${path} must be an ISO date string.`, "site.field_type");
+  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    throwIssue(path, `${path} must be a valid ISO date string.`, "site.date_invalid");
+  }
+  return date;
+}
+
+function normalizeTagKey(raw: string): string {
+  return raw
+    .trim()
+    .toLowerCase()
+    .replace(/[_\s]+/g, "-")
+    .replace(/[^a-z0-9-]+/g, "")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
+}
+
+function titleFromTagKey(key: string): string {
+  return key
+    .split("-")
+    .filter(Boolean)
+    .map((part) => `${part.slice(0, 1).toUpperCase()}${part.slice(1)}`)
+    .join(" ");
+}
+
+function readTagsField(input: Record<string, unknown>): readonly NormalizedTagInput[] | undefined {
+  if (!hasOwn(input, "tags")) return undefined;
+  const value = input.tags;
+  if (value === null) return [];
+  if (!Array.isArray(value)) {
+    throwIssue("tags", "tags must be an array.", "site.field_type");
+  }
+
+  const tags = new Map<string, NormalizedTagInput>();
+  value.forEach((rawTag, index) => {
+    let rawKey: string | undefined;
+    let rawName: string | undefined;
+    let rawColor: string | undefined;
+
+    if (typeof rawTag === "string") {
+      rawKey = rawTag;
+      rawName = rawTag;
+    } else if (isRecord(rawTag)) {
+      if (typeof rawTag.key === "string") rawKey = rawTag.key;
+      if (typeof rawTag.name === "string") rawName = rawTag.name;
+      if (typeof rawTag.color === "string") rawColor = rawTag.color;
+      rawKey ??= rawName;
+    } else {
+      throwIssue(`tags.${index}`, "tag entries must be strings or objects.", "site.field_type");
+    }
+
+    const key = normalizeTagKey(rawKey ?? "");
+    if (key.length === 0) {
+      throwIssue(`tags.${index}`, "tag key must not be blank.", "site.tag_blank");
+    }
+    tags.set(key, {
+      key,
+      name: rawName?.trim() || titleFromTagKey(key),
+      ...(rawColor ? { color: rawColor } : {}),
+    });
+  });
+
+  return [...tags.values()];
 }
 
 function formatDate(value: Date | string | undefined): string | undefined {
@@ -283,92 +424,145 @@ function requireDate(value: Date | string | undefined): string {
   return formatDate(value) ?? new Date(0).toISOString();
 }
 
-function serializeStatus(statusId: string): SitePublicationStatus {
-  return siteStatusForId(statusId) ?? "draft";
+function formatUrl(value: URL | string | undefined): string | undefined {
+  if (value instanceof URL) return value.toString();
+  if (typeof value === "string") return value;
+  return undefined;
 }
 
-function serializePage(page: LocalSiteRawPage): LocalSitePage {
+function serializeVisibility(visibilityId: string): SiteVisibility {
+  return siteVisibilityForId(visibilityId) ?? "private";
+}
+
+function serializeIcon(iconId: string | undefined): SiteIconPreset | undefined {
+  return iconId ? siteIconPresetForId(iconId) : undefined;
+}
+
+function serializeTag(tagRecord: LocalSiteRawTag): LocalSiteTag {
   return {
-    id: page.id,
-    title: page.title,
-    path: page.path,
-    body: page.body,
-    status: serializeStatus(page.status),
-    updatedAt: requireDate(page.updatedAt),
+    id: tagRecord.id,
+    key: tagRecord.key,
+    name: tagRecord.name,
+    color: tagRecord.color,
   };
 }
 
-function serializePost(post: LocalSiteRawPost): LocalSitePost {
+function serializeItem(authority: LocalSiteAuthority, item: LocalSiteRawItem): LocalSiteItem {
+  const tagById = new Map(authority.graph.tag.list().map((tagRecord) => [tagRecord.id, tagRecord]));
+  const tags = (item.tags ?? [])
+    .map((id) => tagById.get(id))
+    .filter((tagRecord): tagRecord is LocalSiteRawTag => Boolean(tagRecord))
+    .map(serializeTag);
+
   return {
-    id: post.id,
-    title: post.title,
-    slug: post.slug,
-    body: post.body,
-    excerpt: post.excerpt,
-    ...(post.publishedAt ? { publishedAt: formatDate(post.publishedAt) } : {}),
-    status: serializeStatus(post.status),
-    updatedAt: requireDate(post.updatedAt),
+    id: item.id,
+    title: item.title,
+    ...(item.path ? { path: item.path } : {}),
+    ...(item.url ? { url: formatUrl(item.url) } : {}),
+    ...(item.body ? { body: item.body } : {}),
+    ...(item.excerpt ? { excerpt: item.excerpt } : {}),
+    visibility: serializeVisibility(item.visibility),
+    ...(serializeIcon(item.icon) ? { icon: serializeIcon(item.icon) } : {}),
+    tags,
+    pinned: item.pinned ?? false,
+    ...(typeof item.sortOrder === "number" ? { sortOrder: item.sortOrder } : {}),
+    ...(item.publishedAt ? { publishedAt: formatDate(item.publishedAt) } : {}),
+    createdAt: requireDate(item.createdAt),
+    updatedAt: requireDate(item.updatedAt),
   };
 }
 
-function sortPages(left: LocalSitePage, right: LocalSitePage): number {
-  if (left.path === "/" && right.path !== "/") return -1;
-  if (right.path === "/" && left.path !== "/") return 1;
-  return left.path.localeCompare(right.path) || left.title.localeCompare(right.title);
+function findRawItem(authority: LocalSiteAuthority, id: string): LocalSiteRawItem {
+  const item = authority.graph.item.list().find((candidate) => candidate.id === id);
+  if (!item) throw new LocalSiteNotFoundError(id);
+  return item;
 }
 
-function sortPosts(left: LocalSitePost, right: LocalSitePost): number {
-  const rightPublishedAt = right.publishedAt ?? "";
-  const leftPublishedAt = left.publishedAt ?? "";
-  return (
-    rightPublishedAt.localeCompare(leftPublishedAt) ||
-    left.title.localeCompare(right.title) ||
-    left.slug.localeCompare(right.slug)
-  );
-}
-
-function ensureUniquePagePath(
+function ensureUniqueItemPath(
   authority: LocalSiteAuthority,
-  path: string,
+  path: string | undefined,
   exceptId?: string,
 ): void {
-  const existing = authority.graph.page
+  if (!path) return;
+  const existing = authority.graph.item
     .list()
-    .find((page) => page.path === path && page.id !== exceptId);
+    .find((item) => item.path === path && item.id !== exceptId);
   if (!existing) return;
   throw new LocalSiteValidationError([
-    validationIssue("path", `A page already exists at "${path}".`, "site.path_duplicate"),
+    validationIssue("path", `An item already exists at "${path}".`, "site.path_duplicate"),
   ]);
 }
 
-function ensureUniquePostSlug(
-  authority: LocalSiteAuthority,
-  slug: string,
-  exceptId?: string,
-): void {
-  const existing = authority.graph.post
-    .list()
-    .find((post) => post.slug === slug && post.id !== exceptId);
-  if (!existing) return;
+function hasPublicSurface(input: {
+  readonly path?: string;
+  readonly url?: URL | string;
+  readonly body?: string;
+}): boolean {
+  return Boolean(input.path || input.url || input.body?.trim());
+}
+
+function ensurePublicSurface(input: {
+  readonly visibility: SiteVisibility;
+  readonly path?: string;
+  readonly url?: URL | string;
+  readonly body?: string;
+}): void {
+  if (input.visibility === "private" || hasPublicSurface(input)) return;
   throw new LocalSiteValidationError([
-    validationIssue("slug", `A post already exists at "${slug}".`, "site.slug_duplicate"),
+    validationIssue(
+      "visibility",
+      "Public items need at least a path, URL, or body.",
+      "site.public_item_empty",
+    ),
   ]);
 }
 
-function findRawPage(authority: LocalSiteAuthority, id: string): LocalSiteRawPage {
-  const page = authority.graph.page.list().find((candidate) => candidate.id === id);
-  if (!page) throw new LocalSiteNotFoundError("page", id);
-  return page;
+function createOrReuseTags(
+  authority: LocalSiteAuthority,
+  tags: readonly NormalizedTagInput[] | undefined,
+): string[] | undefined {
+  if (tags === undefined) return undefined;
+
+  const ids: string[] = [];
+  for (const input of tags) {
+    const existing = authority.graph.tag.list().find((candidate) => candidate.key === input.key);
+    if (existing) {
+      ids.push(existing.id);
+      continue;
+    }
+
+    ids.push(
+      authority.graph.tag.create({
+        name: input.name,
+        key: input.key,
+        color: input.color ?? defaultTagColor,
+      }),
+    );
+  }
+  return ids;
 }
 
-function findRawPost(authority: LocalSiteAuthority, id: string): LocalSiteRawPost {
-  const post = authority.graph.post.list().find((candidate) => candidate.id === id);
-  if (!post) throw new LocalSiteNotFoundError("post", id);
-  return post;
-}
-
-function isVisible(status: SitePublicationStatus, includeDrafts: boolean): boolean {
-  return includeDrafts || status === "published";
+function normalizeItemInput(input: unknown): NormalizedItemInput {
+  const value = requireInputObject(input);
+  return {
+    title: readStringField(value, "title", { required: false, nonBlank: true }),
+    path: readPathField(value),
+    url: readUrlField(value),
+    body: readStringField(value, "body", {
+      required: false,
+      emptyAsUndefined: true,
+    }),
+    excerpt: readStringField(value, "excerpt", {
+      required: false,
+      emptyAsUndefined: true,
+    }),
+    visibility: readVisibilityField(value),
+    icon: readIconField(value),
+    tags: readTagsField(value),
+    pinned: readBooleanField(value, "pinned"),
+    sortOrder: readNumberField(value, "sortOrder"),
+    publishedAt: readDateField(value, "publishedAt"),
+  };
 }
 
 function createLocalSiteStore() {
@@ -384,57 +578,112 @@ export async function openLocalSiteAuthority({
   sqlite,
   now = () => new Date(),
 }: OpenLocalSiteAuthorityOptions): Promise<LocalSiteAuthority> {
-  return createGraphleSqlitePersistedAuthoritativeGraph(createLocalSiteStore(), site, {
-    handle: sqlite,
-    authorityId: graphleLocalSiteAuthorityId,
-    definitions: localSiteGraphDefinitions,
-    seed(graph) {
-      const timestamp = now();
-      const publishedStatus = siteStatusIdFor("published");
+  return createGraphleSqlitePersistedAuthoritativeGraph(
+    createLocalSiteStore(),
+    localSiteGraphNamespace,
+    {
+      handle: sqlite,
+      authorityId: graphleLocalSiteAuthorityId,
+      definitions: localSiteGraphDefinitions,
+      seed(graph) {
+        const timestamp = now();
+        const publicVisibility = siteVisibilityIdFor("public");
+        const privateVisibility = siteVisibilityIdFor("private");
+        const graphleTag = graph.tag.create({
+          name: "Graphle",
+          key: "graphle",
+          color: defaultTagColor,
+        });
 
-      graph.page.create({
-        title: "Home",
-        path: "/",
-        body: "Welcome to your new Graphle site.",
-        status: publishedStatus,
-        updatedAt: timestamp,
-      });
-      graph.post.create({
-        title: "Example post",
-        slug: "example-post",
-        body: "This is the first durable post in your local site graph.",
-        excerpt: "A short example post seeded into the local graph.",
-        publishedAt: timestamp,
-        status: publishedStatus,
-        updatedAt: timestamp,
-      });
+        graph.item.create({
+          title: "Home",
+          path: "/",
+          body: "# Home\n\nWelcome to your new Graphle site.",
+          excerpt: "Welcome to your new Graphle site.",
+          visibility: publicVisibility,
+          icon: siteIconPresetIdFor("website"),
+          tags: [graphleTag],
+          pinned: true,
+          sortOrder: 0,
+          publishedAt: timestamp,
+          createdAt: timestamp,
+          updatedAt: timestamp,
+        });
+        graph.item.create({
+          title: "Example note",
+          path: "/notes/example",
+          body: "# Example note\n\nThis path-backed item is stored in the local site graph.",
+          excerpt: "A path-backed markdown item seeded into the local graph.",
+          visibility: publicVisibility,
+          icon: siteIconPresetIdFor("note"),
+          tags: [graphleTag],
+          publishedAt: timestamp,
+          createdAt: timestamp,
+          updatedAt: timestamp,
+        });
+        graph.item.create({
+          title: "Graphle on GitHub",
+          url: new URL("https://github.com/dpeek/graphle"),
+          excerpt: "Public URL-only link.",
+          visibility: publicVisibility,
+          icon: siteIconPresetIdFor("github"),
+          tags: [graphleTag],
+          pinned: true,
+          sortOrder: 10,
+          publishedAt: timestamp,
+          createdAt: timestamp,
+          updatedAt: timestamp,
+        });
+        graph.item.create({
+          title: "Private bookmark",
+          url: new URL("https://example.com/private-bookmark"),
+          excerpt: "A private URL-only bookmark for local authoring.",
+          visibility: privateVisibility,
+          icon: siteIconPresetIdFor("book"),
+          createdAt: timestamp,
+          updatedAt: timestamp,
+        });
+      },
     },
-  });
+  );
 }
 
-export function listLocalSitePages(
+export function listLocalSiteItems(
   authority: LocalSiteAuthority | undefined,
-): readonly LocalSitePage[] {
-  return authority ? authority.graph.page.list().map(serializePage).sort(sortPages) : [];
+): readonly LocalSiteItem[] {
+  return authority
+    ? authority.graph.item
+        .list()
+        .map((item) => serializeItem(authority, item))
+        .sort(compareSiteItems)
+    : [];
 }
 
-export function listLocalSitePosts(
+export function listPublicLocalSiteItems(
   authority: LocalSiteAuthority | undefined,
-): readonly LocalSitePost[] {
-  return authority ? authority.graph.post.list().map(serializePost).sort(sortPosts) : [];
+): readonly LocalSiteItem[] {
+  return listLocalSiteItems(authority).filter((item) => item.visibility === "public");
+}
+
+export function searchLocalSiteItems(
+  authority: LocalSiteAuthority | undefined,
+  query: string,
+  options: { readonly includePrivate?: boolean } = {},
+): readonly LocalSiteItem[] {
+  const items = options.includePrivate
+    ? listLocalSiteItems(authority)
+    : listPublicLocalSiteItems(authority);
+  return items.filter((item) => siteItemMatchesSearch(item, query));
 }
 
 export function resolveLocalSiteRoute(
   authority: LocalSiteAuthority | undefined,
   path: string,
-  options: { readonly includeDrafts?: boolean } = {},
+  options: { readonly includePrivate?: boolean } = {},
 ): LocalSiteRouteResult {
-  const includeDrafts = options.includeDrafts === true;
   let routePath = path;
-  let route;
   try {
-    route = parseSitePublicRoute(path);
-    routePath = route.kind === "page" ? route.path : `/posts/${route.slug}`;
+    routePath = parseSitePublicRoute(path).path;
   } catch {
     return {
       kind: "not-found",
@@ -443,176 +692,145 @@ export function resolveLocalSiteRoute(
     };
   }
 
-  if (!authority) {
-    return {
-      kind: "not-found",
-      path: routePath,
-      message: `No site route exists at ${routePath}.`,
-    };
-  }
+  const item = (
+    options.includePrivate ? listLocalSiteItems(authority) : listPublicLocalSiteItems(authority)
+  ).find((candidate) => candidate.path === routePath);
 
-  if (route.kind === "post") {
-    const post = listLocalSitePosts(authority).find(
-      (candidate) => candidate.slug === route.slug && isVisible(candidate.status, includeDrafts),
-    );
-    return post
-      ? {
-          kind: "post",
-          path: routePath,
-          post,
-        }
-      : {
-          kind: "not-found",
-          path: routePath,
-          message: `No published post exists at ${routePath}.`,
-        };
-  }
-
-  const page = listLocalSitePages(authority).find(
-    (candidate) => candidate.path === route.path && isVisible(candidate.status, includeDrafts),
-  );
-  return page
+  return item
     ? {
-        kind: "page",
-        path: route.path,
-        page,
+        kind: "item",
+        path: routePath,
+        item,
       }
     : {
         kind: "not-found",
-        path: route.path,
-        message: `No published page exists at ${route.path}.`,
+        path: routePath,
+        message: `No visible item exists at ${routePath}.`,
       };
 }
 
-export async function createLocalSitePage(
+export function readLocalSiteRoutePayload(
+  authority: LocalSiteAuthority | undefined,
+  path: string,
+  options: { readonly includePrivate?: boolean } = {},
+): LocalSiteRoutePayload {
+  return {
+    route: resolveLocalSiteRoute(authority, path, options),
+    items: options.includePrivate
+      ? listLocalSiteItems(authority)
+      : listPublicLocalSiteItems(authority),
+  };
+}
+
+export async function createLocalSiteItem(
   authority: LocalSiteAuthority,
   input: unknown,
   options: { readonly now?: () => Date } = {},
-): Promise<LocalSitePage> {
-  const value = requireInputObject(input);
+): Promise<LocalSiteItem> {
   const now = options.now ?? (() => new Date());
-  const title = readStringField(value, "title", { required: true, nonBlank: true })!;
-  const path = readPathField(value, { required: true })!;
-  const body = readStringField(value, "body", { required: true })!;
-  const status = readStatusField(value, "draft");
-
-  ensureUniquePagePath(authority, path);
-  const id = authority.graph.page.create({
-    title,
-    path,
-    body,
-    status: siteStatusIdFor(status),
-    updatedAt: now(),
-  });
-  await authority.persist();
-  return serializePage(findRawPage(authority, id));
-}
-
-export async function updateLocalSitePage(
-  authority: LocalSiteAuthority,
-  id: string,
-  input: unknown,
-): Promise<LocalSitePage> {
-  const existing = findRawPage(authority, id);
-  const value = requireInputObject(input);
-  const patch: LocalSiteRawPagePatch = {};
-  const title = readStringField(value, "title", { required: false, nonBlank: true });
-  const path = readPathField(value, { required: false });
-  const body = readStringField(value, "body", { required: false });
-
-  if (title !== undefined) patch.title = title;
-  if (path !== undefined) {
-    ensureUniquePagePath(authority, path, id);
-    patch.path = path;
+  const value = normalizeItemInput(input);
+  if (!value.title) {
+    throw new LocalSiteValidationError([
+      validationIssue("title", "title is required.", "site.field_required"),
+    ]);
   }
-  if (body !== undefined) patch.body = body;
-  if (hasOwn(value, "status")) patch.status = siteStatusIdFor(readStatusField(value, "draft"));
 
-  if (Object.keys(patch).length === 0) return serializePage(existing);
-  const updated = authority.graph.page.update(id, patch);
-  await authority.persist();
-  return serializePage(updated);
-}
-
-export async function createLocalSitePost(
-  authority: LocalSiteAuthority,
-  input: unknown,
-  options: { readonly now?: () => Date } = {},
-): Promise<LocalSitePost> {
-  const value = requireInputObject(input);
-  const now = options.now ?? (() => new Date());
-  const title = readStringField(value, "title", { required: true, nonBlank: true })!;
-  const slug = readSlugField(value, { required: true })!;
-  const body = readStringField(value, "body", { required: true })!;
-  const excerpt = readStringField(value, "excerpt", { required: true, nonBlank: true })!;
-  const status = readStatusField(value, "draft");
-
-  ensureUniquePostSlug(authority, slug);
   const timestamp = now();
-  const id = authority.graph.post.create({
-    title,
-    slug,
-    body,
-    excerpt,
-    ...(status === "published" ? { publishedAt: timestamp } : {}),
-    status: siteStatusIdFor(status),
+  const visibility = value.visibility ?? "private";
+  ensureUniqueItemPath(authority, value.path);
+  ensurePublicSurface({
+    visibility,
+    path: value.path,
+    url: value.url,
+    body: value.body,
+  });
+  const tagIds = createOrReuseTags(authority, value.tags);
+  const id = authority.graph.item.create({
+    title: value.title,
+    ...(value.path ? { path: value.path } : {}),
+    ...(value.url ? { url: value.url } : {}),
+    ...(value.body ? { body: value.body } : {}),
+    ...(value.excerpt ? { excerpt: value.excerpt } : {}),
+    visibility: siteVisibilityIdFor(visibility),
+    ...(value.icon ? { icon: siteIconPresetIdFor(value.icon) } : {}),
+    ...(tagIds ? { tags: tagIds } : {}),
+    ...(value.pinned !== undefined ? { pinned: value.pinned } : {}),
+    ...(value.sortOrder !== undefined ? { sortOrder: value.sortOrder } : {}),
+    ...(value.publishedAt
+      ? { publishedAt: value.publishedAt }
+      : visibility === "public"
+        ? { publishedAt: timestamp }
+        : {}),
+    createdAt: timestamp,
     updatedAt: timestamp,
   });
   await authority.persist();
-  return serializePost(findRawPost(authority, id));
+  return serializeItem(authority, findRawItem(authority, id));
 }
 
-export async function updateLocalSitePost(
+export async function updateLocalSiteItem(
   authority: LocalSiteAuthority,
   id: string,
   input: unknown,
   options: { readonly now?: () => Date } = {},
-): Promise<LocalSitePost> {
-  const existing = findRawPost(authority, id);
-  const existingStatus = serializeStatus(existing.status);
-  const value = requireInputObject(input);
+): Promise<LocalSiteItem> {
   const now = options.now ?? (() => new Date());
-  const patch: LocalSiteRawPostPatch = {};
-  const title = readStringField(value, "title", { required: false, nonBlank: true });
-  const slug = readSlugField(value, { required: false });
-  const body = readStringField(value, "body", { required: false });
-  const excerpt = readStringField(value, "excerpt", { required: false, nonBlank: true });
+  const existing = findRawItem(authority, id);
+  const value = normalizeItemInput(input);
+  const current = serializeItem(authority, existing);
+  const next = {
+    title: value.title ?? current.title,
+    path: hasOwn(requireInputObject(input), "path") ? value.path : current.path,
+    url: hasOwn(requireInputObject(input), "url") ? value.url : existing.url,
+    body: hasOwn(requireInputObject(input), "body") ? value.body : current.body,
+    visibility: value.visibility ?? current.visibility,
+  };
 
-  if (title !== undefined) patch.title = title;
-  if (slug !== undefined) {
-    ensureUniquePostSlug(authority, slug, id);
-    patch.slug = slug;
+  ensureUniqueItemPath(authority, next.path, id);
+  ensurePublicSurface(next);
+
+  const patch: LocalSiteRawItemPatch = {};
+  const inputObject = requireInputObject(input);
+  if (value.title !== undefined) patch.title = value.title;
+  if (hasOwn(inputObject, "path")) patch.path = value.path;
+  if (hasOwn(inputObject, "url")) patch.url = value.url;
+  if (hasOwn(inputObject, "body")) patch.body = value.body;
+  if (hasOwn(inputObject, "excerpt")) patch.excerpt = value.excerpt;
+  if (value.visibility !== undefined) patch.visibility = siteVisibilityIdFor(value.visibility);
+  if (hasOwn(inputObject, "icon")) {
+    patch.icon = value.icon ? siteIconPresetIdFor(value.icon) : undefined;
   }
-  if (body !== undefined) patch.body = body;
-  if (excerpt !== undefined) patch.excerpt = excerpt;
-  if (hasOwn(value, "status")) {
-    const status = readStatusField(value, existingStatus);
-    patch.status = siteStatusIdFor(status);
-    if (status === "published" && existingStatus !== "published") {
-      patch.publishedAt = now();
-    }
-    if (status === "draft") {
-      patch.publishedAt = undefined;
-    }
+  const tagIds = createOrReuseTags(authority, value.tags);
+  if (tagIds !== undefined) patch.tags = tagIds;
+  if (value.pinned !== undefined) patch.pinned = value.pinned;
+  if (hasOwn(inputObject, "sortOrder")) patch.sortOrder = value.sortOrder;
+  if (hasOwn(inputObject, "publishedAt")) patch.publishedAt = value.publishedAt;
+
+  const nextVisibility = value.visibility ?? current.visibility;
+  if (
+    nextVisibility === "public" &&
+    current.publishedAt === undefined &&
+    patch.publishedAt === undefined
+  ) {
+    patch.publishedAt = now();
   }
 
-  if (Object.keys(patch).length === 0) return serializePost(existing);
-  const updated = authority.graph.post.update(id, patch);
+  if (Object.keys(patch).length === 0) return serializeItem(authority, existing);
+  patch.updatedAt = now();
+  const updated = authority.graph.item.update(id, patch);
   await authority.persist();
-  return serializePost(updated);
+  return serializeItem(authority, updated);
 }
 
 export function readLocalSiteHomePage(
   authority: LocalSiteAuthority | undefined,
 ): LocalSiteHomePage | undefined {
-  const home = listLocalSitePages(authority).find(
-    (page) => page.path === "/" && page.status === "published",
-  );
+  const home = listPublicLocalSiteItems(authority).find((item) => item.path === "/");
   if (!home) return undefined;
 
   return {
     title: home.title,
-    body: home.body,
+    body: home.body ?? "",
   };
 }
 
@@ -627,8 +845,8 @@ export function readLocalSiteAuthorityHealth(authority: LocalSiteAuthority | und
     status: "ok" as const,
     startupDiagnostics: authority.startupDiagnostics,
     records: {
-      pages: listLocalSitePages(authority).length,
-      posts: listLocalSitePosts(authority).length,
+      items: listLocalSiteItems(authority).length,
+      tags: authority.graph.tag.list().length,
     },
   };
 }

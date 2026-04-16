@@ -11,8 +11,12 @@ personal-site MVP.
 ## What It Owns
 
 - the `site:path` scalar for absolute website paths
-- the `site:status` enum with `draft` and `published`
-- the `site:page` and `site:post` entity definitions
+- the `site:visibility` enum with `private` and `public`
+- the `site:icon` enum for named personal-site icon presets
+- the `site:item` entity definition for pages, posts, links, bookmarks, social
+  links, and notes
+- browser-safe helpers for item path, URL, visibility, icon, search, and sort
+  behavior
 - stable ids for every site type, predicate, enum option, and field-tree node
 - `siteManifest` for the built-in site schema contribution
 

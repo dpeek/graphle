@@ -7,17 +7,15 @@ import { graphleSiteWebClientAssetsPath } from "@dpeek/graphle-site-web/assets";
 import type { LocalAuthController, LocalAdminSession } from "./auth.js";
 import type { GraphleLocalProject } from "./project.js";
 import {
-  createLocalSitePage,
-  createLocalSitePost,
-  listLocalSitePages,
-  listLocalSitePosts,
+  createLocalSiteItem,
+  listLocalSiteItems,
   LocalSiteNotFoundError,
   LocalSiteValidationError,
   readLocalSiteAuthorityHealth,
-  resolveLocalSiteRoute,
-  updateLocalSitePage,
-  updateLocalSitePost,
+  readLocalSiteRoutePayload,
+  updateLocalSiteItem,
   type LocalSiteAuthority,
+  type LocalSiteRoutePayload,
   type LocalSiteRouteResult,
   type LocalSiteValidationIssue,
 } from "./site-authority.js";
@@ -229,22 +227,32 @@ function renderMarkdownFallback(content: string): string {
 }
 
 function renderRouteFallback(route: LocalSiteRouteResult): string {
-  if (route.kind === "page") {
-    return `<article class="content" data-route-kind="page">
-          <h1>${escapeHtml(route.page.title)}</h1>
-          <div class="markdown">${renderMarkdownFallback(route.page.body)}</div>
-        </article>`;
-  }
-
-  if (route.kind === "post") {
-    const publishedAt = route.post.publishedAt
-      ? `<time datetime="${escapeHtml(route.post.publishedAt)}">${escapeHtml(route.post.publishedAt.slice(0, 10))}</time>`
+  if (route.kind === "item") {
+    const publishedAt = route.item.publishedAt
+      ? `<time datetime="${escapeHtml(route.item.publishedAt)}">${escapeHtml(route.item.publishedAt.slice(0, 10))}</time>`
       : "";
-    return `<article class="content" data-route-kind="post">
-          <div class="post-meta">${publishedAt}</div>
-          <h1>${escapeHtml(route.post.title)}</h1>
-          <p class="excerpt">${escapeHtml(route.post.excerpt)}</p>
-          <div class="markdown">${renderMarkdownFallback(route.post.body)}</div>
+    const path = route.item.path ? `<span>${escapeHtml(route.item.path)}</span>` : "";
+    const outboundUrl = route.item.url
+      ? `<a class="outbound" href="${escapeHtml(route.item.url)}" rel="noreferrer">${escapeHtml(route.item.url)}</a>`
+      : "";
+    const excerpt = route.item.excerpt
+      ? `<p class="excerpt">${escapeHtml(route.item.excerpt)}</p>`
+      : "";
+    const tags = route.item.tags.length
+      ? `<ul class="tags">${route.item.tags
+          .map((tag) => `<li>${escapeHtml(tag.name)}</li>`)
+          .join("")}</ul>`
+      : "";
+    const body = route.item.body
+      ? `<div class="markdown">${renderMarkdownFallback(route.item.body)}</div>`
+      : "";
+
+    return `<article class="content" data-route-kind="item">
+          <div class="item-meta">${publishedAt}${path}${outboundUrl}</div>
+          <h1>${escapeHtml(route.item.title)}</h1>
+          ${excerpt}
+          ${tags}
+          ${body}
         </article>`;
   }
 
@@ -256,9 +264,31 @@ function renderRouteFallback(route: LocalSiteRouteResult): string {
 }
 
 function routeTitle(route: LocalSiteRouteResult): string {
-  if (route.kind === "page") return route.page.title;
-  if (route.kind === "post") return route.post.title;
+  if (route.kind === "item") return route.item.title;
   return "Page not found";
+}
+
+function renderSidebarFallback(payload: LocalSiteRoutePayload): string {
+  if (payload.items.length === 0) {
+    return `<aside class="sidebar" aria-label="Site items"><h2>Items</h2><p>No visible items.</p></aside>`;
+  }
+
+  return `<aside class="sidebar" aria-label="Site items">
+          <h2>Items</h2>
+          <ul>
+            ${payload.items
+              .map((item) => {
+                const href = item.path ?? item.url ?? "#";
+                const target = item.path ? "" : ` rel="noreferrer"`;
+                const marker = item.path ? item.path : item.url ? "external" : "item";
+                const tags = item.tags.length
+                  ? `<span>${item.tags.map((tag) => escapeHtml(tag.name)).join(", ")}</span>`
+                  : "";
+                return `<li><a href="${escapeHtml(href)}"${target}>${escapeHtml(item.title)}</a><small>${escapeHtml(marker)}</small>${tags}</li>`;
+              })
+              .join("")}
+          </ul>
+        </aside>`;
 }
 
 function renderClientAssetTags(assetTags: SiteWebClientAssetTags): string {
@@ -276,11 +306,12 @@ function renderSiteHostPage(
   session: LocalAdminSession | null,
   project: GraphleLocalProject,
   assetTags: SiteWebClientAssetTags,
-  route: LocalSiteRouteResult,
+  payload: LocalSiteRoutePayload,
 ): string {
   const authenticated = session !== null;
   const statusLabel = authenticated ? "Admin session active" : "Visitor preview";
   const authoringLabel = authenticated ? "Inline authoring available" : "Inline authoring locked";
+  const route = payload.route;
   const title = routeTitle(route);
 
   return `<!doctype html>
@@ -306,7 +337,7 @@ ${renderClientAssetTags(assetTags)}
       }
       header,
       main {
-        width: min(960px, calc(100% - 32px));
+        width: min(1180px, calc(100% - 32px));
         margin: 0 auto;
       }
       header {
@@ -319,8 +350,10 @@ ${renderClientAssetTags(assetTags)}
       }
       main {
         display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(240px, 320px);
         gap: 28px;
         padding: 48px 0;
+        align-items: start;
       }
       h1 {
         max-width: 720px;
@@ -362,12 +395,39 @@ ${renderClientAssetTags(assetTags)}
         font-size: 1.15rem;
       }
       .eyebrow,
-      .post-meta {
+      .item-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        align-items: center;
         color: #7d4e2f;
         font-size: 0.76rem;
         font-weight: 700;
         letter-spacing: 0;
         text-transform: uppercase;
+      }
+      .outbound {
+        max-width: 100%;
+        overflow-wrap: anywhere;
+        color: #145b7e;
+        text-transform: none;
+      }
+      .tags {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+      .tags li {
+        min-height: 24px;
+        padding: 2px 8px;
+        border: 1px solid #bbc5ba;
+        border-radius: 999px;
+        background: #ffffff;
+        color: #28352f;
+        font-size: 0.82rem;
       }
       .brand {
         font-weight: 700;
@@ -385,10 +445,43 @@ ${renderClientAssetTags(assetTags)}
         white-space: nowrap;
       }
       .panel {
+        grid-column: 1 / -1;
         display: grid;
         gap: 12px;
         padding-top: 24px;
         border-top: 1px solid #d7dbd2;
+      }
+      .sidebar {
+        display: grid;
+        gap: 14px;
+      }
+      .sidebar h2 {
+        margin: 0;
+        font-size: 1rem;
+      }
+      .sidebar ul {
+        display: grid;
+        gap: 12px;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+      .sidebar li {
+        display: grid;
+        gap: 3px;
+        border-top: 1px solid #d7dbd2;
+        padding-top: 10px;
+      }
+      .sidebar a {
+        min-width: 0;
+        overflow-wrap: anywhere;
+        color: #145b7e;
+        font-weight: 700;
+        text-decoration: none;
+      }
+      .sidebar small,
+      .sidebar span {
+        color: #526159;
       }
       .state {
         display: flex;
@@ -411,6 +504,7 @@ ${renderClientAssetTags(assetTags)}
           padding: 16px 0;
         }
         main {
+          grid-template-columns: 1fr;
           padding: 40px 0;
         }
         .status {
@@ -427,6 +521,7 @@ ${renderClientAssetTags(assetTags)}
       </header>
       <main>
         ${renderRouteFallback(route)}
+        ${renderSidebarFallback(payload)}
         <section class="panel" aria-label="Local authoring state">
           <div class="state">
             <strong>${authoringLabel}</strong>
@@ -597,20 +692,20 @@ export function createGraphleLocalServer({
         }
         const session = auth.getSession(cookieHeader);
         return jsonResponse(
-          resolveLocalSiteRoute(siteAuthority, url.searchParams.get("path") ?? "/", {
-            includeDrafts: session !== null,
+          readLocalSiteRoutePayload(siteAuthority, url.searchParams.get("path") ?? "/", {
+            includePrivate: session !== null,
           }),
         );
       }
 
-      if (url.pathname === "/api/site/pages") {
+      if (url.pathname === "/api/site/items") {
         const session = auth.getSession(cookieHeader);
         if (request.method === "GET") {
           if (!session) {
             return errorResponse("Authentication required.", "auth.required", 401);
           }
           return siteApiResponse(() => ({
-            pages: listLocalSitePages(requireSiteAuthority(siteAuthority)),
+            items: listLocalSiteItems(requireSiteAuthority(siteAuthority)),
           }));
         }
         if (request.method === "POST") {
@@ -618,7 +713,7 @@ export function createGraphleLocalServer({
             return errorResponse("Authentication required.", "auth.required", 401);
           }
           return siteApiResponse(async () => ({
-            page: await createLocalSitePage(
+            item: await createLocalSiteItem(
               requireSiteAuthority(siteAuthority),
               await readJsonBody(request),
               {
@@ -630,8 +725,8 @@ export function createGraphleLocalServer({
         return methodNotAllowed("GET, POST");
       }
 
-      const pageId = readApiEntityId(url.pathname, "/api/site/pages");
-      if (pageId !== undefined) {
+      const itemId = readApiEntityId(url.pathname, "/api/site/items");
+      if (itemId !== undefined) {
         if (request.method !== "PATCH") {
           return methodNotAllowed("PATCH");
         }
@@ -640,54 +735,9 @@ export function createGraphleLocalServer({
           return errorResponse("Authentication required.", "auth.required", 401);
         }
         return siteApiResponse(async () => ({
-          page: await updateLocalSitePage(
+          item: await updateLocalSiteItem(
             requireSiteAuthority(siteAuthority),
-            pageId,
-            await readJsonBody(request),
-          ),
-        }));
-      }
-
-      if (url.pathname === "/api/site/posts") {
-        const session = auth.getSession(cookieHeader);
-        if (request.method === "GET") {
-          if (!session) {
-            return errorResponse("Authentication required.", "auth.required", 401);
-          }
-          return siteApiResponse(() => ({
-            posts: listLocalSitePosts(requireSiteAuthority(siteAuthority)),
-          }));
-        }
-        if (request.method === "POST") {
-          if (!session) {
-            return errorResponse("Authentication required.", "auth.required", 401);
-          }
-          return siteApiResponse(async () => ({
-            post: await createLocalSitePost(
-              requireSiteAuthority(siteAuthority),
-              await readJsonBody(request),
-              {
-                now,
-              },
-            ),
-          }));
-        }
-        return methodNotAllowed("GET, POST");
-      }
-
-      const postId = readApiEntityId(url.pathname, "/api/site/posts");
-      if (postId !== undefined) {
-        if (request.method !== "PATCH") {
-          return methodNotAllowed("PATCH");
-        }
-        const session = auth.getSession(cookieHeader);
-        if (!session) {
-          return errorResponse("Authentication required.", "auth.required", 401);
-        }
-        return siteApiResponse(async () => ({
-          post: await updateLocalSitePost(
-            requireSiteAuthority(siteAuthority),
-            postId,
+            itemId,
             await readJsonBody(request),
             { now },
           ),
@@ -734,15 +784,15 @@ export function createGraphleLocalServer({
       }
 
       const session = auth.getSession(cookieHeader);
-      const route = resolveLocalSiteRoute(siteAuthority, url.pathname, {
-        includeDrafts: session !== null,
+      const payload = readLocalSiteRoutePayload(siteAuthority, url.pathname, {
+        includePrivate: session !== null,
       });
       return new Response(
         request.method === "HEAD"
           ? null
-          : renderSiteHostPage(session, project, await loadAssetTags(), route),
+          : renderSiteHostPage(session, project, await loadAssetTags(), payload),
         {
-          status: route.kind === "not-found" ? 404 : 200,
+          status: payload.route.kind === "not-found" ? 404 : 200,
           headers: {
             "cache-control": "no-store",
             "content-type": "text/html; charset=utf-8",

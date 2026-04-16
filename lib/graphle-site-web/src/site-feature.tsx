@@ -1,27 +1,37 @@
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { GraphleShellErrorState, GraphleShellLoadingState } from "@dpeek/graphle-web-shell";
 import type { GraphleShellFeature } from "@dpeek/graphle-web-shell";
+import {
+  compareSiteItems,
+  siteIconPresets,
+  siteItemMatchesSearch,
+} from "@dpeek/graphle-module-site";
 import { Badge } from "@dpeek/graphle-web-ui/badge";
 import { Button } from "@dpeek/graphle-web-ui/button";
 import { Input } from "@dpeek/graphle-web-ui/input";
 import { MarkdownRenderer } from "@dpeek/graphle-web-ui/markdown";
 import { Textarea } from "@dpeek/graphle-web-ui/textarea";
 import {
-  EyeOffIcon,
-  FilePlus2Icon,
-  NewspaperIcon,
+  BookmarkIcon,
+  Edit3Icon,
+  ExternalLinkIcon,
+  FileTextIcon,
+  GlobeIcon,
+  LinkIcon,
+  LockIcon,
+  PinIcon,
+  PlusIcon,
   RefreshCwIcon,
   SaveIcon,
-  SendIcon,
+  SearchIcon,
 } from "lucide-react";
 
 import type {
-  GraphleSitePage,
-  GraphleSitePageInput,
-  GraphleSitePost,
-  GraphleSitePostInput,
-  GraphleSitePublicationStatus,
+  GraphleSiteIconPreset,
+  GraphleSiteItem,
+  GraphleSiteItemInput,
   GraphleSiteStatusSnapshot,
+  GraphleSiteVisibility,
 } from "./status.js";
 
 export type GraphleSiteStatusState =
@@ -32,10 +42,8 @@ export type GraphleSiteStatusState =
 export interface GraphleSiteFeatureOptions {
   readonly status: GraphleSiteStatusState;
   readonly onRefresh?: () => void;
-  readonly onCreatePage?: (input: GraphleSitePageInput) => Promise<void>;
-  readonly onUpdatePage?: (id: string, input: GraphleSitePageInput) => Promise<void>;
-  readonly onCreatePost?: (input: GraphleSitePostInput) => Promise<void>;
-  readonly onUpdatePost?: (id: string, input: GraphleSitePostInput) => Promise<void>;
+  readonly onCreateItem?: (input: GraphleSiteItemInput) => Promise<void>;
+  readonly onUpdateItem?: (id: string, input: GraphleSiteItemInput) => Promise<void>;
 }
 
 type SaveState =
@@ -43,37 +51,145 @@ type SaveState =
   | { readonly kind: "saving" }
   | { readonly kind: "error"; readonly message: string };
 
-const defaultPageDraft: GraphleSitePageInput = {
-  title: "Untitled page",
-  path: "/about",
-  body: "# Untitled page\n\nStart writing here.",
-  status: "draft",
+type EditorMode =
+  | { readonly kind: "create"; readonly draft: ItemDraft }
+  | { readonly kind: "edit"; readonly id: string };
+
+interface ItemDraft {
+  readonly title: string;
+  readonly path: string;
+  readonly url: string;
+  readonly excerpt: string;
+  readonly body: string;
+  readonly visibility: GraphleSiteVisibility;
+  readonly icon: "" | GraphleSiteIconPreset;
+  readonly tags: string;
+  readonly pinned: boolean;
+  readonly sortOrder: string;
+}
+
+const emptyDraft: ItemDraft = {
+  title: "Untitled item",
+  path: "",
+  url: "",
+  excerpt: "",
+  body: "",
+  visibility: "private",
+  icon: "",
+  tags: "",
+  pinned: false,
+  sortOrder: "",
 };
 
-const defaultPostDraft: GraphleSitePostInput = {
-  title: "Untitled post",
-  slug: "untitled-post",
-  body: "# Untitled post\n\nStart writing here.",
-  excerpt: "A short summary for the post list.",
-  status: "draft",
-};
+const presetDrafts = [
+  {
+    id: "page",
+    label: "Page",
+    icon: FileTextIcon,
+    draft: {
+      ...emptyDraft,
+      title: "Untitled page",
+      path: "/about",
+      body: "# Untitled page\n\nStart writing here.",
+      visibility: "private" as const,
+      icon: "website" as const,
+    },
+  },
+  {
+    id: "post",
+    label: "Post",
+    icon: FileTextIcon,
+    draft: {
+      ...emptyDraft,
+      title: "Untitled post",
+      path: "/posts/untitled-post",
+      excerpt: "A short summary for the post list.",
+      body: "# Untitled post\n\nStart writing here.",
+      visibility: "private" as const,
+      icon: "note" as const,
+    },
+  },
+  {
+    id: "link",
+    label: "Link",
+    icon: LinkIcon,
+    draft: {
+      ...emptyDraft,
+      title: "Useful link",
+      url: "https://example.com/",
+      visibility: "public" as const,
+      icon: "link" as const,
+    },
+  },
+  {
+    id: "bookmark",
+    label: "Bookmark",
+    icon: BookmarkIcon,
+    draft: {
+      ...emptyDraft,
+      title: "Private bookmark",
+      url: "https://example.com/",
+      visibility: "private" as const,
+      icon: "book" as const,
+    },
+  },
+  {
+    id: "social",
+    label: "Social",
+    icon: GlobeIcon,
+    draft: {
+      ...emptyDraft,
+      title: "Social link",
+      url: "https://example.com/",
+      visibility: "public" as const,
+      icon: "linkedin" as const,
+      pinned: true,
+      sortOrder: "5",
+    },
+  },
+] as const;
 
-function pageDraft(page: GraphleSitePage): GraphleSitePageInput {
+function draftFromItem(item: GraphleSiteItem): ItemDraft {
   return {
-    title: page.title,
-    path: page.path,
-    body: page.body,
-    status: page.status,
+    title: item.title,
+    path: item.path ?? "",
+    url: item.url ?? "",
+    excerpt: item.excerpt ?? "",
+    body: item.body ?? "",
+    visibility: item.visibility,
+    icon: item.icon ?? "",
+    tags: item.tags.map((tag) => tag.key).join(", "),
+    pinned: item.pinned,
+    sortOrder: item.sortOrder === undefined ? "" : String(item.sortOrder),
   };
 }
 
-function postDraft(post: GraphleSitePost): GraphleSitePostInput {
+function optionalTrimmed(value: string): string | undefined {
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
+function inputFromDraft(draft: ItemDraft): GraphleSiteItemInput {
+  const sortOrder = optionalTrimmed(draft.sortOrder);
+  const parsedSortOrder = sortOrder === undefined ? undefined : Number(sortOrder);
+  if (parsedSortOrder !== undefined && !Number.isFinite(parsedSortOrder)) {
+    throw new Error("Sort order must be a finite number.");
+  }
+
   return {
-    title: post.title,
-    slug: post.slug,
-    body: post.body,
-    excerpt: post.excerpt,
-    status: post.status,
+    title: draft.title,
+    path: optionalTrimmed(draft.path),
+    url: optionalTrimmed(draft.url),
+    excerpt: optionalTrimmed(draft.excerpt),
+    body: optionalTrimmed(draft.body),
+    visibility: draft.visibility,
+    icon: draft.icon || undefined,
+    tags: draft.tags
+      .split(",")
+      .map((tag) => tag.trim())
+      .filter((tag) => tag.length > 0),
+    pinned: draft.pinned,
+    sortOrder: parsedSortOrder,
   };
 }
 
@@ -81,37 +197,60 @@ function messageForError(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-function StatusBadge({ status }: { readonly status: GraphleSitePublicationStatus }) {
-  return <Badge variant={status === "published" ? "default" : "outline"}>{status}</Badge>;
+function VisibilityBadge({ visibility }: { readonly visibility: GraphleSiteVisibility }) {
+  return (
+    <Badge variant={visibility === "public" ? "default" : "outline"}>
+      {visibility === "public" ? "public" : "private"}
+    </Badge>
+  );
+}
+
+function ItemMarkers({ item }: { readonly item: GraphleSiteItem }) {
+  return (
+    <span className="graphle-site-item-markers">
+      <VisibilityBadge visibility={item.visibility} />
+      {item.pinned ? (
+        <Badge variant="outline">
+          <PinIcon aria-hidden={true} />
+          pinned
+        </Badge>
+      ) : null}
+    </span>
+  );
 }
 
 function RoutePreview({ snapshot }: { readonly snapshot: GraphleSiteStatusSnapshot }) {
   const route = snapshot.route;
 
-  if (route.kind === "page") {
+  if (route.kind === "item") {
+    const item = route.item;
     return (
-      <article className="graphle-site-preview-article" data-route-kind="page">
+      <article className="graphle-site-preview-article" data-route-kind="item">
         <div className="graphle-site-preview-meta">
-          <StatusBadge status={route.page.status} />
-          <span>{route.page.path}</span>
+          <ItemMarkers item={item} />
+          {item.path ? <span>{item.path}</span> : null}
+          {item.publishedAt ? <time>{item.publishedAt.slice(0, 10)}</time> : null}
         </div>
-        <h2>{route.page.title}</h2>
-        <MarkdownRenderer className="graphle-site-markdown" content={route.page.body} />
-      </article>
-    );
-  }
-
-  if (route.kind === "post") {
-    return (
-      <article className="graphle-site-preview-article" data-route-kind="post">
-        <div className="graphle-site-preview-meta">
-          <StatusBadge status={route.post.status} />
-          <span>/posts/{route.post.slug}</span>
-          {route.post.publishedAt ? <time>{route.post.publishedAt.slice(0, 10)}</time> : null}
-        </div>
-        <h2>{route.post.title}</h2>
-        <p className="graphle-site-excerpt">{route.post.excerpt}</p>
-        <MarkdownRenderer className="graphle-site-markdown" content={route.post.body} />
+        <h2>{item.title}</h2>
+        {item.excerpt ? <p className="graphle-site-excerpt">{item.excerpt}</p> : null}
+        {item.url ? (
+          <a className="graphle-site-outbound" href={item.url} rel="noreferrer">
+            <ExternalLinkIcon aria-hidden={true} />
+            {item.url}
+          </a>
+        ) : null}
+        {item.tags.length ? (
+          <div className="graphle-site-tags">
+            {item.tags.map((tag) => (
+              <Badge key={tag.id} variant="outline">
+                {tag.name}
+              </Badge>
+            ))}
+          </div>
+        ) : null}
+        {item.body ? (
+          <MarkdownRenderer className="graphle-site-markdown" content={item.body} />
+        ) : null}
       </article>
     );
   }
@@ -137,23 +276,44 @@ function Field({ label, children }: { readonly label: string; readonly children:
   );
 }
 
-function StatusSelect({
+function VisibilitySelect({
   value,
   onChange,
 }: {
-  readonly value: GraphleSitePublicationStatus;
-  readonly onChange: (value: GraphleSitePublicationStatus) => void;
+  readonly value: GraphleSiteVisibility;
+  readonly onChange: (value: GraphleSiteVisibility) => void;
 }) {
   return (
     <select
       className="graphle-site-select"
       value={value}
-      onChange={(event) =>
-        onChange(event.currentTarget.value === "published" ? "published" : "draft")
-      }
+      onChange={(event) => onChange(event.currentTarget.value === "public" ? "public" : "private")}
     >
-      <option value="draft">Draft</option>
-      <option value="published">Published</option>
+      <option value="private">Private</option>
+      <option value="public">Public</option>
+    </select>
+  );
+}
+
+function IconSelect({
+  value,
+  onChange,
+}: {
+  readonly value: "" | GraphleSiteIconPreset;
+  readonly onChange: (value: "" | GraphleSiteIconPreset) => void;
+}) {
+  return (
+    <select
+      className="graphle-site-select"
+      value={value}
+      onChange={(event) => onChange(event.currentTarget.value as "" | GraphleSiteIconPreset)}
+    >
+      <option value="">None</option>
+      {siteIconPresets.map((preset) => (
+        <option key={preset} value={preset}>
+          {preset}
+        </option>
+      ))}
     </select>
   );
 }
@@ -163,43 +323,45 @@ function SaveError({ state }: { readonly state: SaveState }) {
   return <p className="graphle-site-save-error">{state.message}</p>;
 }
 
-function PageEditor({
-  page,
-  onSave,
+function ItemEditor({
+  item,
+  initialDraft,
+  onCreate,
+  onUpdate,
 }: {
-  readonly page: GraphleSitePage;
-  readonly onSave?: (id: string, input: GraphleSitePageInput) => Promise<void>;
+  readonly item?: GraphleSiteItem;
+  readonly initialDraft: ItemDraft;
+  readonly onCreate?: (input: GraphleSiteItemInput) => Promise<void>;
+  readonly onUpdate?: (id: string, input: GraphleSiteItemInput) => Promise<void>;
 }) {
-  const [draft, setDraft] = useState<GraphleSitePageInput>(() => pageDraft(page));
+  const [draft, setDraft] = useState<ItemDraft>(() => (item ? draftFromItem(item) : initialDraft));
   const [saveState, setSaveState] = useState<SaveState>({ kind: "idle" });
 
   useEffect(() => {
-    setDraft(pageDraft(page));
+    setDraft(item ? draftFromItem(item) : initialDraft);
     setSaveState({ kind: "idle" });
-  }, [page]);
+  }, [initialDraft, item]);
 
-  async function save(input: GraphleSitePageInput) {
-    if (!onSave) return;
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
     setSaveState({ kind: "saving" });
     try {
-      await onSave(page.id, input);
+      const input = inputFromDraft(draft);
+      if (item) {
+        await onUpdate?.(item.id, input);
+      } else {
+        await onCreate?.(input);
+      }
     } catch (error) {
       setSaveState({ kind: "error", message: messageForError(error) });
     }
   }
 
-  function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    void save(draft);
-  }
-
-  const publishing = draft.status === "published";
-
   return (
     <form className="graphle-site-editor" onSubmit={submit}>
       <div className="graphle-site-editor-heading">
-        <h3>Edit page</h3>
-        <StatusBadge status={draft.status} />
+        <h3>{item ? "Edit item" : "Create item"}</h3>
+        <VisibilityBadge visibility={draft.visibility} />
       </div>
       <Field label="Title">
         <Input
@@ -207,16 +369,67 @@ function PageEditor({
           onChange={(event) => setDraft((current) => ({ ...current, title: event.target.value }))}
         />
       </Field>
-      <Field label="Path">
+      <div className="graphle-site-field-row">
+        <Field label="Path">
+          <Input
+            value={draft.path}
+            placeholder="/about"
+            onChange={(event) => setDraft((current) => ({ ...current, path: event.target.value }))}
+          />
+        </Field>
+        <Field label="Visibility">
+          <VisibilitySelect
+            value={draft.visibility}
+            onChange={(visibility) => setDraft((current) => ({ ...current, visibility }))}
+          />
+        </Field>
+      </div>
+      <Field label="URL">
         <Input
-          value={draft.path}
-          onChange={(event) => setDraft((current) => ({ ...current, path: event.target.value }))}
+          value={draft.url}
+          placeholder="https://example.com"
+          onChange={(event) => setDraft((current) => ({ ...current, url: event.target.value }))}
         />
       </Field>
-      <Field label="Status">
-        <StatusSelect
-          value={draft.status}
-          onChange={(status) => setDraft((current) => ({ ...current, status }))}
+      <div className="graphle-site-field-row">
+        <Field label="Icon">
+          <IconSelect
+            value={draft.icon}
+            onChange={(icon) => setDraft((current) => ({ ...current, icon }))}
+          />
+        </Field>
+        <Field label="Sort order">
+          <Input
+            type="number"
+            value={draft.sortOrder}
+            onChange={(event) =>
+              setDraft((current) => ({ ...current, sortOrder: event.target.value }))
+            }
+          />
+        </Field>
+      </div>
+      <Field label="Tags">
+        <Input
+          value={draft.tags}
+          placeholder="graphle, notes"
+          onChange={(event) => setDraft((current) => ({ ...current, tags: event.target.value }))}
+        />
+      </Field>
+      <label className="graphle-site-checkbox">
+        <input
+          type="checkbox"
+          checked={draft.pinned}
+          onChange={(event) =>
+            setDraft((current) => ({ ...current, pinned: event.target.checked }))
+          }
+        />
+        <span>Pinned</span>
+      </label>
+      <Field label="Excerpt">
+        <Textarea
+          rows={3}
+          value={draft.excerpt}
+          onChange={(event) => setDraft((current) => ({ ...current, excerpt: event.target.value }))}
         />
       </Field>
       <Field label="Body">
@@ -226,28 +439,20 @@ function PageEditor({
           onChange={(event) => setDraft((current) => ({ ...current, body: event.target.value }))}
         />
       </Field>
+      <div className="graphle-site-markdown-preview" aria-label="Markdown preview">
+        <MarkdownRenderer
+          className="graphle-site-markdown"
+          content={draft.body || draft.excerpt || "Nothing to preview yet."}
+        />
+      </div>
       <div className="graphle-site-editor-actions">
         <Button type="submit" disabled={saveState.kind === "saving"}>
-          <SaveIcon aria-hidden={true} data-icon="inline-start" />
-          Save
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          disabled={saveState.kind === "saving"}
-          onClick={() =>
-            void save({
-              ...draft,
-              status: publishing ? "draft" : "published",
-            })
-          }
-        >
-          {publishing ? (
-            <EyeOffIcon aria-hidden={true} data-icon="inline-start" />
+          {item ? (
+            <SaveIcon aria-hidden={true} data-icon="inline-start" />
           ) : (
-            <SendIcon aria-hidden={true} data-icon="inline-start" />
+            <PlusIcon aria-hidden={true} data-icon="inline-start" />
           )}
-          {publishing ? "Unpublish" : "Publish"}
+          {item ? "Save item" : "Create item"}
         </Button>
       </div>
       <SaveError state={saveState} />
@@ -255,294 +460,194 @@ function PageEditor({
   );
 }
 
-function PostEditor({
-  post,
-  onSave,
+function ItemSidebar({
+  items,
+  authenticated,
+  onEdit,
 }: {
-  readonly post: GraphleSitePost;
-  readonly onSave?: (id: string, input: GraphleSitePostInput) => Promise<void>;
+  readonly items: readonly GraphleSiteItem[];
+  readonly authenticated: boolean;
+  readonly onEdit: (id: string) => void;
 }) {
-  const [draft, setDraft] = useState<GraphleSitePostInput>(() => postDraft(post));
-  const [saveState, setSaveState] = useState<SaveState>({ kind: "idle" });
-
-  useEffect(() => {
-    setDraft(postDraft(post));
-    setSaveState({ kind: "idle" });
-  }, [post]);
-
-  async function save(input: GraphleSitePostInput) {
-    if (!onSave) return;
-    setSaveState({ kind: "saving" });
-    try {
-      await onSave(post.id, input);
-    } catch (error) {
-      setSaveState({ kind: "error", message: messageForError(error) });
-    }
-  }
-
-  function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    void save(draft);
-  }
-
-  const publishing = draft.status === "published";
+  const [query, setQuery] = useState("");
+  const filtered = useMemo(
+    () => [...items].filter((item) => siteItemMatchesSearch(item, query)).sort(compareSiteItems),
+    [items, query],
+  );
 
   return (
-    <form className="graphle-site-editor" onSubmit={submit}>
-      <div className="graphle-site-editor-heading">
-        <h3>Edit post</h3>
-        <StatusBadge status={draft.status} />
-      </div>
-      <Field label="Title">
+    <aside className="graphle-site-sidebar" aria-label="Site items">
+      <label className="graphle-site-search">
+        <SearchIcon aria-hidden={true} />
         <Input
-          value={draft.title}
-          onChange={(event) => setDraft((current) => ({ ...current, title: event.target.value }))}
+          value={query}
+          placeholder="Search items"
+          onChange={(event) => setQuery(event.target.value)}
         />
-      </Field>
-      <Field label="Slug">
-        <Input
-          value={draft.slug}
-          onChange={(event) => setDraft((current) => ({ ...current, slug: event.target.value }))}
-        />
-      </Field>
-      <Field label="Excerpt">
-        <Textarea
-          rows={3}
-          value={draft.excerpt}
-          onChange={(event) => setDraft((current) => ({ ...current, excerpt: event.target.value }))}
-        />
-      </Field>
-      <Field label="Status">
-        <StatusSelect
-          value={draft.status}
-          onChange={(status) => setDraft((current) => ({ ...current, status }))}
-        />
-      </Field>
-      <Field label="Body">
-        <Textarea
-          rows={12}
-          value={draft.body}
-          onChange={(event) => setDraft((current) => ({ ...current, body: event.target.value }))}
-        />
-      </Field>
-      <div className="graphle-site-editor-actions">
-        <Button type="submit" disabled={saveState.kind === "saving"}>
-          <SaveIcon aria-hidden={true} data-icon="inline-start" />
-          Save
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          disabled={saveState.kind === "saving"}
-          onClick={() =>
-            void save({
-              ...draft,
-              status: publishing ? "draft" : "published",
-            })
-          }
-        >
-          {publishing ? (
-            <EyeOffIcon aria-hidden={true} data-icon="inline-start" />
-          ) : (
-            <SendIcon aria-hidden={true} data-icon="inline-start" />
-          )}
-          {publishing ? "Unpublish" : "Publish"}
-        </Button>
-      </div>
-      <SaveError state={saveState} />
-    </form>
-  );
-}
-
-function CreatePageForm({
-  initialPath,
-  onCreate,
-}: {
-  readonly initialPath: string;
-  readonly onCreate?: (input: GraphleSitePageInput) => Promise<void>;
-}) {
-  const initialDraft = useMemo(
-    () => ({
-      ...defaultPageDraft,
-      path: initialPath,
-    }),
-    [initialPath],
-  );
-  const [draft, setDraft] = useState<GraphleSitePageInput>(initialDraft);
-  const [saveState, setSaveState] = useState<SaveState>({ kind: "idle" });
-
-  useEffect(() => {
-    setDraft(initialDraft);
-    setSaveState({ kind: "idle" });
-  }, [initialDraft]);
-
-  async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!onCreate) return;
-    setSaveState({ kind: "saving" });
-    try {
-      await onCreate(draft);
-    } catch (error) {
-      setSaveState({ kind: "error", message: messageForError(error) });
-    }
-  }
-
-  return (
-    <form className="graphle-site-create-form" onSubmit={submit}>
-      <h4>
-        <FilePlus2Icon aria-hidden={true} />
-        New page
-      </h4>
-      <Field label="Title">
-        <Input
-          value={draft.title}
-          onChange={(event) => setDraft((current) => ({ ...current, title: event.target.value }))}
-        />
-      </Field>
-      <Field label="Path">
-        <Input
-          value={draft.path}
-          onChange={(event) => setDraft((current) => ({ ...current, path: event.target.value }))}
-        />
-      </Field>
-      <Button type="submit" disabled={saveState.kind === "saving"}>
-        <FilePlus2Icon aria-hidden={true} data-icon="inline-start" />
-        Create page
-      </Button>
-      <SaveError state={saveState} />
-    </form>
-  );
-}
-
-function CreatePostForm({
-  onCreate,
-}: {
-  readonly onCreate?: (input: GraphleSitePostInput) => Promise<void>;
-}) {
-  const [draft, setDraft] = useState<GraphleSitePostInput>(defaultPostDraft);
-  const [saveState, setSaveState] = useState<SaveState>({ kind: "idle" });
-
-  async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!onCreate) return;
-    setSaveState({ kind: "saving" });
-    try {
-      await onCreate(draft);
-    } catch (error) {
-      setSaveState({ kind: "error", message: messageForError(error) });
-    }
-  }
-
-  return (
-    <form className="graphle-site-create-form" onSubmit={submit}>
-      <h4>
-        <NewspaperIcon aria-hidden={true} />
-        New post
-      </h4>
-      <Field label="Title">
-        <Input
-          value={draft.title}
-          onChange={(event) => setDraft((current) => ({ ...current, title: event.target.value }))}
-        />
-      </Field>
-      <Field label="Slug">
-        <Input
-          value={draft.slug}
-          onChange={(event) => setDraft((current) => ({ ...current, slug: event.target.value }))}
-        />
-      </Field>
-      <Field label="Excerpt">
-        <Textarea
-          rows={3}
-          value={draft.excerpt}
-          onChange={(event) => setDraft((current) => ({ ...current, excerpt: event.target.value }))}
-        />
-      </Field>
-      <Button type="submit" disabled={saveState.kind === "saving"}>
-        <NewspaperIcon aria-hidden={true} data-icon="inline-start" />
-        Create post
-      </Button>
-      <SaveError state={saveState} />
-    </form>
-  );
-}
-
-function ContentLists({
-  pages,
-  posts,
-}: {
-  readonly pages: readonly GraphleSitePage[];
-  readonly posts: readonly GraphleSitePost[];
-}) {
-  return (
-    <div className="graphle-site-content-lists">
-      <section>
-        <h4>Pages</h4>
-        <ul>
-          {pages.map((page) => (
-            <li key={page.id}>
-              <a href={page.path}>{page.title}</a>
-              <StatusBadge status={page.status} />
+      </label>
+      <ul>
+        {filtered.map((item) => {
+          const href = item.path ?? item.url ?? "#";
+          const external = !item.path && Boolean(item.url);
+          return (
+            <li key={item.id}>
+              <a href={href} rel={external ? "noreferrer" : undefined}>
+                <span>{item.title}</span>
+                <small>{item.path ?? item.url ?? "unrouted"}</small>
+              </a>
+              <ItemMarkers item={item} />
+              {item.tags.length ? (
+                <span className="graphle-site-sidebar-tags">
+                  {item.tags.map((tag) => tag.name).join(", ")}
+                </span>
+              ) : null}
+              {authenticated ? (
+                <Button type="button" variant="outline" size="sm" onClick={() => onEdit(item.id)}>
+                  <Edit3Icon aria-hidden={true} data-icon="inline-start" />
+                  Edit
+                </Button>
+              ) : null}
             </li>
-          ))}
-        </ul>
-      </section>
-      <section>
-        <h4>Posts</h4>
-        <ul>
-          {posts.map((post) => (
-            <li key={post.id}>
-              <a href={`/posts/${post.slug}`}>{post.title}</a>
-              <StatusBadge status={post.status} />
-            </li>
-          ))}
-        </ul>
-      </section>
+          );
+        })}
+      </ul>
+    </aside>
+  );
+}
+
+function PresetButtons({ onCreate }: { readonly onCreate: (draft: ItemDraft) => void }) {
+  return (
+    <div className="graphle-site-presets" aria-label="Creation presets">
+      {presetDrafts.map((preset) => {
+        const Icon = preset.icon;
+        return (
+          <Button
+            key={preset.id}
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => onCreate(preset.draft)}
+          >
+            <Icon aria-hidden={true} data-icon="inline-start" />
+            {preset.label}
+          </Button>
+        );
+      })}
     </div>
   );
 }
 
 function InlineAuthoring({
   snapshot,
-  onCreatePage,
-  onUpdatePage,
-  onCreatePost,
-  onUpdatePost,
+  mode,
+  selectedItem,
+  onCreateMode,
+  onEditMode,
+  onCreateItem,
+  onUpdateItem,
 }: {
   readonly snapshot: GraphleSiteStatusSnapshot;
-  readonly onCreatePage?: (input: GraphleSitePageInput) => Promise<void>;
-  readonly onUpdatePage?: (id: string, input: GraphleSitePageInput) => Promise<void>;
-  readonly onCreatePost?: (input: GraphleSitePostInput) => Promise<void>;
-  readonly onUpdatePost?: (id: string, input: GraphleSitePostInput) => Promise<void>;
+  readonly mode: EditorMode;
+  readonly selectedItem?: GraphleSiteItem;
+  readonly onCreateMode: (draft: ItemDraft) => void;
+  readonly onEditMode: (id: string) => void;
+  readonly onCreateItem?: (input: GraphleSiteItemInput) => Promise<void>;
+  readonly onUpdateItem?: (id: string, input: GraphleSiteItemInput) => Promise<void>;
 }) {
   if (!snapshot.session.authenticated) return null;
 
-  const route = snapshot.route;
-  const initialPath =
-    route.kind === "not-found" && !route.path.startsWith("/posts/")
-      ? route.path
-      : defaultPageDraft.path;
-
   return (
     <aside className="graphle-site-authoring" aria-label="Inline authoring">
-      {route.kind === "page" ? <PageEditor page={route.page} onSave={onUpdatePage} /> : null}
-      {route.kind === "post" ? <PostEditor post={route.post} onSave={onUpdatePost} /> : null}
-      <div className="graphle-site-create-grid">
-        <CreatePageForm initialPath={initialPath} onCreate={onCreatePage} />
-        <CreatePostForm onCreate={onCreatePost} />
+      <div className="graphle-site-create-form">
+        <h4>New item</h4>
+        <PresetButtons onCreate={onCreateMode} />
       </div>
-      <ContentLists pages={snapshot.pages} posts={snapshot.posts} />
+      <ItemEditor
+        item={mode.kind === "edit" ? selectedItem : undefined}
+        initialDraft={mode.kind === "create" ? mode.draft : emptyDraft}
+        onCreate={onCreateItem}
+        onUpdate={onUpdateItem}
+      />
+      <div className="graphle-site-content-lists">
+        <section>
+          <h4>Editable items</h4>
+          <ul>
+            {snapshot.items.map((item) => (
+              <li key={item.id}>
+                <button type="button" onClick={() => onEditMode(item.id)}>
+                  {item.visibility === "private" ? <LockIcon aria-hidden={true} /> : null}
+                  <span>{item.title}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      </div>
     </aside>
   );
 }
 
-function GraphleSitePreview({
-  status,
-  onCreatePage,
-  onUpdatePage,
-  onCreatePost,
-  onUpdatePost,
-}: GraphleSiteFeatureOptions) {
+function initialCreateDraft(snapshot: GraphleSiteStatusSnapshot): ItemDraft {
+  if (snapshot.route.kind === "not-found") {
+    return {
+      ...presetDrafts[0].draft,
+      path: snapshot.route.path,
+    };
+  }
+  return presetDrafts[0].draft;
+}
+
+function ReadySitePreview({
+  snapshot,
+  onCreateItem,
+  onUpdateItem,
+}: {
+  readonly snapshot: GraphleSiteStatusSnapshot;
+  readonly onCreateItem?: (input: GraphleSiteItemInput) => Promise<void>;
+  readonly onUpdateItem?: (id: string, input: GraphleSiteItemInput) => Promise<void>;
+}) {
+  const routeItemId = snapshot.route.kind === "item" ? snapshot.route.item.id : undefined;
+  const [mode, setMode] = useState<EditorMode>(() =>
+    routeItemId
+      ? { kind: "edit", id: routeItemId }
+      : { kind: "create", draft: initialCreateDraft(snapshot) },
+  );
+
+  useEffect(() => {
+    setMode(
+      routeItemId
+        ? { kind: "edit", id: routeItemId }
+        : { kind: "create", draft: initialCreateDraft(snapshot) },
+    );
+  }, [routeItemId, snapshot]);
+
+  const selectedItem =
+    mode.kind === "edit" ? snapshot.items.find((item) => item.id === mode.id) : undefined;
+
+  return (
+    <div className="graphle-site-workspace">
+      <section className="graphle-site-preview" aria-label="Website preview">
+        <RoutePreview snapshot={snapshot} />
+      </section>
+      <ItemSidebar
+        items={snapshot.items}
+        authenticated={snapshot.session.authenticated}
+        onEdit={(id) => setMode({ kind: "edit", id })}
+      />
+      <InlineAuthoring
+        snapshot={snapshot}
+        mode={mode}
+        selectedItem={selectedItem}
+        onCreateMode={(draft) => setMode({ kind: "create", draft })}
+        onEditMode={(id) => setMode({ kind: "edit", id })}
+        onCreateItem={onCreateItem}
+        onUpdateItem={onUpdateItem}
+      />
+    </div>
+  );
+}
+
+function GraphleSitePreview({ status, onCreateItem, onUpdateItem }: GraphleSiteFeatureOptions) {
   if (status.state === "loading") {
     return <GraphleShellLoadingState label="Loading site preview" />;
   }
@@ -552,18 +657,11 @@ function GraphleSitePreview({
   }
 
   return (
-    <div className="graphle-site-workspace">
-      <section className="graphle-site-preview" aria-label="Website preview">
-        <RoutePreview snapshot={status.snapshot} />
-      </section>
-      <InlineAuthoring
-        snapshot={status.snapshot}
-        onCreatePage={onCreatePage}
-        onUpdatePage={onUpdatePage}
-        onCreatePost={onCreatePost}
-        onUpdatePost={onUpdatePost}
-      />
-    </div>
+    <ReadySitePreview
+      snapshot={status.snapshot}
+      onCreateItem={onCreateItem}
+      onUpdateItem={onUpdateItem}
+    />
   );
 }
 
