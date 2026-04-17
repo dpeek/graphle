@@ -1,7 +1,7 @@
 ---
 name: Graphle site web
 description: "Assembled personal-site browser app, feature registration, and package-owned client assets for @dpeek/graphle-site-web."
-last_updated: 2026-04-16
+last_updated: 2026-04-17
 ---
 
 # Graphle Site Web
@@ -16,9 +16,13 @@ last_updated: 2026-04-16
 ## Current Contract
 
 `@dpeek/graphle-site-web` builds the browser app that `@dpeek/graphle-local`
-serves from package assets. The package imports `@dpeek/graphle-web-shell` for
-generic shell composition, `@dpeek/graphle-web-ui` for browser primitives, and
+serves from package assets. The product path renders a site-owned frame, not
+the generic Graphle shell chrome. It uses `@dpeek/graphle-web-ui` sidebar,
+dropdown, dialog, form, tooltip, button, and markdown primitives plus
 browser-safe item helpers from `@dpeek/graphle-module-site`.
+Markdown typography comes from `@dpeek/graphle-web-ui`'s shared
+Tailwind Typography-backed renderer; site-web only adds route-level layout
+constraints.
 
 The first screen is the current website route preview. The app loads:
 
@@ -26,25 +30,42 @@ The first screen is the current website route preview. The app loads:
 - `GET /api/session`
 - `GET /api/site/route?path=<current-path>`
 
-Those payloads drive shell status badges, the public preview, and local admin
-visibility. When `/api/session` reports an authenticated local admin session,
-the app also loads:
+Those payloads drive the public route content, the flat item sidebar, and local
+admin visibility. When `/api/session` reports an authenticated local admin
+session, the app also loads:
 
 - `GET /api/site/items`
 
-The first screen is still the website preview, with a flat searchable item
-sidebar. URL-only items use their external URL, while path-backed items navigate
-to exact local routes. Authenticated sessions see one inline item editor on the
-same public route. UI presets for page, post, link, bookmark, and social link
-only prefill fields; they do not persist an item kind. Editors use browser-safe
-primitives from `@dpeek/graphle-web-ui`: inputs, textareas, native selects,
-buttons, badges, checkboxes, and markdown rendering. There is no `/admin`,
-`/authoring`, or other product route namespace.
+The first screen is the website preview with one left sidebar and centered
+route content. Sidebar rows show only item icon and item title. Path-backed
+items navigate to exact local routes with `history.pushState`; URL-only items
+open their external URL in a new tab and do not create public permalinks.
+`popstate` reloads the route through `/api/site/route?path=<path>`.
+
+Authenticated sessions can edit either the current route item or a URL-only
+item selected from the sidebar action menu. Edit mode keeps the same content
+layout and swaps predicate display rows for predicate-backed draft controls
+planned from `site:item` field metadata and `@dpeek/graphle-react` draft
+primitives. Visible field labels are hidden, while controls keep accessible
+names. There are no creation presets; the single `+` action calls the blank
+create intent and enters edit mode on the returned private routed item.
+
+Authenticated sessions can delete items through the sidebar action menu after a
+confirmation dialog. Drag-and-drop ordering uses `@dnd-kit/sortable` and writes
+normalized consecutive `site:item.sortOrder` values through one batch endpoint.
+
+The local theme helper reads and writes `localStorage.graphle.theme`, supports
+`light`, `dark`, and `system`, applies `light`/`dark` classes to
+`document.documentElement`, and updates when the system preference changes. The
+visible control is one icon-only sidebar button with a tooltip and accessible
+label.
 
 Mutation helpers call only the local `/api/site/*` endpoints:
 
 - `POST /api/site/items`
 - `PATCH /api/site/items/:id`
+- `DELETE /api/site/items/:id`
+- `PATCH /api/site/items/order`
 
 Visibility, tags, pins, sort order, URL, path, excerpt, and markdown body are
 represented as item fields in the same payloads. `@dpeek/graphle-site-web` does

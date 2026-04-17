@@ -45,6 +45,12 @@ site browser app:
 - `siteItemMatchesSearch` and `compareSiteItems`: implement the flat sidebar
   search and deterministic item ordering rules
 
+`compareSiteItems` treats explicit manual order as the strongest product
+ordering signal: items with `site:item.sortOrder` sort before unordered items
+by ascending value. Items without `sortOrder` continue to use the deterministic
+fallback order: pinned first, newer `publishedAt`, newer `updatedAt`, then
+title.
+
 ## Minimal Core Dependency
 
 The site module references `core:tag` for item tags. Local site boot widens the

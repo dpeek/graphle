@@ -1,5 +1,4 @@
 import "@dpeek/graphle-web-ui/global.css";
-import "@dpeek/graphle-web-shell/shell.css";
 import "./site-app.css";
 
 import { StrictMode } from "react";

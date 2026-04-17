@@ -54,9 +54,7 @@ export function TextTooltip({ children, text }: { children: React.ReactNode; tex
   return (
     <Tooltip>
       <TooltipTrigger render={<>{children}</>} />
-      <TooltipPrimitive.Positioner>
-        <TooltipContent>{text}</TooltipContent>
-      </TooltipPrimitive.Positioner>
+      <TooltipContent>{text}</TooltipContent>
     </Tooltip>
   );
 }

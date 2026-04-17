@@ -1,3 +1,4 @@
+import { cn } from "@dpeek/graphle-web-ui/utils";
 import ReactMarkdown from "react-markdown";
 
 type BunMarkdownApi = typeof Bun.markdown;
@@ -16,7 +17,10 @@ export function MarkdownRenderer({ className, content }: { className?: string; c
   const bunMarkdown = getBunMarkdown();
 
   return (
-    <div className={className} data-web-markdown-renderer={bunMarkdown ? "bun" : "react-markdown"}>
+    <div
+      className={cn("graph-markdown prose max-w-none dark:prose-invert", className)}
+      data-web-markdown-renderer={bunMarkdown ? "bun" : "react-markdown"}
+    >
       {bunMarkdown ? (
         bunMarkdown.react(content, undefined, {
           autolinks: true,

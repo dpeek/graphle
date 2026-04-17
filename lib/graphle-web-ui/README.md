@@ -11,7 +11,8 @@ used by browser shells and product-specific web surfaces.
 ## What It Owns
 
 - reusable browser UI primitives and layout components
-- shared markdown rendering plus Monaco and source-preview shells
+- shared markdown rendering backed by Tailwind Typography plus Monaco and
+  source-preview shells
 - shared styling, theme, and small browser utility hooks
 - browser-only building blocks that do not depend on graph runtime types
 

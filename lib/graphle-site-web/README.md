@@ -1,7 +1,7 @@
 # Graphle Site Web
 
-`@dpeek/graphle-site-web` assembles the personal-site browser app from the
-generic shell and browser primitives.
+`@dpeek/graphle-site-web` assembles the personal-site browser app from
+browser primitives and the MVP site item contracts.
 
 ## Package Docs
 
@@ -11,12 +11,14 @@ generic shell and browser primitives.
 ## What It Owns
 
 - the package-built browser entrypoint served by `@dpeek/graphle-local`
-- personal-site feature registration for the generic shell
+- the site-owned sidebar and centered content frame for the personal-site path
+- personal-site feature registration for future generic-shell composition
 - local status loading from `/api/health` and `/api/session`
 - route loading from `/api/site/route`
-- a flat searchable item sidebar using shared site item search/sort helpers
-- one inline `site:item` editor that appears only for authenticated local admin
-  sessions
+- a flat item sidebar with path navigation, URL-only external links, action
+  menus, delete confirmation, drag reorder, and a theme toggle
+- one inline predicate-backed `site:item` editor that appears only for
+  authenticated local admin sessions
 - site-specific public preview presentation for the current local host route
 
 ## What It Does Not Own

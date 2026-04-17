@@ -117,7 +117,7 @@ async function readJson<T>(fetcher: GraphleSiteStatusFetcher, path: string): Pro
 async function writeJson<T>(
   fetcher: GraphleSiteStatusFetcher,
   path: string,
-  method: "POST" | "PATCH",
+  method: "DELETE" | "POST" | "PATCH",
   body: unknown,
 ): Promise<T> {
   const response = await fetcher(path, {
@@ -126,7 +126,7 @@ async function writeJson<T>(
       accept: "application/json",
       "content-type": "application/json",
     },
-    body: JSON.stringify(body),
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
 
   const payload = (await response.json().catch(() => ({}))) as {
@@ -187,20 +187,29 @@ export async function loadGraphleSiteStatus({
 
 export interface GraphleSiteItemInput {
   readonly title: string;
-  readonly path?: string;
-  readonly url?: string;
-  readonly body?: string;
-  readonly excerpt?: string;
+  readonly path?: string | null;
+  readonly url?: string | null;
+  readonly body?: string | null;
+  readonly excerpt?: string | null;
   readonly visibility: GraphleSiteVisibility;
-  readonly icon?: GraphleSiteIconPreset;
+  readonly icon?: GraphleSiteIconPreset | null;
   readonly tags: readonly string[];
   readonly pinned: boolean;
-  readonly sortOrder?: number;
-  readonly publishedAt?: string;
+  readonly sortOrder?: number | null;
+  readonly publishedAt?: string | null;
+}
+
+export interface GraphleSiteBlankCreateInput {
+  readonly intent: "blank";
+}
+
+export interface GraphleSiteItemOrderInput {
+  readonly id: string;
+  readonly sortOrder: number;
 }
 
 export async function createGraphleSiteItem(
-  input: GraphleSiteItemInput,
+  input: GraphleSiteBlankCreateInput | GraphleSiteItemInput,
   fetcher: GraphleSiteStatusFetcher = fetch,
 ): Promise<GraphleSiteItem> {
   const payload = await writeJson<{ readonly item: GraphleSiteItem }>(
@@ -210,6 +219,12 @@ export async function createGraphleSiteItem(
     input,
   );
   return payload.item;
+}
+
+export async function createBlankGraphleSiteItem(
+  fetcher: GraphleSiteStatusFetcher = fetch,
+): Promise<GraphleSiteItem> {
+  return createGraphleSiteItem({ intent: "blank" }, fetcher);
 }
 
 export async function updateGraphleSiteItem(
@@ -224,4 +239,29 @@ export async function updateGraphleSiteItem(
     input,
   );
   return payload.item;
+}
+
+export async function deleteGraphleSiteItem(
+  id: string,
+  fetcher: GraphleSiteStatusFetcher = fetch,
+): Promise<void> {
+  await writeJson<{ readonly ok: true }>(
+    fetcher,
+    `/api/site/items/${encodeURIComponent(id)}`,
+    "DELETE",
+    undefined,
+  );
+}
+
+export async function reorderGraphleSiteItems(
+  items: readonly GraphleSiteItemOrderInput[],
+  fetcher: GraphleSiteStatusFetcher = fetch,
+): Promise<readonly GraphleSiteItem[]> {
+  const payload = await writeJson<{ readonly items: readonly GraphleSiteItem[] }>(
+    fetcher,
+    "/api/site/items/order",
+    "PATCH",
+    { items },
+  );
+  return payload.items;
 }

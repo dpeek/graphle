@@ -8,11 +8,13 @@ import type { LocalAuthController, LocalAdminSession } from "./auth.js";
 import type { GraphleLocalProject } from "./project.js";
 import {
   createLocalSiteItem,
+  deleteLocalSiteItem,
   listLocalSiteItems,
   LocalSiteNotFoundError,
   LocalSiteValidationError,
   readLocalSiteAuthorityHealth,
   readLocalSiteRoutePayload,
+  reorderLocalSiteItems,
   updateLocalSiteItem,
   type LocalSiteAuthority,
   type LocalSiteRoutePayload,
@@ -228,36 +230,29 @@ function renderMarkdownFallback(content: string): string {
 
 function renderRouteFallback(route: LocalSiteRouteResult): string {
   if (route.kind === "item") {
-    const publishedAt = route.item.publishedAt
-      ? `<time datetime="${escapeHtml(route.item.publishedAt)}">${escapeHtml(route.item.publishedAt.slice(0, 10))}</time>`
-      : "";
-    const path = route.item.path ? `<span>${escapeHtml(route.item.path)}</span>` : "";
     const outboundUrl = route.item.url
-      ? `<a class="outbound" href="${escapeHtml(route.item.url)}" rel="noreferrer">${escapeHtml(route.item.url)}</a>`
+      ? `<a class="outbound" href="${escapeHtml(route.item.url)}" rel="noreferrer" target="_blank">${escapeHtml(route.item.url)}</a>`
       : "";
     const excerpt = route.item.excerpt
       ? `<p class="excerpt">${escapeHtml(route.item.excerpt)}</p>`
       : "";
     const tags = route.item.tags.length
-      ? `<ul class="tags">${route.item.tags
-          .map((tag) => `<li>${escapeHtml(tag.name)}</li>`)
-          .join("")}</ul>`
+      ? `<p class="tags">${route.item.tags.map((tag) => escapeHtml(tag.name)).join(", ")}</p>`
       : "";
     const body = route.item.body
       ? `<div class="markdown">${renderMarkdownFallback(route.item.body)}</div>`
       : "";
 
     return `<article class="content" data-route-kind="item">
-          <div class="item-meta">${publishedAt}${path}${outboundUrl}</div>
           <h1>${escapeHtml(route.item.title)}</h1>
           ${excerpt}
-          ${tags}
+          ${outboundUrl}
           ${body}
+          ${tags}
         </article>`;
   }
 
   return `<article class="content not-found" data-route-kind="not-found">
-          <p class="eyebrow">404</p>
           <h1>Page not found</h1>
           <p>${escapeHtml(route.message)}</p>
         </article>`;
@@ -270,25 +265,20 @@ function routeTitle(route: LocalSiteRouteResult): string {
 
 function renderSidebarFallback(payload: LocalSiteRoutePayload): string {
   if (payload.items.length === 0) {
-    return `<aside class="sidebar" aria-label="Site items"><h2>Items</h2><p>No visible items.</p></aside>`;
+    return `<nav class="sidebar" aria-label="Site items"></nav>`;
   }
 
-  return `<aside class="sidebar" aria-label="Site items">
-          <h2>Items</h2>
+  return `<nav class="sidebar" aria-label="Site items">
           <ul>
             ${payload.items
               .map((item) => {
                 const href = item.path ?? item.url ?? "#";
-                const target = item.path ? "" : ` rel="noreferrer"`;
-                const marker = item.path ? item.path : item.url ? "external" : "item";
-                const tags = item.tags.length
-                  ? `<span>${item.tags.map((tag) => escapeHtml(tag.name)).join(", ")}</span>`
-                  : "";
-                return `<li><a href="${escapeHtml(href)}"${target}>${escapeHtml(item.title)}</a><small>${escapeHtml(marker)}</small>${tags}</li>`;
+                const target = item.path ? "" : ` rel="noreferrer" target="_blank"`;
+                return `<li><a href="${escapeHtml(href)}"${target}>${escapeHtml(item.title)}</a></li>`;
               })
               .join("")}
           </ul>
-        </aside>`;
+        </nav>`;
 }
 
 function renderClientAssetTags(assetTags: SiteWebClientAssetTags): string {
@@ -303,14 +293,11 @@ function renderClientAssetTags(assetTags: SiteWebClientAssetTags): string {
 }
 
 function renderSiteHostPage(
-  session: LocalAdminSession | null,
-  project: GraphleLocalProject,
+  _session: LocalAdminSession | null,
+  _project: GraphleLocalProject,
   assetTags: SiteWebClientAssetTags,
   payload: LocalSiteRoutePayload,
 ): string {
-  const authenticated = session !== null;
-  const statusLabel = authenticated ? "Admin session active" : "Visitor preview";
-  const authoringLabel = authenticated ? "Inline authoring available" : "Inline authoring locked";
   const route = payload.route;
   const title = routeTitle(route);
 
@@ -319,15 +306,15 @@ function renderSiteHostPage(
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>${escapeHtml(title)} - Graphle Local Site</title>
+    <title>${escapeHtml(title)}</title>
 ${renderClientAssetTags(assetTags)}
     <style>
       :root {
         color-scheme: light;
         font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
         line-height: 1.5;
-        color: #1c2420;
-        background: #f7f7f2;
+        color: #191b1f;
+        background: #fbfcfd;
       }
       * {
         box-sizing: border-box;
@@ -335,199 +322,139 @@ ${renderClientAssetTags(assetTags)}
       body {
         margin: 0;
       }
-      header,
-      main {
-        width: min(1180px, calc(100% - 32px));
-        margin: 0 auto;
-      }
-      header {
+      .site-fallback-frame {
         display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 16px;
-        min-height: 76px;
-        border-bottom: 1px solid #d7dbd2;
+        min-height: 100vh;
       }
-      main {
-        display: grid;
-        grid-template-columns: minmax(0, 1fr) minmax(240px, 320px);
-        gap: 28px;
-        padding: 48px 0;
-        align-items: start;
-      }
-      h1 {
+      .site-fallback-frame .content > h1 {
         max-width: 720px;
         margin: 0;
         font-size: clamp(2.2rem, 8vw, 4.7rem);
         line-height: 1;
         letter-spacing: 0;
       }
-      p {
+      .site-fallback-frame p {
         max-width: 620px;
         margin: 0;
-        color: #526159;
+        color: #56606f;
         font-size: 1.05rem;
       }
-      .content {
+      .site-fallback-frame .content {
         display: grid;
+        width: min(100%, 52rem);
+        min-height: 100vh;
+        margin: 0 auto;
+        padding: clamp(2rem, 6vw, 5rem) clamp(1.25rem, 4vw, 3.5rem);
+        align-content: start;
         gap: 20px;
       }
-      .markdown {
+      .site-fallback-frame .markdown {
         display: grid;
         max-width: 720px;
         gap: 14px;
-        color: #26342d;
+        color: #252b33;
+        font-size: 1.05rem;
+        line-height: 1.75;
       }
-      .markdown > * {
+      .site-fallback-frame .markdown > * {
         margin: 0;
       }
-      .markdown h1,
-      .markdown h2,
-      .markdown h3 {
+      .site-fallback-frame .markdown h1 {
+        max-width: 720px;
+        color: #191b1f;
+        font-size: clamp(2.2rem, 8vw, 4.7rem);
+        font-weight: 650;
+        line-height: 1;
+        letter-spacing: 0;
+        overflow-wrap: anywhere;
+      }
+      .site-fallback-frame .markdown h2 {
+        margin-top: 24px;
+        color: #191b1f;
+        font-size: clamp(1.35rem, 3vw, 2rem);
+        font-weight: 650;
+        line-height: 1.2;
+        letter-spacing: 0;
+      }
+      .site-fallback-frame .markdown h3 {
+        margin-top: 12px;
+        color: #191b1f;
+        font-size: 1.12rem;
+        font-weight: 650;
         line-height: 1.16;
         letter-spacing: 0;
       }
-      .markdown a {
+      .site-fallback-frame .markdown ul,
+      .site-fallback-frame .markdown ol {
+        display: grid;
+        gap: 7px;
+        padding-left: 22px;
+      }
+      .site-fallback-frame .markdown a {
         color: #145b7e;
       }
-      .excerpt {
-        color: #49564f;
+      .site-fallback-frame .excerpt {
+        color: #4f5a68;
         font-size: 1.15rem;
       }
-      .eyebrow,
-      .item-meta {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 10px;
-        align-items: center;
-        color: #7d4e2f;
-        font-size: 0.76rem;
-        font-weight: 700;
-        letter-spacing: 0;
-        text-transform: uppercase;
-      }
-      .outbound {
+      .site-fallback-frame .outbound {
         max-width: 100%;
         overflow-wrap: anywhere;
         color: #145b7e;
-        text-transform: none;
-      }
-      .tags {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 8px;
-        margin: 0;
-        padding: 0;
-        list-style: none;
-      }
-      .tags li {
-        min-height: 24px;
-        padding: 2px 8px;
-        border: 1px solid #bbc5ba;
-        border-radius: 999px;
-        background: #ffffff;
-        color: #28352f;
-        font-size: 0.82rem;
-      }
-      .brand {
-        font-weight: 700;
-      }
-      .status {
-        display: inline-flex;
-        align-items: center;
-        min-height: 32px;
-        padding: 0 12px;
-        border: 1px solid #bbc5ba;
-        border-radius: 8px;
-        background: #ffffff;
-        color: #28352f;
-        font-size: 0.92rem;
-        white-space: nowrap;
-      }
-      .panel {
-        grid-column: 1 / -1;
-        display: grid;
-        gap: 12px;
-        padding-top: 24px;
-        border-top: 1px solid #d7dbd2;
-      }
-      .sidebar {
-        display: grid;
-        gap: 14px;
-      }
-      .sidebar h2 {
-        margin: 0;
-        font-size: 1rem;
-      }
-      .sidebar ul {
-        display: grid;
-        gap: 12px;
-        margin: 0;
-        padding: 0;
-        list-style: none;
-      }
-      .sidebar li {
-        display: grid;
-        gap: 3px;
-        border-top: 1px solid #d7dbd2;
-        padding-top: 10px;
-      }
-      .sidebar a {
-        min-width: 0;
-        overflow-wrap: anywhere;
-        color: #145b7e;
-        font-weight: 700;
+        font-weight: 600;
         text-decoration: none;
       }
-      .sidebar small,
-      .sidebar span {
-        color: #526159;
+      .site-fallback-frame .tags {
+        margin: 0;
+        color: #66707e;
+        font-size: 0.9rem;
       }
-      .state {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 12px;
-        align-items: center;
-        color: #28352f;
+      .site-fallback-frame .sidebar {
+        flex: 0 0 15rem;
+        border-right: 1px solid #e3e6ea;
+        background: #ffffff;
+        padding: 12px 8px;
       }
-      code {
-        padding: 3px 6px;
+      .site-fallback-frame .sidebar ul {
+        display: grid;
+        gap: 2px;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+      .site-fallback-frame .sidebar a {
+        display: block;
+        min-width: 0;
+        overflow-wrap: anywhere;
         border-radius: 6px;
-        background: #e8ece5;
-        font: 0.95em ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        color: #22262d;
+        padding: 7px 8px;
+        text-decoration: none;
       }
-      @media (max-width: 640px) {
-        header {
-          align-items: flex-start;
+      .site-fallback-frame .sidebar a:hover {
+        background: #f3f5f7;
+      }
+      @media (max-width: 760px) {
+        .site-fallback-frame {
           flex-direction: column;
-          justify-content: center;
-          padding: 16px 0;
         }
-        main {
-          grid-template-columns: 1fr;
-          padding: 40px 0;
+        .site-fallback-frame .sidebar {
+          flex-basis: auto;
+          width: 100%;
+          border-right: 0;
+          border-bottom: 1px solid #e3e6ea;
         }
-        .status {
-          white-space: normal;
+        .site-fallback-frame .content {
+          min-height: 0;
         }
       }
     </style>
   </head>
   <body>
     <div id="root">
-      <header>
-        <div class="brand">Graphle local site</div>
-        <div class="status" data-authenticated="${String(authenticated)}">${statusLabel}</div>
-      </header>
-      <main>
-        ${renderRouteFallback(route)}
+      <main class="site-fallback-frame">
         ${renderSidebarFallback(payload)}
-        <section class="panel" aria-label="Local authoring state">
-          <div class="state">
-            <strong>${authoringLabel}</strong>
-            <span>Project <code>${escapeHtml(project.projectId)}</code></span>
-          </div>
-        </section>
+        ${renderRouteFallback(route)}
       </main>
     </div>
   </body>
@@ -725,14 +652,37 @@ export function createGraphleLocalServer({
         return methodNotAllowed("GET, POST");
       }
 
-      const itemId = readApiEntityId(url.pathname, "/api/site/items");
-      if (itemId !== undefined) {
+      if (url.pathname === "/api/site/items/order") {
         if (request.method !== "PATCH") {
           return methodNotAllowed("PATCH");
         }
         const session = auth.getSession(cookieHeader);
         if (!session) {
           return errorResponse("Authentication required.", "auth.required", 401);
+        }
+        return siteApiResponse(async () => ({
+          items: await reorderLocalSiteItems(
+            requireSiteAuthority(siteAuthority),
+            await readJsonBody(request),
+            { now },
+          ),
+        }));
+      }
+
+      const itemId = readApiEntityId(url.pathname, "/api/site/items");
+      if (itemId !== undefined) {
+        const session = auth.getSession(cookieHeader);
+        if (!session) {
+          return errorResponse("Authentication required.", "auth.required", 401);
+        }
+        if (request.method === "DELETE") {
+          return siteApiResponse(async () => {
+            await deleteLocalSiteItem(requireSiteAuthority(siteAuthority), itemId);
+            return { ok: true };
+          });
+        }
+        if (request.method !== "PATCH") {
+          return methodNotAllowed("PATCH, DELETE");
         }
         return siteApiResponse(async () => ({
           item: await updateLocalSiteItem(

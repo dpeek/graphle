@@ -445,10 +445,15 @@ function optionalDate(value: string | undefined): string {
 }
 
 export function compareSiteItems(left: SiteItemSearchTarget, right: SiteItemSearchTarget): number {
-  if (left.pinned !== right.pinned) return left.pinned ? -1 : 1;
+  const leftHasSortOrder = left.sortOrder !== undefined;
+  const rightHasSortOrder = right.sortOrder !== undefined;
 
-  const sortOrder = optionalNumber(left.sortOrder) - optionalNumber(right.sortOrder);
-  if (sortOrder !== 0) return sortOrder;
+  if (leftHasSortOrder || rightHasSortOrder) {
+    const sortOrder = optionalNumber(left.sortOrder) - optionalNumber(right.sortOrder);
+    if (sortOrder !== 0) return sortOrder;
+  }
+
+  if (left.pinned !== right.pinned) return left.pinned ? -1 : 1;
 
   const publishedAt = optionalDate(right.publishedAt).localeCompare(optionalDate(left.publishedAt));
   if (publishedAt !== 0) return publishedAt;

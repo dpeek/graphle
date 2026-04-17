@@ -1,4 +1,4 @@
-Status: Proposed
+Status: Implemented
 Last Updated: 2026-04-16
 
 # Personal Site Layout And Authoring UX
@@ -285,6 +285,27 @@ None. This PDR resolves the current questions as:
 - canonical public pages use `path`
 - URL-only editing uses authenticated item actions, not public routes
 - ordering uses `@dnd-kit/sortable` over persisted `sortOrder`
+
+## Implementation Notes
+
+Implemented in the MVP path on 2026-04-16:
+
+- `@dpeek/graphle-site-web` now renders a site-owned sidebar/content frame
+  instead of the generic Graphle shell chrome.
+- The sidebar rows show item icons and titles, use route navigation for
+  path-backed items, open URL-only items in a new tab, and expose
+  authenticated action menus for edit/delete.
+- The `+` action calls the blank-create intent; the local authority allocates
+  unique private paths such as `/untitled` and `/untitled-2`.
+- Authenticated edit mode uses one `site:item` row plan backed by site predicate
+  metadata and `@dpeek/graphle-react` draft primitives.
+- Drag ordering uses `@dnd-kit/sortable` and persists normalized consecutive
+  `sortOrder` values through `PATCH /api/site/items/order`.
+- Deletion is exposed through `DELETE /api/site/items/:id` and confirmed in the
+  browser before the request.
+- The theme helper persists `localStorage.graphle.theme`, supports
+  `light | dark | system`, and applies existing `light`/`dark` token classes to
+  `document.documentElement`.
 
 ## Success Criteria
 

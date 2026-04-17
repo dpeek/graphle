@@ -18,9 +18,9 @@ personal-site product path.
   `core:color`, and `site` definitions
 - first-run seed content for public and private `site:item` records
 - the Bun HTTP request handler for `/api/health`, `/api/session`, `/api/init`,
-  item-based `/api/site/*` read-write routes, unknown `/api/*` JSON 404s,
-  package-owned browser assets, and the site host document with graph-backed
-  fallback HTML
+  item-based `/api/site/*` read-write routes including blank create, delete,
+  and batch ordering, unknown `/api/*` JSON 404s, package-owned browser assets,
+  and the site host document with graph-backed fallback HTML
 - public route resolution for exact `site:item.path` values
 - signed local admin cookies and process-local init-token redemption
 - `graphle dev` CLI option parsing and browser opening

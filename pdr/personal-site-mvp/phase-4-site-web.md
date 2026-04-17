@@ -287,6 +287,22 @@ current app proof.
 
 None.
 
+## Follow-Up Notes
+
+The layout UX follow-up in [`./site-layout-ux.md`](./site-layout-ux.md) replaced
+the Phase 4 three-column authoring preview with the minimalist site frame:
+
+- the product path now renders one left item sidebar and centered route content
+  without Graphle shell status chrome
+- creation presets were removed in favor of one blank-create `+` action
+- URL-only edit state is client-side authenticated authoring state, not a
+  public permalink
+- item delete and batch reorder APIs were added under `/api/site/*`
+- manual ordering now normalizes visible sidebar items to consecutive
+  `site:item.sortOrder` values
+- theme selection is local browser state applied through existing
+  `light`/`dark` CSS token classes
+
 ## Success Criteria
 
 - The MVP site schema uses `site:item` for all site content.

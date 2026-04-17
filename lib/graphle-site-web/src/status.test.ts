@@ -1,6 +1,12 @@
 import { describe, expect, it } from "bun:test";
 
-import { loadGraphleSiteStatus, type GraphleSiteStatusFetcher } from "./status.js";
+import {
+  createBlankGraphleSiteItem,
+  deleteGraphleSiteItem,
+  loadGraphleSiteStatus,
+  reorderGraphleSiteItems,
+  type GraphleSiteStatusFetcher,
+} from "./status.js";
 
 describe("loadGraphleSiteStatus", () => {
   it("loads health, session, route items, and authenticated authoring items", async () => {
@@ -94,5 +100,85 @@ describe("loadGraphleSiteStatus", () => {
     expect(snapshot.route.kind).toBe("item");
     expect(snapshot.items).toHaveLength(2);
     expect(snapshot.items[1]?.visibility).toBe("private");
+  });
+
+  it("writes blank create, delete, and reorder requests through site APIs", async () => {
+    const requests: Array<{
+      readonly body?: unknown;
+      readonly method: string;
+      readonly path: string;
+    }> = [];
+    const fetcher: GraphleSiteStatusFetcher = async (input, init) => {
+      const path = String(input);
+      requests.push({
+        path,
+        method: init?.method ?? "GET",
+        body: init?.body ? JSON.parse(String(init.body)) : undefined,
+      });
+
+      if (path === "/api/site/items" && init?.method === "POST") {
+        return Response.json({
+          item: {
+            id: "item-new",
+            title: "Untitled",
+            path: "/untitled",
+            visibility: "private",
+            tags: [],
+            pinned: false,
+            createdAt: "2026-04-15T00:00:00.000Z",
+            updatedAt: "2026-04-15T00:00:00.000Z",
+          },
+        });
+      }
+
+      if (path === "/api/site/items/item-new" && init?.method === "DELETE") {
+        return Response.json({ ok: true });
+      }
+
+      if (path === "/api/site/items/order" && init?.method === "PATCH") {
+        return Response.json({ items: [] });
+      }
+
+      return new Response("not found", { status: 404 });
+    };
+
+    await expect(createBlankGraphleSiteItem(fetcher)).resolves.toMatchObject({
+      id: "item-new",
+      path: "/untitled",
+      visibility: "private",
+    });
+    await expect(deleteGraphleSiteItem("item-new", fetcher)).resolves.toBeUndefined();
+    await expect(
+      reorderGraphleSiteItems(
+        [
+          { id: "item-2", sortOrder: 0 },
+          { id: "item-1", sortOrder: 1 },
+        ],
+        fetcher,
+      ),
+    ).resolves.toEqual([]);
+
+    expect(requests).toEqual([
+      {
+        path: "/api/site/items",
+        method: "POST",
+        body: { intent: "blank" },
+      },
+      {
+        path: "/api/site/items/item-new",
+        method: "DELETE",
+        body: undefined,
+      },
+      {
+        path: "/api/site/items/order",
+        method: "PATCH",
+        body: {
+          items: [
+            { id: "item-2", sortOrder: 0 },
+            { id: "item-1", sortOrder: 1 },
+          ],
+        },
+      },
+    ]);
   });
 });

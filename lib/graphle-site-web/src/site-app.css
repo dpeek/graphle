@@ -1,351 +1,111 @@
+html,
+body {
+  min-height: 100%;
+}
+
 body {
   margin: 0;
 }
 
 #root {
-  min-height: 100vh;
+  min-height: 100svh;
 }
 
-.graphle-shell-content {
-  border: 0;
-  background: transparent;
-  padding: 0;
-}
-
-.graphle-site-workspace {
+.graphle-site-content-article {
   display: grid;
-  min-width: 0;
-  grid-template-columns: minmax(0, 1fr) minmax(260px, 340px) minmax(320px, 420px);
-  gap: 24px;
-  align-items: start;
-}
-
-.graphle-site-preview {
-  min-width: 0;
-  padding: clamp(20px, 4vw, 48px) 0;
-}
-
-.graphle-site-preview-article {
-  display: grid;
-  min-height: 52vh;
   align-content: start;
-  gap: 22px;
+  gap: 1.25rem;
+  min-height: 54vh;
 }
 
-.graphle-site-preview-meta {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-  color: var(--muted-foreground);
-  font-size: 0.82rem;
-}
-
-.graphle-site-item-markers {
-  display: inline-flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.graphle-site-preview-article h2 {
-  max-width: 760px;
+.graphle-site-content-article > h1 {
+  max-width: 48rem;
   margin: 0;
   color: var(--foreground);
-  font-size: clamp(2.3rem, 7vw, 5.2rem);
+  font-size: clamp(2.4rem, 7vw, 5.4rem);
   line-height: 1;
   letter-spacing: 0;
   overflow-wrap: anywhere;
 }
 
 .graphle-site-excerpt {
-  max-width: 680px;
+  max-width: 40rem;
   margin: 0;
-  color: color-mix(in oklch, var(--foreground) 76%, var(--muted-foreground));
-  font-size: 1.15rem;
-  line-height: 1.6;
+  color: color-mix(in oklch, var(--foreground) 74%, var(--muted-foreground));
+  font-size: 1.1rem;
+  line-height: 1.65;
 }
 
 .graphle-site-outbound {
   display: inline-flex;
   min-width: 0;
-  max-width: 720px;
+  max-width: 100%;
   align-items: center;
-  gap: 8px;
+  gap: 0.5rem;
+  color: var(--primary);
+  font-weight: 600;
   overflow-wrap: anywhere;
-  color: #145b7e;
-  font-weight: 700;
   text-decoration: none;
+}
+
+.graphle-site-outbound:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
 .graphle-site-outbound svg {
   flex: 0 0 auto;
+  width: 1rem;
+  height: 1rem;
 }
 
-.graphle-site-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.graphle-site-markdown {
-  display: grid;
-  max-width: 720px;
-  gap: 14px;
-  color: color-mix(in oklch, var(--foreground) 88%, var(--muted-foreground));
-  font-size: 1rem;
-  line-height: 1.72;
-}
-
-.graphle-site-markdown > * {
+.graphle-site-tag-line {
   margin: 0;
-}
-
-.graphle-site-markdown h1,
-.graphle-site-markdown h2,
-.graphle-site-markdown h3 {
-  line-height: 1.18;
-  letter-spacing: 0;
-}
-
-.graphle-site-markdown a {
-  color: #145b7e;
-  text-underline-offset: 3px;
-}
-
-.graphle-site-markdown pre,
-.graphle-site-markdown code {
-  max-width: 100%;
-  overflow-x: auto;
-}
-
-.graphle-site-sidebar,
-.graphle-site-authoring {
-  display: grid;
-  min-width: 0;
-  gap: 16px;
-  border-left: 1px solid var(--border);
-  padding-left: 24px;
-}
-
-.graphle-site-search {
-  display: grid;
-  grid-template-columns: 18px minmax(0, 1fr);
-  gap: 8px;
-  align-items: center;
-}
-
-.graphle-site-search svg {
   color: var(--muted-foreground);
+  font-size: 0.9rem;
+  line-height: 1.5;
 }
 
-.graphle-site-sidebar ul,
-.graphle-site-content-lists ul {
-  display: grid;
-  gap: 10px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.graphle-site-sidebar li {
-  display: grid;
-  min-width: 0;
-  gap: 8px;
-  border-top: 1px solid var(--border);
-  padding-top: 12px;
-}
-
-.graphle-site-sidebar a {
-  display: grid;
-  min-width: 0;
-  gap: 2px;
-  color: var(--foreground);
-  text-decoration: none;
-}
-
-.graphle-site-sidebar a span,
-.graphle-site-content-lists button span {
-  min-width: 0;
-  overflow-wrap: anywhere;
-  font-weight: 700;
-}
-
-.graphle-site-sidebar small,
-.graphle-site-sidebar-tags {
-  min-width: 0;
-  overflow-wrap: anywhere;
-  color: var(--muted-foreground);
-  font-size: 0.78rem;
-}
-
-.graphle-site-editor,
-.graphle-site-create-form,
-.graphle-site-content-lists section {
-  display: grid;
-  min-width: 0;
-  gap: 12px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--card);
-  padding: 16px;
-}
-
-.graphle-site-editor-heading {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.graphle-site-editor h3,
-.graphle-site-create-form h4,
-.graphle-site-content-lists h4 {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: 8px;
-  margin: 0;
-  font-size: 0.96rem;
-  line-height: 1.3;
-  letter-spacing: 0;
-}
-
-.graphle-site-editor h3 {
-  font-size: 1.05rem;
-}
-
-.graphle-site-field {
-  display: grid;
-  min-width: 0;
-  gap: 6px;
-}
-
-.graphle-site-field > span {
-  color: var(--muted-foreground);
-  font-size: 0.78rem;
-  font-weight: 600;
-}
-
-.graphle-site-field-row {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.graphle-site-select {
-  min-height: 36px;
-  width: 100%;
-  border: 1px solid var(--input);
-  border-radius: 8px;
-  background: var(--background);
-  color: var(--foreground);
-  padding: 0 10px;
-}
-
-.graphle-site-checkbox {
-  display: inline-flex;
-  width: fit-content;
-  align-items: center;
-  gap: 8px;
-  color: var(--foreground);
-  font-size: 0.88rem;
-  font-weight: 600;
-}
-
-.graphle-site-editor textarea {
-  min-height: 86px;
-  resize: vertical;
-}
-
-.graphle-site-editor textarea[rows="12"] {
-  min-height: 260px;
-}
-
-.graphle-site-markdown-preview {
-  min-width: 0;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--background);
-  padding: 12px;
-}
-
-.graphle-site-editor-actions,
-.graphle-site-presets {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.graphle-site-save-error {
-  margin: 0;
-  color: #a43b35;
-  font-size: 0.88rem;
-}
-
-.graphle-site-content-lists button {
-  display: inline-flex;
-  min-width: 0;
-  width: 100%;
-  align-items: center;
-  gap: 8px;
+.graphle-site-editor-row[data-site-field-role="title"] input {
+  min-height: 4rem;
   border: 0;
   background: transparent;
-  color: var(--foreground);
   padding: 0;
-  text-align: left;
+  color: var(--foreground);
+  font-size: clamp(2rem, 6vw, 4.8rem);
+  font-weight: 650;
+  line-height: 1;
+  letter-spacing: 0;
 }
 
-.graphle-site-content-lists button svg {
-  flex: 0 0 auto;
-  color: var(--muted-foreground);
+.graphle-site-editor-row[data-site-field-role="body"],
+.graphle-site-editor-row[data-site-field-role="meta"],
+.graphle-site-editor-row[data-site-field-role="hidden"] {
+  max-width: 46rem;
 }
 
-@media (max-width: 1280px) {
-  .graphle-site-workspace {
-    grid-template-columns: minmax(0, 1fr) minmax(260px, 340px);
-  }
-
-  .graphle-site-authoring {
-    grid-column: 1 / -1;
-    border-left: 0;
-    border-top: 1px solid var(--border);
-    padding-top: 24px;
-    padding-left: 0;
-  }
+.graphle-site-editor-row[data-site-field-role="body"] textarea[data-site-field="body"] {
+  min-height: 24rem;
 }
 
-@media (max-width: 860px) {
-  .graphle-site-workspace {
-    grid-template-columns: 1fr;
-  }
-
-  .graphle-site-sidebar {
-    border-left: 0;
-    border-top: 1px solid var(--border);
-    padding-top: 20px;
-    padding-left: 0;
-  }
+.graphle-site-select-control {
+  width: 100%;
 }
 
-@media (max-width: 620px) {
-  .graphle-shell-main {
-    padding: 16px;
-  }
+.graphle-site-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
 
-  .graphle-site-preview {
-    padding: 22px 0;
-  }
-
-  .graphle-site-preview-article {
-    min-height: 40vh;
-  }
-
-  .graphle-site-preview-article h2 {
-    font-size: 2.35rem;
-  }
-
-  .graphle-site-field-row {
-    grid-template-columns: 1fr;
+@media (max-width: 760px) {
+  .graphle-site-content-article > h1 {
+    font-size: 2.4rem;
   }
 }

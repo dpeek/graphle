@@ -160,6 +160,7 @@ export interface LocalSiteAuthority {
   readonly graph: {
     readonly item: {
       create(input: LocalSiteRawItemCreate): string;
+      delete(id: string): void;
       update(id: string, patch: LocalSiteRawItemPatch): LocalSiteRawItem;
       list(): readonly LocalSiteRawItem[];
     };
@@ -203,6 +204,11 @@ interface NormalizedItemInput {
   readonly pinned?: boolean;
   readonly sortOrder?: number;
   readonly publishedAt?: Date;
+}
+
+interface NormalizedReorderItemInput {
+  readonly id: string;
+  readonly sortOrder: number;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -364,6 +370,34 @@ function normalizeTagKey(raw: string): string {
     .replace(/[^a-z0-9-]+/g, "")
     .replace(/-+/g, "-")
     .replace(/^-|-$/g, "");
+}
+
+function slugifyPathSegment(raw: string): string {
+  const slug = raw
+    .trim()
+    .toLowerCase()
+    .replace(/[_\s]+/g, "-")
+    .replace(/[^a-z0-9-]+/g, "")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
+  return slug || "untitled";
+}
+
+function allocateUniqueSitePath(authority: LocalSiteAuthority, title: string): string {
+  const base = `/${slugifyPathSegment(title)}`;
+  const existingPaths = new Set(
+    authority.graph.item
+      .list()
+      .map((item) => item.path)
+      .filter((path): path is string => typeof path === "string" && path.length > 0),
+  );
+
+  if (!existingPaths.has(base)) return base;
+
+  for (let suffix = 2; ; suffix += 1) {
+    const candidate = `${base}-${suffix}`;
+    if (!existingPaths.has(candidate)) return candidate;
+  }
 }
 
 function titleFromTagKey(key: string): string {
@@ -565,6 +599,54 @@ function normalizeItemInput(input: unknown): NormalizedItemInput {
   };
 }
 
+function normalizeCreateItemInput(
+  authority: LocalSiteAuthority,
+  input: unknown,
+): NormalizedItemInput {
+  const value = requireInputObject(input);
+  if (!hasOwn(value, "intent")) return normalizeItemInput(value);
+
+  if (value.intent !== "blank") {
+    throwIssue("intent", 'intent must be "blank" when provided.', "site.intent_invalid");
+  }
+
+  return {
+    title: "Untitled",
+    path: allocateUniqueSitePath(authority, "Untitled"),
+    visibility: "private",
+    tags: [],
+    pinned: false,
+  };
+}
+
+function normalizeReorderInput(input: unknown): readonly NormalizedReorderItemInput[] {
+  const value = requireInputObject(input);
+  const rawItems = value.items;
+  if (!Array.isArray(rawItems)) {
+    throwIssue("items", "items must be an array.", "site.field_type");
+  }
+
+  const seenIds = new Set<string>();
+  return rawItems.map((rawItem, index) => {
+    if (!isRecord(rawItem)) {
+      throwIssue(`items.${index}`, "order entries must be objects.", "site.field_type");
+    }
+    const id = readStringField(rawItem, "id", { required: true, nonBlank: true });
+    const sortOrder = readNumberField(rawItem, "sortOrder");
+    if (id === undefined) {
+      throwIssue(`items.${index}.id`, "id is required.", "site.field_required");
+    }
+    if (sortOrder === undefined) {
+      throwIssue(`items.${index}.sortOrder`, "sortOrder is required.", "site.field_required");
+    }
+    if (seenIds.has(id)) {
+      throwIssue(`items.${index}.id`, `Duplicate item id "${id}".`, "site.item_duplicate");
+    }
+    seenIds.add(id);
+    return { id, sortOrder };
+  });
+}
+
 function createLocalSiteStore() {
   return createGraphStore(
     createBootstrappedSnapshot(localSiteGraphDefinitions, {
@@ -622,8 +704,8 @@ export async function openLocalSiteAuthority({
           updatedAt: timestamp,
         });
         graph.item.create({
-          title: "Graphle on GitHub",
-          url: new URL("https://github.com/dpeek/graphle"),
+          title: "GitHub",
+          url: new URL("https://github.com/dpeek"),
           excerpt: "Public URL-only link.",
           visibility: publicVisibility,
           icon: siteIconPresetIdFor("github"),
@@ -635,11 +717,41 @@ export async function openLocalSiteAuthority({
           updatedAt: timestamp,
         });
         graph.item.create({
-          title: "Private bookmark",
-          url: new URL("https://example.com/private-bookmark"),
-          excerpt: "A private URL-only bookmark for local authoring.",
+          title: "X",
+          url: new URL("https://x.com/dpeekdotcom"),
+          excerpt: "Public URL-only link.",
+          visibility: publicVisibility,
+          icon: siteIconPresetIdFor("x"),
+          tags: [graphleTag],
+          pinned: true,
+          sortOrder: 10,
+          publishedAt: timestamp,
+          createdAt: timestamp,
+          updatedAt: timestamp,
+        });
+        graph.item.create({
+          title: "LinkedIn",
+          url: new URL("https://www.linkedin.com/in/dpeekdotcom/"),
+          excerpt: "Public URL-only link.",
+          visibility: publicVisibility,
+          icon: siteIconPresetIdFor("linkedin"),
+          tags: [graphleTag],
+          pinned: true,
+          sortOrder: 10,
+          publishedAt: timestamp,
+          createdAt: timestamp,
+          updatedAt: timestamp,
+        });
+        graph.item.create({
+          title: "Private",
+          url: new URL("https://www.linkedin.com/in/dpeekdotcom/"),
+          excerpt: "Public URL-only link.",
           visibility: privateVisibility,
-          icon: siteIconPresetIdFor("book"),
+          icon: siteIconPresetIdFor("link"),
+          tags: [graphleTag],
+          pinned: true,
+          sortOrder: 10,
+          publishedAt: timestamp,
           createdAt: timestamp,
           updatedAt: timestamp,
         });
@@ -728,7 +840,7 @@ export async function createLocalSiteItem(
   options: { readonly now?: () => Date } = {},
 ): Promise<LocalSiteItem> {
   const now = options.now ?? (() => new Date());
-  const value = normalizeItemInput(input);
+  const value = normalizeCreateItemInput(authority, input);
   if (!value.title) {
     throw new LocalSiteValidationError([
       validationIssue("title", "title is required.", "site.field_required"),
@@ -766,6 +878,37 @@ export async function createLocalSiteItem(
   });
   await authority.persist();
   return serializeItem(authority, findRawItem(authority, id));
+}
+
+export async function deleteLocalSiteItem(
+  authority: LocalSiteAuthority,
+  id: string,
+): Promise<void> {
+  findRawItem(authority, id);
+  authority.graph.item.delete(id);
+  await authority.persist();
+}
+
+export async function reorderLocalSiteItems(
+  authority: LocalSiteAuthority,
+  input: unknown,
+  options: { readonly now?: () => Date } = {},
+): Promise<readonly LocalSiteItem[]> {
+  const now = options.now ?? (() => new Date());
+  const items = normalizeReorderInput(input);
+  const rawItemsById = new Map(authority.graph.item.list().map((item) => [item.id, item]));
+  const missing = items.find((item) => !rawItemsById.has(item.id));
+  if (missing) throw new LocalSiteNotFoundError(missing.id);
+
+  const timestamp = now();
+  for (const item of items) {
+    authority.graph.item.update(item.id, {
+      sortOrder: item.sortOrder,
+      updatedAt: timestamp,
+    });
+  }
+  await authority.persist();
+  return listLocalSiteItems(authority);
 }
 
 export async function updateLocalSiteItem(

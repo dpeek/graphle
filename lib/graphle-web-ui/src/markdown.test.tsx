@@ -26,6 +26,10 @@ describe("MarkdownRenderer", () => {
 
     const markup = renderToStaticMarkup(<MarkdownRenderer content="hello world" />);
 
+    expect(markup).toContain("graph-markdown");
+    expect(markup).toContain("prose");
+    expect(markup).toContain("max-w-none");
+    expect(markup).toContain("dark:prose-invert");
     expect(markup).toContain('data-web-markdown-renderer="bun"');
     expect(markup).toContain('data-bun-rendered="true"');
     expect(markup).toContain("HELLO WORLD");
@@ -39,7 +43,20 @@ describe("MarkdownRenderer", () => {
     );
 
     expect(markup).toContain('data-web-markdown-renderer="react-markdown"');
+    expect(markup).toContain("graph-markdown");
+    expect(markup).toContain("prose");
     expect(markup).toContain("<h1>Heading</h1>");
     expect(markup).toContain('<a href="https://example.com">example</a>');
+  });
+
+  it("keeps caller class names for layout without replacing markdown styles", () => {
+    const markup = renderToStaticMarkup(
+      <MarkdownRenderer className="max-w-[48rem]" content="hello world" />,
+    );
+
+    expect(markup).toContain("graph-markdown");
+    expect(markup).toContain("prose");
+    expect(markup).toContain("max-w-[48rem]");
+    expect(markup).not.toContain("max-w-none");
   });
 });

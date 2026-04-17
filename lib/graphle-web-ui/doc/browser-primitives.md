@@ -1,7 +1,7 @@
 ---
 name: Graphle web UI primitives
 description: "Browser primitive ownership, exports, and package boundary for @dpeek/graphle-web-ui."
-last_updated: 2026-04-15
+last_updated: 2026-04-17
 ---
 
 # Graphle Web UI Primitives
@@ -17,6 +17,12 @@ last_updated: 2026-04-15
 `@dpeek/graphle-web-ui` is the canonical package for reusable browser
 presentation primitives. It owns controls, layout helpers, markdown rendering,
 theme CSS, and small browser utility hooks.
+
+`MarkdownRenderer` applies the shared `.graph-markdown` class and Tailwind
+Typography `prose` classes by default. Consumers may pass extra classes for
+layout constraints, but product apps should not redefine markdown typography
+locally. Graphle-specific markdown CSS should be limited to design-token
+bridging around the upstream typography rules.
 
 The package exports source-level component subpaths such as
 `@dpeek/graphle-web-ui/button`, `@dpeek/graphle-web-ui/badge`, and

@@ -22,7 +22,11 @@
     "check": "oxlint --type-aware --type-check --fix src vite.config.ts --ignore-pattern '**/*.test.ts' --ignore-pattern '**/*.test.tsx' && oxfmt && bun test"
   },
   "dependencies": {
+    "@dnd-kit/core": "^6.3.1",
+    "@dnd-kit/sortable": "^10.0.0",
+    "@dnd-kit/utilities": "^3.2.2",
     "@dpeek/graphle-module-site": "workspace:*",
+    "@dpeek/graphle-react": "workspace:*",
     "@dpeek/graphle-web-shell": "workspace:*",
     "@dpeek/graphle-web-ui": "workspace:*",
     "lucide-react": "^0.577.0",

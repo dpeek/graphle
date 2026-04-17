@@ -194,8 +194,9 @@ describe("local server routes", () => {
       expect(response.status).toBe(404);
       expect(response.headers.get("content-type")).toBe("text/html; charset=utf-8");
       expect(html).toContain("Page not found");
-      expect(html).toContain("Admin session active");
-      expect(html).toContain("Inline authoring available");
+      expect(html).not.toContain("Admin session active");
+      expect(html).not.toContain("Inline authoring available");
+      expect(html).not.toContain("Graphle local site");
     });
   });
 
@@ -224,7 +225,7 @@ describe("local server routes", () => {
             recovery: "none",
           },
           records: {
-            items: 4,
+            items: 6,
             tags: 1,
           },
         },
@@ -332,6 +333,50 @@ describe("local server routes", () => {
           }),
         }),
       );
+      const blankItem = await server.fetch(
+        new Request("http://127.0.0.1:4318/api/site/items", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            cookie,
+          },
+          body: JSON.stringify({ intent: "blank" }),
+        }),
+      );
+      const blankItemPayload = (await blankItem.json()) as {
+        readonly item: { readonly id: string; readonly path: string };
+      };
+      const reordered = await server.fetch(
+        new Request("http://127.0.0.1:4318/api/site/items/order", {
+          method: "PATCH",
+          headers: {
+            "content-type": "application/json",
+            cookie,
+          },
+          body: JSON.stringify({
+            items: [
+              { id: blankItemPayload.item.id, sortOrder: 0 },
+              { id: createdItemPayload.item.id, sortOrder: 1 },
+            ],
+          }),
+        }),
+      );
+      const deleted = await server.fetch(
+        new Request(
+          `http://127.0.0.1:4318/api/site/items/${encodeURIComponent(blankItemPayload.item.id)}`,
+          {
+            method: "DELETE",
+            headers: {
+              cookie,
+            },
+          },
+        ),
+      );
+      const listAfterDelete = await server.fetch(
+        new Request("http://127.0.0.1:4318/api/site/items", {
+          headers: { cookie },
+        }),
+      );
       const workPage = await server.fetch(new Request("http://127.0.0.1:4318/work"));
       const publicHomeRoute = await server.fetch(
         new Request("http://127.0.0.1:4318/api/site/route?path=%2F"),
@@ -375,6 +420,29 @@ describe("local server routes", () => {
         },
       });
       expect(createdLink.status).toBe(200);
+      expect(blankItem.status).toBe(200);
+      expect(blankItemPayload.item.path).toBe("/untitled");
+      expect(reordered.status).toBe(200);
+      expect(await reordered.json()).toMatchObject({
+        items: expect.arrayContaining([
+          expect.objectContaining({
+            id: blankItemPayload.item.id,
+            sortOrder: 0,
+          }),
+          expect.objectContaining({
+            id: createdItemPayload.item.id,
+            sortOrder: 1,
+          }),
+        ]),
+      });
+      expect(deleted.status).toBe(200);
+      expect(await deleted.json()).toEqual({ ok: true });
+      const itemsAfterDelete = (
+        (await listAfterDelete.json()) as {
+          readonly items: readonly { readonly id: string }[];
+        }
+      ).items;
+      expect(itemsAfterDelete.some((item) => item.id === blankItemPayload.item.id)).toBe(false);
       expect(workPage.status).toBe(200);
       expect(await workPage.text()).toContain("Public item.");
       expect(await publicHomeRoute.json()).toMatchObject({

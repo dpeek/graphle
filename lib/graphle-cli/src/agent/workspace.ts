@@ -739,6 +739,7 @@ export class CheckoutManager {
     if (!(await this.#gitConfigValue(cwd, "user.email"))) {
       commitArgs.push("-c", "user.email=graphle-agent@localhost");
     }
+    commitArgs.push("-c", "commit.gpgsign=false");
     commitArgs.push("commit", "-m", subject);
     if (body?.trim()) {
       commitArgs.push("-m", body.trim());
@@ -1130,7 +1131,10 @@ export class CheckoutManager {
   async #mergeIntoControlRepo(issue: IssueRuntimeState, streamRef: string) {
     this.#reportIssueProgress(issue, `merging ${streamRef} into main via control repo`);
     await this.#runOrThrow(["git", "checkout", "main"], issue.controlPath);
-    await this.#runOrThrow(["git", "merge", "--no-edit", streamRef], issue.controlPath);
+    await this.#runOrThrow(
+      ["git", "-c", "commit.gpgsign=false", "merge", "--no-edit", streamRef],
+      issue.controlPath,
+    );
     await this.#runOrThrow(["git", "push", "origin", "main"], issue.controlPath);
     this.#reportIssueProgress(issue, "pushed merged main to origin");
   }
@@ -1148,7 +1152,10 @@ export class CheckoutManager {
     try {
       this.#reportIssueProgress(issue, `merging ${streamRef} into local main`);
       await this.#runOrThrow(["git", "switch", "-c", mergeBranch], mergePath);
-      await this.#runOrThrow(["git", "merge", "--no-edit", streamRef], mergePath);
+      await this.#runOrThrow(
+        ["git", "-c", "commit.gpgsign=false", "merge", "--no-edit", streamRef],
+        mergePath,
+      );
       const mergedSha = await this.#revParseHead(mergePath);
       const currentBranch = await this.#currentBranch(repoPath);
       if (currentBranch === "main") {
@@ -1289,6 +1296,7 @@ export class CheckoutManager {
       if (!(await this.#gitConfigValue(finalizePath, "user.email"))) {
         commitArgs.push("-c", "user.email=graphle-agent@localhost");
       }
+      commitArgs.push("-c", "commit.gpgsign=false");
       commitArgs.push(
         "commit",
         "-m",
@@ -1466,7 +1474,7 @@ export class CheckoutManager {
       `rebasing task work onto ${workspace.branchName}`,
     );
     const result = await this.#runCommand(
-      ["git", "rebase", workspace.branchName],
+      ["git", "-c", "commit.gpgsign=false", "rebase", workspace.branchName],
       workspace.path,
       this.#hooks.timeoutMs,
     );

@@ -130,8 +130,8 @@ describe("site module", () => {
     ];
 
     expect([...items].sort(compareSiteItems).map((item) => item.title)).toEqual([
-      "Pinned link",
       "Ordered",
+      "Pinned link",
       "Later",
     ]);
     expect(siteItemMatchesSearch(items[1]!, "github.com/dpeek")).toBe(true);

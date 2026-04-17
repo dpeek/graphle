@@ -64,9 +64,13 @@ seed duplicate records.
   private routed items
 - `GET /api/site/items`: authenticated item list for inline authoring
 - `POST /api/site/items`: authenticated item creation with inline tag
-  creation/reuse
+  creation/reuse; `{ "intent": "blank" }` creates a private `Untitled` item
+  with a server-allocated unique routed path such as `/untitled`
 - `PATCH /api/site/items/:id`: authenticated item updates, visibility changes,
   pinning, sorting, and tag replacement
+- `DELETE /api/site/items/:id`: authenticated item deletion
+- `PATCH /api/site/items/order`: authenticated batch sort-order update; all
+  referenced ids must exist before any `site:item.sortOrder` values are written
 - unknown `/api/*`: JSON 404
 
 Static browser files are served from the package-built
@@ -82,10 +86,10 @@ still loading the package browser app. The host document includes graph-backed
 title, body, excerpt, outbound URL, tags, and item sidebar content inside
 `#root` before the browser bundle mounts.
 
-Create and update helpers use the typed graph client over the persisted
-authority and then rewrite the authority baseline through the SQLite adapter.
-They do not add site-specific SQLite tables, keep a route-local content mirror,
-or bypass authority storage.
+Create, update, delete, and reorder helpers use the typed graph client over the
+persisted authority and then rewrite the authority baseline through the SQLite
+adapter. They do not add site-specific SQLite tables, keep a route-local content
+mirror, or bypass authority storage.
 
 ## Local Auth
 
