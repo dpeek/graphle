@@ -11,7 +11,13 @@ import {
   type EditSessionFieldController,
 } from "@dpeek/graphle-react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { booleanTypeModule, core, coreGraphBootstrapOptions, stringTypeModule } from "../index.js";
+import {
+  booleanTypeModule,
+  core,
+  coreGraphBootstrapOptions,
+  markdownTypeModule,
+  stringTypeModule,
+} from "../index.js";
 import {
   PredicateField,
   PredicateFieldControl,
@@ -53,6 +59,13 @@ const probeRecord = defineType({
         description: "Workflow state for the probe.",
       },
     }),
+    notes: markdownTypeModule.field({
+      cardinality: "one?",
+      meta: {
+        label: "Notes",
+        description: "Markdown notes for the probe.",
+      },
+    }),
   },
 });
 
@@ -65,6 +78,7 @@ function createProbeFields() {
   const recordId = graph.probeRecord.create({
     active: true,
     name: "Probe Name",
+    notes: "# Probe notes",
   });
   return graph.probeRecord.ref(recordId).fields;
 }
@@ -278,5 +292,22 @@ describe("@dpeek/graphle-module-core/react-dom resolver", () => {
     expect(statusFieldMarkup).toContain('data-web-field-kind="select"');
     expect(statusFieldMarkup).toContain("Workflow state for the probe.");
     expect(statusFieldMarkup).toContain("Status must be selected");
+  });
+
+  it("keeps markdown control rendering write-only and leaves rendering to view mode", () => {
+    const { notes: notesField } = createProbeFields();
+
+    const controlMarkup = renderToStaticMarkup(<PredicateFieldControl predicate={notesField} />);
+    const viewMarkup = renderToStaticMarkup(<PredicateFieldView predicate={notesField} />);
+
+    expect(controlMarkup).toContain('data-web-field-kind="markdown"');
+    expect(controlMarkup).toContain('data-web-markdown-source="textarea"');
+    expect(controlMarkup).not.toContain("Preview");
+    expect(controlMarkup).not.toContain("data-web-source-preview-toggle");
+    expect(controlMarkup).not.toContain("data-web-markdown-preview");
+    expect(controlMarkup).not.toContain("graph-markdown");
+    expect(viewMarkup).toContain('data-web-field-kind="markdown"');
+    expect(viewMarkup).toContain("graph-markdown");
+    expect(viewMarkup).toContain("Probe notes");
   });
 });

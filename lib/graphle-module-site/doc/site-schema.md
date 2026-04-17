@@ -1,7 +1,7 @@
 ---
 name: Graph module site schema
 description: "Personal-site MVP site namespace ownership for @dpeek/graphle-module-site."
-last_updated: 2026-04-16
+last_updated: 2026-04-17
 ---
 
 # Graph Module Site Schema
@@ -22,16 +22,17 @@ the personal-site MVP:
 - `site:visibility`: enum with `private` and `public`
 - `site:icon`: named icon presets for common personal-site links
 - `site:item`: title, optional path, optional absolute URL, optional markdown
-  body, optional excerpt, visibility, optional icon preset, `core:tag`
-  references, pinned state, optional sort order, optional published-at
-  timestamp, created-at timestamp, and updated-at timestamp
+  body, visibility, optional icon preset, `core:tag` references, optional sort
+  order, created-at timestamp, and updated-at timestamp
 
 The package exports the resolved `site` namespace, `siteItemSurface`, and
 `siteManifest`. `siteItemSurface` is the authored `RecordSurfaceSpec` for
-shared browser entity surfaces: title/excerpt/body/url/tags content fields,
-path/visibility/published-at route fields, icon/pinned/sort-order sidebar
-fields, and created/updated metadata fields. The manifest publishes that
-surface through `runtime.recordSurfaces` beside the schema contribution.
+shared browser entity surfaces: icon/title/body/url/tags content fields,
+path/visibility route fields, and created/updated metadata fields.
+`site:item.sortOrder` stays in the schema for sidebar drag-and-drop ordering,
+but it is intentionally not exposed in the item editor surface. The manifest
+publishes that surface through `runtime.recordSurfaces` beside the schema
+contribution.
 
 Stable ids live in `../src/site.json`; package-local tests fail when authored
 schema keys drift without an intentional id-map update.
@@ -54,8 +55,7 @@ site browser app:
 `compareSiteItems` treats explicit manual order as the strongest product
 ordering signal: items with `site:item.sortOrder` sort before unordered items
 by ascending value. Items without `sortOrder` continue to use the deterministic
-fallback order: pinned first, newer `publishedAt`, newer `updatedAt`, then
-title.
+fallback order: newer `createdAt`, newer `updatedAt`, then title.
 
 ## Minimal Core Dependency
 

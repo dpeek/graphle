@@ -164,8 +164,6 @@ describe("graphle sqlite", () => {
         title: "Example item",
         path: "/example",
         body: "# Example",
-        excerpt: "A short example post.",
-        publishedAt: new Date("2026-04-15T00:00:00.000Z"),
         visibility: site.visibility.values.public.id,
       });
       await first.persist();
@@ -181,7 +179,6 @@ describe("graphle sqlite", () => {
           expect.objectContaining({
             title: "Example item",
             path: "/example",
-            excerpt: "A short example post.",
           }),
         ]);
       } finally {

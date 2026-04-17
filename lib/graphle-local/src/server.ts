@@ -221,9 +221,6 @@ function renderRouteFallback(route: LocalSiteRouteResult): string {
     const outboundUrl = route.item.url
       ? `<a class="outbound" href="${escapeHtml(route.item.url)}" rel="noreferrer" target="_blank">${escapeHtml(route.item.url)}</a>`
       : "";
-    const excerpt = route.item.excerpt
-      ? `<p class="excerpt">${escapeHtml(route.item.excerpt)}</p>`
-      : "";
     const tags = route.item.tags.length
       ? `<p class="tags">${route.item.tags.map((tag) => escapeHtml(tag.name)).join(", ")}</p>`
       : "";
@@ -233,7 +230,6 @@ function renderRouteFallback(route: LocalSiteRouteResult): string {
 
     return `<article class="content" data-route-kind="item">
           <h1>${escapeHtml(route.item.title)}</h1>
-          ${excerpt}
           ${outboundUrl}
           ${body}
           ${tags}
@@ -380,10 +376,6 @@ ${renderClientAssetTags(assetTags)}
       }
       .site-fallback-frame .markdown a {
         color: #145b7e;
-      }
-      .site-fallback-frame .excerpt {
-        color: #4f5a68;
-        font-size: 1.15rem;
       }
       .site-fallback-frame .outbound {
         max-width: 100%;

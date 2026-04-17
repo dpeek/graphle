@@ -57,13 +57,10 @@ export interface LocalSiteItem {
   readonly path?: string;
   readonly url?: string;
   readonly body?: string;
-  readonly excerpt?: string;
   readonly visibility: SiteVisibility;
   readonly icon?: SiteIconPreset;
   readonly tags: readonly LocalSiteTag[];
-  readonly pinned: boolean;
   readonly sortOrder?: number;
-  readonly publishedAt?: string;
   readonly createdAt: string;
   readonly updatedAt: string;
 }
@@ -149,13 +146,10 @@ function serializeItem(authority: LocalSiteAuthority, item: LocalSiteRawItem): L
     ...(item.path ? { path: item.path } : {}),
     ...(item.url ? { url: formatUrl(item.url) } : {}),
     ...(item.body ? { body: item.body } : {}),
-    ...(item.excerpt ? { excerpt: item.excerpt } : {}),
     visibility: serializeVisibility(item.visibility),
     ...(serializeIcon(item.icon) ? { icon: serializeIcon(item.icon) } : {}),
     tags,
-    pinned: item.pinned ?? false,
     ...(typeof item.sortOrder === "number" ? { sortOrder: item.sortOrder } : {}),
-    ...(item.publishedAt ? { publishedAt: formatDate(item.publishedAt) } : {}),
     createdAt: requireDate(item.createdAt),
     updatedAt: requireDate(item.updatedAt),
   };
@@ -195,13 +189,10 @@ export async function openLocalSiteAuthority({
           title: "Home",
           path: "/",
           body: "# Home\n\nWelcome to your new Graphle site.",
-          excerpt: "Welcome to your new Graphle site.",
           visibility: publicVisibility,
           icon: siteIconPresetIdFor("website"),
           tags: [graphleTag],
-          pinned: true,
           sortOrder: 0,
-          publishedAt: timestamp,
           createdAt: timestamp,
           updatedAt: timestamp,
         });
@@ -209,63 +200,49 @@ export async function openLocalSiteAuthority({
           title: "Example note",
           path: "/notes/example",
           body: "# Example note\n\nThis path-backed item is stored in the local site graph.",
-          excerpt: "A path-backed markdown item seeded into the local graph.",
           visibility: publicVisibility,
           icon: siteIconPresetIdFor("note"),
           tags: [graphleTag],
-          publishedAt: timestamp,
           createdAt: timestamp,
           updatedAt: timestamp,
         });
         graph.item.create({
           title: "GitHub",
           url: new URL("https://github.com/dpeek"),
-          excerpt: "Public URL-only link.",
           visibility: publicVisibility,
           icon: siteIconPresetIdFor("github"),
           tags: [graphleTag],
-          pinned: true,
           sortOrder: 10,
-          publishedAt: timestamp,
           createdAt: timestamp,
           updatedAt: timestamp,
         });
         graph.item.create({
           title: "X",
           url: new URL("https://x.com/dpeekdotcom"),
-          excerpt: "Public URL-only link.",
           visibility: publicVisibility,
           icon: siteIconPresetIdFor("x"),
           tags: [graphleTag],
-          pinned: true,
           sortOrder: 10,
-          publishedAt: timestamp,
           createdAt: timestamp,
           updatedAt: timestamp,
         });
         graph.item.create({
           title: "LinkedIn",
           url: new URL("https://www.linkedin.com/in/dpeekdotcom/"),
-          excerpt: "Public URL-only link.",
           visibility: publicVisibility,
           icon: siteIconPresetIdFor("linkedin"),
           tags: [graphleTag],
-          pinned: true,
           sortOrder: 10,
-          publishedAt: timestamp,
           createdAt: timestamp,
           updatedAt: timestamp,
         });
         graph.item.create({
           title: "Private",
           url: new URL("https://www.linkedin.com/in/dpeekdotcom/"),
-          excerpt: "Public URL-only link.",
           visibility: privateVisibility,
           icon: siteIconPresetIdFor("link"),
           tags: [graphleTag],
-          pinned: true,
           sortOrder: 10,
-          publishedAt: timestamp,
           createdAt: timestamp,
           updatedAt: timestamp,
         });

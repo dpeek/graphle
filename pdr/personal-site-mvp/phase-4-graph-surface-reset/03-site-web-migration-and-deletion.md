@@ -60,10 +60,12 @@ Add a `RecordSurfaceSpec` for `site:item` in `@dpeek/graphle-module-site`.
 The site module should own the authored structure for the item editor:
 
 - title field: `title`
-- primary body fields: `excerpt`, `body`, `url`, `tags`
-- route/publishing fields: `path`, `visibility`, `publishedAt`
-- sidebar fields: `icon`, `pinned`, `sortOrder`
+- primary body fields: `icon`, `body`, `url`, `tags`
+- route/publishing fields: `path`, `visibility`
 - metadata fields: `createdAt`, `updatedAt`
+
+`site:item.sortOrder` remains in the graph schema for sidebar drag-and-drop
+ordering, but it is intentionally omitted from the item editor surface.
 
 Use existing surface contracts from `@dpeek/graphle-module`; do not define a
 site-specific surface model.
@@ -147,12 +149,10 @@ Expected behavior:
 
 - `body` uses the shared markdown editor/view path
 - `tags` uses the shared entity-reference/tag editor/view path
-- `path`, `url`, `excerpt`, and `title` use shared text/url controls
+- `path`, `url`, and `title` use shared text/url controls
 - `visibility` uses the shared enum/select control
-- `pinned` uses the shared boolean control
-- `sortOrder` uses the shared number control
-- `publishedAt`, `createdAt`, and `updatedAt` use shared date view/control
-  behavior according to writability
+- `createdAt` and `updatedAt` use shared date view/control behavior according
+  to writability
 
 Site-specific chrome may remain in `site-web`: the sidebar, route preview,
 edit toggle placement, item actions, dark mode, and public document frame.

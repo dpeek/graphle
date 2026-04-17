@@ -55,13 +55,10 @@ describe("site module", () => {
       path: "/",
       url: new URL("https://example.com/"),
       body: "# Home",
-      excerpt: "A home page.",
       visibility: siteVisibilityIdFor("public"),
       icon: siteIconPresetIdFor("website"),
       tags: [tagId],
-      pinned: true,
       sortOrder: 1,
-      publishedAt: now,
       createdAt: now,
       updatedAt: now,
     });
@@ -71,13 +68,10 @@ describe("site module", () => {
       path: "/",
       url: new URL("https://example.com/"),
       body: "# Home",
-      excerpt: "A home page.",
       visibility: siteVisibilityIdFor("public"),
       icon: siteIconPresetIdFor("website"),
       tags: [tagId],
-      pinned: true,
       sortOrder: 1,
-      publishedAt: now,
       createdAt: now,
       updatedAt: now,
     });
@@ -89,28 +83,22 @@ describe("site module", () => {
       key: "site:item:surface",
       subject: "site:item",
       titleField: "title",
-      subtitleField: "excerpt",
     });
     expect(siteItemSurface.sections.map((section) => section.key)).toEqual([
       "content",
       "route",
-      "sidebar",
       "metadata",
     ]);
     expect(
       siteItemSurface.sections.flatMap((section) => section.fields.map((field) => field.path)),
     ).toEqual([
+      "icon",
       "title",
-      "excerpt",
       "body",
       "url",
       "tags",
       "path",
       "visibility",
-      "publishedAt",
-      "icon",
-      "pinned",
-      "sortOrder",
       "createdAt",
       "updatedAt",
     ]);
@@ -137,36 +125,35 @@ describe("site module", () => {
     expect(() => parseSiteIconPreset("custom")).toThrow("Invalid site icon preset");
   });
 
-  it("searches and sorts item summaries using PRD rules", () => {
+  it("searches and sorts item summaries using site ordering rules", () => {
     const items = [
       {
-        title: "Later",
+        title: "Newer",
         visibility: "public" as const,
-        pinned: false,
-        publishedAt: "2026-04-10T00:00:00.000Z",
+        createdAt: "2026-04-10T00:00:00.000Z",
         updatedAt: "2026-04-10T00:00:00.000Z",
       },
       {
-        title: "Pinned link",
+        title: "Graph link",
         url: "https://github.com/dpeek/graphle",
         visibility: "public" as const,
-        pinned: true,
         tags: [{ key: "graphle", name: "Graphle" }],
+        createdAt: "2026-04-09T00:00:00.000Z",
         updatedAt: "2026-04-09T00:00:00.000Z",
       },
       {
         title: "Ordered",
         visibility: "private" as const,
-        pinned: false,
         sortOrder: 1,
+        createdAt: "2026-04-08T00:00:00.000Z",
         updatedAt: "2026-04-08T00:00:00.000Z",
       },
     ];
 
     expect([...items].sort(compareSiteItems).map((item) => item.title)).toEqual([
       "Ordered",
-      "Pinned link",
-      "Later",
+      "Newer",
+      "Graph link",
     ]);
     expect(siteItemMatchesSearch(items[1]!, "github.com/dpeek")).toBe(true);
     expect(siteItemMatchesSearch(items[1]!, "graphle")).toBe(true);

@@ -445,7 +445,6 @@ describe("local server routes", () => {
         body: "# Graph transport\n\nWritten through /api/tx.",
         visibility: siteVisibilityIdFor("public"),
         tags: [],
-        pinned: false,
       });
       expect(client.sync.getPendingTransactions()).toHaveLength(1);
       await client.sync.flush();
@@ -546,7 +545,6 @@ describe("local server routes", () => {
         body: "# Work\n\nPrivate item.",
         visibility: siteVisibilityIdFor("private"),
         tags: [workTag],
-        pinned: false,
       });
       await client.sync.flush();
 
@@ -561,9 +559,7 @@ describe("local server routes", () => {
       client.graph.item.update(workId, {
         body: "# Work\n\nPublic item.",
         visibility: siteVisibilityIdFor("public"),
-        pinned: true,
         sortOrder: 2,
-        publishedAt: new Date("2026-04-15T00:00:00.000Z"),
       });
       await client.sync.flush();
 
@@ -573,17 +569,14 @@ describe("local server routes", () => {
       const linkId = client.graph.item.create({
         title: "Public link",
         url: new URL("https://example.com/public-link"),
-        excerpt: "A URL-only public link.",
         visibility: siteVisibilityIdFor("public"),
         tags: [],
-        pinned: false,
       });
       const blankId = client.graph.item.create({
         title: "Untitled",
         path: "/untitled",
         visibility: siteVisibilityIdFor("private"),
         tags: [],
-        pinned: false,
       });
       await client.sync.flush();
 
@@ -626,7 +619,6 @@ describe("local server routes", () => {
           item: {
             title: "Work",
             visibility: "public",
-            pinned: true,
             tags: [
               {
                 key: "work",
@@ -694,7 +686,6 @@ describe("local server routes", () => {
         body: "Survives reopen.",
         visibility: siteVisibilityIdFor("public"),
         tags: [],
-        pinned: false,
       });
       await client.sync.flush();
     } finally {

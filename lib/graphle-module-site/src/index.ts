@@ -9,7 +9,6 @@ import {
 } from "@dpeek/graphle-module";
 import { applyGraphIdMap, type ResolvedGraphNamespace } from "@dpeek/graphle-kernel";
 import {
-  booleanTypeModule,
   dateTypeModule,
   markdownTypeModule,
   numberTypeModule,
@@ -49,13 +48,11 @@ export interface SiteItemSearchTarget {
   readonly path?: string;
   readonly url?: string;
   readonly body?: string;
-  readonly excerpt?: string;
   readonly visibility?: SiteVisibility;
   readonly icon?: SiteIconPreset;
   readonly tags?: readonly SiteItemSearchTag[];
-  readonly pinned?: boolean;
   readonly sortOrder?: number;
-  readonly publishedAt?: string;
+  readonly createdAt?: string;
   readonly updatedAt?: string;
 }
 
@@ -183,23 +180,6 @@ function titleField(label: string) {
   });
 }
 
-function optionalStringField(label: string) {
-  return stringTypeModule.field({
-    cardinality: "one?",
-    meta: {
-      label,
-      editor: {
-        kind: "textarea",
-        multiline: true,
-      },
-    },
-    filter: {
-      operators: ["contains", "equals"] as const,
-      defaultOperator: "contains",
-    },
-  });
-}
-
 function optionalBodyField(label: string) {
   return markdownTypeModule.field({
     cardinality: "one?",
@@ -290,7 +270,6 @@ export const siteItem = defineType({
       },
     }),
     body: optionalBodyField("Body"),
-    excerpt: optionalStringField("Excerpt"),
     visibility: visibilityField("Visibility"),
     icon: siteIconPresetTypeModule.field({
       cardinality: "one?",
@@ -312,20 +291,6 @@ export const siteItem = defineType({
       editorKind: "entity-reference-combobox",
       label: "Tags",
     }),
-    pinned: {
-      ...booleanTypeModule.field({
-        cardinality: "one",
-        onCreate: ({ incoming }) => incoming ?? false,
-        meta: {
-          label: "Pinned",
-        },
-        filter: {
-          operators: ["is"] as const,
-          defaultOperator: "is",
-        },
-      }),
-      createOptional: true as const,
-    },
     sortOrder: numberTypeModule.field({
       cardinality: "one?",
       meta: {
@@ -334,12 +299,6 @@ export const siteItem = defineType({
       filter: {
         operators: ["equals", "lt", "gt"] as const,
         defaultOperator: "equals",
-      },
-    }),
-    publishedAt: dateTypeModule.field({
-      cardinality: "one?",
-      meta: {
-        label: "Published at",
       },
     }),
     createdAt: createdAtField(),
@@ -362,14 +321,13 @@ export const siteItemSurface = {
   key: "site:item:surface",
   subject: site.item.values.key,
   titleField: "title",
-  subtitleField: "excerpt",
   sections: [
     {
       key: "content",
       title: "Content",
       fields: [
+        { path: "icon", label: "Icon" },
         { path: "title", label: "Title" },
-        { path: "excerpt", label: "Excerpt" },
         { path: "body", label: "Body" },
         { path: "url", label: "URL" },
         { path: "tags", label: "Tags" },
@@ -381,16 +339,6 @@ export const siteItemSurface = {
       fields: [
         { path: "path", label: "Path" },
         { path: "visibility", label: "Visibility" },
-        { path: "publishedAt", label: "Published at" },
-      ],
-    },
-    {
-      key: "sidebar",
-      title: "Sidebar",
-      fields: [
-        { path: "icon", label: "Icon" },
-        { path: "pinned", label: "Pinned" },
-        { path: "sortOrder", label: "Sort order" },
       ],
     },
     {
@@ -469,7 +417,6 @@ export function siteItemMatchesSearch(item: SiteItemSearchTarget, rawQuery: stri
     item.title,
     item.path,
     ...searchableUrlParts(item.url),
-    item.excerpt,
     item.body,
     item.visibility,
     item.icon,
@@ -499,10 +446,8 @@ export function compareSiteItems(left: SiteItemSearchTarget, right: SiteItemSear
     if (sortOrder !== 0) return sortOrder;
   }
 
-  if (left.pinned !== right.pinned) return left.pinned ? -1 : 1;
-
-  const publishedAt = optionalDate(right.publishedAt).localeCompare(optionalDate(left.publishedAt));
-  if (publishedAt !== 0) return publishedAt;
+  const createdAt = optionalDate(right.createdAt).localeCompare(optionalDate(left.createdAt));
+  if (createdAt !== 0) return createdAt;
 
   const updatedAt = optionalDate(right.updatedAt).localeCompare(optionalDate(left.updatedAt));
   if (updatedAt !== 0) return updatedAt;

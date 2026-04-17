@@ -192,7 +192,6 @@ function ItemView({ item }: { readonly item: GraphleSiteItemView }) {
       ) : (
         <>
           <h1>{item.title}</h1>
-          {item.excerpt ? <p className="text-muted-foreground">{item.excerpt}</p> : null}
           {item.url ? (
             <a href={item.url} rel="noreferrer" target="_blank">
               <ExternalLinkIcon aria-hidden={true} />

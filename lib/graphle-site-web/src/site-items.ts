@@ -100,7 +100,6 @@ export function serializeGraphleSiteItem(
     .map(serializeTag);
   const icon = serializeIcon(item.icon);
   const url = formatUrl(item.url);
-  const publishedAt = formatDate(item.publishedAt);
 
   return {
     id: item.id,
@@ -108,13 +107,10 @@ export function serializeGraphleSiteItem(
     ...(item.path ? { path: item.path } : {}),
     ...(url ? { url } : {}),
     ...(item.body ? { body: item.body } : {}),
-    ...(item.excerpt ? { excerpt: item.excerpt } : {}),
     visibility: serializeVisibility(item.visibility),
     ...(icon ? { icon } : {}),
     tags,
-    pinned: item.pinned ?? false,
     ...(typeof item.sortOrder === "number" ? { sortOrder: item.sortOrder } : {}),
-    ...(publishedAt ? { publishedAt } : {}),
     createdAt: requireDate(item.createdAt),
     updatedAt: requireDate(item.updatedAt),
   };
@@ -188,7 +184,6 @@ export function createBlankGraphleSiteItem(runtime: GraphleSiteGraphClient): Gra
     path: allocateGraphleSitePath(runtime),
     visibility: siteVisibilityIdFor("private"),
     tags: [],
-    pinned: false,
   });
   const item = findGraphleSiteItemView(runtime, id);
   if (!item) throw new Error("Created site item was not readable from the graph runtime.");

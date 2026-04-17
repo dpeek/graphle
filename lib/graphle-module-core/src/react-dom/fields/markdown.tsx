@@ -6,12 +6,7 @@ import {
 } from "@dpeek/graphle-react";
 import { MarkdownRenderer } from "@dpeek/graphle-web-ui/markdown";
 import { MonacoSourceEditor, sourcePreviewMonacoOptions } from "@dpeek/graphle-web-ui/monaco";
-import {
-  EmptyPreview,
-  SourcePreviewFieldEditor,
-  sourcePreviewPanelClassName,
-} from "@dpeek/graphle-web-ui/source-preview";
-import { useDeferredValue, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 
 import {
   normalizeTextValue,
@@ -48,7 +43,6 @@ export function MarkdownFieldEditor({
   const committedValue = normalizeTextValue(value);
   const [draft, setDraft] = useState(committedValue);
   const [isInvalid, setIsInvalid] = useState(false);
-  const deferredDraft = useDeferredValue(draft);
 
   useEffect(() => {
     setDraft(committedValue);
@@ -66,34 +60,15 @@ export function MarkdownFieldEditor({
   }
 
   return (
-    <SourcePreviewFieldEditor
-      kind="markdown"
-      preview={
-        deferredDraft.trim().length > 0 ? (
-          <div
-            className={sourcePreviewPanelClassName}
-            data-web-markdown-preview={deferredDraft === draft ? "ready" : "deferred"}
-          >
-            <MarkdownRenderer content={deferredDraft} />
-          </div>
-        ) : (
-          <EmptyPreview attribute="markdown">
-            Start writing to preview rendered markdown.
-          </EmptyPreview>
-        )
-      }
-      source={
-        <div aria-invalid={isInvalid || undefined}>
-          <MonacoSourceEditor
-            language="markdown"
-            onChange={applyDraft}
-            options={sourcePreviewMonacoOptions}
-            placeholder={placeholder}
-            sourceKind="markdown"
-            value={draft}
-          />
-        </div>
-      }
-    />
+    <div aria-invalid={isInvalid || undefined} data-web-field-kind="markdown">
+      <MonacoSourceEditor
+        language="markdown"
+        onChange={applyDraft}
+        options={sourcePreviewMonacoOptions}
+        placeholder={placeholder}
+        sourceKind="markdown"
+        value={draft}
+      />
+    </div>
   );
 }

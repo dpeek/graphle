@@ -86,8 +86,8 @@ is an exact item-path lookup. URL-only items appear in sidebar data but do not
 resolve to internal pages. Private items are visible only to requests with a
 valid local admin cookie. Missing routes return a useful 404 host document while
 still loading the package browser app. The host document includes graph-backed
-title, body, excerpt, outbound URL, tags, and item sidebar content inside
-`#root` before the browser bundle mounts.
+title, body, outbound URL, tags, and item sidebar content inside `#root`
+before the browser bundle mounts.
 
 Generic graph transactions use the shared persisted-authority write session and
 durably commit through the SQLite adapter. The local route projection reads

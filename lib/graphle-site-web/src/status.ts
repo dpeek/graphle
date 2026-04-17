@@ -48,13 +48,10 @@ export interface GraphleSiteRouteItem {
   readonly path?: string;
   readonly url?: string;
   readonly body?: string;
-  readonly excerpt?: string;
   readonly visibility: SiteVisibility;
   readonly icon?: SiteIconPreset;
   readonly tags: readonly GraphleSiteRouteTag[];
-  readonly pinned: boolean;
   readonly sortOrder?: number;
-  readonly publishedAt?: string;
   readonly createdAt: string;
   readonly updatedAt: string;
 }
