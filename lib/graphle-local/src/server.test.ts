@@ -498,25 +498,16 @@ describe("local server routes", () => {
     }
   });
 
-  it("exposes site route, list, create, update, URL-only, and visibility APIs", async () => {
+  it("keeps site route reads while content writes move to graph transport", async () => {
     await withGraphServer(async ({ server, initToken }) => {
-      const unauthenticatedItems = await server.fetch(
-        new Request("http://127.0.0.1:4318/api/site/items"),
-      );
       const cookie = await redeemAdminCookie(server, initToken);
-      const unauthenticatedWrite = await server.fetch(
+      const fetcher = createAdminCookieFetch(server, cookie);
+      const legacyList = await server.fetch(
         new Request("http://127.0.0.1:4318/api/site/items", {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-          },
-          body: JSON.stringify({
-            title: "No auth",
-            body: "No auth.",
-          }),
+          headers: { cookie },
         }),
       );
-      const invalidPublicItem = await server.fetch(
+      const legacyWrite = await server.fetch(
         new Request("http://127.0.0.1:4318/api/site/items", {
           method: "POST",
           headers: {
@@ -524,30 +515,41 @@ describe("local server routes", () => {
             cookie,
           },
           body: JSON.stringify({
-            title: "Empty public item",
-            visibility: "public",
+            title: "Legacy write",
           }),
         }),
       );
-      const createdItem = await server.fetch(
-        new Request("http://127.0.0.1:4318/api/site/items", {
-          method: "POST",
+      const legacyOrder = await server.fetch(
+        new Request("http://127.0.0.1:4318/api/site/items/order", {
+          method: "PATCH",
           headers: {
             "content-type": "application/json",
             cookie,
           },
           body: JSON.stringify({
-            title: "Work",
-            path: "/work",
-            body: "# Work\n\nPrivate item.",
-            visibility: "private",
-            tags: ["work"],
+            items: [],
           }),
         }),
       );
-      const createdItemPayload = (await createdItem.json()) as {
-        readonly item: { readonly id: string };
-      };
+      const client = await createGraphleSiteHttpGraphClient({
+        url: "http://127.0.0.1:4318/",
+        fetch: fetcher,
+      });
+      const workTag = client.graph.tag.create({
+        name: "Work",
+        key: "work",
+        color: "#2563eb",
+      });
+      const workId = client.graph.item.create({
+        title: "Work",
+        path: "/work",
+        body: "# Work\n\nPrivate item.",
+        visibility: siteVisibilityIdFor("private"),
+        tags: [workTag],
+        pinned: false,
+      });
+      await client.sync.flush();
+
       const unauthenticatedPrivate = await server.fetch(
         new Request("http://127.0.0.1:4318/api/site/route?path=%2Fwork"),
       );
@@ -556,101 +558,54 @@ describe("local server routes", () => {
           headers: { cookie },
         }),
       );
-      const publishedItem = await server.fetch(
-        new Request(
-          `http://127.0.0.1:4318/api/site/items/${encodeURIComponent(createdItemPayload.item.id)}`,
-          {
-            method: "PATCH",
-            headers: {
-              "content-type": "application/json",
-              cookie,
-            },
-            body: JSON.stringify({
-              title: "Work",
-              path: "/work",
-              body: "# Work\n\nPublic item.",
-              visibility: "public",
-              pinned: true,
-              sortOrder: 2,
-            }),
-          },
-        ),
-      );
+      client.graph.item.update(workId, {
+        body: "# Work\n\nPublic item.",
+        visibility: siteVisibilityIdFor("public"),
+        pinned: true,
+        sortOrder: 2,
+        publishedAt: new Date("2026-04-15T00:00:00.000Z"),
+      });
+      await client.sync.flush();
+
       const routeAfterPublish = await server.fetch(
         new Request("http://127.0.0.1:4318/api/site/route?path=%2Fwork"),
       );
-      const createdLink = await server.fetch(
-        new Request("http://127.0.0.1:4318/api/site/items", {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-            cookie,
-          },
-          body: JSON.stringify({
-            title: "Public link",
-            url: "https://example.com/public-link",
-            excerpt: "A URL-only public link.",
-            visibility: "public",
-            tags: ["links"],
-          }),
-        }),
-      );
-      const blankItem = await server.fetch(
-        new Request("http://127.0.0.1:4318/api/site/items", {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-            cookie,
-          },
-          body: JSON.stringify({ intent: "blank" }),
-        }),
-      );
-      const blankItemPayload = (await blankItem.json()) as {
-        readonly item: { readonly id: string; readonly path: string };
-      };
-      const reordered = await server.fetch(
-        new Request("http://127.0.0.1:4318/api/site/items/order", {
-          method: "PATCH",
-          headers: {
-            "content-type": "application/json",
-            cookie,
-          },
-          body: JSON.stringify({
-            items: [
-              { id: blankItemPayload.item.id, sortOrder: 0 },
-              { id: createdItemPayload.item.id, sortOrder: 1 },
-            ],
-          }),
-        }),
-      );
-      const deleted = await server.fetch(
-        new Request(
-          `http://127.0.0.1:4318/api/site/items/${encodeURIComponent(blankItemPayload.item.id)}`,
-          {
-            method: "DELETE",
-            headers: {
-              cookie,
-            },
-          },
-        ),
-      );
-      const listAfterDelete = await server.fetch(
-        new Request("http://127.0.0.1:4318/api/site/items", {
-          headers: { cookie },
-        }),
-      );
+      const linkId = client.graph.item.create({
+        title: "Public link",
+        url: new URL("https://example.com/public-link"),
+        excerpt: "A URL-only public link.",
+        visibility: siteVisibilityIdFor("public"),
+        tags: [],
+        pinned: false,
+      });
+      const blankId = client.graph.item.create({
+        title: "Untitled",
+        path: "/untitled",
+        visibility: siteVisibilityIdFor("private"),
+        tags: [],
+        pinned: false,
+      });
+      await client.sync.flush();
+
+      client.graph.item.ref(workId).batch(() => {
+        client.graph.item.update(blankId, { sortOrder: 0 });
+        client.graph.item.update(workId, { sortOrder: 1 });
+      });
+      await client.sync.flush();
+      expect(client.graph.item.get(blankId).sortOrder).toBe(0);
+      expect(client.graph.item.get(workId).sortOrder).toBe(1);
+
+      client.graph.item.delete(blankId);
+      await client.sync.flush();
+
       const workPage = await server.fetch(new Request("http://127.0.0.1:4318/work"));
       const publicHomeRoute = await server.fetch(
         new Request("http://127.0.0.1:4318/api/site/route?path=%2F"),
       );
 
-      expect(unauthenticatedItems.status).toBe(401);
-      expect(unauthenticatedWrite.status).toBe(401);
-      expect(invalidPublicItem.status).toBe(400);
-      expect(await invalidPublicItem.json()).toMatchObject({
-        code: "site.validation_failed",
-      });
-      expect(createdItem.status).toBe(200);
+      expect(legacyList.status).toBe(404);
+      expect(legacyWrite.status).toBe(404);
+      expect(legacyOrder.status).toBe(404);
       expect(await unauthenticatedPrivate.json()).toMatchObject({
         route: {
           kind: "not-found",
@@ -665,7 +620,6 @@ describe("local server routes", () => {
           },
         },
       });
-      expect(publishedItem.status).toBe(200);
       expect(await routeAfterPublish.json()).toMatchObject({
         route: {
           kind: "item",
@@ -681,30 +635,8 @@ describe("local server routes", () => {
           },
         },
       });
-      expect(createdLink.status).toBe(200);
-      expect(blankItem.status).toBe(200);
-      expect(blankItemPayload.item.path).toBe("/untitled");
-      expect(reordered.status).toBe(200);
-      expect(await reordered.json()).toMatchObject({
-        items: expect.arrayContaining([
-          expect.objectContaining({
-            id: blankItemPayload.item.id,
-            sortOrder: 0,
-          }),
-          expect.objectContaining({
-            id: createdItemPayload.item.id,
-            sortOrder: 1,
-          }),
-        ]),
-      });
-      expect(deleted.status).toBe(200);
-      expect(await deleted.json()).toEqual({ ok: true });
-      const itemsAfterDelete = (
-        (await listAfterDelete.json()) as {
-          readonly items: readonly { readonly id: string }[];
-        }
-      ).items;
-      expect(itemsAfterDelete.some((item) => item.id === blankItemPayload.item.id)).toBe(false);
+      expect(client.graph.item.list().some((item) => item.id === linkId)).toBe(true);
+      expect(client.graph.item.list().some((item) => item.id === blankId)).toBe(false);
       expect(workPage.status).toBe(200);
       expect(await workPage.text()).toContain("Public item.");
       expect(await publicHomeRoute.json()).toMatchObject({
@@ -752,22 +684,19 @@ describe("local server routes", () => {
 
     try {
       const cookie = await redeemAdminCookie(firstServer, auth.initToken);
-      const created = await firstServer.fetch(
-        new Request("http://127.0.0.1:4318/api/site/items", {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-            cookie,
-          },
-          body: JSON.stringify({
-            title: "Durable item",
-            path: "/durable",
-            body: "Survives reopen.",
-            visibility: "public",
-          }),
-        }),
-      );
-      expect(created.status).toBe(200);
+      const client = await createGraphleSiteHttpGraphClient({
+        url: "http://127.0.0.1:4318/",
+        fetch: createAdminCookieFetch(firstServer, cookie),
+      });
+      client.graph.item.create({
+        title: "Durable item",
+        path: "/durable",
+        body: "Survives reopen.",
+        visibility: siteVisibilityIdFor("public"),
+        tags: [],
+        pinned: false,
+      });
+      await client.sync.flush();
     } finally {
       firstSqlite.close();
     }

@@ -1,7 +1,7 @@
 ---
 name: Graph UI stack
 description: "Cross-package ownership for typed refs, host-neutral React runtime, route-neutral surface runtime, and browser adapters centered on @dpeek/graphle-surface."
-last_updated: 2026-04-07
+last_updated: 2026-04-17
 ---
 
 # Graph UI stack
@@ -57,13 +57,15 @@ authoritative command execution.
 - `@dpeek/graphle-react` owns the host-neutral React layer: predicate and entity
   hooks, metadata readers, edit-session contracts, validation issue mapping,
   resolver primitives, and draft helpers
-- `@dpeek/graphle-surface` owns route-neutral collection-surface, collection-command,
-  and record-surface runtime plus the browser mounts on `react-dom`
+- `@dpeek/graphle-surface` owns route-neutral collection-surface,
+  collection-command, readonly record-surface runtime, and generic interactive
+  entity-surface planning plus the browser mounts on `react-dom`
 - `@dpeek/graphle-module-core/react-dom` owns the current default browser adapter
   that composes host-neutral contracts into concrete field, filter, icon, SVG,
   and preview behavior
 - app-owned code owns routes, shell composition, query pages, browser
-  experiments, transport, and authoritative command implementations
+  experiments, transport, dialogs, app-only field overrides, and authoritative
+  command implementations
 
 ## Stable contracts
 
@@ -105,7 +107,8 @@ The split between `@dpeek/graphle-react` and `@dpeek/graphle-surface` is deliber
 - `@dpeek/graphle-react` reads authored metadata and typed refs into host-neutral
   hooks, resolver primitives, validation issue helpers, and draft controllers
 - `@dpeek/graphle-surface` resolves authored record and collection surfaces into
-  route-neutral runtime bindings and browser mounts
+  route-neutral runtime bindings, maps `RecordSurfaceSpec` structure into
+  interactive entity row plans, and exposes browser mounts
 
 Do not move route-neutral surface binding down into `@dpeek/graphle-react`.
 Do not move generic metadata readers or draft helpers up into
@@ -116,12 +119,12 @@ Do not move generic metadata readers or draft helpers up into
 The current browser split is:
 
 - `@dpeek/graphle-react`: no DOM tags or browser-only widgets
-- `@dpeek/graphle-surface/react-dom`: collection and record mounts plus shared shell
-  chrome for those surfaces
+- `@dpeek/graphle-surface/react-dom`: collection and readonly record mounts
+  plus generic entity view/edit/create bodies and shared section chrome
 - `@dpeek/graphle-module-core/react-dom`: current default field, filter, icon, SVG,
   and query-editor behavior tied to built-in core contracts
-- app code: route registration, shell chrome, explorer or create flows, and
-  transport-aware composition
+- app code: route registration, shell chrome, dialog framing, app-only field
+  overrides, and transport-aware composition
 
 That keeps reusable browser defaults above the host-neutral layers without
 turning `app` into the owner of every adapter decision.

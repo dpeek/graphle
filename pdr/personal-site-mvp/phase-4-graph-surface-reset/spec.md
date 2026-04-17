@@ -1,4 +1,4 @@
-Status: Proposed
+Status: Implemented
 Last Updated: 2026-04-17
 
 # Phase 4 graph surface reset
@@ -262,6 +262,23 @@ Expected outcomes:
 - site content writes use graph transactions
 - site-specific public route rendering still works from graph state
 - obsolete content DTO types, fetch helpers, and route handlers are deleted
+
+## Implemented changes
+
+Phase 4 landed in three implementation PDRs:
+
+- `01-generic-local-graph-transport.md` exposed authenticated `/api/sync` and
+  `/api/tx` transport over the local persisted authority.
+- `02-productize-entity-surfaces.md` moved reusable entity planning,
+  predicate rows, live edit surfaces, and create bodies into
+  `@dpeek/graphle-surface` and `@dpeek/graphle-surface/react-dom`.
+- `03-site-web-migration-and-deletion.md` added the authored `site:item`
+  surface, mounted `site-web` on the generic graph runtime, replaced the
+  custom site editor with the shared `EntitySurface`, and deleted the legacy
+  `/api/site/items*` content write path.
+
+The remaining validation before closing the branch is browser smoke: desktop
+and mobile checks for the public route, sidebar, and authenticated editor.
 
 ## Success Criteria
 

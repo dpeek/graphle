@@ -1,7 +1,7 @@
 ---
 name: App web overview
 description: "Current app-owned browser and Worker runtime map for @dpeek/graphle-app."
-last_updated: 2026-04-08
+last_updated: 2026-04-17
 ---
 
 # App web overview
@@ -21,7 +21,7 @@ last_updated: 2026-04-08
 - the shipped browser identity bootstrap contract
 - the current installed-module activation proof for authority bootstrap and
   query-surface composition
-- the app-owned entity-surface boundary for interactive record screens
+- the app wrapper boundary around shared interactive entity surfaces
 - the package boundary between app/web composition, shared browser primitives,
   and graph-owned runtime layers
 
@@ -123,24 +123,29 @@ Current limits:
 - activation changes are row-driven authority rebuilds, not hot toggles or
   installer UX
 
-## Entity-surface boundary
+## Entity surface boundary
 
-Interactive entity screens stay in `@dpeek/graphle-app`, even when they reuse shared
-section chrome from `@dpeek/graphle-surface`.
+Generic interactive entity surfaces now live in
+`@dpeek/graphle-surface/react-dom`. `@dpeek/graphle-app` owns only the app route
+wrappers, app catalog glue, and app-only field overrides around those shared
+surfaces.
 
 Current landing:
 
-- `EntitySurface` and `CreateEntitySurface` are the active app-owned wrappers
+- `EntitySurface` is a thin app wrapper over
+  `@dpeek/graphle-surface/react-dom` that supplies the app secret editor.
+- `CreateEntitySurface` is an app dialog wrapper around
+  `CreateEntitySurfaceBody`.
 - `entity-type-browser.tsx`, `collection-browser-surface.tsx`, and
-  `entity-create-button.tsx` consume those wrappers directly
-- `entity-surface-plan.ts` owns row roles and chrome policy
-- `PredicateRow` owns mode-aware row rendering and validation placement
-- future app-owned interactive record/detail work should start from
-  `EntitySurface` or `CreateEntitySurface`, not from a parallel inspector-local
-  detail or create stack
-- `RecordSurfaceMount*` stays the lower-level readonly record layer; app/web
-  may reuse its chrome helpers, but it is not the app-owned interactive detail
-  entrypoint
+  `entity-create-button.tsx` consume the app wrappers because those routes own
+  app navigation, runtime, and catalog context.
+- `entity-surface-plan.ts` and `field-editor-row.tsx` are re-export shims for
+  shared planner and predicate-row code.
+- Row roles, chrome policy, validation placement, predicate rendering, and
+  create-draft support live in `@dpeek/graphle-surface`,
+  `@dpeek/graphle-surface/react-dom`, and `@dpeek/graphle-react`.
+- `RecordSurfaceMount*` stays the lower-level readonly record layer; app/web may
+  reuse its chrome helpers, but it is not the interactive edit path.
 
 Current details and the adapter path live in
 [`./entity-surface.md`](./entity-surface.md).
@@ -179,8 +184,8 @@ or authority routing, it stays in app/web or the owning graph package.
 
 - [`./workflow-web.md`](./workflow-web.md): current browser workflow surface
   and browser-agent boundary
-- [`./entity-surface.md`](./entity-surface.md): app-owned interactive
-  entity-surface family above readonly record surfaces
+- [`./entity-surface.md`](./entity-surface.md): app wrappers around shared
+  interactive entity surfaces
 - [`./auth-store.md`](./auth-store.md): Better Auth store and migration path
 - [`./local-bootstrap.md`](./local-bootstrap.md): localhost-only instant
   onboarding contract

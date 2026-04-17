@@ -19,8 +19,7 @@ personal-site product path.
 - first-run seed content for public and private `site:item` records
 - the Bun HTTP request handler for `/api/health`, `/api/session`, `/api/init`,
   authenticated generic graph transport at `/api/sync` and `/api/tx`,
-  transitional item-based `/api/site/*` read-write routes including blank
-  create, delete, and batch ordering, unknown `/api/*` JSON 404s,
+  read-only route projection at `/api/site/route`, unknown `/api/*` JSON 404s,
   package-owned browser assets, and the site host document with graph-backed
   fallback HTML
 - public route resolution for exact `site:item.path` values

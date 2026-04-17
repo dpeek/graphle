@@ -141,15 +141,20 @@ export function useGraphRuntime<
   return useResolvedGraphRuntime<TNamespace, TDefs>();
 }
 
-export function useGraphSyncState<T extends GraphSchema>(
-  runtime?: GraphRuntime<T> | null,
-): GraphClientSyncState {
+export function useGraphSyncState<
+  TNamespace extends GraphSchema,
+  TDefs extends GraphSchema = TNamespace,
+>(runtime?: GraphRuntime<TNamespace, TDefs> | null): GraphClientSyncState {
   return useStableSyncState(useResolvedGraphRuntime(runtime).sync);
 }
 
-export function useGraphQuery<T extends GraphSchema, TResult>(
-  query: (runtime: GraphRuntime<T>) => TResult,
-  options: GraphQueryOptions<T> = {},
+export function useGraphQuery<
+  TNamespace extends GraphSchema,
+  TResult,
+  TDefs extends GraphSchema = TNamespace,
+>(
+  query: (runtime: GraphRuntime<TNamespace, TDefs>) => TResult,
+  options: GraphQueryOptions<TNamespace, TDefs> = {},
 ): TResult {
   const resolvedRuntime = useResolvedGraphRuntime(options.runtime);
   const syncState = useGraphSyncState(resolvedRuntime);

@@ -1,5 +1,4 @@
 import "@dpeek/graphle-web-ui/global.css";
-import "./site-app.css";
 
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";

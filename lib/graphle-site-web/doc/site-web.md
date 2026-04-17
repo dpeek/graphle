@@ -35,9 +35,10 @@ The package also exports a browser-safe graph client seam:
 
 That seam assembles `site:item`, `core:tag`, `core:color`, and the minimal core
 definitions needed by the local site graph, then wires them to
-`@dpeek/graphle-client`'s standard `/api/sync` and `/api/tx` transport. It is
-available for the generic authoring migration, but the visible Phase 4 UI is
-not mounted on it yet.
+`@dpeek/graphle-client`'s standard `/api/sync` and `/api/tx` transport. The
+browser app mounts this runtime for authenticated local admins and wraps the
+site frame in `@dpeek/graphle-react` runtime providers so shared predicate
+controls can write and flush graph transactions.
 
 The first screen is the current website route preview. The app loads:
 
@@ -46,10 +47,9 @@ The first screen is the current website route preview. The app loads:
 - `GET /api/site/route?path=<current-path>`
 
 Those payloads drive the public route content, the flat item sidebar, and local
-admin visibility. When `/api/session` reports an authenticated local admin
-session, the app also loads:
-
-- `GET /api/site/items`
+admin visibility before any authenticated graph sync has completed. Public and
+unauthenticated hydration keeps using this read-only route projection; it is
+not the browser authoring model.
 
 The first screen is the website preview with one left sidebar and centered
 route content. Sidebar rows show only item icon and item title. Path-backed
@@ -59,15 +59,24 @@ open their external URL in a new tab and do not create public permalinks.
 
 Authenticated sessions can edit either the current route item or a URL-only
 item selected from the sidebar action menu. Edit mode keeps the same content
-layout and swaps predicate display rows for predicate-backed draft controls
-planned from `site:item` field metadata and `@dpeek/graphle-react` draft
-primitives. Visible field labels are hidden, while controls keep accessible
-names. There are no creation presets; the single `+` action calls the blank
-create intent and enters edit mode on the returned private routed item.
+layout and mounts the shared `EntitySurface` from
+`@dpeek/graphle-surface/react-dom` over a live `site:item` entity ref, with the
+authored `siteItemSurface` section chrome and field labels visible. Field
+selection, markdown editing, tag/reference editing, enum selects, URL/date,
+boolean, number, and text controls come from shared predicate metadata and
+`@dpeek/graphle-module-core/react-dom`; site-web keeps only product chrome such
+as the sidebar, route preview, action menu, and theme toggle. The browser app
+does not ship package-local CSS overrides for predicate editors or display
+rows; it imports the shared `@dpeek/graphle-web-ui/global.css` styles and uses
+the default shared surface rendering wherever possible.
+
+There are no creation presets. The single `+` action creates a private
+`Untitled` routed item through the graph runtime, flushes the transaction
+through `/api/tx`, navigates to the new path, and enters edit mode.
 
 Authenticated sessions can delete items through the sidebar action menu after a
 confirmation dialog. Drag-and-drop ordering uses `@dnd-kit/sortable` and writes
-normalized consecutive `site:item.sortOrder` values through one batch endpoint.
+normalized consecutive `site:item.sortOrder` values as graph transactions.
 
 The local theme helper reads and writes `localStorage.graphle.theme`, supports
 `light`, `dark`, and `system`, applies `light`/`dark` classes to
@@ -75,17 +84,10 @@ The local theme helper reads and writes `localStorage.graphle.theme`, supports
 visible control is one icon-only sidebar button with a tooltip and accessible
 label.
 
-Current visible mutation helpers call only the local `/api/site/*` endpoints:
-
-- `POST /api/site/items`
-- `PATCH /api/site/items/:id`
-- `DELETE /api/site/items/:id`
-- `PATCH /api/site/items/order`
-
-Visibility, tags, pins, sort order, URL, path, excerpt, and markdown body are
-represented as item fields in the same payloads. These DTO helpers are
-transitional; future site authoring should use the exported generic graph
-client seam instead of adding new `/api/site/*` content routes.
+Current visible mutation helpers call only the graph runtime. Create, delete,
+reorder, and field edits produce typed graph mutations, and the runtime flushes
+them through `/api/tx`. Browser authoring no longer calls `/api/site/items`,
+`/api/site/items/order`, or `/api/site/items/:id`.
 
 ## Built Assets
 

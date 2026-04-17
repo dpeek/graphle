@@ -1,3 +1,5 @@
+import type { SiteIconPreset, SiteVisibility } from "@dpeek/graphle-module-site";
+
 export interface GraphleSiteHealth {
   readonly ok?: boolean;
   readonly service?: {
@@ -33,36 +35,23 @@ export interface GraphleSiteSession {
   } | null;
 }
 
-export type GraphleSiteVisibility = "private" | "public";
-
-export type GraphleSiteIconPreset =
-  | "link"
-  | "website"
-  | "github"
-  | "x"
-  | "linkedin"
-  | "rss"
-  | "email"
-  | "book"
-  | "note";
-
-export interface GraphleSiteTag {
+export interface GraphleSiteRouteTag {
   readonly id: string;
   readonly key: string;
   readonly name: string;
   readonly color: string;
 }
 
-export interface GraphleSiteItem {
+export interface GraphleSiteRouteItem {
   readonly id: string;
   readonly title: string;
   readonly path?: string;
   readonly url?: string;
   readonly body?: string;
   readonly excerpt?: string;
-  readonly visibility: GraphleSiteVisibility;
-  readonly icon?: GraphleSiteIconPreset;
-  readonly tags: readonly GraphleSiteTag[];
+  readonly visibility: SiteVisibility;
+  readonly icon?: SiteIconPreset;
+  readonly tags: readonly GraphleSiteRouteTag[];
   readonly pinned: boolean;
   readonly sortOrder?: number;
   readonly publishedAt?: string;
@@ -74,7 +63,7 @@ export type GraphleSiteRoute =
   | {
       readonly kind: "item";
       readonly path: string;
-      readonly item: GraphleSiteItem;
+      readonly item: GraphleSiteRouteItem;
     }
   | {
       readonly kind: "not-found";
@@ -84,7 +73,7 @@ export type GraphleSiteRoute =
 
 export interface GraphleSiteRoutePayload {
   readonly route: GraphleSiteRoute;
-  readonly items: readonly GraphleSiteItem[];
+  readonly items: readonly GraphleSiteRouteItem[];
 }
 
 export interface GraphleSiteStatusSnapshot {
@@ -92,7 +81,7 @@ export interface GraphleSiteStatusSnapshot {
   readonly health: GraphleSiteHealth;
   readonly session: GraphleSiteSession;
   readonly route: GraphleSiteRoute;
-  readonly items: readonly GraphleSiteItem[];
+  readonly items: readonly GraphleSiteRouteItem[];
 }
 
 export type GraphleSiteStatusFetcher = (
@@ -114,50 +103,10 @@ async function readJson<T>(fetcher: GraphleSiteStatusFetcher, path: string): Pro
   return (await response.json()) as T;
 }
 
-async function writeJson<T>(
-  fetcher: GraphleSiteStatusFetcher,
-  path: string,
-  method: "DELETE" | "POST" | "PATCH",
-  body: unknown,
-): Promise<T> {
-  const response = await fetcher(path, {
-    method,
-    headers: {
-      accept: "application/json",
-      "content-type": "application/json",
-    },
-    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-  });
-
-  const payload = (await response.json().catch(() => ({}))) as {
-    readonly error?: string;
-    readonly issues?: readonly { readonly path?: string; readonly message?: string }[];
-  };
-  if (!response.ok) {
-    const issue = payload.issues?.find((candidate) => candidate.message);
-    throw new Error(issue?.message ?? payload.error ?? `${path} returned HTTP ${response.status}`);
-  }
-
-  return payload as T;
-}
-
 function routePath(path: string): string {
   const params = new URLSearchParams();
   params.set("path", path);
   return `/api/site/route?${params.toString()}`;
-}
-
-async function loadAuthoringItems(
-  fetcher: GraphleSiteStatusFetcher,
-  session: GraphleSiteSession,
-  routeItems: readonly GraphleSiteItem[],
-): Promise<readonly GraphleSiteItem[]> {
-  if (!session.authenticated) return routeItems;
-  const payload = await readJson<{ readonly items: readonly GraphleSiteItem[] }>(
-    fetcher,
-    "/api/site/items",
-  );
-  return payload.items;
 }
 
 export async function loadGraphleSiteStatus({
@@ -174,94 +123,12 @@ export async function loadGraphleSiteStatus({
     readJson<GraphleSiteSession>(fetcher, "/api/session"),
     readJson<GraphleSiteRoutePayload>(fetcher, routePath(path)),
   ]);
-  const items = await loadAuthoringItems(fetcher, session, routePayload.items);
 
   return {
     loadedAt: now().toISOString(),
     health,
     session,
     route: routePayload.route,
-    items,
+    items: routePayload.items,
   };
-}
-
-export interface GraphleSiteItemInput {
-  readonly title: string;
-  readonly path?: string | null;
-  readonly url?: string | null;
-  readonly body?: string | null;
-  readonly excerpt?: string | null;
-  readonly visibility: GraphleSiteVisibility;
-  readonly icon?: GraphleSiteIconPreset | null;
-  readonly tags: readonly string[];
-  readonly pinned: boolean;
-  readonly sortOrder?: number | null;
-  readonly publishedAt?: string | null;
-}
-
-export interface GraphleSiteBlankCreateInput {
-  readonly intent: "blank";
-}
-
-export interface GraphleSiteItemOrderInput {
-  readonly id: string;
-  readonly sortOrder: number;
-}
-
-export async function createGraphleSiteItem(
-  input: GraphleSiteBlankCreateInput | GraphleSiteItemInput,
-  fetcher: GraphleSiteStatusFetcher = fetch,
-): Promise<GraphleSiteItem> {
-  const payload = await writeJson<{ readonly item: GraphleSiteItem }>(
-    fetcher,
-    "/api/site/items",
-    "POST",
-    input,
-  );
-  return payload.item;
-}
-
-export async function createBlankGraphleSiteItem(
-  fetcher: GraphleSiteStatusFetcher = fetch,
-): Promise<GraphleSiteItem> {
-  return createGraphleSiteItem({ intent: "blank" }, fetcher);
-}
-
-export async function updateGraphleSiteItem(
-  id: string,
-  input: GraphleSiteItemInput,
-  fetcher: GraphleSiteStatusFetcher = fetch,
-): Promise<GraphleSiteItem> {
-  const payload = await writeJson<{ readonly item: GraphleSiteItem }>(
-    fetcher,
-    `/api/site/items/${encodeURIComponent(id)}`,
-    "PATCH",
-    input,
-  );
-  return payload.item;
-}
-
-export async function deleteGraphleSiteItem(
-  id: string,
-  fetcher: GraphleSiteStatusFetcher = fetch,
-): Promise<void> {
-  await writeJson<{ readonly ok: true }>(
-    fetcher,
-    `/api/site/items/${encodeURIComponent(id)}`,
-    "DELETE",
-    undefined,
-  );
-}
-
-export async function reorderGraphleSiteItems(
-  items: readonly GraphleSiteItemOrderInput[],
-  fetcher: GraphleSiteStatusFetcher = fetch,
-): Promise<readonly GraphleSiteItem[]> {
-  const payload = await writeJson<{ readonly items: readonly GraphleSiteItem[] }>(
-    fetcher,
-    "/api/site/items/order",
-    "PATCH",
-    { items },
-  );
-  return payload.items;
 }

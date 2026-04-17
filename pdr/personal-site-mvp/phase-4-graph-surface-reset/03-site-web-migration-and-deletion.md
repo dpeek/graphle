@@ -1,4 +1,4 @@
-Status: Proposed
+Status: Implemented
 Last Updated: 2026-04-17
 
 # 03: Site-web migration and deletion
@@ -217,6 +217,26 @@ available.
 ## Open Questions
 
 None.
+
+## Implemented Changes
+
+- Added `siteItemSurface` as the module-owned `site:item` `RecordSurfaceSpec`
+  and published it through `siteManifest.runtime.recordSurfaces`.
+- Mounted the site browser app on `createGraphleSiteHttpGraphClient(...)` for
+  authenticated local admin sessions and wrapped the product frame in
+  `GraphRuntimeProvider`.
+- Kept `/api/health`, `/api/session`, and `/api/site/route` as host/read-only
+  status and public route projection APIs.
+- Replaced authenticated browser item state with graph-backed selectors over
+  the synced runtime.
+- Replaced the custom `site:item` editor switch with the shared
+  `EntitySurface` from `@dpeek/graphle-surface/react-dom`.
+- Moved create, delete, reorder, field edits, and tag creation onto graph
+  mutations flushed through `/api/tx`.
+- Deleted browser DTO write helpers and deleted local server content write
+  handlers for `/api/site/items`, `/api/site/items/order`, and
+  `/api/site/items/:id`.
+- Updated package docs for module-site, site-web, and local runtime ownership.
 
 ## Success Criteria
 

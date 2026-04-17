@@ -1,4 +1,4 @@
-import { defineGraphModuleManifest } from "@dpeek/graphle-module";
+import { defineGraphModuleManifest, type RecordSurfaceSpec } from "@dpeek/graphle-module";
 import {
   defineDefaultEnumTypeModule,
   defineEnum,
@@ -358,6 +358,52 @@ export type SiteNamespace = ResolvedGraphNamespace<typeof siteSchemaInput>;
 
 export const site: SiteNamespace = applyGraphIdMap(siteIds, siteSchemaInput);
 
+export const siteItemSurface = {
+  key: "site:item:surface",
+  subject: site.item.values.key,
+  titleField: "title",
+  subtitleField: "excerpt",
+  sections: [
+    {
+      key: "content",
+      title: "Content",
+      fields: [
+        { path: "title", label: "Title" },
+        { path: "excerpt", label: "Excerpt" },
+        { path: "body", label: "Body" },
+        { path: "url", label: "URL" },
+        { path: "tags", label: "Tags" },
+      ],
+    },
+    {
+      key: "route",
+      title: "Route",
+      fields: [
+        { path: "path", label: "Path" },
+        { path: "visibility", label: "Visibility" },
+        { path: "publishedAt", label: "Published at" },
+      ],
+    },
+    {
+      key: "sidebar",
+      title: "Sidebar",
+      fields: [
+        { path: "icon", label: "Icon" },
+        { path: "pinned", label: "Pinned" },
+        { path: "sortOrder", label: "Sort order" },
+      ],
+    },
+    {
+      key: "metadata",
+      title: "Metadata",
+      fields: [
+        { path: "createdAt", label: "Created at" },
+        { path: "updatedAt", label: "Updated at" },
+      ],
+    },
+  ],
+} as const satisfies RecordSurfaceSpec;
+
 export interface SiteItemRoute {
   readonly kind: "item";
   readonly path: string;
@@ -483,5 +529,6 @@ export const siteManifest = defineGraphModuleManifest({
         namespace: site,
       },
     ],
+    recordSurfaces: [siteItemSurface],
   },
 });

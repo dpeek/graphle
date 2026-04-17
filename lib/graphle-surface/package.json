@@ -23,11 +23,13 @@
   },
   "dependencies": {
     "@dpeek/graphle-client": "workspace:*",
+    "@dpeek/graphle-kernel": "workspace:*",
     "@dpeek/graphle-module": "workspace:*",
     "@dpeek/graphle-module-core": "workspace:*",
     "@dpeek/graphle-module-workflow": "workspace:*",
     "@dpeek/graphle-projection": "workspace:*",
     "@dpeek/graphle-query": "workspace:*",
+    "@dpeek/graphle-react": "workspace:*",
     "@dpeek/graphle-web-ui": "workspace:*",
     "react": "^19.2.4"
   },

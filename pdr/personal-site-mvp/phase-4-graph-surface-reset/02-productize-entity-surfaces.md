@@ -1,4 +1,4 @@
-Status: Proposed
+Status: Implemented
 Last Updated: 2026-04-17
 
 # 02: Productize entity surfaces
@@ -211,6 +211,36 @@ not a goal.
 ## Open Questions
 
 None.
+
+## Implemented Changes
+
+- Moved generic entity surface planning into `@dpeek/graphle-surface` root
+  exports:
+  - live entity row planning
+  - draft row planning
+  - field-tree fallback ordering
+  - `RecordSurfaceSpec` section/title/subtitle structure mapping
+  - generic create field eligibility and default enum values
+- Added `@dpeek/graphle-surface/react-dom` interactive browser exports:
+  - `EntitySurface`
+  - `CreateEntitySurface`
+  - `CreateEntitySurfaceBody`
+  - `EntitySurfaceFieldSection`
+  - `EntitySurfaceFieldSections`
+  - `PredicateRow`
+- Kept readonly `resolveRecordSurfaceBinding(...)` separate from interactive
+  editing. Entity surfaces consume `RecordSurfaceSpec` only as structure and
+  resolve typed live or draft predicate refs directly.
+- Thinned app-owned generic copies:
+  - `entity-surface-plan.ts` now re-exports the shared planner.
+  - `field-editor-row.tsx` now re-exports the shared predicate row.
+  - `entity-surface.tsx` is a thin wrapper that supplies the app secret editor.
+  - `create-entity-surface.tsx` is a dialog wrapper around
+    `CreateEntitySurfaceBody`.
+  - `explorer/create-draft-plan.ts` now keeps only proof-app default values for
+    workflow order and tag colors.
+- Did not extract app-only workflow, explorer routing, Better Auth, or
+  secret-field storage behavior into `@dpeek/graphle-surface`.
 
 ## Success Criteria
 

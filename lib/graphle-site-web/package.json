@@ -29,6 +29,7 @@
     "@dpeek/graphle-module-core": "workspace:*",
     "@dpeek/graphle-module-site": "workspace:*",
     "@dpeek/graphle-react": "workspace:*",
+    "@dpeek/graphle-surface": "workspace:*",
     "@dpeek/graphle-web-shell": "workspace:*",
     "@dpeek/graphle-web-ui": "workspace:*",
     "lucide-react": "^0.577.0",

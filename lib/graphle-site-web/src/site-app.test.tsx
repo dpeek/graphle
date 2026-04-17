@@ -71,12 +71,13 @@ describe("GraphleSiteShell", () => {
     expect(html).toContain("Home");
     expect(html).toContain("Private bookmark");
     expect(html).toContain("graph-markdown");
-    expect(html).toContain("max-w-[48rem]");
     expect(html).not.toContain("Welcome home.");
+    expect(html).not.toContain("graphle-site-");
     expect(html).not.toContain("Site preview");
     expect(html).not.toContain("Search items");
     expect(html).not.toContain("Edit item");
     expect(html).not.toContain("New item");
+    expect(html).not.toContain("Reorder Home");
     expect(html).not.toContain("Visitor preview");
     expect(html).not.toContain("Admin active");
   });

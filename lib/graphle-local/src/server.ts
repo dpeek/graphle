@@ -13,19 +13,11 @@ import { graphleSiteWebClientAssetsPath } from "@dpeek/graphle-site-web/assets";
 import type { LocalAuthController, LocalAdminSession } from "./auth.js";
 import type { GraphleLocalProject } from "./project.js";
 import {
-  createLocalSiteItem,
-  deleteLocalSiteItem,
-  listLocalSiteItems,
-  LocalSiteNotFoundError,
-  LocalSiteValidationError,
   readLocalSiteAuthorityHealth,
   readLocalSiteRoutePayload,
-  reorderLocalSiteItems,
-  updateLocalSiteItem,
   type LocalSiteAuthority,
   type LocalSiteRoutePayload,
   type LocalSiteRouteResult,
-  type LocalSiteValidationIssue,
 } from "./site-authority.js";
 
 export interface GraphleLocalServer {
@@ -150,20 +142,6 @@ function copyToArrayBuffer(bytes: Uint8Array): ArrayBuffer {
   const copy = new Uint8Array(bytes.byteLength);
   copy.set(bytes);
   return copy.buffer;
-}
-
-async function readJsonBody(request: Request): Promise<unknown> {
-  try {
-    return await request.json();
-  } catch {
-    throw new LocalSiteValidationError([
-      {
-        path: "body",
-        code: "site.body_invalid",
-        message: "Request body must be valid JSON.",
-      },
-    ]);
-  }
 }
 
 function isViteManifestEntry(value: unknown): value is ViteManifestEntry {
@@ -471,30 +449,6 @@ ${renderClientAssetTags(assetTags)}
 </html>`;
 }
 
-function readApiEntityId(pathname: string, collectionPath: string): string | undefined {
-  const prefix = `${collectionPath}/`;
-  if (!pathname.startsWith(prefix)) return undefined;
-  const id = pathname.slice(prefix.length);
-  if (id.length === 0 || id.includes("/")) return undefined;
-  return decodeURIComponent(id);
-}
-
-function requireSiteAuthority(authority: LocalSiteAuthority | undefined): LocalSiteAuthority {
-  if (authority) return authority;
-  throw new Error("The local site authority is unavailable.");
-}
-
-function validationResponse(issues: readonly LocalSiteValidationIssue[]): Response {
-  return jsonResponse(
-    {
-      error: "Invalid site input.",
-      code: "site.validation_failed",
-      issues,
-    },
-    400,
-  );
-}
-
 function graphAuthorityUnavailableResponse(): Response {
   return errorResponse(
     "The local site authority is unavailable.",
@@ -581,61 +535,6 @@ async function graphTransactionResponse(
     return jsonResponse(await authority.applyTransaction(transaction));
   } catch (error) {
     return graphTransportErrorResponse(error);
-  }
-}
-
-function readGraphValidationIssues(
-  error: unknown,
-): readonly LocalSiteValidationIssue[] | undefined {
-  if (!error || typeof error !== "object") return undefined;
-  const result = (error as { readonly result?: unknown }).result;
-  if (!result || typeof result !== "object") return undefined;
-  const issues = (result as { readonly issues?: unknown }).issues;
-  if (!Array.isArray(issues)) return undefined;
-
-  return issues.flatMap((issue) => {
-    if (!issue || typeof issue !== "object") return [];
-    const candidate = issue as {
-      readonly path?: unknown;
-      readonly code?: unknown;
-      readonly message?: unknown;
-    };
-    return [
-      {
-        path: Array.isArray(candidate.path) ? candidate.path.join(".") : "body",
-        code: typeof candidate.code === "string" ? candidate.code : "site.graph_validation",
-        message:
-          typeof candidate.message === "string" ? candidate.message : "Graph validation failed.",
-      },
-    ];
-  });
-}
-
-function siteApiErrorResponse(error: unknown): Response {
-  if (error instanceof LocalSiteValidationError) {
-    return validationResponse(error.issues);
-  }
-  if (error instanceof LocalSiteNotFoundError) {
-    return errorResponse(error.message, error.code, 404);
-  }
-
-  const graphIssues = readGraphValidationIssues(error);
-  if (graphIssues) {
-    return validationResponse(graphIssues);
-  }
-
-  if (error instanceof Error && error.message === "The local site authority is unavailable.") {
-    return errorResponse(error.message, "site.authority_unavailable", 503);
-  }
-
-  return errorResponse("Site request failed.", "site.request_failed", 500);
-}
-
-async function siteApiResponse(action: () => unknown): Promise<Response> {
-  try {
-    return jsonResponse(await action());
-  } catch (error) {
-    return siteApiErrorResponse(error);
   }
 }
 
@@ -742,75 +641,6 @@ export function createGraphleLocalServer({
             includePrivate: session !== null,
           }),
         );
-      }
-
-      if (url.pathname === "/api/site/items") {
-        const session = auth.getSession(cookieHeader);
-        if (request.method === "GET") {
-          if (!session) {
-            return authRequiredResponse();
-          }
-          return siteApiResponse(() => ({
-            items: listLocalSiteItems(requireSiteAuthority(siteAuthority)),
-          }));
-        }
-        if (request.method === "POST") {
-          if (!session) {
-            return authRequiredResponse();
-          }
-          return siteApiResponse(async () => ({
-            item: await createLocalSiteItem(
-              requireSiteAuthority(siteAuthority),
-              await readJsonBody(request),
-              {
-                now,
-              },
-            ),
-          }));
-        }
-        return methodNotAllowed("GET, POST");
-      }
-
-      if (url.pathname === "/api/site/items/order") {
-        if (request.method !== "PATCH") {
-          return methodNotAllowed("PATCH");
-        }
-        const session = auth.getSession(cookieHeader);
-        if (!session) {
-          return authRequiredResponse();
-        }
-        return siteApiResponse(async () => ({
-          items: await reorderLocalSiteItems(
-            requireSiteAuthority(siteAuthority),
-            await readJsonBody(request),
-            { now },
-          ),
-        }));
-      }
-
-      const itemId = readApiEntityId(url.pathname, "/api/site/items");
-      if (itemId !== undefined) {
-        const session = auth.getSession(cookieHeader);
-        if (!session) {
-          return authRequiredResponse();
-        }
-        if (request.method === "DELETE") {
-          return siteApiResponse(async () => {
-            await deleteLocalSiteItem(requireSiteAuthority(siteAuthority), itemId);
-            return { ok: true };
-          });
-        }
-        if (request.method !== "PATCH") {
-          return methodNotAllowed("PATCH, DELETE");
-        }
-        return siteApiResponse(async () => ({
-          item: await updateLocalSiteItem(
-            requireSiteAuthority(siteAuthority),
-            itemId,
-            await readJsonBody(request),
-            { now },
-          ),
-        }));
       }
 
       if (url.pathname.startsWith("/api/")) {

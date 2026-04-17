@@ -68,21 +68,13 @@ seed duplicate records.
   and returns the sidebar items visible to the request; unauthenticated
   requests see public items only, while a valid local admin cookie can preview
   private routed items
-- `GET /api/site/items`: authenticated item list for inline authoring
-- `POST /api/site/items`: authenticated item creation with inline tag
-  creation/reuse; `{ "intent": "blank" }` creates a private `Untitled` item
-  with a server-allocated unique routed path such as `/untitled`
-- `PATCH /api/site/items/:id`: authenticated item updates, visibility changes,
-  pinning, sorting, and tag replacement
-- `DELETE /api/site/items/:id`: authenticated item deletion
-- `PATCH /api/site/items/order`: authenticated batch sort-order update; all
-  referenced ids must exist before any `site:item.sortOrder` values are written
 - unknown `/api/*`: JSON 404
 
 `/api/sync` and `/api/tx` are the authoring substrate for the graph-backed site
-editor migration. The `/api/site/items` create/update/delete/order endpoints
-remain transitional compatibility routes for the current Phase 4 browser UI and
-should not grow new content DTO behavior.
+editor. Browser create, update, delete, reorder, and tag edits are graph
+transactions against those endpoints. The old `/api/site/items` content
+authoring endpoints are intentionally removed; unknown `/api/site/items*`
+requests now use the normal JSON 404 behavior.
 
 Static browser files are served from the package-built
 `@dpeek/graphle-site-web` client output. Unknown static asset paths return a
@@ -98,10 +90,10 @@ title, body, excerpt, outbound URL, tags, and item sidebar content inside
 `#root` before the browser bundle mounts.
 
 Generic graph transactions use the shared persisted-authority write session and
-durably commit through the SQLite adapter. The transitional site DTO helpers
-still use the typed graph client over that same authority and then rewrite the
-authority baseline. Neither path adds site-specific SQLite tables, keeps a
-route-local content mirror, or bypasses authority storage.
+durably commit through the SQLite adapter. The local route projection reads
+from the same authority state. No site-specific SQLite tables, route-local
+content mirror, or custom JSON content write layer sit beside the graph
+authority.
 
 ## Local Auth
 

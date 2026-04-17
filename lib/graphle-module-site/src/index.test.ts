@@ -13,6 +13,7 @@ import {
   parseSitePublicRoute,
   parseSiteVisibility,
   site,
+  siteItemSurface,
   siteIconPresetForId,
   siteIconPresetIdFor,
   siteItemMatchesSearch,
@@ -81,6 +82,39 @@ describe("site module", () => {
       updatedAt: now,
     });
     expect(siteManifest.runtime.schemas?.[0]?.namespace).toBe(site);
+  });
+
+  it("publishes authored site item record surface metadata", () => {
+    expect(siteItemSurface).toMatchObject({
+      key: "site:item:surface",
+      subject: "site:item",
+      titleField: "title",
+      subtitleField: "excerpt",
+    });
+    expect(siteItemSurface.sections.map((section) => section.key)).toEqual([
+      "content",
+      "route",
+      "sidebar",
+      "metadata",
+    ]);
+    expect(
+      siteItemSurface.sections.flatMap((section) => section.fields.map((field) => field.path)),
+    ).toEqual([
+      "title",
+      "excerpt",
+      "body",
+      "url",
+      "tags",
+      "path",
+      "visibility",
+      "publishedAt",
+      "icon",
+      "pinned",
+      "sortOrder",
+      "createdAt",
+      "updatedAt",
+    ]);
+    expect(siteManifest.runtime.recordSurfaces).toEqual([siteItemSurface]);
   });
 
   it("validates site paths, URLs, visibility, and icon presets", () => {

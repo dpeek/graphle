@@ -26,9 +26,15 @@ the personal-site MVP:
   references, pinned state, optional sort order, optional published-at
   timestamp, created-at timestamp, and updated-at timestamp
 
-The package exports the resolved `site` namespace and `siteManifest`. Stable ids
-live in `../src/site.json`; package-local tests fail when authored schema keys
-drift without an intentional id-map update.
+The package exports the resolved `site` namespace, `siteItemSurface`, and
+`siteManifest`. `siteItemSurface` is the authored `RecordSurfaceSpec` for
+shared browser entity surfaces: title/excerpt/body/url/tags content fields,
+path/visibility/published-at route fields, icon/pinned/sort-order sidebar
+fields, and created/updated metadata fields. The manifest publishes that
+surface through `runtime.recordSurfaces` beside the schema contribution.
+
+Stable ids live in `../src/site.json`; package-local tests fail when authored
+schema keys drift without an intentional id-map update.
 
 The package also exports browser-safe helpers used by the local runtime and
 site browser app:

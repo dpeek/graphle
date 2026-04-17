@@ -1,7 +1,7 @@
 ---
 name: Graph surface react dom
-description: "Browser mounts and override seams for @dpeek/graphle-surface/react-dom."
-last_updated: 2026-04-03
+description: "Browser mounts, entity surfaces, and override seams for @dpeek/graphle-surface/react-dom."
+last_updated: 2026-04-17
 ---
 
 # Graph surface react dom
@@ -9,8 +9,8 @@ last_updated: 2026-04-03
 ## Read this when
 
 - you are changing `@dpeek/graphle-surface/react-dom`
-- you need to understand the current browser mount behavior for collection or
-  record surfaces
+- you need to understand the current browser mount behavior for collection,
+  record, or interactive entity surfaces
 - you are deciding where host customization belongs
 
 ## Main source anchors
@@ -21,18 +21,23 @@ last_updated: 2026-04-03
   triggers
 - `../src/react-dom/record-surface-mount.tsx`: record shell, sections, and
   related collections
+- `../src/react-dom/entity-surface.tsx`: entity view/edit/create bodies,
+  predicate rows, validation display, and host editor overrides
 - `../src/react-dom/record-surface-mount.test.tsx`: current shell and override
   coverage
+- `../src/react-dom/entity-surface.test.tsx`: field-row mode, validation, and
+  editor override coverage
 
 ## What this layer owns
 
 - browser mounting for collection surfaces
 - browser mounting for readonly record surfaces
+- browser mounting for generic interactive entity surfaces
 - the current shared record shell and section chrome
 - a minimal button layer for collection commands
 
-It does not own route registration, app shell composition, or general command
-form or dialog infrastructure.
+It does not own route registration, app shell composition, auth, secret storage,
+or general command form or dialog infrastructure.
 
 ## Collection surface mounts
 
@@ -107,6 +112,35 @@ The current record shell is readonly and opinionated:
 - `renderField(...)` to replace per-field rendering while keeping shared
   section structure
 
+## Entity surfaces
+
+`EntitySurface` renders a live entity from typed `EntityRef` and
+`PredicateRef` handles. It accepts explicit `view | edit` mode control,
+optional `RecordSurfaceSpec` metadata for section and field ordering, optional
+mutation runtime, validation messages keyed by field path, and a host
+`renderEditor(...)` override. By default it keeps sections unframed so hosts can
+place the editor inside their own shell; pass `sectionChrome={true}` to render
+authored record-surface section titles and section cards.
+
+`CreateEntitySurfaceBody` renders the shared draft-backed create flow without
+owning a dialog shell. It creates draft predicate refs with
+`createEntityDraftController(...)` from `@dpeek/graphle-react`, validates
+through the caller's `validateCreate(...)`, creates through the caller's
+`create(...)`, and invokes `onCreated(entityId)` after optional mutation flush.
+Hosts can supply their own action footer through `renderActions(...)`.
+
+`PredicateRow` is the shared row body. In view mode it asks
+`@dpeek/graphle-module-core/react-dom` for `PredicateFieldView` support and
+falls back to generic value formatting when unsupported. In edit mode it uses
+`PredicateFieldControl` for supported client-write predicates unless the host
+provides a custom editor override. Row-local mutation errors and submit-time
+validation messages are displayed together.
+
+`RecordSurfaceSpec` remains structural input only. Entity surfaces use it for
+title/subtitle hints, section chrome, and field order, then resolve live or
+draft predicate refs directly. Editing does not go through
+`resolveRecordSurfaceBinding(...)`.
+
 ## Related collections
 
 Related collection panels only mount when `relatedMountOptions` includes:
@@ -122,5 +156,7 @@ mount does not guess how to recover missing query runtime dependencies.
 - Keep route and shell composition above this package.
 - Use `renderField(...)` and the mount props for targeted customization before
   forking the whole shell.
+- Use entity-surface `renderEditor(...)` for host-only field behavior such as
+  secret editors.
 - Keep general browser field widgets and query renderer implementations in the
   lower-level adapter packages they already belong to.

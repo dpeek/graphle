@@ -1,40 +1,23 @@
 import { isSecretBackedField } from "@dpeek/graphle-app/graph";
-import type { RecordSurfaceFieldBinding } from "@dpeek/graphle-surface";
-import { RecordSurfaceLayout, RecordSurfaceSectionView } from "@dpeek/graphle-surface/react-dom";
+import { RecordSurfaceLayout } from "@dpeek/graphle-surface/react-dom";
+import {
+  EntitySurfaceFieldSection,
+  type EntitySurfaceFieldEditorRenderer,
+  type EntitySurfaceFieldRow,
+} from "@dpeek/graphle-surface/react-dom";
 import { GraphIcon } from "@dpeek/graphle-module-core/react-dom";
 import { Badge } from "@dpeek/graphle-web-ui/badge";
 import { type ReactNode } from "react";
 
+import type { EntitySurfaceMode } from "./entity-surface-plan.js";
+import { SecretFieldEditor } from "./field-editor.js";
 import type {
-  EntitySurfaceDescriptionVisibilityPolicy,
-  EntitySurfaceLabelVisibilityPolicy,
-  EntitySurfaceMode,
-  EntitySurfaceModeValue,
-  EntitySurfaceValidationPlacementPolicy,
-} from "./entity-surface-plan.js";
-import { PredicateRow, SecretFieldEditor } from "./field-editor.js";
-import type {
-  AnyPredicateRef,
   ExplorerRuntime,
   FieldValidationMessage,
-  MutationCallbacks,
   SubmitSecretFieldMutation,
 } from "./explorer/model.js";
 
-export type InspectorFieldRow = {
-  customEditor?: (callbacks: MutationCallbacks) => ReactNode;
-  description?: string;
-  descriptionVisibility?: EntitySurfaceModeValue<EntitySurfaceDescriptionVisibilityPolicy>;
-  display?: EntitySurfaceModeValue<"compact" | "default">;
-  labelVisibility?: EntitySurfaceModeValue<EntitySurfaceLabelVisibilityPolicy>;
-  pathLabel: string;
-  predicate?: AnyPredicateRef;
-  readOnly?: boolean;
-  title?: string;
-  validationMessages?: readonly FieldValidationMessage[];
-  validationPlacement?: EntitySurfaceModeValue<EntitySurfaceValidationPlacementPolicy>;
-  value?: ReactNode;
-};
+export type InspectorFieldRow = EntitySurfaceFieldRow;
 
 export function InspectorShell({
   badges,
@@ -108,74 +91,31 @@ export function InspectorFieldSection({
   title?: string;
   validationMessagesByPath?: ReadonlyMap<string, readonly FieldValidationMessage[]>;
 }) {
-  const fieldEntries = rows.map((row) => ({
-    field: {
-      ...(row.description ? { description: row.description } : {}),
-      label: row.title ?? row.pathLabel,
-      path: row.pathLabel,
-      value: row.value,
-    } satisfies RecordSurfaceFieldBinding,
-    row,
-  }));
+  const renderSecretEditor: EntitySurfaceFieldEditorRenderer | undefined =
+    runtime && submitSecretField
+      ? ({ callbacks, predicate }) =>
+          isSecretBackedField(predicate.field) && predicate.field.cardinality !== "many" ? (
+            <SecretFieldEditor
+              callbacks={callbacks}
+              predicate={predicate}
+              runtime={runtime}
+              submitSecretField={submitSecretField}
+            />
+          ) : undefined
+      : undefined;
 
   return (
-    <RecordSurfaceSectionView
+    <EntitySurfaceFieldSection
       chrome={chrome}
       description={description}
       emptyMessage={emptyMessage}
-      fields={fieldEntries.map((entry) => entry.field)}
-      renderField={(field) => {
-        const entry = fieldEntries.find((candidate) => candidate.field === field);
-        if (!entry) {
-          return null;
-        }
-        const row = entry.row;
-        const predicate = row.predicate;
-        return (
-          <PredicateRow
-            customEditor={
-              predicate
-                ? (row.customEditor ??
-                  (runtime &&
-                  submitSecretField &&
-                  isSecretBackedField(predicate.field) &&
-                  predicate.field.cardinality !== "many"
-                    ? (callbacks) => (
-                        <SecretFieldEditor
-                          callbacks={callbacks}
-                          predicate={predicate}
-                          runtime={runtime}
-                          submitSecretField={submitSecretField}
-                        />
-                      )
-                    : undefined))
-                : undefined
-            }
-            description={row.description}
-            descriptionVisibility={row.descriptionVisibility}
-            display={row.display}
-            hideMissingStatus={hideMissingStatus}
-            labelVisibility={row.labelVisibility}
-            mode={mode}
-            pathLabel={row.pathLabel}
-            predicate={predicate}
-            readOnly={row.readOnly}
-            title={row.title}
-            validationMessages={[
-              ...(row.validationMessages ?? []),
-              ...(validationMessagesByPath?.get(row.pathLabel) ?? []),
-            ]}
-            validationPlacement={row.validationPlacement}
-            value={row.value}
-          />
-        );
-      }}
-      section={{
-        ...(description ? { description } : {}),
-        fields: fieldEntries.map((entry) => entry.field),
-        key: title,
-        title,
-      }}
+      hideMissingStatus={hideMissingStatus}
+      mode={mode}
+      mutationRuntime={runtime}
+      renderEditor={renderSecretEditor}
+      rows={rows}
+      title={title}
+      validationMessagesByPath={validationMessagesByPath}
     />
   );
 }

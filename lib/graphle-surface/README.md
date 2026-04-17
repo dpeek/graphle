@@ -1,11 +1,13 @@
 # Graph Surface
 
 `@dpeek/graphle-surface` owns route-neutral collection-surface, collection-command,
-and record-surface runtime on top of `@dpeek/graphle-query`.
+record-surface, and generic interactive entity-surface runtime on top of the
+typed Graphle client stack.
 
 The root package resolves authored `CollectionSurfaceSpec` and
-`RecordSurfaceSpec` contracts into shared runtime bindings. The `react-dom`
-subpath provides the browser mounts for those surfaces.
+`RecordSurfaceSpec` contracts into shared runtime bindings and entity-surface
+row plans. The `react-dom` subpath provides the browser mounts and shared
+entity view/edit/create bodies for those surfaces.
 
 Record surfaces currently cover the smallest shared detail/runtime slice:
 
@@ -15,7 +17,16 @@ Record surfaces currently cover the smallest shared detail/runtime slice:
 - `ObjectViewSpec` compatibility via explicit adaptation into
   `RecordSurfaceSpec`
 
-Generic command wiring and edit orchestration still stay host-owned.
+Interactive entity surfaces cover the shared route-neutral browser slice:
+
+- live entity row planning over typed predicate refs
+- draft-backed create planning over `@dpeek/graphle-react` draft controllers
+- `RecordSurfaceSpec` section metadata as authored structure
+- predicate field view/control delegation to `@dpeek/graphle-module-core/react-dom`
+- host-supplied editor overrides for app-only behavior such as secret fields
+
+Generic command wiring, route selection, dialogs, auth, and shell composition
+still stay host-owned.
 
 ## Read This First
 
@@ -27,9 +38,14 @@ Generic command wiring and edit orchestration still stay host-owned.
   binding resolution.
 - Read `./src/record-surface.ts` for readonly record binding and
   `ObjectViewSpec` adaptation.
+- Read `./src/entity-surface-plan.ts` and `./src/entity-create-plan.ts` for
+  route-neutral entity row and draft-create planning.
 - Read `./src/react-dom/index.ts` for the browser entrypoint.
 - Read `./src/react-dom/collection-surface-mount.tsx` and
-  `./src/react-dom/record-surface-mount.tsx` for the current browser mounts.
+  `./src/react-dom/record-surface-mount.tsx` for collection and readonly
+  record mounts.
+- Read `./src/react-dom/entity-surface.tsx` for the shared interactive
+  entity view/edit/create browser bodies.
 
 ## Package Docs
 
@@ -62,8 +78,10 @@ metadata, query execution, or app route ownership.
 - collection command binding for the current browser proving ground
 - readonly record-surface binding over authored sections and related
   collections
+- route-neutral live and draft entity-surface planning
+- shared browser entity view/edit/create components and field sections
 - `ObjectViewSpec` compatibility adaptation into `RecordSurfaceSpec`
-- browser mounts for collection and record surfaces
+- browser mounts for collection, record, and entity surfaces
 
 ## Important Semantics
 
@@ -85,6 +103,12 @@ metadata, query execution, or app route ownership.
   do not own edit-session orchestration.
 - `RecordSurfaceMount` can render related collections only when the caller
   provides both a collection lookup and an installed query-surface registry.
+- Interactive entity surfaces use typed predicate refs directly. They may read
+  `RecordSurfaceSpec` section/title/subtitle metadata for structure, but they
+  do not route editing through `resolveRecordSurfaceBinding(...)`.
+- The shared predicate row delegates view and edit widgets to
+  `@dpeek/graphle-module-core/react-dom`; hosts can override editor rendering
+  without importing app-only field systems into this package.
 
 ## Entrypoints
 
@@ -97,7 +121,8 @@ metadata, query execution, or app route ownership.
   `GraphCommandSurfaceSpec`, or `ObjectViewSpec` contracts
 - query transport, saved-query persistence, or query-surface catalog ownership
 - field resolver primitives, field widgets, or browser field adapters
-- route registration, shell composition, or authoritative command execution
+- route registration, shell composition, dialogs, auth, secret storage, or
+  authoritative command execution
 
 ## Root API
 
@@ -109,6 +134,10 @@ metadata, query execution, or app route ownership.
 - `resolveCollectionCommandBindings`
 - `resolveRecordSurfaceBinding`
 - `adaptObjectViewToRecordSurface`
+- `buildLiveEntitySurfacePlan`
+- `buildDraftEntitySurfacePlan`
+- `buildEntityCreatePlan`
+- `buildEntityCreateDefaults`
 
 ## `react-dom` API
 
@@ -119,6 +148,12 @@ metadata, query execution, or app route ownership.
 - `RecordSurfaceMountView`
 - `RecordSurfaceLayout`
 - `RecordSurfaceSectionView`
+- `EntitySurface`
+- `CreateEntitySurface`
+- `CreateEntitySurfaceBody`
+- `EntitySurfaceFieldSection`
+- `EntitySurfaceFieldSections`
+- `PredicateRow`
 
 ## Build Output
 
