@@ -1,5 +1,5 @@
 Status: Proposed
-Last Updated: 2026-04-16
+Last Updated: 2026-04-18
 
 # Phase 5: Cloudflare deploy
 
@@ -24,6 +24,8 @@ Last Updated: 2026-04-16
 - `../../lib/graphle-site-web/src/site-app.tsx`
 - `../../lib/graphle-site-web/src/site-feature.tsx`
 - `../../lib/graphle-site-web/src/status.ts`
+- `../../lib/graphle-deploy-cloudflare/README.md`
+- `../../lib/graphle-deploy-cloudflare/doc/cloudflare-public-rendering.md`
 - `../../lib/graphle-web-shell/README.md`
 - `../../lib/graphle-web-shell/doc/web-shell.md`
 - `../../lib/graphle-web-ui/README.md`
@@ -70,25 +72,50 @@ application.
 
 ## Approach
 
-Build a small Cloudflare deployment package and connect it to the existing
-local runtime through a narrow authenticated API. Keep the remote runtime
-focused on public rendering from a durable item graph baseline.
+Finish the Cloudflare deployment package and connect it to the existing local
+runtime through a narrow authenticated API. Keep the remote runtime focused on
+public rendering from a durable item graph baseline.
+
+`./cloud-public-rendering.md` is now implemented. Phase 5 should build on that
+package instead of re-planning or re-implementing the remote public renderer.
+The remaining ship work is Cloudflare provisioning, local deploy APIs,
+nonsecret metadata persistence, browser deploy controls, and end-to-end deploy
+verification.
 
 ### Package boundary
 
-Add `@dpeek/graphle-deploy-cloudflare` as the package that owns Cloudflare
-deployment behavior.
+Use `@dpeek/graphle-deploy-cloudflare` as the package that owns Cloudflare
+deployment behavior. The package already owns the public Worker renderer,
+Durable Object baseline storage, baseline replacement endpoint, cache policy,
+and publish verification handoff. Phase 5 should add the remaining local deploy
+API, Cloudflare API provisioning, metadata persistence, and browser controls
+around that package instead of introducing a second route DTO or Worker runtime.
 
 The package should own:
 
 - Cloudflare API input validation and client calls
 - deterministic Worker and Durable Object naming
-- Worker script or deploy bundle generation
-- Durable Object authority storage for the remote public site graph
-- public baseline filtering for `site:item` and referenced `core:tag` records
+- Worker script or deploy bundle generation for the existing
+  `fetchCloudflarePublicSite` runtime
+- Durable Object binding and migration config for
+  `GraphlePublicSiteBaselineDurableObject`
+- public baseline publish through `publishPublicSiteBaseline(...)`
 - remote metadata types and validation
 - deploy result, status, and error contracts consumed by the local runtime
 - package README and docs
+
+The package already owns:
+
+- public Worker fetch routing
+- Durable Object baseline storage
+- protected baseline replacement at `/api/baseline`
+- `GET /api/health`
+- server-rendered public routes through `@dpeek/graphle-site-web`
+- CDN cache headers and optional asset tag injection
+- remote rejection of incompatible baselines, private `site:item` records, and
+  unreferenced or private-only `core:tag` records
+- path-purge handoff plus health and `/` verification in
+  `publishPublicSiteBaseline(...)`
 
 `@dpeek/graphle-local` should only expose local HTTP handlers and call the
 deploy package. It must not contain Cloudflare API wiring, Worker source
@@ -187,44 +214,51 @@ It should not contain:
 - Cloudflare API tokens
 - local-only deploy form state
 
+The current public baseline projection lives in `@dpeek/graphle-local` as
+`buildPublicSiteGraphBaseline(...)`. Phase 5 should either move that builder to
+`@dpeek/graphle-deploy-cloudflare` or call it through a narrow local boundary.
+Do not duplicate the filtering rules.
+
 The deploy operation should:
 
 1. validate Cloudflare inputs
 2. derive deterministic resource names from `GRAPHLE_PROJECT_ID` and any
    explicit Worker name override
-3. create or update the Worker script
+3. create or update the Worker script from the deploy package runtime
 4. provision or update the Durable Object binding and migration state
-5. upload the public item baseline to the remote authority
-6. verify the remote health endpoint
-7. verify at least `/` from the public Worker URL
-8. verify that a known URL-only public item appears in the public list when one
+5. build the projected public graph baseline from the local authority
+6. publish the baseline through `publishPublicSiteBaseline(...)`
+7. verify the remote health endpoint
+8. verify at least `/` from the public Worker URL
+9. verify that a known URL-only public item appears in the public list when one
    exists locally
-9. persist nonsecret remote metadata locally
+10. persist nonsecret remote metadata locally
 
 Re-running deploy should update the same resources. It must not create duplicate
 Workers or Durable Object classes for the same project.
 
 ### Remote Worker runtime
 
-The remote Worker should be a small public-site runtime, not the current app
-runtime.
+The remote Worker runtime already exists in `@dpeek/graphle-deploy-cloudflare`.
+Phase 5 should package and deploy that runtime, not create a second one. The
+remote Worker remains a small public-site runtime, not the current app runtime.
 
-It should:
+It already:
 
-- boot minimal core plus `core:tag` plus the `site:item` schema needed to render
-  public items
-- persist the remote public graph in a Durable Object
-- accept baseline replacement only through a deploy-only endpoint protected by a
-  per-deploy secret or Cloudflare API-mediated deployment flow
-- serve public website routes by exact item path
-- include URL-only public items in the public sidebar/list
-- render item tags for public items
-- return JSON health/status for deploy verification under `/api/health`
-- return JSON 404 for unknown `/api/*`
+- boots minimal core plus `core:tag` plus the `site:item` schema needed to
+  render public items
+- persists the remote public graph baseline in a Durable Object
+- accepts baseline replacement only through a deploy-only endpoint protected by
+  a per-deploy secret
+- serves public website routes by exact item path
+- includes URL-only public items in the public sidebar/list
+- renders item tags for public items
+- returns JSON health/status for deploy verification under `/api/health`
+- returns JSON 404 for unknown `/api/*`
 
-The public renderer can share browser-safe route helpers and markdown rendering
-policy with the local site path. It should not expose local admin preview rules
-or private item data.
+The public renderer shares browser-safe route helpers and markdown rendering
+policy with the local site path. It must not expose local admin preview rules or
+private item data.
 
 ### Browser app
 
@@ -299,11 +333,12 @@ None. This plan assumes Worker URL deployment only, credentials supplied by
 
 ## Success Criteria
 
-- `@dpeek/graphle-deploy-cloudflare` exists with package metadata, TypeScript
-  config, README, package docs, and focused tests.
+- `@dpeek/graphle-deploy-cloudflare` continues to own the existing public
+  Worker runtime, Durable Object baseline storage, protected baseline
+  replacement, route SSR, cache policy, and publish handoff.
 - The deploy package owns Cloudflare API calls, Worker bundle generation,
-  Durable Object storage, public baseline filtering, remote metadata contracts,
-  and sanitized deploy errors.
+  Durable Object binding/migration config, remote metadata contracts, and
+  sanitized deploy errors.
 - `@dpeek/graphle-local` exposes authenticated `GET /api/deploy/status` and
   `POST /api/deploy` handlers under `/api/*`.
 - Unauthenticated deploy requests return JSON 401.
@@ -320,6 +355,8 @@ None. This plan assumes Worker URL deployment only, credentials supplied by
 - The deployed Worker serves `/` and exact item paths from remote graph state.
 - The deployed Worker includes URL-only public items in the public sidebar/list.
 - Unknown remote `/api/*` routes return JSON 404.
+- Remote baseline replacement rejects incompatible projection metadata, private
+  `site:item` records, and unreferenced or private-only `core:tag` records.
 - Local nonsecret remote metadata survives `graphle dev` restart through
   `graphle.sqlite`.
 - The browser shell shows deploy status, remote URL, progress, and sanitized
@@ -337,8 +374,23 @@ None. This plan assumes Worker URL deployment only, credentials supplied by
 
 ## Tasks
 
+Already completed by `./cloud-public-rendering.md`:
+
 - Add `@dpeek/graphle-deploy-cloudflare` with package metadata, exports,
   TypeScript config, README, and package docs.
+- Implement the remote Worker runtime owned by the deploy package.
+- Implement Durable Object storage for the remote public site baseline.
+- Add remote Worker tests for health, unknown `/api/*`, baseline install, exact
+  item-path rendering, URL-only public item list rendering, private item
+  absence, private-only tag absence, missing-route HTML, cache headers, static
+  assets, and publish handoff.
+- Add protected baseline replacement with projection compatibility validation
+  and remote sanitization checks.
+- Add publish handoff for baseline replacement, known path purge, remote health
+  verification, and `/` verification.
+
+Remaining Phase 5 tasks:
+
 - Define Cloudflare deploy input, status, result, metadata, and sanitized error
   types.
 - Add tests for deploy input validation, secret redaction, deterministic naming,
@@ -349,20 +401,18 @@ None. This plan assumes Worker URL deployment only, credentials supplied by
   authority reopen.
 - Implement public baseline projection from the local persisted authority:
   public items, referenced tags, and required schema/bootstrap records only.
+  Move the current local builder into the deploy package if that is the cleanest
+  ownership split; otherwise keep one shared implementation and call it from the
+  local deploy API.
 - Add tests for public baseline projection: private item exclusion, private-only
   tag exclusion, URL-only public item inclusion, routed public item inclusion,
   and path/URL item inclusion.
 - Implement Cloudflare API client boundaries for Worker create/update, Durable
   Object migration/binding updates, and remote verification.
 - Add tests for API request construction with mocked Cloudflare responses.
-- Implement the remote Worker bundle owned by the deploy package.
-- Implement Durable Object storage for the remote public site authority using
-  the persisted-authority contract.
-- Add remote Worker tests for health, unknown `/api/*`, baseline install, exact
-  item-path rendering, URL-only public item list rendering, private item
-  absence, private-only tag absence, and missing-route HTML.
 - Implement deploy orchestration: validate inputs, provision/update resources,
-  upload public baseline, verify remote health and `/`, then persist metadata.
+  build and publish the public baseline through `publishPublicSiteBaseline(...)`,
+  verify the remote health and `/`, then persist metadata.
 - Add local API handlers for `GET /api/deploy/status` and `POST /api/deploy`.
 - Add local-server tests for authenticated deploy, unauthenticated 401s,
   validation failures, sanitized Cloudflare failures, successful metadata

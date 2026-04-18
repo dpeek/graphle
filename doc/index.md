@@ -34,9 +34,11 @@ storage, and `@dpeek/graphle-module-site` owns the `site:` schema. The
 operator runtime remains in `@dpeek/graphle-cli`. `@dpeek/graphle-app` stays
 focused on the curated graph helper surface plus app-specific web and Worker
 composition. `@dpeek/graphle-web-ui` owns reusable browser primitives,
-`@dpeek/graphle-web-shell` owns generic browser shell composition, and
+`@dpeek/graphle-web-shell` owns generic browser shell composition,
 `@dpeek/graphle-site-web` owns the assembled personal-site browser app served
-by the local runtime. `@dpeek/utils` owns shared env, log, and process helpers.
+by the local runtime, and `@dpeek/graphle-deploy-cloudflare` owns the
+Cloudflare public-site renderer and publish handoff. `@dpeek/utils` owns shared
+env, log, and process helpers.
 
 ## Root docs
 
@@ -94,6 +96,9 @@ The current dependency chain is:
 - `../lib/graphle-site-web/doc/site-web.md`: assembled personal-site browser app,
   local route loading, inline authoring controls, and package-built static
   assets
+- `../lib/graphle-deploy-cloudflare/doc/cloudflare-public-rendering.md`:
+  Cloudflare Worker public rendering, Durable Object baseline storage, cache
+  policy, and deploy/sync publish handoff
 - `../lib/graphle-cli/doc/agent-runtime.md`: issue-driven automation runtime,
   scheduler, workspace lifecycle, and retained runtime behavior
 - `../lib/graphle-cli/doc/agent-workflow.md`: workflow loading, issue routing, context
@@ -158,6 +163,9 @@ The current dependency chain is:
 - `../lib/graphle-site-web/`: `@dpeek/graphle-site-web`, the packaged
   personal-site browser app, inline authoring surface, and built client assets
   served by `graphle dev`
+- `../lib/graphle-deploy-cloudflare/`: `@dpeek/graphle-deploy-cloudflare`, the
+  Cloudflare public-site Worker runtime, Durable Object baseline storage,
+  server-rendered public routes, cache policy, and publish verification handoff
 - `../lib/graphle-app/`: `@dpeek/graphle-app`, the app package for graph helper exports plus the
   browser Worker, routes, and app-owned web composition
 - `../lib/graphle-cli/`: `@dpeek/graphle-cli`, the operator shell package for command dispatch,

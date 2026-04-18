@@ -44,9 +44,9 @@
   fallback with a sanitized public graph runtime, using the existing projection
   contracts instead of a new DTO-shaped model.
 - [Personal site MVP cloud public rendering](/Users/dpeek/code/graphle/pdr/personal-site-mvp/cloud-public-rendering.md):
-  plan the deployed public-site renderer: Cloudflare Worker SSR from the public
-  graph baseline, projection-compatible baseline metadata, CDN caching, and a
-  clean sync handoff.
+  implemented the deployed public-site renderer package: Cloudflare Worker SSR
+  from the public graph baseline, projection-compatible baseline metadata,
+  Durable Object storage, CDN caching, and a clean deploy/sync handoff.
 - [Personal site layout and authoring UX](/Users/dpeek/code/graphle/pdr/personal-site-mvp/site-layout-ux.md):
   plan the minimalist site frame: item-only sidebar, centered route content,
   predicate-backed edit mode, one-button create, URL-only item actions,

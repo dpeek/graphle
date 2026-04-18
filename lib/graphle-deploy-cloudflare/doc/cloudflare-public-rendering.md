@@ -1,0 +1,96 @@
+---
+name: Graphle Cloudflare public rendering
+description: "Cloudflare Worker public-site rendering, public graph baseline storage, and publish handoff for @dpeek/graphle-deploy-cloudflare."
+last_updated: 2026-04-18
+---
+
+# Cloudflare Public Rendering
+
+## Read This When
+
+- you are changing the deployed personal-site Worker runtime
+- you are changing public baseline replacement or validation
+- you are changing Cloudflare cache behavior for public HTML
+- you are wiring deploy or sync publishing into the remote runtime
+
+## Current Contract
+
+The Cloudflare runtime is a public-site renderer, not a hosted copy of the
+Graphle app. It imports the site module and shared site renderer, but it does
+not import `@dpeek/graphle-app`, Better Auth, workflow, saved-query,
+installed-module, local admin auth, or app shell routes.
+
+The Worker delegates public rendering to one Durable Object instance named
+`public-site-baseline`. That object stores the current
+`PublicSiteGraphBaseline` under one storage key. The baseline must match the
+installed `siteItemPublicProjectionSpec.projectionId` and `definitionHash`
+before it is accepted or rendered. Replacement also rejects private
+`site:item` records and unreferenced or private-only `core:tag` records, so a
+deploy bug cannot turn a compatible-but-unsanitized snapshot into public HTML.
+Missing or incompatible baselines are recoverable by replacing the remote
+baseline from the projected public graph; the runtime does not reinterpret older
+projection definitions.
+
+The remote API surface is intentionally narrow:
+
+- `GET /api/health` returns no-store JSON with baseline status.
+- `PUT /api/baseline` and `POST /api/baseline` replace the baseline when the
+  request presents the configured deploy secret.
+- unknown `/api/*` paths return no-store JSON 404s.
+- non-API `GET` and `HEAD` requests server-render public routes.
+
+The baseline replacement secret is supplied by the Worker environment as
+`GRAPHLE_DEPLOY_SECRET`. A replacement request may send the secret as
+`Authorization: Bearer <secret>` or `x-graphle-deploy-secret: <secret>`. If the
+secret is not configured, baseline replacement is unavailable.
+
+Public route rendering uses this flow:
+
+```text
+request path
+  -> Durable Object reads PublicSiteGraphBaseline
+  -> createGraphlePublicSiteRuntimeFromBaseline(...)
+  -> resolve exact site:item.path
+  -> renderPublicSiteRoute(...)
+  -> full HTML document
+```
+
+`renderPublicSiteRoute(...)` comes from `@dpeek/graphle-site-web`, so local and
+cloud rendering share route resolution, sidebar item ordering, URL-only item
+display, missing-route behavior, and `siteItemViewSurface` rendering.
+
+## Cache Policy
+
+The first runtime uses path purge rather than a custom Cloudflare cache key.
+`definitionHash` remains compatibility metadata and is not used as freshness
+state.
+
+- public route HTML: `public, s-maxage=300, max-age=0, must-revalidate`
+- missing public routes: `public, s-maxage=60, max-age=0, must-revalidate`
+- static assets served through an `ASSETS` binding: `public, max-age=31536000,
+immutable`
+- all `/api/*` responses: `no-store`
+- missing or incompatible baseline responses: `no-store`
+
+Rendered HTML includes the public baseline hash in a response header and a meta
+tag. If deploy attaches packaged site assets, it can pass comma-separated or
+JSON-array asset paths through `GRAPHLE_PUBLIC_SITE_STYLES` and
+`GRAPHLE_PUBLIC_SITE_SCRIPTS`; the Worker will include those tags and serve
+matching `/assets/*` responses through the `ASSETS` binding. Deploy and later
+sync publishers should still purge known public paths after baseline
+replacement for the MVP.
+
+## Publish Handoff
+
+`publishPublicSiteBaseline(...)` is the deploy/sync handoff. It:
+
+1. uploads the new baseline to `/api/baseline`
+2. derives known public paths from the accepted baseline
+3. calls an optional purge callback with those paths
+4. verifies `GET /api/health`
+5. verifies `GET /` with a no-cache request
+
+That keeps invalidation independent from the mechanism that created the
+baseline. Phase 5 deploy can purge paths through the Cloudflare API, while a
+later sync publisher can use the same path list or switch to cache-tag/versioned
+invalidation without changing route rendering.

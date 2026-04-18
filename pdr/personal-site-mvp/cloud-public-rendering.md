@@ -1,4 +1,4 @@
-Status: Proposed
+Status: Implemented
 Last Updated: 2026-04-18
 
 # Cloud public rendering
@@ -46,6 +46,28 @@ remote public graph runtime -> route item ref -> siteItemViewSurface -> HTML
 
 The Worker should be a public-site runtime. It should not be a hosted copy of
 the Graphle app, and it should not expose local admin authoring behavior.
+
+## Implemented Shape
+
+`@dpeek/graphle-deploy-cloudflare` now owns the cloud public rendering runtime.
+It exports:
+
+- a Cloudflare Worker fetch entrypoint
+- `GraphlePublicSiteBaselineDurableObject` for remote baseline storage
+- protected baseline replacement at `/api/baseline`
+- public health at `/api/health`
+- publish helpers that replace the baseline, verify health and `/`, and pass
+  known public paths back to deploy/sync code for purge
+
+The Worker stores the exact `PublicSiteGraphBaseline` produced from the public
+graph projection. Baselines must match the installed site projection
+`projectionId` and `definitionHash`; missing or incompatible baselines are
+recovered by replacing the remote baseline from the projected public graph.
+
+Cloud public pages render through `@dpeek/graphle-site-web`'s
+`renderPublicSiteRoute(...)`, so local and cloud public routes share route
+resolution, URL-only sidebar items, missing-route behavior, and
+`siteItemViewSurface` output.
 
 ## Approach
 
