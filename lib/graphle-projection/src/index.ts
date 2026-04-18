@@ -254,6 +254,41 @@ export interface RetainedProjectionProviderRegistration<
   readonly invalidation?: RetainedProjectionInvalidationTarget;
 }
 
+export interface ProjectionArtifactBuildInput<Snapshot = unknown> {
+  readonly snapshot: Snapshot;
+  readonly sourceCursor: string;
+}
+
+export interface ProjectionArtifactInvalidationInput {
+  readonly graphId: string;
+  readonly sourceCursor: string;
+  readonly touchedTypeIds: Iterable<string>;
+}
+
+/**
+ * Storage-agnostic host contract for derived projection artifacts.
+ *
+ * The registration owns identity, compatibility, recovery, and invalidation
+ * metadata. Host packages own storage and can specialize the snapshot and
+ * artifact types without copying provider/recovery semantics.
+ */
+export interface ProjectionArtifactProvider<
+  Registration extends RetainedProjectionProviderRegistration =
+    RetainedProjectionProviderRegistration,
+  Snapshot = unknown,
+  Artifact = unknown,
+  Hydrated = unknown,
+> {
+  readonly registration: Registration;
+  readonly buildArtifact: (input: ProjectionArtifactBuildInput<Snapshot>) => Artifact;
+  readonly hydrateArtifact: (artifact: Artifact) => Hydrated;
+  readonly createInvalidationEvent: (
+    input: ProjectionArtifactInvalidationInput,
+  ) => InvalidationEvent | undefined;
+}
+
+export type ProjectionArtifactRecoveryReason = "missing" | "incompatible" | "stale";
+
 export const moduleQuerySurfaceQueryKinds = ["collection", "scope"] as const;
 
 export type ModuleQuerySurfaceQueryKind = (typeof moduleQuerySurfaceQueryKinds)[number];
@@ -1085,6 +1120,30 @@ export function findRetainedProjectionRecord<T extends RetainedProjectionMetadat
     projectionId: metadata.projectionId,
     expectedDefinitionHash: metadata.definitionHash,
   };
+}
+
+export function classifyProjectionArtifactRecovery<T>({
+  artifact,
+  authoritative,
+  hydrate,
+  sameArtifact,
+}: {
+  readonly artifact: T | null | undefined;
+  readonly authoritative: T;
+  readonly hydrate: (artifact: T) => unknown;
+  readonly sameArtifact: (left: T, right: T) => boolean;
+}): ProjectionArtifactRecoveryReason | null {
+  if (!artifact) {
+    return "missing";
+  }
+
+  try {
+    hydrate(artifact);
+  } catch {
+    return "incompatible";
+  }
+
+  return sameArtifact(artifact, authoritative) ? null : "stale";
 }
 
 export function defineProjectionCatalog<const T extends readonly ProjectionSpec[]>(

@@ -20,7 +20,10 @@ personal-site MVP.
 - stable ids for every site type, predicate, enum option, and field-tree node
 - authored `site:item` editor and route-view `RecordSurfaceSpec` metadata for
   shared entity surfaces
-- `siteManifest` for the built-in site schema and record-surface contributions
+- public `site:item` graph projection metadata and baseline compatibility
+  helpers
+- `siteManifest` for the built-in site schema, record-surface, and projection
+  contributions
 
 ## What It Does Not Own
 

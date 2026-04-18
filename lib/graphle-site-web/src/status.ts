@@ -1,5 +1,3 @@
-import type { SiteIconPreset, SiteVisibility } from "@dpeek/graphle-module-site";
-
 export interface GraphleSiteHealth {
   readonly ok?: boolean;
   readonly service?: {
@@ -35,50 +33,11 @@ export interface GraphleSiteSession {
   } | null;
 }
 
-export interface GraphleSiteRouteTag {
-  readonly id: string;
-  readonly key: string;
-  readonly name: string;
-  readonly color: string;
-}
-
-export interface GraphleSiteRouteItem {
-  readonly id: string;
-  readonly title: string;
-  readonly path?: string;
-  readonly url?: string;
-  readonly body?: string;
-  readonly visibility: SiteVisibility;
-  readonly icon?: SiteIconPreset;
-  readonly tags: readonly GraphleSiteRouteTag[];
-  readonly sortOrder?: number;
-  readonly createdAt: string;
-  readonly updatedAt: string;
-}
-
-export type GraphleSiteRoute =
-  | {
-      readonly kind: "item";
-      readonly path: string;
-      readonly item: GraphleSiteRouteItem;
-    }
-  | {
-      readonly kind: "not-found";
-      readonly path: string;
-      readonly message: string;
-    };
-
-export interface GraphleSiteRoutePayload {
-  readonly route: GraphleSiteRoute;
-  readonly items: readonly GraphleSiteRouteItem[];
-}
-
 export interface GraphleSiteStatusSnapshot {
   readonly loadedAt: string;
   readonly health: GraphleSiteHealth;
   readonly session: GraphleSiteSession;
-  readonly route: GraphleSiteRoute;
-  readonly items: readonly GraphleSiteRouteItem[];
+  readonly path: string;
 }
 
 export type GraphleSiteStatusFetcher = (
@@ -100,12 +59,6 @@ async function readJson<T>(fetcher: GraphleSiteStatusFetcher, path: string): Pro
   return (await response.json()) as T;
 }
 
-function routePath(path: string): string {
-  const params = new URLSearchParams();
-  params.set("path", path);
-  return `/api/site/route?${params.toString()}`;
-}
-
 export async function loadGraphleSiteStatus({
   fetcher = fetch,
   now = () => new Date(),
@@ -115,17 +68,15 @@ export async function loadGraphleSiteStatus({
   readonly now?: () => Date;
   readonly path?: string;
 } = {}): Promise<GraphleSiteStatusSnapshot> {
-  const [health, session, routePayload] = await Promise.all([
+  const [health, session] = await Promise.all([
     readJson<GraphleSiteHealth>(fetcher, "/api/health"),
     readJson<GraphleSiteSession>(fetcher, "/api/session"),
-    readJson<GraphleSiteRoutePayload>(fetcher, routePath(path)),
   ]);
 
   return {
     loadedAt: now().toISOString(),
     health,
     session,
-    route: routePayload.route,
-    items: routePayload.items,
+    path,
   };
 }

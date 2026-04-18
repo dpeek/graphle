@@ -7,7 +7,12 @@ import {
   existingEntityReferenceField,
   type TypeModuleFilter,
 } from "@dpeek/graphle-module";
-import { applyGraphIdMap, type ResolvedGraphNamespace } from "@dpeek/graphle-kernel";
+import {
+  applyGraphIdMap,
+  edgeId,
+  type GraphStoreSnapshot,
+  type ResolvedGraphNamespace,
+} from "@dpeek/graphle-kernel";
 import {
   dateTypeModule,
   markdownTypeModule,
@@ -16,6 +21,11 @@ import {
   tag,
   urlTypeModule,
 } from "@dpeek/graphle-module-core";
+import {
+  createPredicateDependencyKey,
+  createProjectionDependencyKey,
+  type ProjectionSpec,
+} from "@dpeek/graphle-projection";
 
 import siteIds from "./site.json";
 
@@ -384,6 +394,60 @@ export const siteItemViewSurface = {
   ],
 } as const satisfies RecordSurfaceSpec;
 
+export const siteItemPublicProjectionSpec = {
+  projectionId: "site:item:public-graph",
+  kind: "outbound-share",
+  definitionHash: "projection-def:site:item:public-graph:v1",
+  sourceScopeKinds: ["graph"],
+  dependencyKeys: [
+    createProjectionDependencyKey("site:item:public-graph"),
+    createPredicateDependencyKey(edgeId(site.item.fields.title)),
+    createPredicateDependencyKey(edgeId(site.item.fields.path)),
+    createPredicateDependencyKey(edgeId(site.item.fields.url)),
+    createPredicateDependencyKey(edgeId(site.item.fields.body)),
+    createPredicateDependencyKey(edgeId(site.item.fields.visibility)),
+    createPredicateDependencyKey(edgeId(site.item.fields.icon)),
+    createPredicateDependencyKey(edgeId(site.item.fields.tags)),
+    createPredicateDependencyKey(edgeId(site.item.fields.sortOrder)),
+    createPredicateDependencyKey(edgeId(site.item.fields.createdAt)),
+    createPredicateDependencyKey(edgeId(site.item.fields.updatedAt)),
+    createPredicateDependencyKey(edgeId(tag.fields.key)),
+    createPredicateDependencyKey(edgeId(tag.fields.name)),
+    createPredicateDependencyKey(edgeId(tag.fields.color)),
+  ],
+  rebuildStrategy: "full",
+  visibilityMode: "share-surface",
+} as const satisfies ProjectionSpec;
+
+export interface PublicSiteGraphBaseline {
+  readonly projectionId: typeof siteItemPublicProjectionSpec.projectionId;
+  readonly definitionHash: typeof siteItemPublicProjectionSpec.definitionHash;
+  readonly sourceCursor: string;
+  readonly baselineHash: string;
+  readonly generatedAt: string;
+  readonly snapshot: GraphStoreSnapshot;
+}
+
+export function isPublicSiteGraphBaselineCompatible(
+  baseline: Pick<PublicSiteGraphBaseline, "projectionId" | "definitionHash">,
+  spec: Pick<ProjectionSpec, "projectionId" | "definitionHash"> = siteItemPublicProjectionSpec,
+): boolean {
+  return (
+    baseline.projectionId === spec.projectionId && baseline.definitionHash === spec.definitionHash
+  );
+}
+
+export function assertPublicSiteGraphBaselineCompatible(
+  baseline: Pick<PublicSiteGraphBaseline, "projectionId" | "definitionHash">,
+  spec: Pick<ProjectionSpec, "projectionId" | "definitionHash"> = siteItemPublicProjectionSpec,
+): void {
+  if (isPublicSiteGraphBaselineCompatible(baseline, spec)) return;
+
+  throw new Error(
+    `Public site graph baseline is incompatible: expected ${spec.projectionId}@${spec.definitionHash}, received ${baseline.projectionId}@${baseline.definitionHash}.`,
+  );
+}
+
 export interface SiteItemRoute {
   readonly kind: "item";
   readonly path: string;
@@ -507,5 +571,6 @@ export const siteManifest = defineGraphModuleManifest({
       },
     ],
     recordSurfaces: [siteItemSurface, siteItemViewSurface],
+    projections: [siteItemPublicProjectionSpec],
   },
 });

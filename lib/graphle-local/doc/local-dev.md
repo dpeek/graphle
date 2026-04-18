@@ -1,7 +1,7 @@
 ---
 name: Graphle local dev runtime
 description: "Local dev runtime, project bootstrap, persisted site authority, auth, routes, and browser opening owned by @dpeek/graphle-local."
-last_updated: 2026-04-17
+last_updated: 2026-04-18
 ---
 
 # Graphle Local Dev Runtime
@@ -64,36 +64,34 @@ seed duplicate records.
 - `POST /api/tx`: authenticated generic graph transaction transport; accepts a
   `GraphWriteTransaction` JSON body and commits through the persisted local
   site authority
-- `GET /api/site/route?path=<path>`: resolves an exact `site:item.path` route
-  and returns the sidebar items visible to the request; unauthenticated
-  requests see public items only, while a valid local admin cookie can preview
-  private routed items
 - unknown `/api/*`: JSON 404
 
 `/api/sync` and `/api/tx` are the authoring substrate for the graph-backed site
 editor. Browser create, update, delete, reorder, and tag edits are graph
 transactions against those endpoints. The old `/api/site/items` content
-authoring endpoints are intentionally removed; unknown `/api/site/items*`
-requests now use the normal JSON 404 behavior.
+authoring endpoints are intentionally removed; unknown `/api/site/items*` and
+`/api/site/route` requests now use the normal JSON 404 behavior.
 
 Static browser files are served from the package-built
 `@dpeek/graphle-site-web` client output. Unknown static asset paths return a
 plain 404 and do not fall through to the website route.
 
-All other non-API routes are website routes resolved from the persisted site
-authority. `/` renders the item whose `site:item.path` is `/`; every other path
-is an exact item-path lookup. URL-only items appear in sidebar data but do not
-resolve to internal pages. Private items are visible only to requests with a
-valid local admin cookie. Missing routes return a useful 404 host document while
-still loading the package browser app. The host document includes graph-backed
-title, body, outbound URL, tags, and item sidebar content inside `#root`
-before the browser bundle mounts.
+All other non-API routes are website routes resolved from a sanitized public
+graph projection built from the persisted site authority. `/` renders the item
+whose `site:item.path` is `/`; every other path is an exact item-path lookup.
+URL-only public items appear in the sidebar but do not resolve to internal
+pages. Private items and tags referenced only by private items are excluded
+from the projected graph. Missing routes return a useful 404 host document
+while still loading the package browser app. The host document includes
+graph-backed `siteItemViewSurface` output inside `#root` and embeds the public
+baseline metadata and snapshot for browser hydration.
 
 Generic graph transactions use the shared persisted-authority write session and
-durably commit through the SQLite adapter. The local route projection reads
-from the same authority state. No site-specific SQLite tables, route-local
-content mirror, or custom JSON content write layer sit beside the graph
-authority.
+durably commit through the SQLite adapter. The public graph projection reads
+from the same authority state, but it is a narrower read model with
+`@dpeek/graphle-projection` compatibility metadata. No site-specific SQLite
+tables, route-local content mirror, or custom JSON content write layer sit
+beside the graph authority.
 
 ## Local Auth
 

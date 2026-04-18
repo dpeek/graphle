@@ -90,7 +90,11 @@ import {
   type WorkflowMutationResult,
   workflowReviewModuleReadScope,
 } from "@dpeek/graphle-module-workflow";
-import { type DependencyKey, type InvalidationEvent } from "@dpeek/graphle-projection";
+import {
+  classifyProjectionArtifactRecovery,
+  type DependencyKey,
+  type InvalidationEvent,
+} from "@dpeek/graphle-projection";
 import {
   createSavedQueryRepositoryFromGraph,
   deriveSavedQueryRecord,
@@ -786,7 +790,7 @@ function buildRetainedWorkflowProjectionState(
   snapshot: GraphStoreSnapshot,
   sourceCursor: string,
 ): RetainedWorkflowProjectionState {
-  return getWorkflowReviewRetainedProjectionProvider().buildRetainedState(snapshot, sourceCursor);
+  return getWorkflowReviewRetainedProjectionProvider().buildArtifact({ snapshot, sourceCursor });
 }
 
 function getWorkflowReviewRetainedProjectionProvider(): WorkflowReviewRetainedProjectionProvider {
@@ -835,25 +839,6 @@ function sameRetainedWorkflowProjectionState(
   right: RetainedWorkflowProjectionState,
 ): boolean {
   return JSON.stringify(left) === JSON.stringify(right);
-}
-
-function classifyRetainedProjectionRecovery<T>(
-  retained: T | null,
-  authoritative: T,
-  hydrate: (retained: T) => unknown,
-  sameState: (left: T, right: T) => boolean,
-): "missing" | "incompatible" | "stale" | null {
-  if (!retained) {
-    return "missing";
-  }
-
-  try {
-    hydrate(retained);
-  } catch {
-    return "incompatible";
-  }
-
-  return sameState(retained, authoritative) ? null : "stale";
 }
 
 function trimOptionalString(value: string | undefined): string | undefined {
@@ -3788,12 +3773,12 @@ export async function createWebAppAuthority(
     authority.createTotalSyncPayload().cursor,
   );
   if (
-    classifyRetainedProjectionRecovery(
-      retainedWorkflowProjectionRef.current,
-      recoveredWorkflowProjection,
-      getWorkflowReviewRetainedProjectionProvider().hydrateRetainedState,
-      sameRetainedWorkflowProjectionState,
-    )
+    classifyProjectionArtifactRecovery({
+      artifact: retainedWorkflowProjectionRef.current,
+      authoritative: recoveredWorkflowProjection,
+      hydrate: getWorkflowReviewRetainedProjectionProvider().hydrateArtifact,
+      sameArtifact: sameRetainedWorkflowProjectionState,
+    })
   ) {
     await replaceRetainedWorkflowProjection(recoveredWorkflowProjection);
   }
@@ -4500,9 +4485,7 @@ export async function createWebAppAuthority(
     const retainedProjectionProvider = getWorkflowReviewRetainedProjectionProvider();
     if (retainedWorkflowProjectionRef.current) {
       try {
-        return retainedProjectionProvider.hydrateRetainedState(
-          retainedWorkflowProjectionRef.current,
-        );
+        return retainedProjectionProvider.hydrateArtifact(retainedWorkflowProjectionRef.current);
       } catch {
         retainedWorkflowProjectionRef.current = null;
       }
@@ -4514,7 +4497,7 @@ export async function createWebAppAuthority(
     );
     retainedWorkflowProjectionRef.current = clonePersistedValue(projection);
     void replaceRetainedWorkflowProjection(projection).catch(() => {});
-    return retainedProjectionProvider.hydrateRetainedState(projection);
+    return retainedProjectionProvider.hydrateArtifact(projection);
   }
 
   function readProjectBranchScope(

@@ -1,14 +1,24 @@
 export { graphleSiteWebClientAssetsPath } from "./assets.js";
 export {
   createGraphleSiteHttpGraphClient,
+  createGraphlePublicSiteRuntime,
+  createGraphlePublicSiteRuntimeFromBaseline,
   graphleSiteGraphBootstrapOptions,
   graphleSiteGraphDefinitions,
   graphleSiteGraphNamespace,
+  type GraphlePublicSiteRuntime,
   type GraphleSiteGraphClient,
   type GraphleSiteGraphDefinitions,
   type GraphleSiteGraphNamespace,
   type GraphleSiteHttpGraphClientOptions,
+  type GraphleSiteReadonlyRuntime,
 } from "./graph.js";
+export {
+  renderPublicSiteRoute,
+  type PublicSiteRenderAssets,
+  type RenderPublicSiteRouteOptions,
+  type RenderedPublicSiteRoute,
+} from "./public-renderer.js";
 export { GraphleSiteApp, GraphleSiteShell } from "./site-app.js";
 export { buildGraphleSiteOrderPayload, createGraphleSiteFeature } from "./site-feature.js";
 export {
@@ -24,14 +34,12 @@ export {
   type GraphleSiteItemOrder,
   type GraphleSiteItemRef,
   type GraphleSiteItemView,
+  type GraphleSiteRoute,
+  type GraphleSiteRouteTag,
 } from "./site-items.js";
 export {
   loadGraphleSiteStatus,
   type GraphleSiteHealth,
-  type GraphleSiteRoute,
-  type GraphleSiteRouteItem,
-  type GraphleSiteRoutePayload,
-  type GraphleSiteRouteTag,
   type GraphleSiteSession,
   type GraphleSiteStatusSnapshot,
 } from "./status.js";

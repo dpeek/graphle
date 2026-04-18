@@ -1,7 +1,7 @@
 ---
 name: Graphle site web
 description: "Assembled personal-site browser app, feature registration, and package-owned client assets for @dpeek/graphle-site-web."
-last_updated: 2026-04-17
+last_updated: 2026-04-18
 ---
 
 # Graphle Site Web
@@ -12,8 +12,8 @@ last_updated: 2026-04-17
 - you are changing the site feature registration mounted in the generic shell
 - you are changing the browser-safe graph client assembly for the local site
   graph
-- you are changing package-built client assets, route loading, or inline
-  authoring controls
+- you are changing package-built client assets, public route rendering, or
+  inline authoring controls
 
 ## Current Contract
 
@@ -26,36 +26,38 @@ Markdown typography comes from `@dpeek/graphle-web-ui`'s shared
 Tailwind Typography-backed renderer; site-web only adds route-level layout
 constraints.
 
-The package also exports a browser-safe graph client seam:
+The package exports two browser/server-safe graph seams:
 
 - `graphleSiteGraphNamespace`
 - `graphleSiteGraphDefinitions`
 - `graphleSiteGraphBootstrapOptions`
 - `createGraphleSiteHttpGraphClient(...)`
+- `createGraphlePublicSiteRuntime(...)`
+- `createGraphlePublicSiteRuntimeFromBaseline(...)`
+- `renderPublicSiteRoute(...)`
 
-That seam assembles `site:item`, `core:tag`, `core:color`, and the minimal core
-definitions needed by the local site graph, then wires them to
-`@dpeek/graphle-client`'s standard `/api/sync` and `/api/tx` transport. The
-browser app mounts this runtime for authenticated local admins and wraps the
-site frame in `@dpeek/graphle-react` runtime providers so shared predicate
-controls can write and flush graph transactions.
+Those seams assemble `site:item`, `core:tag`, `core:color`, and the minimal
+core definitions needed by the local site graph. The HTTP client wires them to
+`@dpeek/graphle-client`'s standard `/api/sync` and `/api/tx` transport for
+authenticated authoring. The public runtime hydrates a sanitized
+`PublicSiteGraphBaseline` and validates its `projectionId` and `definitionHash`
+against the installed site projection metadata before rendering.
 
 The first screen is the current website route preview. The app loads:
 
 - `GET /api/health`
 - `GET /api/session`
-- `GET /api/site/route?path=<current-path>`
 
-Those payloads drive the public route content, the flat item sidebar, and local
-admin visibility before any authenticated graph sync has completed. Public and
-unauthenticated hydration keeps using this read-only route projection; it is
-not the browser authoring model.
+Those payloads drive service and auth state. Public route content and the flat
+item sidebar come from the embedded sanitized public graph baseline. That keeps
+public hydration off `/api/sync` and away from private local-authoring facts.
 
 The first screen is the website preview with one left sidebar and centered
 route content. Sidebar rows show only item icon and item title. Path-backed
 items navigate to exact local routes with `history.pushState`; URL-only items
 open their external URL in a new tab and do not create public permalinks.
-`popstate` reloads the route through `/api/site/route?path=<path>`.
+`popstate` reloads status and resolves the route against the current graph
+runtime. URL-only items appear in the sidebar but do not resolve as pages.
 
 Authenticated sessions can edit either the current route item or a URL-only
 item selected from the sidebar action menu. Edit mode keeps the same content
@@ -70,11 +72,11 @@ does not ship package-local CSS overrides for predicate editors or display
 rows; it imports the shared `@dpeek/graphle-web-ui/global.css` styles and uses
 the default shared surface rendering wherever possible.
 
-When the authenticated graph runtime is available, route preview resolves the
-current route item id back to a live graph ref and renders `siteItemViewSurface`
-through the lower-level entity-surface field section pieces in view mode. Public
-and unauthenticated hydration still uses the read-only DTO route projection
-because `/api/sync` is admin-only.
+Route preview resolves the current item id back to a graph ref and renders
+`siteItemViewSurface` through the lower-level entity-surface field section
+pieces in view mode. Public visitors use the sanitized public graph runtime.
+Authenticated sessions use the private synced graph runtime and can switch the
+selected item into the authored `siteItemSurface` editor.
 
 There are no creation presets. The single `+` action creates a private
 `Untitled` routed item through the graph runtime, flushes the transaction

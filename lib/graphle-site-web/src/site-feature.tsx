@@ -46,7 +46,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@dpeek/graphle-web-ui/dropdown-menu";
-import { MarkdownRenderer } from "@dpeek/graphle-web-ui/markdown";
 import {
   Sidebar,
   SidebarContent,
@@ -67,7 +66,6 @@ import {
   AtSignIcon,
   BookOpenIcon,
   Edit3Icon,
-  ExternalLinkIcon,
   FileTextIcon,
   GithubIcon,
   GlobeIcon,
@@ -92,16 +90,17 @@ import {
   type ReactNode,
 } from "react";
 
-import type { GraphleSiteGraphClient } from "./graph.js";
+import type { GraphleSiteGraphClient, GraphleSiteReadonlyRuntime } from "./graph.js";
 import {
   findGraphleSiteItemRef,
   listGraphleSiteItemViews,
   resolveGraphleSiteRoute,
+  type GraphleSiteRoute,
   type GraphleSiteItemOrder,
   type GraphleSiteItemRef,
   type GraphleSiteItemView,
 } from "./site-items.js";
-import type { GraphleSiteRoute, GraphleSiteStatusSnapshot } from "./status.js";
+import type { GraphleSiteStatusSnapshot } from "./status.js";
 import { useGraphleSiteTheme } from "./theme.js";
 
 export type GraphleSiteStatusState =
@@ -111,7 +110,7 @@ export type GraphleSiteStatusState =
 
 export interface GraphleSiteFeatureOptions {
   readonly path?: string;
-  readonly runtime?: GraphleSiteGraphClient | null;
+  readonly runtime?: GraphleSiteReadonlyRuntime | null;
   readonly status: GraphleSiteStatusState;
   readonly onCreateBlankItem?: () => Promise<GraphleSiteItemView>;
   readonly onDeleteItem?: (id: string) => Promise<void>;
@@ -196,7 +195,12 @@ function RouteView({
 
   if (itemRef) return <GraphBackedItemView entity={itemRef} />;
 
-  return <ItemView item={route.item} />;
+  return (
+    <article className="flex flex-col gap-4" data-route-kind="not-found">
+      <h1>Page not found</h1>
+      <p className="text-muted-foreground">No visible item exists at {route.path}.</p>
+    </article>
+  );
 }
 
 function GraphBackedItemView({ entity }: { readonly entity: GraphleSiteItemRef }) {
@@ -214,31 +218,6 @@ function GraphBackedItemView({ entity }: { readonly entity: GraphleSiteItemRef }
   return (
     <article className="flex flex-col gap-4" data-route-kind="item">
       <EntitySurfaceFieldSections chrome={false} mode="view" sections={sections} />
-    </article>
-  );
-}
-
-function ItemView({ item }: { readonly item: GraphleSiteItemView }) {
-  const body = item.body?.trim();
-
-  return (
-    <article className="flex flex-col gap-4" data-route-kind="item">
-      {body ? (
-        <MarkdownRenderer content={body} />
-      ) : (
-        <>
-          <h1>{item.title}</h1>
-          {item.url ? (
-            <a href={item.url} rel="noreferrer" target="_blank">
-              <ExternalLinkIcon aria-hidden={true} />
-              <span>{item.url}</span>
-            </a>
-          ) : null}
-          {item.tags.length ? (
-            <p className="text-muted-foreground">{item.tags.map((tag) => tag.name).join(", ")}</p>
-          ) : null}
-        </>
-      )}
     </article>
   );
 }
@@ -272,7 +251,7 @@ function selectedContentItem({
   readonly route: GraphleSiteRoute;
 }): GraphleSiteItemView | undefined {
   if (editItemId) return items.find((item) => item.id === editItemId);
-  return route.kind === "item" ? route.item : undefined;
+  return route.kind === "item" ? items.find((item) => item.id === route.itemId) : undefined;
 }
 
 export function buildGraphleSiteOrderPayload(
@@ -542,7 +521,7 @@ function ReadySitePreview({
   route,
   snapshot,
 }: {
-  readonly graphRuntime?: GraphleSiteGraphClient | null;
+  readonly graphRuntime?: GraphleSiteReadonlyRuntime | null;
   readonly items: readonly GraphleSiteItemView[];
   readonly onCreateBlankItem?: () => Promise<GraphleSiteItemView>;
   readonly onDeleteItem?: (id: string) => Promise<void>;
@@ -555,15 +534,20 @@ function ReadySitePreview({
   const [deleteItem, setDeleteItem] = useState<GraphleSiteItemView | null>(null);
   const [actionError, setActionError] = useState("");
   const activeItem = selectedContentItem({ editItemId, items, route });
+  const mutationRuntime = graphRuntime && "sync" in graphRuntime ? graphRuntime : null;
   const activeItemRef =
-    graphRuntime && editItemId ? findGraphleSiteItemRef(graphRuntime, editItemId) : undefined;
-  const routeItemId = route.kind === "item" ? route.item.id : undefined;
+    mutationRuntime && editItemId ? findGraphleSiteItemRef(mutationRuntime, editItemId) : undefined;
+  const routeItemId = route.kind === "item" ? route.itemId : undefined;
   const routeItemRef =
     graphRuntime && route.kind === "item"
-      ? findGraphleSiteItemRef(graphRuntime, route.item.id)
+      ? findGraphleSiteItemRef(graphRuntime, route.itemId)
       : undefined;
   const isEditing =
-    snapshot.session.authenticated && editItemId !== null && activeItem && activeItemRef;
+    snapshot.session.authenticated &&
+    editItemId !== null &&
+    activeItem &&
+    activeItemRef &&
+    mutationRuntime;
 
   function navigateToItem(item: GraphleSiteItemView, event: MouseEvent<HTMLAnchorElement>) {
     if (!item.path) return;
@@ -635,8 +619,8 @@ function ReadySitePreview({
                 {actionError}
               </p>
             ) : null}
-            {isEditing && activeItemRef && graphRuntime ? (
-              <ItemEditor entity={activeItemRef} runtime={graphRuntime} />
+            {isEditing && activeItemRef && mutationRuntime ? (
+              <ItemEditor entity={activeItemRef} runtime={mutationRuntime} />
             ) : (
               <RouteView itemRef={routeItemRef} route={route} />
             )}
@@ -685,6 +669,34 @@ function GraphBackedReadySitePreview({
   );
 }
 
+function ReadonlyGraphBackedReadySitePreview({
+  path,
+  runtime,
+  snapshot,
+  ...props
+}: Omit<Parameters<typeof ReadySitePreview>[0], "graphRuntime" | "items" | "route"> & {
+  readonly path: string;
+  readonly runtime: GraphleSiteReadonlyRuntime;
+}) {
+  const selection = useMemo(
+    () => ({
+      items: listGraphleSiteItemViews(runtime),
+      route: resolveGraphleSiteRoute(runtime, path),
+    }),
+    [path, runtime],
+  );
+
+  return (
+    <ReadySitePreview
+      {...props}
+      graphRuntime={runtime}
+      items={selection.items}
+      route={selection.route}
+      snapshot={snapshot}
+    />
+  );
+}
+
 export function GraphleSitePreview({
   path,
   runtime,
@@ -697,8 +709,12 @@ export function GraphleSitePreview({
   if (status.state === "loading") return <LoadingSurface />;
   if (status.state === "error") return <ErrorSurface message={status.message} />;
 
-  const routePath = path ?? status.snapshot.route.path;
-  if (status.snapshot.session.authenticated && runtime) {
+  const routePath = path ?? status.snapshot.path;
+  if (status.snapshot.session.authenticated) {
+    if (!runtime || !("sync" in runtime)) {
+      return <ErrorSurface message="The private site graph is unavailable." />;
+    }
+
     return (
       <GraphBackedReadySitePreview
         path={routePath}
@@ -712,21 +728,25 @@ export function GraphleSitePreview({
     );
   }
 
-  return (
-    <ReadySitePreview
-      items={status.snapshot.items}
-      route={status.snapshot.route}
-      snapshot={status.snapshot}
-      onCreateBlankItem={onCreateBlankItem}
-      onDeleteItem={onDeleteItem}
-      onNavigatePath={onNavigatePath}
-      onReorderItems={onReorderItems}
-    />
-  );
+  if (runtime) {
+    return (
+      <ReadonlyGraphBackedReadySitePreview
+        path={routePath}
+        runtime={runtime}
+        snapshot={status.snapshot}
+        onCreateBlankItem={onCreateBlankItem}
+        onDeleteItem={onDeleteItem}
+        onNavigatePath={onNavigatePath}
+        onReorderItems={onReorderItems}
+      />
+    );
+  }
+
+  return <ErrorSurface message="The public site graph is unavailable." />;
 }
 
 function activePagePath(status: GraphleSiteStatusState): string {
-  return status.state === "ready" ? status.snapshot.route.path : "/";
+  return status.state === "ready" ? status.snapshot.path : "/";
 }
 
 export function createGraphleSiteFeature(options: GraphleSiteFeatureOptions): GraphleShellFeature {

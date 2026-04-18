@@ -22,9 +22,9 @@ import {
   defineRetainedProjectionProviderRegistry,
   listRetainedProjectionProvidersForScope,
   matchesModuleReadScopeRegistration,
-  type InvalidationEvent,
   type ModuleReadScopeDefinition,
   type ModuleReadScopeRegistration,
+  type ProjectionArtifactProvider,
   type RetainedProjectionProviderRegistration,
 } from "@dpeek/graphle-projection";
 
@@ -43,25 +43,12 @@ function createModuleEntityTypeIds(
   );
 }
 
-type WebAppRetainedProjectionInvalidationInput = {
-  readonly graphId: string;
-  readonly sourceCursor: string;
-  readonly touchedTypeIds: Iterable<string>;
-};
-
 export type WebAppRetainedProjectionProvider<
   Registration extends RetainedProjectionProviderRegistration =
     RetainedProjectionProviderRegistration,
   State = unknown,
   Hydrated = unknown,
-> = {
-  readonly registration: Registration;
-  readonly buildRetainedState: (snapshot: GraphStoreSnapshot, sourceCursor: string) => State;
-  readonly hydrateRetainedState: (retained: State) => Hydrated;
-  readonly createInvalidationEvent: (
-    input: WebAppRetainedProjectionInvalidationInput,
-  ) => InvalidationEvent | undefined;
-};
+> = ProjectionArtifactProvider<Registration, GraphStoreSnapshot, State, Hydrated>;
 
 export type AnyWebAppRetainedProjectionProvider = WebAppRetainedProjectionProvider<any, any, any>;
 
@@ -73,7 +60,7 @@ export type WorkflowReviewRetainedProjectionProvider = WebAppRetainedProjectionP
 
 const workflowReviewRetainedProjectionProvider = Object.freeze({
   registration: workflowReviewRetainedProjectionProviderRegistration,
-  buildRetainedState(snapshot: GraphStoreSnapshot, sourceCursor: string) {
+  buildArtifact({ snapshot, sourceCursor }) {
     return createRetainedWorkflowProjectionState(
       createGraphClient(createStore(snapshot), projectionSchema),
       {
@@ -81,10 +68,10 @@ const workflowReviewRetainedProjectionProvider = Object.freeze({
       },
     );
   },
-  hydrateRetainedState(retained: RetainedWorkflowProjectionState) {
-    return createWorkflowProjectionIndexFromRetainedState(retained);
+  hydrateArtifact(artifact: RetainedWorkflowProjectionState) {
+    return createWorkflowProjectionIndexFromRetainedState(artifact);
   },
-  createInvalidationEvent(input: WebAppRetainedProjectionInvalidationInput) {
+  createInvalidationEvent(input) {
     return createWorkflowReviewInvalidationEvent({
       ...input,
       eventId: `workflow-review:${input.sourceCursor}`,

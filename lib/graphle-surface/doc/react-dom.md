@@ -1,7 +1,7 @@
 ---
 name: Graph surface react dom
 description: "Browser mounts, entity surfaces, and override seams for @dpeek/graphle-surface/react-dom."
-last_updated: 2026-04-17
+last_updated: 2026-04-18
 ---
 
 # Graph surface react dom
@@ -143,7 +143,10 @@ draft predicate refs directly. Editing does not go through
 `resolveRecordSurfaceBinding(...)`. Hosts that need surface rendering without
 the `EntitySurface` card shell can compose `buildLiveEntitySurfacePlan(...)`,
 `buildEntitySurfaceFieldSections(...)`, and `EntitySurfaceFieldSections` with
-`chrome={false}`.
+`chrome={false}`. `@dpeek/graphle-site-web` uses that lower-level path for
+public and authenticated route preview so `siteItemViewSurface` can render from
+a graph ref without mounting the edit surface or adding site-specific field
+view overrides.
 
 ## Related collections
 

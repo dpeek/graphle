@@ -2,7 +2,13 @@ import { GraphRuntimeProvider } from "@dpeek/graphle-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { GraphleSitePreview, type GraphleSiteStatusState } from "./site-feature.js";
-import { createGraphleSiteHttpGraphClient, type GraphleSiteGraphClient } from "./graph.js";
+import {
+  createGraphlePublicSiteRuntimeFromBaseline,
+  createGraphleSiteHttpGraphClient,
+  type GraphlePublicSiteRuntime,
+  type GraphleSiteGraphClient,
+  type GraphleSiteReadonlyRuntime,
+} from "./graph.js";
 import {
   createBlankGraphleSiteItem,
   deleteGraphleSiteItem,
@@ -15,7 +21,7 @@ import { loadGraphleSiteStatus } from "./status.js";
 
 export interface GraphleSiteShellProps {
   readonly path?: string;
-  readonly runtime?: GraphleSiteGraphClient | null;
+  readonly runtime?: GraphleSiteReadonlyRuntime | null;
   readonly status: GraphleSiteStatusState;
   readonly onCreateBlankItem?: () => Promise<GraphleSiteItemView>;
   readonly onDeleteItem?: (id: string) => Promise<void>;
@@ -52,19 +58,30 @@ function currentOrigin(): string {
   return typeof window === "undefined" ? "http://127.0.0.1:4318/" : window.location.origin;
 }
 
+function readEmbeddedPublicRuntime(): GraphlePublicSiteRuntime | null {
+  if (typeof document === "undefined") return null;
+  const script = document.getElementById("graphle-public-site-baseline");
+  const payload = script?.textContent;
+  if (!payload) return null;
+  return createGraphlePublicSiteRuntimeFromBaseline(JSON.parse(payload));
+}
+
 export function GraphleSiteApp() {
   const [status, setStatus] = useState<GraphleSiteStatusState>({ state: "loading" });
   const [path, setPath] = useState("/");
-  const [runtime, setRuntime] = useState<GraphleSiteGraphClient | null>(null);
+  const [runtime, setRuntime] = useState<GraphleSiteReadonlyRuntime | null>(null);
   const runtimeRef = useRef<GraphleSiteGraphClient | null>(null);
+  const publicRuntimeRef = useRef<GraphlePublicSiteRuntime | null>(null);
 
   const ensureRuntime = useCallback(async (authenticated: boolean) => {
     if (!authenticated) {
       runtimeRef.current = null;
-      setRuntime(null);
-      return null;
+      publicRuntimeRef.current ??= readEmbeddedPublicRuntime();
+      setRuntime(publicRuntimeRef.current);
+      return publicRuntimeRef.current;
     }
 
+    publicRuntimeRef.current = null;
     if (runtimeRef.current) {
       await runtimeRef.current.sync.sync();
       setRuntime(runtimeRef.current);
@@ -121,6 +138,8 @@ export function GraphleSiteApp() {
     return runtimeRef.current;
   }
 
+  const mutationRuntime = runtime && "sync" in runtime ? runtime : null;
+
   useEffect(() => {
     refresh();
   }, [refresh]);
@@ -135,7 +154,7 @@ export function GraphleSiteApp() {
   }, [loadPath]);
 
   return (
-    <GraphRuntimeProvider runtime={runtime}>
+    <GraphRuntimeProvider runtime={mutationRuntime}>
       <GraphleSiteShell
         path={path}
         runtime={runtime}

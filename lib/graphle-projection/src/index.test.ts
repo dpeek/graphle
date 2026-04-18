@@ -3,6 +3,7 @@ import { describe, expect, it } from "bun:test";
 import { createModuleSyncScope, graphSyncScope } from "@dpeek/graphle-sync";
 
 import {
+  classifyProjectionArtifactRecovery,
   type DependencyKey,
   createRegisteredModuleReadScope,
   createRegisteredModuleReadScopeRequest,
@@ -465,6 +466,48 @@ describe("graph projection contracts", () => {
       projectionId: "workflow:missing",
       expectedDefinitionHash: "projection-def:workflow:missing:v1",
     });
+  });
+
+  it("classifies projection artifact recovery without owning storage", () => {
+    const authoritative = { version: 1 };
+
+    expect(
+      classifyProjectionArtifactRecovery({
+        artifact: null,
+        authoritative,
+        hydrate: () => undefined,
+        sameArtifact: Object.is,
+      }),
+    ).toBe("missing");
+
+    expect(
+      classifyProjectionArtifactRecovery({
+        artifact: { version: 1 },
+        authoritative,
+        hydrate: () => {
+          throw new Error("definition mismatch");
+        },
+        sameArtifact: Object.is,
+      }),
+    ).toBe("incompatible");
+
+    expect(
+      classifyProjectionArtifactRecovery({
+        artifact: { version: 0 },
+        authoritative,
+        hydrate: () => undefined,
+        sameArtifact: (left, right) => left.version === right.version,
+      }),
+    ).toBe("stale");
+
+    expect(
+      classifyProjectionArtifactRecovery({
+        artifact: { version: 1 },
+        authoritative,
+        hydrate: () => undefined,
+        sameArtifact: (left, right) => left.version === right.version,
+      }),
+    ).toBe(null);
   });
 });
 

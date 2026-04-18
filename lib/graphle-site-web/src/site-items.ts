@@ -9,11 +9,41 @@ import {
   type SiteVisibility,
 } from "@dpeek/graphle-module-site";
 
-import type { GraphleSiteGraphClient } from "./graph.js";
-import type { GraphleSiteRoute, GraphleSiteRouteItem, GraphleSiteRouteTag } from "./status.js";
+import type { GraphleSiteGraphClient, GraphleSiteReadonlyRuntime } from "./graph.js";
 
-export type GraphleSiteItemRef = ReturnType<GraphleSiteGraphClient["graph"]["item"]["ref"]>;
-export type GraphleSiteItemView = GraphleSiteRouteItem;
+export type GraphleSiteItemRef = ReturnType<GraphleSiteReadonlyRuntime["graph"]["item"]["ref"]>;
+export interface GraphleSiteRouteTag {
+  readonly id: string;
+  readonly key: string;
+  readonly name: string;
+  readonly color: string;
+}
+
+export interface GraphleSiteItemView {
+  readonly id: string;
+  readonly title: string;
+  readonly path?: string;
+  readonly url?: string;
+  readonly body?: string;
+  readonly visibility: SiteVisibility;
+  readonly icon?: SiteIconPreset;
+  readonly tags: readonly GraphleSiteRouteTag[];
+  readonly sortOrder?: number;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+}
+
+export type GraphleSiteRoute =
+  | {
+      readonly kind: "item";
+      readonly path: string;
+      readonly itemId: string;
+    }
+  | {
+      readonly kind: "not-found";
+      readonly path: string;
+      readonly message: string;
+    };
 
 export interface GraphleSiteItemOrder {
   readonly id: string;
@@ -90,8 +120,8 @@ export function allocateGraphleSitePath(
 }
 
 export function serializeGraphleSiteItem(
-  runtime: GraphleSiteGraphClient,
-  item: ReturnType<GraphleSiteGraphClient["graph"]["item"]["list"]>[number],
+  runtime: GraphleSiteReadonlyRuntime,
+  item: ReturnType<GraphleSiteReadonlyRuntime["graph"]["item"]["list"]>[number],
 ): GraphleSiteItemView {
   const tagById = new Map(runtime.graph.tag.list().map((tag) => [tag.id, tag]));
   const tags = (item.tags ?? [])
@@ -117,7 +147,7 @@ export function serializeGraphleSiteItem(
 }
 
 export function listGraphleSiteItemViews(
-  runtime: GraphleSiteGraphClient,
+  runtime: GraphleSiteReadonlyRuntime,
   options: { readonly includePrivate?: boolean; readonly query?: string } = {},
 ): readonly GraphleSiteItemView[] {
   return runtime.graph.item
@@ -129,7 +159,7 @@ export function listGraphleSiteItemViews(
 }
 
 export function findGraphleSiteItemView(
-  runtime: GraphleSiteGraphClient,
+  runtime: GraphleSiteReadonlyRuntime,
   id: string,
 ): GraphleSiteItemView | undefined {
   const item = runtime.graph.item.list().find((candidate) => candidate.id === id);
@@ -137,7 +167,7 @@ export function findGraphleSiteItemView(
 }
 
 export function findGraphleSiteItemRef(
-  runtime: GraphleSiteGraphClient,
+  runtime: GraphleSiteReadonlyRuntime,
   id: string | undefined,
 ): GraphleSiteItemRef | undefined {
   if (!id) return undefined;
@@ -146,7 +176,7 @@ export function findGraphleSiteItemRef(
 }
 
 export function resolveGraphleSiteRoute(
-  runtime: GraphleSiteGraphClient,
+  runtime: GraphleSiteReadonlyRuntime,
   path: string,
   options: { readonly includePrivate?: boolean } = {},
 ): GraphleSiteRoute {
@@ -169,7 +199,7 @@ export function resolveGraphleSiteRoute(
     ? {
         kind: "item",
         path: routePath,
-        item,
+        itemId: item.id,
       }
     : {
         kind: "not-found",

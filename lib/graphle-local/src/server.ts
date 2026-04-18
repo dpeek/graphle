@@ -8,17 +8,18 @@ import {
 } from "@dpeek/graphle-client";
 import type { GraphWriteTransaction } from "@dpeek/graphle-kernel";
 import type { GraphleSqliteHandle } from "@dpeek/graphle-sqlite";
-import { graphleSiteWebClientAssetsPath } from "@dpeek/graphle-site-web/assets";
-
-import type { LocalAuthController, LocalAdminSession } from "./auth.js";
-import type { GraphleLocalProject } from "./project.js";
 import {
-  readLocalSiteAuthorityHealth,
-  readLocalSiteRoutePayload,
-  type LocalSiteAuthority,
-  type LocalSiteRoutePayload,
-  type LocalSiteRouteResult,
-} from "./site-authority.js";
+  createGraphlePublicSiteRuntimeFromBaseline,
+  renderPublicSiteRoute,
+  type RenderedPublicSiteRoute,
+} from "@dpeek/graphle-site-web";
+import { graphleSiteWebClientAssetsPath } from "@dpeek/graphle-site-web/assets";
+import type { PublicSiteGraphBaseline } from "@dpeek/graphle-module-site";
+
+import type { LocalAuthController } from "./auth.js";
+import type { GraphleLocalProject } from "./project.js";
+import { buildPublicSiteGraphBaseline } from "./public-site-projection.js";
+import { readLocalSiteAuthorityHealth, type LocalSiteAuthority } from "./site-authority.js";
 
 export interface GraphleLocalServer {
   fetch(request: Request): Promise<Response> | Response;
@@ -195,76 +196,6 @@ function escapeHtml(value: string): string {
     .replaceAll('"', "&quot;");
 }
 
-type BunMarkdownHost = typeof globalThis & {
-  Bun?: {
-    markdown?: {
-      html?: (content: string, options?: Record<string, unknown>) => string;
-    };
-  };
-};
-
-function renderMarkdownFallback(content: string): string {
-  const markdown = (globalThis as BunMarkdownHost).Bun?.markdown;
-  if (typeof markdown?.html === "function") {
-    return markdown.html(content, {
-      autolinks: true,
-      headings: { ids: true },
-      tagFilter: true,
-    });
-  }
-
-  return `<pre>${escapeHtml(content)}</pre>`;
-}
-
-function renderRouteFallback(route: LocalSiteRouteResult): string {
-  if (route.kind === "item") {
-    const outboundUrl = route.item.url
-      ? `<a class="outbound" href="${escapeHtml(route.item.url)}" rel="noreferrer" target="_blank">${escapeHtml(route.item.url)}</a>`
-      : "";
-    const tags = route.item.tags.length
-      ? `<p class="tags">${route.item.tags.map((tag) => escapeHtml(tag.name)).join(", ")}</p>`
-      : "";
-    const body = route.item.body
-      ? `<div class="markdown">${renderMarkdownFallback(route.item.body)}</div>`
-      : "";
-
-    return `<article class="content" data-route-kind="item">
-          <h1>${escapeHtml(route.item.title)}</h1>
-          ${outboundUrl}
-          ${body}
-          ${tags}
-        </article>`;
-  }
-
-  return `<article class="content not-found" data-route-kind="not-found">
-          <h1>Page not found</h1>
-          <p>${escapeHtml(route.message)}</p>
-        </article>`;
-}
-
-function routeTitle(route: LocalSiteRouteResult): string {
-  if (route.kind === "item") return route.item.title;
-  return "Page not found";
-}
-
-function renderSidebarFallback(payload: LocalSiteRoutePayload): string {
-  if (payload.items.length === 0) {
-    return `<nav class="sidebar" aria-label="Site items"></nav>`;
-  }
-
-  return `<nav class="sidebar" aria-label="Site items">
-          <ul>
-            ${payload.items
-              .map((item) => {
-                const href = item.path ?? item.url ?? "#";
-                const target = item.path ? "" : ` rel="noreferrer" target="_blank"`;
-                return `<li><a href="${escapeHtml(href)}"${target}>${escapeHtml(item.title)}</a></li>`;
-              })
-              .join("")}
-          </ul>
-        </nav>`;
-}
-
 function renderClientAssetTags(assetTags: SiteWebClientAssetTags): string {
   const styleTags = assetTags.styles
     .map((href) => `    <link rel="stylesheet" href="/${escapeHtml(href)}">`)
@@ -276,167 +207,33 @@ function renderClientAssetTags(assetTags: SiteWebClientAssetTags): string {
   return [styleTags, scriptTags].filter((value) => value.length > 0).join("\n");
 }
 
-function renderSiteHostPage(
-  _session: LocalAdminSession | null,
-  _project: GraphleLocalProject,
-  assetTags: SiteWebClientAssetTags,
-  payload: LocalSiteRoutePayload,
-): string {
-  const route = payload.route;
-  const title = routeTitle(route);
+function renderPublicBaselineScript(baseline: PublicSiteGraphBaseline): string {
+  const payload = JSON.stringify(baseline)
+    .replaceAll("<", "\\u003c")
+    .replaceAll(">", "\\u003e")
+    .replaceAll("&", "\\u0026")
+    .replaceAll("\u2028", "\\u2028")
+    .replaceAll("\u2029", "\\u2029");
 
+  return `    <script id="graphle-public-site-baseline" type="application/json">${payload}</script>`;
+}
+
+function renderSiteHostPage(
+  assetTags: SiteWebClientAssetTags,
+  baseline: PublicSiteGraphBaseline,
+  rendered: RenderedPublicSiteRoute,
+): string {
   return `<!doctype html>
 <html lang="en">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>${escapeHtml(title)}</title>
+    <title>${escapeHtml(rendered.title)}</title>
 ${renderClientAssetTags(assetTags)}
-    <style>
-      :root {
-        color-scheme: light;
-        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-        line-height: 1.5;
-        color: #191b1f;
-        background: #fbfcfd;
-      }
-      * {
-        box-sizing: border-box;
-      }
-      body {
-        margin: 0;
-      }
-      .site-fallback-frame {
-        display: flex;
-        min-height: 100vh;
-      }
-      .site-fallback-frame .content > h1 {
-        max-width: 720px;
-        margin: 0;
-        font-size: clamp(2.2rem, 8vw, 4.7rem);
-        line-height: 1;
-        letter-spacing: 0;
-      }
-      .site-fallback-frame p {
-        max-width: 620px;
-        margin: 0;
-        color: #56606f;
-        font-size: 1.05rem;
-      }
-      .site-fallback-frame .content {
-        display: grid;
-        width: min(100%, 52rem);
-        min-height: 100vh;
-        margin: 0 auto;
-        padding: clamp(2rem, 6vw, 5rem) clamp(1.25rem, 4vw, 3.5rem);
-        align-content: start;
-        gap: 20px;
-      }
-      .site-fallback-frame .markdown {
-        display: grid;
-        max-width: 720px;
-        gap: 14px;
-        color: #252b33;
-        font-size: 1.05rem;
-        line-height: 1.75;
-      }
-      .site-fallback-frame .markdown > * {
-        margin: 0;
-      }
-      .site-fallback-frame .markdown h1 {
-        max-width: 720px;
-        color: #191b1f;
-        font-size: clamp(2.2rem, 8vw, 4.7rem);
-        font-weight: 650;
-        line-height: 1;
-        letter-spacing: 0;
-        overflow-wrap: anywhere;
-      }
-      .site-fallback-frame .markdown h2 {
-        margin-top: 24px;
-        color: #191b1f;
-        font-size: clamp(1.35rem, 3vw, 2rem);
-        font-weight: 650;
-        line-height: 1.2;
-        letter-spacing: 0;
-      }
-      .site-fallback-frame .markdown h3 {
-        margin-top: 12px;
-        color: #191b1f;
-        font-size: 1.12rem;
-        font-weight: 650;
-        line-height: 1.16;
-        letter-spacing: 0;
-      }
-      .site-fallback-frame .markdown ul,
-      .site-fallback-frame .markdown ol {
-        display: grid;
-        gap: 7px;
-        padding-left: 22px;
-      }
-      .site-fallback-frame .markdown a {
-        color: #145b7e;
-      }
-      .site-fallback-frame .outbound {
-        max-width: 100%;
-        overflow-wrap: anywhere;
-        color: #145b7e;
-        font-weight: 600;
-        text-decoration: none;
-      }
-      .site-fallback-frame .tags {
-        margin: 0;
-        color: #66707e;
-        font-size: 0.9rem;
-      }
-      .site-fallback-frame .sidebar {
-        flex: 0 0 15rem;
-        border-right: 1px solid #e3e6ea;
-        background: #ffffff;
-        padding: 12px 8px;
-      }
-      .site-fallback-frame .sidebar ul {
-        display: grid;
-        gap: 2px;
-        margin: 0;
-        padding: 0;
-        list-style: none;
-      }
-      .site-fallback-frame .sidebar a {
-        display: block;
-        min-width: 0;
-        overflow-wrap: anywhere;
-        border-radius: 6px;
-        color: #22262d;
-        padding: 7px 8px;
-        text-decoration: none;
-      }
-      .site-fallback-frame .sidebar a:hover {
-        background: #f3f5f7;
-      }
-      @media (max-width: 760px) {
-        .site-fallback-frame {
-          flex-direction: column;
-        }
-        .site-fallback-frame .sidebar {
-          flex-basis: auto;
-          width: 100%;
-          border-right: 0;
-          border-bottom: 1px solid #e3e6ea;
-        }
-        .site-fallback-frame .content {
-          min-height: 0;
-        }
-      }
-    </style>
+${renderPublicBaselineScript(baseline)}
   </head>
   <body>
-    <div id="root">
-      <main class="site-fallback-frame">
-        ${renderSidebarFallback(payload)}
-        ${renderRouteFallback(route)}
-      </main>
-    </div>
+    <div id="root">${rendered.html}</div>
   </body>
 </html>`;
 }
@@ -623,18 +420,6 @@ export function createGraphleLocalServer({
         return graphTransactionResponse(request, siteAuthority);
       }
 
-      if (url.pathname === "/api/site/route") {
-        if (request.method !== "GET") {
-          return methodNotAllowed("GET");
-        }
-        const session = auth.getSession(cookieHeader);
-        return jsonResponse(
-          readLocalSiteRoutePayload(siteAuthority, url.searchParams.get("path") ?? "/", {
-            includePrivate: session !== null,
-          }),
-        );
-      }
-
       if (url.pathname.startsWith("/api/")) {
         return jsonResponse(
           {
@@ -674,16 +459,25 @@ export function createGraphleLocalServer({
         return methodNotAllowed("GET, HEAD");
       }
 
-      const session = auth.getSession(cookieHeader);
-      const payload = readLocalSiteRoutePayload(siteAuthority, url.pathname, {
-        includePrivate: session !== null,
+      const baseline = buildPublicSiteGraphBaseline({
+        authority: siteAuthority,
+        now,
+      });
+      const runtime = createGraphlePublicSiteRuntimeFromBaseline(baseline);
+      const rendered = renderPublicSiteRoute({
+        runtime,
+        path: url.pathname,
+        health: {
+          graph: readLocalSiteAuthorityHealth(siteAuthority),
+        },
+        now,
       });
       return new Response(
         request.method === "HEAD"
           ? null
-          : renderSiteHostPage(session, project, await loadAssetTags(), payload),
+          : renderSiteHostPage(await loadAssetTags(), baseline, rendered),
         {
-          status: payload.route.kind === "not-found" ? 404 : 200,
+          status: rendered.status,
           headers: {
             "cache-control": "no-store",
             "content-type": "text/html; charset=utf-8",

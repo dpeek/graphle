@@ -22,7 +22,8 @@
     "@dpeek/graphle-client": "workspace:*",
     "@dpeek/graphle-kernel": "workspace:*",
     "@dpeek/graphle-module": "workspace:*",
-    "@dpeek/graphle-module-core": "workspace:*"
+    "@dpeek/graphle-module-core": "workspace:*",
+    "@dpeek/graphle-projection": "workspace:*"
   },
   "devDependencies": {
     "@types/bun": "^1.3.9",

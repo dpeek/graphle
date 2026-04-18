@@ -1,7 +1,7 @@
 ---
 name: Graph module site schema
 description: "Personal-site MVP site namespace ownership for @dpeek/graphle-module-site."
-last_updated: 2026-04-17
+last_updated: 2026-04-18
 ---
 
 # Graph Module Site Schema
@@ -26,7 +26,8 @@ the personal-site MVP:
   order, created-at timestamp, and updated-at timestamp
 
 The package exports the resolved `site` namespace, `siteItemSurface`,
-`siteItemViewSurface`, and `siteManifest`. `siteItemSurface` is the authored
+`siteItemViewSurface`, `siteItemPublicProjectionSpec`, public baseline
+compatibility helpers, and `siteManifest`. `siteItemSurface` is the authored
 `RecordSurfaceSpec` for shared browser editing surfaces: icon/title/body/url/tags
 content fields, path/visibility route fields, and created/updated metadata
 fields. `siteItemViewSurface` is the authored read surface for route display:
@@ -37,6 +38,14 @@ site-local `createdAt` display format at `Month DD, YYYY` in UTC, for example
 but it is intentionally not exposed in the item editor surface. The manifest
 publishes both surfaces through `runtime.recordSurfaces` beside the schema
 contribution.
+
+`siteItemPublicProjectionSpec` declares the sanitized public graph projection
+for website rendering. Its identity is `site:item:public-graph`, its kind is
+`outbound-share`, its rebuild strategy is `full`, and its visibility mode is
+`share-surface`. Change the `definitionHash` whenever the included facts,
+public filtering, route-visible semantics, or surface assumptions become
+incompatible with an existing public graph baseline. `siteManifest` publishes
+the projection through `runtime.projections`.
 
 Stable ids live in `../src/site.json`; package-local tests fail when authored
 schema keys drift without an intentional id-map update.

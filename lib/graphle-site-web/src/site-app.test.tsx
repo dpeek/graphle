@@ -15,10 +15,8 @@ import { resolveGraphleSiteTheme } from "./theme.js";
 
 function readyStatus({
   authenticated,
-  routeItemBody = "# Home",
 }: {
   readonly authenticated: boolean;
-  readonly routeItemBody?: string;
 }): GraphleSiteStatusState {
   return {
     state: "ready",
@@ -34,41 +32,7 @@ function readyStatus({
         authenticated,
         session: authenticated ? { projectId: "project-1", subject: "local-admin" } : null,
       },
-      route: {
-        kind: "item",
-        path: "/",
-        item: {
-          id: "item-1",
-          title: "Home",
-          path: "/",
-          body: routeItemBody,
-          visibility: "public",
-          tags: [{ id: "tag-1", key: "graphle", name: "Graphle", color: "#2563eb" }],
-          createdAt: "2026-04-15T00:00:00.000Z",
-          updatedAt: "2026-04-15T00:00:00.000Z",
-        },
-      },
-      items: [
-        {
-          id: "item-1",
-          title: "Home",
-          path: "/",
-          body: routeItemBody,
-          visibility: "public",
-          tags: [{ id: "tag-1", key: "graphle", name: "Graphle", color: "#2563eb" }],
-          createdAt: "2026-04-15T00:00:00.000Z",
-          updatedAt: "2026-04-15T00:00:00.000Z",
-        },
-        {
-          id: "item-2",
-          title: "Private bookmark",
-          url: "https://example.com/",
-          visibility: "private",
-          tags: [],
-          createdAt: "2026-04-15T00:00:00.000Z",
-          updatedAt: "2026-04-15T00:00:00.000Z",
-        },
-      ],
+      path: "/",
     },
   };
 }
@@ -85,8 +49,27 @@ function createSiteRuntime() {
 
 describe("GraphleSiteShell", () => {
   it("mounts the item site feature inside the generic shell", () => {
+    const runtime = createSiteRuntime();
+    runtime.graph.item.create({
+      title: "Home",
+      path: "/",
+      body: "# Home",
+      visibility: siteVisibilityIdFor("public"),
+      tags: [],
+      createdAt: new Date("2026-04-15T00:00:00.000Z"),
+      updatedAt: new Date("2026-04-15T00:00:00.000Z"),
+    });
+    runtime.graph.item.create({
+      title: "Private bookmark",
+      url: new URL("https://example.com/"),
+      visibility: siteVisibilityIdFor("private"),
+      tags: [],
+      createdAt: new Date("2026-04-15T00:00:00.000Z"),
+      updatedAt: new Date("2026-04-15T00:00:00.000Z"),
+    });
+
     const html = renderToStaticMarkup(
-      <GraphleSiteShell status={readyStatus({ authenticated: true })} />,
+      <GraphleSiteShell runtime={runtime} status={readyStatus({ authenticated: true })} />,
     );
 
     expect(html).toContain("Home");
@@ -141,20 +124,29 @@ describe("GraphleSiteShell", () => {
     expect(html).toContain("<strong>home</strong>");
   });
 
-  it("keeps the unauthenticated DTO route fallback nonblank", () => {
+  it("renders unauthenticated public routes through graph refs", () => {
+    const runtime = createSiteRuntime();
+    runtime.graph.item.create({
+      title: "Home",
+      path: "/",
+      body: "Public **graph** content.",
+      visibility: siteVisibilityIdFor("public"),
+      tags: [],
+      createdAt: new Date("2026-04-15T00:00:00.000Z"),
+      updatedAt: new Date("2026-04-15T00:00:00.000Z"),
+    });
+
     const html = renderToStaticMarkup(
       <GraphleSitePreview
         path="/"
-        status={readyStatus({
-          authenticated: false,
-          routeItemBody: "Public **fallback** content.",
-        })}
+        runtime={runtime}
+        status={readyStatus({ authenticated: false })}
       />,
     );
 
     expect(html).toContain("graph-markdown");
     expect(html).toContain("Public");
-    expect(html).toContain("<strong>fallback</strong>");
+    expect(html).toContain("<strong>graph</strong>");
   });
 
   it("normalizes reorder payloads to consecutive sort order values", () => {

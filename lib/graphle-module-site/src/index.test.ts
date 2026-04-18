@@ -17,10 +17,13 @@ import {
   siteItemViewSurface,
   siteIconPresetForId,
   siteIconPresetIdFor,
+  siteItemPublicProjectionSpec,
   siteItemMatchesSearch,
   siteManifest,
   siteVisibilityForId,
   siteVisibilityIdFor,
+  assertPublicSiteGraphBaselineCompatible,
+  isPublicSiteGraphBaselineCompatible,
 } from "./index.js";
 import siteIds from "./site.json";
 
@@ -112,6 +115,41 @@ describe("site module", () => {
       siteItemViewSurface.sections.flatMap((section) => section.fields.map((field) => field.path)),
     ).toEqual(["title", "createdAt", "tags", "body"]);
     expect(siteManifest.runtime.recordSurfaces).toEqual([siteItemSurface, siteItemViewSurface]);
+  });
+
+  it("publishes the public site graph projection metadata", () => {
+    expect(siteItemPublicProjectionSpec).toMatchObject({
+      projectionId: "site:item:public-graph",
+      kind: "outbound-share",
+      definitionHash: "projection-def:site:item:public-graph:v1",
+      rebuildStrategy: "full",
+      visibilityMode: "share-surface",
+    });
+    expect(siteItemPublicProjectionSpec.dependencyKeys).toContain(
+      "projection:site:item:public-graph",
+    );
+    expect(siteManifest.runtime.projections).toEqual([siteItemPublicProjectionSpec]);
+  });
+
+  it("validates public site graph baseline compatibility through projection metadata", () => {
+    expect(
+      isPublicSiteGraphBaselineCompatible({
+        projectionId: siteItemPublicProjectionSpec.projectionId,
+        definitionHash: siteItemPublicProjectionSpec.definitionHash,
+      }),
+    ).toBe(true);
+    expect(
+      isPublicSiteGraphBaselineCompatible({
+        projectionId: siteItemPublicProjectionSpec.projectionId,
+        definitionHash: "projection-def:site:item:public-graph:v0",
+      }),
+    ).toBe(false);
+    expect(() =>
+      assertPublicSiteGraphBaselineCompatible({
+        projectionId: siteItemPublicProjectionSpec.projectionId,
+        definitionHash: "projection-def:site:item:public-graph:v0",
+      }),
+    ).toThrow("Public site graph baseline is incompatible");
   });
 
   it("formats site item created dates for the authored view surface", () => {

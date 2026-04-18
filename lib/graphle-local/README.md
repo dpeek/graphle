@@ -19,10 +19,10 @@ personal-site product path.
 - first-run seed content for public and private `site:item` records
 - the Bun HTTP request handler for `/api/health`, `/api/session`, `/api/init`,
   authenticated generic graph transport at `/api/sync` and `/api/tx`,
-  read-only route projection at `/api/site/route`, unknown `/api/*` JSON 404s,
-  package-owned browser assets, and the site host document with graph-backed
-  fallback HTML
-- public route resolution for exact `site:item.path` values
+  unknown `/api/*` JSON 404s, package-owned browser assets, and the site host
+  document rendered from a sanitized public graph projection
+- public graph baseline projection and route resolution for exact
+  `site:item.path` values
 - signed local admin cookies and process-local init-token redemption
 - `graphle dev` CLI option parsing and browser opening
 

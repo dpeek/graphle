@@ -244,8 +244,9 @@ describe("local server routes", () => {
           },
         },
       });
-      expect(html).toContain("<h1>Home</h1>");
+      expect(html).toContain("Home");
       expect(html).toContain("Welcome to your new Graphle site.");
+      expect(html).toContain("graphle-public-site-baseline");
       expect(html).not.toContain("Personal site placeholder");
     });
   });
@@ -477,27 +478,21 @@ describe("local server routes", () => {
     });
 
     try {
-      const route = await secondServer.fetch(
-        new Request("http://127.0.0.1:4318/api/site/route?path=%2Fgraph-transport"),
-      );
+      const page = await secondServer.fetch(new Request("http://127.0.0.1:4318/graph-transport"));
+      const html = await page.text();
 
       expect(itemId).not.toBe("");
-      expect(await route.json()).toMatchObject({
-        route: {
-          kind: "item",
-          item: {
-            id: itemId,
-            title: "Graph transport",
-          },
-        },
-      });
+      expect(page.status).toBe(200);
+      expect(html).toContain("Graph transport");
+      expect(html).toContain("Written through /api/tx.");
+      expect(html).toContain("graphle-public-site-baseline");
     } finally {
       secondSqlite.close();
       await rm(cwd, { force: true, recursive: true });
     }
   });
 
-  it("keeps site route reads while content writes move to graph transport", async () => {
+  it("renders public site pages from the sanitized graph projection", async () => {
     await withGraphServer(async ({ server, initToken }) => {
       const cookie = await redeemAdminCookie(server, initToken);
       const fetcher = createAdminCookieFetch(server, cookie);
@@ -530,6 +525,9 @@ describe("local server routes", () => {
           }),
         }),
       );
+      const legacyRoute = await server.fetch(
+        new Request("http://127.0.0.1:4318/api/site/route?path=%2F"),
+      );
       const client = await createGraphleSiteHttpGraphClient({
         url: "http://127.0.0.1:4318/",
         fetch: fetcher,
@@ -548,14 +546,7 @@ describe("local server routes", () => {
       });
       await client.sync.flush();
 
-      const unauthenticatedPrivate = await server.fetch(
-        new Request("http://127.0.0.1:4318/api/site/route?path=%2Fwork"),
-      );
-      const authenticatedPrivate = await server.fetch(
-        new Request("http://127.0.0.1:4318/api/site/route?path=%2Fwork", {
-          headers: { cookie },
-        }),
-      );
+      const privateBeforePublish = await server.fetch(new Request("http://127.0.0.1:4318/work"));
       client.graph.item.update(workId, {
         body: "# Work\n\nPublic item.",
         visibility: siteVisibilityIdFor("public"),
@@ -563,9 +554,7 @@ describe("local server routes", () => {
       });
       await client.sync.flush();
 
-      const routeAfterPublish = await server.fetch(
-        new Request("http://127.0.0.1:4318/api/site/route?path=%2Fwork"),
-      );
+      const pageAfterPublish = await server.fetch(new Request("http://127.0.0.1:4318/work"));
       const linkId = client.graph.item.create({
         title: "Public link",
         url: new URL("https://example.com/public-link"),
@@ -592,59 +581,30 @@ describe("local server routes", () => {
       await client.sync.flush();
 
       const workPage = await server.fetch(new Request("http://127.0.0.1:4318/work"));
-      const publicHomeRoute = await server.fetch(
-        new Request("http://127.0.0.1:4318/api/site/route?path=%2F"),
-      );
+      const publicHomePage = await server.fetch(new Request("http://127.0.0.1:4318/"));
+      const privateBeforePublishHtml = await privateBeforePublish.text();
+      const pageAfterPublishHtml = await pageAfterPublish.text();
+      const publicHomeHtml = await publicHomePage.text();
 
       expect(legacyList.status).toBe(404);
       expect(legacyWrite.status).toBe(404);
       expect(legacyOrder.status).toBe(404);
-      expect(await unauthenticatedPrivate.json()).toMatchObject({
-        route: {
-          kind: "not-found",
-        },
-      });
-      expect(await authenticatedPrivate.json()).toMatchObject({
-        route: {
-          kind: "item",
-          item: {
-            title: "Work",
-            visibility: "private",
-          },
-        },
-      });
-      expect(await routeAfterPublish.json()).toMatchObject({
-        route: {
-          kind: "item",
-          item: {
-            title: "Work",
-            visibility: "public",
-            tags: [
-              {
-                key: "work",
-              },
-            ],
-          },
-        },
-      });
+      expect(legacyRoute.status).toBe(404);
+      expect(privateBeforePublish.status).toBe(404);
+      expect(privateBeforePublishHtml).toContain("Page not found");
+      expect(privateBeforePublishHtml).not.toContain("Private item.");
+      expect(pageAfterPublish.status).toBe(200);
+      expect(pageAfterPublishHtml).toContain("Work");
+      expect(pageAfterPublishHtml).toContain("Public item.");
+      expect(pageAfterPublishHtml).toContain("Work");
       expect(client.graph.item.list().some((item) => item.id === linkId)).toBe(true);
       expect(client.graph.item.list().some((item) => item.id === blankId)).toBe(false);
       expect(workPage.status).toBe(200);
       expect(await workPage.text()).toContain("Public item.");
-      expect(await publicHomeRoute.json()).toMatchObject({
-        route: {
-          kind: "item",
-          item: {
-            title: "Home",
-          },
-        },
-        items: expect.arrayContaining([
-          expect.objectContaining({
-            title: "Public link",
-            url: "https://example.com/public-link",
-          }),
-        ]),
-      });
+      expect(publicHomeHtml).toContain("Home");
+      expect(publicHomeHtml).toContain("Public link");
+      expect(publicHomeHtml).toContain("https://example.com/public-link");
+      expect(publicHomeHtml).not.toContain("Untitled");
     });
   });
 
@@ -706,18 +666,12 @@ describe("local server routes", () => {
     });
 
     try {
-      const route = await secondServer.fetch(
-        new Request("http://127.0.0.1:4318/api/site/route?path=%2Fdurable"),
-      );
+      const page = await secondServer.fetch(new Request("http://127.0.0.1:4318/durable"));
+      const html = await page.text();
 
-      expect(await route.json()).toMatchObject({
-        route: {
-          kind: "item",
-          item: {
-            title: "Durable item",
-          },
-        },
-      });
+      expect(page.status).toBe(200);
+      expect(html).toContain("Durable item");
+      expect(html).toContain("Survives reopen.");
     } finally {
       secondSqlite.close();
       await rm(cwd, { force: true, recursive: true });
@@ -781,7 +735,8 @@ describe("local server routes", () => {
       expect(html).toContain('<div id="root">');
       expect(html).toContain('<link rel="stylesheet" href="/assets/main.css">');
       expect(html).toContain('<script type="module" src="/assets/main.js"></script>');
-      expect(html).toContain("<h1>Home</h1>");
+      expect(html).toContain("graphle-public-site-baseline");
+      expect(html).toContain("Home");
     } finally {
       sqlite.close();
       await rm(cwd, { force: true, recursive: true });

@@ -40,7 +40,7 @@
   `site-web` to graph transport and shared entity surfaces, then delete custom
   site content DTO authoring.
 - [Personal site MVP public graph projection](/Users/dpeek/code/graphle/pdr/personal-site-mvp/public-graph-projection.md):
-  plan the pre-deploy cleanup that replaces the unauthenticated route DTO
+  implemented the pre-deploy cleanup that replaces the unauthenticated route DTO
   fallback with a sanitized public graph runtime, using the existing projection
   contracts instead of a new DTO-shaped model.
 - [Personal site MVP cloud public rendering](/Users/dpeek/code/graphle/pdr/personal-site-mvp/cloud-public-rendering.md):
