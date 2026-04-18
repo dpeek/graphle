@@ -1,7 +1,7 @@
 ---
 name: Graphle web UI primitives
 description: "Browser primitive ownership, exports, and package boundary for @dpeek/graphle-web-ui."
-last_updated: 2026-04-17
+last_updated: 2026-04-18
 ---
 
 # Graphle Web UI Primitives
@@ -23,6 +23,11 @@ Typography `prose` classes by default. Consumers may pass extra classes for
 layout constraints, but product apps should not redefine markdown typography
 locally. Graphle-specific markdown CSS should be limited to design-token
 bridging around the upstream typography rules.
+
+Markdown rendering uses a single `react-markdown` pipeline with GFM and heading
+slug support. Fenced code blocks are rendered by `@dpeek/graphle-web-ui` with
+plain SSR output, copy controls, filename/language labels, and lazy Shiki
+highlighting loaded only after a highlighted block mounts.
 
 The package exports source-level component subpaths such as
 `@dpeek/graphle-web-ui/button`, `@dpeek/graphle-web-ui/badge`, and

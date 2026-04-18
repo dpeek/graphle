@@ -135,6 +135,41 @@ describe("record surface binding", () => {
       ok: false,
     });
   });
+
+  it("resolves authored label visibility for readonly bindings", async () => {
+    const result = await resolveRecordSurfaceBinding({
+      lookup: {
+        getFieldValue: (path) => path,
+      },
+      surface: {
+        key: "record:task",
+        labelVisibility: "hide",
+        sections: [
+          {
+            fields: [{ path: "name" }, { labelVisibility: "show", path: "status" }],
+            key: "details",
+            title: "Details",
+          },
+        ],
+        subject: "task",
+      } satisfies RecordSurfaceSpec,
+    });
+
+    expect(result).toMatchObject({
+      binding: {
+        sections: [
+          {
+            fields: [
+              { labelVisibility: "hide", path: "name" },
+              { labelVisibility: "show", path: "status" },
+            ],
+            labelVisibility: "hide",
+          },
+        ],
+      },
+      ok: true,
+    });
+  });
 });
 
 describe("object-view compatibility adapter", () => {

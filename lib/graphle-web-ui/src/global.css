@@ -254,6 +254,83 @@
   --tw-prose-invert-td-borders: var(--border);
 }
 
+.graph-markdown .graph-markdown-code-block {
+  margin-block: 1.25rem;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: color-mix(in oklch, var(--background) 96%, var(--muted));
+  color: var(--foreground);
+}
+
+.graph-markdown .graph-markdown-code-block-header {
+  display: flex;
+  min-height: 2rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--muted);
+  padding: 0.25rem 0.375rem 0.25rem 0.75rem;
+}
+
+.graph-markdown .graph-markdown-code-block-label {
+  overflow: hidden;
+  color: var(--muted-foreground);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  line-height: 1rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.graph-markdown .graph-markdown-code-block-copy-button {
+  color: var(--muted-foreground);
+}
+
+.graph-markdown .graph-markdown-code-block-copy-button:hover {
+  color: var(--foreground);
+}
+
+.graph-markdown .graph-markdown-code-block-body {
+  overflow: auto;
+}
+
+.graph-markdown .graph-markdown-code-block-pre,
+.graph-markdown .graph-markdown-code-block-highlight .shiki {
+  margin: 0;
+  min-width: max-content;
+  overflow: visible;
+  background: transparent;
+  padding: 0.875rem 1rem;
+  color: var(--foreground);
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  line-height: 1.55;
+  tab-size: 2;
+}
+
+.graph-markdown .graph-markdown-code-block-pre code {
+  font: inherit;
+}
+
+.graph-markdown .shiki,
+.graph-markdown .shiki span {
+  background-color: transparent;
+  color: var(--shiki-light);
+  font-style: var(--shiki-light-font-style);
+  font-weight: var(--shiki-light-font-weight);
+  text-decoration: var(--shiki-light-text-decoration);
+}
+
+.dark .graph-markdown .shiki,
+.dark .graph-markdown .shiki span {
+  color: var(--shiki-dark);
+  font-style: var(--shiki-dark-font-style);
+  font-weight: var(--shiki-dark-font-weight);
+  text-decoration: var(--shiki-dark-text-decoration);
+}
+
 @keyframes spin-60 {
   0%,
   50% {

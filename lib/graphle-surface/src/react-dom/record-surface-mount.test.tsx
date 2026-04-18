@@ -118,4 +118,28 @@ describe("record surface mount", () => {
     expect(html).toContain('data-custom-field="status"');
     expect(html).toContain("Details");
   });
+
+  it("hides default readonly labels when the binding requests it", () => {
+    const html = renderToStaticMarkup(
+      <RecordSurfaceSectionView
+        fields={[
+          {
+            label: "Status",
+            labelVisibility: "hide",
+            path: "status",
+            value: "active",
+          },
+        ]}
+        section={{
+          fields: [],
+          key: "details",
+          title: "Details",
+        }}
+      />,
+    );
+
+    expect(html).not.toContain('data-record-surface-label="status"');
+    expect(html).not.toContain("Status");
+    expect(html).toContain("active");
+  });
 });

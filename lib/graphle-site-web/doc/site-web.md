@@ -74,9 +74,11 @@ the default shared surface rendering wherever possible.
 
 Route preview resolves the current item id back to a graph ref and renders
 `siteItemViewSurface` through the lower-level entity-surface field section
-pieces in view mode. Public visitors use the sanitized public graph runtime.
-Authenticated sessions use the private synced graph runtime and can switch the
-selected item into the authored `siteItemSurface` editor.
+pieces in view mode. That view surface preserves authored field order while
+hiding visible field labels so public pages render as post content. Public
+visitors use the sanitized public graph runtime. Authenticated sessions use the
+private synced graph runtime and can switch the selected item into the authored
+`siteItemSurface` editor.
 
 There are no creation presets. The single `+` action creates a private
 `Untitled` routed item through the graph runtime, flushes the transaction

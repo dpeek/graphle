@@ -3,6 +3,7 @@ import type {
   ObjectViewRelatedSpec,
   ObjectViewSpec,
   RecordSurfaceSpec,
+  SurfaceLabelVisibilityPolicy,
 } from "@dpeek/graphle-module";
 
 type Awaitable<T> = Promise<T> | T;
@@ -17,6 +18,7 @@ export type RecordSurfaceLookup = {
 export type RecordSurfaceFieldBinding = {
   readonly description?: string;
   readonly label: string;
+  readonly labelVisibility?: SurfaceLabelVisibilityPolicy;
   readonly path: string;
   readonly value: unknown;
 };
@@ -25,6 +27,7 @@ export type RecordSurfaceSectionBinding = {
   readonly description?: string;
   readonly fields: readonly RecordSurfaceFieldBinding[];
   readonly key: string;
+  readonly labelVisibility?: SurfaceLabelVisibilityPolicy;
   readonly title: string;
 };
 
@@ -119,12 +122,17 @@ async function readFieldValue(
 async function resolveFieldBinding(
   lookup: RecordSurfaceLookup,
   surface: RecordSurfaceSpec,
+  section: RecordSurfaceSpec["sections"][number],
   field: RecordSurfaceSpec["sections"][number]["fields"][number],
 ): Promise<RecordSurfaceFieldBinding> {
   const value = await readFieldValue(lookup, surface, field.path);
+  const labelVisibility =
+    field.labelVisibility ?? section.labelVisibility ?? surface.labelVisibility;
+
   return {
     ...(field.description ? { description: field.description } : {}),
     label: field.label ?? field.path,
+    ...(labelVisibility ? { labelVisibility } : {}),
     path: field.path,
     value,
   };
@@ -135,12 +143,15 @@ async function resolveSectionBinding(
   surface: RecordSurfaceSpec,
   section: RecordSurfaceSpec["sections"][number],
 ): Promise<RecordSurfaceSectionBinding> {
+  const labelVisibility = section.labelVisibility ?? surface.labelVisibility;
+
   return {
     ...(section.description ? { description: section.description } : {}),
     fields: await Promise.all(
-      section.fields.map((field) => resolveFieldBinding(lookup, surface, field)),
+      section.fields.map((field) => resolveFieldBinding(lookup, surface, section, field)),
     ),
     key: section.key,
+    ...(labelVisibility ? { labelVisibility } : {}),
     title: section.title,
   };
 }

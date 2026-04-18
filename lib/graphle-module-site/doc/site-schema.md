@@ -31,9 +31,10 @@ compatibility helpers, and `siteManifest`. `siteItemSurface` is the authored
 `RecordSurfaceSpec` for shared browser editing surfaces: icon/title/body/url/tags
 content fields, path/visibility route fields, and created/updated metadata
 fields. `siteItemViewSurface` is the authored read surface for route display:
-title heading, created date, tags, and markdown body. The read surface keeps the
-site-local `createdAt` display format at `Month DD, YYYY` in UTC, for example
-`November 01, 2023`.
+title heading, created date, tags, and markdown body, with visible field labels
+hidden so route pages read like posts rather than form rows. The read surface
+keeps the site-local `createdAt` display format at `Month DD, YYYY` in UTC, for
+example `November 01, 2023`.
 `site:item.sortOrder` stays in the schema for sidebar drag-and-drop ordering,
 but it is intentionally not exposed in the item editor surface. The manifest
 publishes both surfaces through `runtime.recordSurfaces` beside the schema

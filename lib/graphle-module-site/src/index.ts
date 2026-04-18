@@ -378,18 +378,13 @@ export const siteItemSurface = {
 
 export const siteItemViewSurface = {
   key: "site:item:view-surface",
+  labelVisibility: "hide",
   subject: site.item.values.key,
-  titleField: "title",
   sections: [
     {
       key: "content",
       title: "Content",
-      fields: [
-        { path: "title", label: "Title" },
-        { path: "createdAt", label: "Created at" },
-        { path: "tags", label: "Tags" },
-        { path: "body", label: "Body" },
-      ],
+      fields: [{ path: "createdAt" }, { path: "body" }],
     },
   ],
 } as const satisfies RecordSurfaceSpec;

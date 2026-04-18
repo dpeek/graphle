@@ -69,6 +69,7 @@ type EntitySurfaceRowCandidate<P = unknown> =
   | {
       readonly description?: string;
       readonly kind: "predicate";
+      readonly labelVisibility?: EntitySurfaceLabelVisibilityPolicy;
       readonly pathLabel: string;
       readonly predicate: P;
       readonly predicateId: string;
@@ -78,6 +79,7 @@ type EntitySurfaceRowCandidate<P = unknown> =
   | {
       readonly description?: string;
       readonly kind: "value";
+      readonly labelVisibility?: EntitySurfaceLabelVisibilityPolicy;
       readonly pathLabel: string;
       readonly section?: EntitySurfaceSectionMetadata;
       readonly title?: string;
@@ -181,12 +183,21 @@ function sectionMetadataFromSurface(
   );
 }
 
-function metadataFromFieldSpec(field: RecordSurfaceFieldSpec): {
+function metadataFromFieldSpec(
+  surface: RecordSurfaceSpec,
+  section: RecordSurfaceSpec["sections"][number],
+  field: RecordSurfaceFieldSpec,
+): {
   readonly description?: string;
+  readonly labelVisibility?: EntitySurfaceLabelVisibilityPolicy;
   readonly title?: string;
 } {
+  const labelVisibility =
+    field.labelVisibility ?? section.labelVisibility ?? surface.labelVisibility;
+
   return {
     ...(field.description ? { description: field.description } : {}),
+    ...(labelVisibility ? { labelVisibility } : {}),
     ...(field.label ? { title: field.label } : {}),
   };
 }
@@ -213,7 +224,7 @@ function buildAuthoredCandidates<P>(
       seen.add(field.path);
       ordered.push({
         ...candidate,
-        ...metadataFromFieldSpec(field),
+        ...metadataFromFieldSpec(surface, section, field),
         section: sectionMetadata,
       });
     }
@@ -226,19 +237,25 @@ function buildAuthoredCandidates<P>(
     seen.add(fieldPath);
     ordered.push({
       ...candidate,
+      ...(surface.labelVisibility ? { labelVisibility: surface.labelVisibility } : {}),
       section: fallbackSection,
     });
   }
 
-  const hiddenSystemCandidates = candidates.filter((candidate) => {
-    if (seen.has(candidate.pathLabel)) return false;
-    if (candidate.kind === "value") return true;
-    return (
-      candidate.predicateId === defaultEntitySurfaceCorePredicateIds.type ||
-      candidate.predicateId === defaultEntitySurfaceCorePredicateIds.createdAt ||
-      candidate.predicateId === defaultEntitySurfaceCorePredicateIds.updatedAt
-    );
-  });
+  const hiddenSystemCandidates = candidates
+    .filter((candidate) => {
+      if (seen.has(candidate.pathLabel)) return false;
+      if (candidate.kind === "value") return true;
+      return (
+        candidate.predicateId === defaultEntitySurfaceCorePredicateIds.type ||
+        candidate.predicateId === defaultEntitySurfaceCorePredicateIds.createdAt ||
+        candidate.predicateId === defaultEntitySurfaceCorePredicateIds.updatedAt
+      );
+    })
+    .map((candidate) => ({
+      ...candidate,
+      ...(surface.labelVisibility ? { labelVisibility: surface.labelVisibility } : {}),
+    }));
 
   return [...ordered, ...hiddenSystemCandidates];
 }
@@ -310,7 +327,10 @@ function planEntitySurfaceRow<P>(
 ): EntitySurfaceRowPlan<P> {
   const role = resolveRole(candidate, mode, surface);
   const base = {
-    chrome: getDefaultChrome(role),
+    chrome: {
+      ...getDefaultChrome(role),
+      ...(candidate.labelVisibility ? { labelVisibility: candidate.labelVisibility } : {}),
+    },
     ...(candidate.description ? { description: candidate.description } : {}),
     pathLabel: candidate.pathLabel,
     role,

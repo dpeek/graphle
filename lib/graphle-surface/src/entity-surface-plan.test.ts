@@ -120,14 +120,19 @@ describe("entity surface plan", () => {
   it("uses authored record-surface sections as structure without readonly binding", () => {
     const surface = {
       key: "test:plannerItem",
+      labelVisibility: "hide",
       sections: [
         {
-          fields: [{ label: "Priority", path: "priority" }, { path: "details" }],
+          fields: [
+            { label: "Priority", labelVisibility: "show", path: "priority" },
+            { path: "details" },
+          ],
           key: "summary",
           title: "Summary",
         },
         {
           description: "Secondary authored fields.",
+          labelVisibility: "show",
           fields: [{ path: "notes" }],
           key: "more",
           title: "More",
@@ -143,18 +148,61 @@ describe("entity surface plan", () => {
     expect(
       plan.rows.map((row) => ({
         pathLabel: row.pathLabel,
+        labelVisibility: row.chrome.labelVisibility,
         role: row.role,
         section: row.section?.key,
         title: row.title,
       })),
     ).toEqual([
-      { pathLabel: "priority", role: "title", section: "summary", title: "Priority" },
-      { pathLabel: "details", role: "body", section: "summary", title: undefined },
-      { pathLabel: "notes", role: "meta", section: "more", title: undefined },
-      { pathLabel: "updatedAt", role: "meta", section: undefined, title: undefined },
-      { pathLabel: "id", role: "hidden", section: undefined, title: undefined },
-      { pathLabel: "type", role: "hidden", section: undefined, title: undefined },
-      { pathLabel: "createdAt", role: "hidden", section: undefined, title: undefined },
+      {
+        labelVisibility: "show",
+        pathLabel: "priority",
+        role: "title",
+        section: "summary",
+        title: "Priority",
+      },
+      {
+        labelVisibility: "hide",
+        pathLabel: "details",
+        role: "body",
+        section: "summary",
+        title: undefined,
+      },
+      {
+        labelVisibility: "show",
+        pathLabel: "notes",
+        role: "meta",
+        section: "more",
+        title: undefined,
+      },
+      {
+        labelVisibility: "hide",
+        pathLabel: "updatedAt",
+        role: "meta",
+        section: undefined,
+        title: undefined,
+      },
+      {
+        labelVisibility: "hide",
+        pathLabel: "id",
+        role: "hidden",
+        section: undefined,
+        title: undefined,
+      },
+      {
+        labelVisibility: "hide",
+        pathLabel: "type",
+        role: "hidden",
+        section: undefined,
+        title: undefined,
+      },
+      {
+        labelVisibility: "hide",
+        pathLabel: "createdAt",
+        role: "hidden",
+        section: undefined,
+        title: undefined,
+      },
     ]);
     expect(plan.sections.map((section) => section.key)).toEqual(["summary", "more", "fields"]);
     expect(plan.sections[0]?.rows.map((row) => row.pathLabel)).toEqual(["priority", "details"]);

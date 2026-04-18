@@ -108,12 +108,18 @@ describe("site module", () => {
     ]);
     expect(siteItemViewSurface).toMatchObject({
       key: "site:item:view-surface",
+      labelVisibility: "hide",
       subject: "site:item",
       titleField: "title",
     });
     expect(
       siteItemViewSurface.sections.flatMap((section) => section.fields.map((field) => field.path)),
     ).toEqual(["title", "createdAt", "tags", "body"]);
+    expect(
+      siteItemViewSurface.sections.flatMap((section) =>
+        section.fields.map((field) => ("label" in field ? field.label : undefined)),
+      ),
+    ).toEqual([undefined, undefined, undefined, undefined]);
     expect(siteManifest.runtime.recordSurfaces).toEqual([siteItemSurface, siteItemViewSurface]);
   });
 

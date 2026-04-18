@@ -177,6 +177,33 @@ describe("entity surface react-dom", () => {
     expect(html).toContain("Name");
   });
 
+  it("can hide authored labels while preserving field values", () => {
+    const hiddenLabelSurface = {
+      key: "test:entity:hidden-label-surface",
+      labelVisibility: "hide",
+      subject: "test:entity",
+      sections: [
+        {
+          key: "content",
+          title: "Content",
+          fields: [{ path: "name", label: "Name" }],
+        },
+      ],
+    } as const satisfies RecordSurfaceSpec;
+
+    const html = renderToStaticMarkup(
+      <EntitySurface
+        entity={createEntity()}
+        mode="view"
+        showModeToggle={false}
+        surface={hiddenLabelSurface}
+      />,
+    );
+
+    expect(html).not.toContain('data-explorer-field-label="name"');
+    expect(html).toContain("Alpha");
+  });
+
   it("renders authored title fields as semantic headings in view mode", () => {
     const html = renderToStaticMarkup(
       <EntitySurface

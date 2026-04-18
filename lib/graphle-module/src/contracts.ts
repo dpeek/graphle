@@ -1,12 +1,15 @@
 import type { GraphCommandPolicy } from "@dpeek/graphle-authority";
 import type { DefinitionIconRef } from "@dpeek/graphle-kernel";
 
+export type SurfaceLabelVisibilityPolicy = "show" | "hide" | "auto";
+
 /**
  * One field row inside an authored object-view section.
  */
 export type ObjectViewFieldSpec = {
   readonly path: string;
   readonly label?: string;
+  readonly labelVisibility?: SurfaceLabelVisibilityPolicy;
   readonly description?: string;
 };
 
@@ -17,6 +20,7 @@ export type ObjectViewSectionSpec = {
   readonly key: string;
   readonly title: string;
   readonly description?: string;
+  readonly labelVisibility?: SurfaceLabelVisibilityPolicy;
   readonly fields: readonly ObjectViewFieldSpec[];
 };
 
@@ -79,6 +83,7 @@ export type RecordSurfaceSpec = {
   readonly subject: string;
   readonly titleField?: string;
   readonly subtitleField?: string;
+  readonly labelVisibility?: SurfaceLabelVisibilityPolicy;
   readonly sections: readonly RecordSurfaceSectionSpec[];
   readonly related?: readonly RecordSurfaceRelatedContentSpec[];
   readonly commandSurfaces?: readonly string[];

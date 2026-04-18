@@ -203,25 +203,31 @@ function RecordSurfaceUnavailableCard({
 }
 
 function DefaultRecordSurfaceFieldRow({ field }: { readonly field: RecordSurfaceFieldBinding }) {
+  const shouldShowHeader = field.labelVisibility !== "hide" || Boolean(field.description);
+
   return (
     <div className="space-y-3 pb-4 last:pb-0" data-record-surface-field={field.path}>
-      <div className="space-y-1.5">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="min-w-0 space-y-1">
-            <div
-              className="text-foreground text-sm font-medium"
-              data-record-surface-label={field.path}
-            >
-              {field.label}
+      {shouldShowHeader ? (
+        <div className="space-y-1.5">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0 space-y-1">
+              {field.labelVisibility !== "hide" ? (
+                <div
+                  className="text-foreground text-sm font-medium"
+                  data-record-surface-label={field.path}
+                >
+                  {field.label}
+                </div>
+              ) : null}
+              {field.description ? (
+                <div className="text-muted-foreground text-xs">{field.description}</div>
+              ) : null}
             </div>
-            {field.description ? (
-              <div className="text-muted-foreground text-xs">{field.description}</div>
-            ) : null}
           </div>
         </div>
-      </div>
+      ) : null}
 
-      <div className="mt-3">{renderFieldValue(field.value)}</div>
+      <div className={shouldShowHeader ? "mt-3" : undefined}>{renderFieldValue(field.value)}</div>
     </div>
   );
 }
