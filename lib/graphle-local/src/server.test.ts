@@ -2,6 +2,11 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import {
+  CloudflareDeployError,
+  cloudflarePublicSiteDurableObjectBindingName,
+  cloudflarePublicSiteDurableObjectClassName,
+} from "@dpeek/graphle-deploy-cloudflare";
 import { createGraphleSiteHttpGraphClient } from "@dpeek/graphle-site-web";
 import { siteVisibilityIdFor } from "@dpeek/graphle-module-site";
 import { openGraphleSqlite } from "@dpeek/graphle-sqlite";
@@ -224,6 +229,286 @@ describe("local server routes", () => {
         code: "not-found",
       });
     });
+  });
+
+  it("requires local admin auth for deploy endpoints", async () => {
+    await withGraphServer(async ({ server }) => {
+      const status = await server.fetch(new Request("http://127.0.0.1:4318/api/deploy/status"));
+      const deploy = await server.fetch(
+        new Request("http://127.0.0.1:4318/api/deploy", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({}),
+        }),
+      );
+
+      expect(status.status).toBe(401);
+      expect(await status.json()).toEqual({
+        error: "Authentication required.",
+        code: "auth.required",
+      });
+      expect(deploy.status).toBe(401);
+      expect(await deploy.json()).toEqual({
+        error: "Authentication required.",
+        code: "auth.required",
+      });
+    });
+  });
+
+  it("reports deploy readiness without exposing API tokens", async () => {
+    await withGraphServer(async ({ server, initToken }) => {
+      const cookie = await redeemAdminCookie(server, initToken);
+      const status = await server.fetch(
+        new Request("http://127.0.0.1:4318/api/deploy/status", {
+          headers: { cookie },
+        }),
+      );
+      const payload = await status.json();
+
+      expect(status.status).toBe(200);
+      expect(payload).toMatchObject({
+        state: "idle",
+        credentials: {
+          hasApiToken: false,
+          missing: ["accountId", "apiToken"],
+        },
+        metadata: null,
+        currentBaseline: {
+          matchesLastDeploy: false,
+        },
+      });
+      expect(JSON.stringify(payload)).not.toContain("token");
+    });
+  });
+
+  it("returns field-level deploy validation failures without echoing secrets", async () => {
+    await withGraphServer(async ({ server, initToken }) => {
+      const cookie = await redeemAdminCookie(server, initToken);
+      const response = await server.fetch(
+        new Request("http://127.0.0.1:4318/api/deploy", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            cookie,
+          },
+          body: JSON.stringify({
+            accountId: "account-1",
+            apiToken: "secret-token",
+            workerName: "Bad_Name",
+          }),
+        }),
+      );
+      const payload = await response.json();
+
+      expect(response.status).toBe(400);
+      expect(payload).toMatchObject({
+        error: "Cloudflare deploy settings are invalid.",
+        code: "deploy.settings_invalid",
+        issues: [
+          {
+            field: "workerName",
+            code: "invalid",
+          },
+        ],
+      });
+      expect(JSON.stringify(payload)).not.toContain("secret-token");
+    });
+  });
+
+  it("runs deploy through the package boundary and persists nonsecret metadata", async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "graphle-local-server-deploy-"));
+    const project = await prepareLocalProject({
+      cwd,
+      generateAuthSecret: () => "secret",
+      generateProjectId: () => "project-1",
+    });
+    const firstSqlite = await openGraphleSqlite({ path: project.databasePath });
+    const firstAuthority = await openLocalSiteAuthority({
+      sqlite: firstSqlite,
+      now: () => new Date("2026-04-15T00:00:00.000Z"),
+    });
+    const auth = createLocalAuthController({
+      authSecret: project.authSecret,
+      projectId: project.projectId,
+      initToken: "init-token",
+      now: () => new Date("2026-04-15T00:00:00.000Z"),
+    });
+    const firstServer = createGraphleLocalServer({
+      project,
+      sqlite: firstSqlite,
+      auth,
+      siteAuthority: firstAuthority,
+      now: () => new Date("2026-04-18T00:00:00.000Z"),
+      deployCloudflarePublicSite: async ({ input, baseline, now }) => {
+        expect(input.apiToken).toBe("secret-token");
+        return {
+          ok: true,
+          state: "ready",
+          metadata: {
+            accountId: input.accountId ?? "",
+            workerName: input.workerName ?? "",
+            workerUrl: "https://graphle-project.example.workers.dev",
+            durableObjectBinding: cloudflarePublicSiteDurableObjectBindingName,
+            durableObjectClass: cloudflarePublicSiteDurableObjectClassName,
+            sourceCursor: baseline.sourceCursor,
+            baselineHash: baseline.baselineHash,
+            deployedAt: now().toISOString(),
+            status: "ready",
+          },
+          publish: {
+            baselineHash: baseline.baselineHash,
+            paths: ["/"],
+            healthStatus: 200,
+            homeStatus: 200,
+          },
+        };
+      },
+    });
+
+    let cookie = "";
+    try {
+      cookie = await redeemAdminCookie(firstServer, auth.initToken);
+      const response = await firstServer.fetch(
+        new Request("http://127.0.0.1:4318/api/deploy", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            cookie,
+          },
+          body: JSON.stringify({
+            accountId: "account-1",
+            apiToken: "secret-token",
+            workerName: "graphle-project",
+          }),
+        }),
+      );
+
+      expect(response.status).toBe(200);
+      expect(await response.json()).toMatchObject({
+        ok: true,
+        metadata: {
+          accountId: "account-1",
+          workerName: "graphle-project",
+          workerUrl: "https://graphle-project.example.workers.dev",
+          status: "ready",
+        },
+      });
+    } finally {
+      firstSqlite.close();
+    }
+
+    const secondSqlite = await openGraphleSqlite({ path: project.databasePath });
+    const secondAuthority = await openLocalSiteAuthority({
+      sqlite: secondSqlite,
+      now: () => new Date("2026-04-18T00:00:00.000Z"),
+    });
+    const secondServer = createGraphleLocalServer({
+      project,
+      sqlite: secondSqlite,
+      auth,
+      siteAuthority: secondAuthority,
+      now: () => new Date("2026-04-18T00:00:00.000Z"),
+    });
+
+    try {
+      const status = await secondServer.fetch(
+        new Request("http://127.0.0.1:4318/api/deploy/status", {
+          headers: { cookie },
+        }),
+      );
+      const payload = await status.json();
+
+      expect(status.status).toBe(200);
+      expect(payload).toMatchObject({
+        state: "ready",
+        credentials: {
+          accountId: "account-1",
+          workerName: "graphle-project",
+          hasApiToken: false,
+          missing: ["apiToken"],
+        },
+        metadata: {
+          accountId: "account-1",
+          workerName: "graphle-project",
+          workerUrl: "https://graphle-project.example.workers.dev/",
+          status: "ready",
+        },
+        currentBaseline: {
+          matchesLastDeploy: true,
+        },
+      });
+      expect(JSON.stringify(payload)).not.toContain("secret-token");
+    } finally {
+      secondSqlite.close();
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+
+  it("returns sanitized Cloudflare deploy failures", async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "graphle-local-server-deploy-fail-"));
+    const project = await prepareLocalProject({
+      cwd,
+      generateAuthSecret: () => "secret",
+      generateProjectId: () => "project-1",
+    });
+    const sqlite = await openGraphleSqlite({ path: project.databasePath });
+    const siteAuthority = await openLocalSiteAuthority({
+      sqlite,
+      now: () => new Date("2026-04-18T00:00:00.000Z"),
+    });
+    const auth = createLocalAuthController({
+      authSecret: project.authSecret,
+      projectId: project.projectId,
+      initToken: "init-token",
+      now: () => new Date("2026-04-18T00:00:00.000Z"),
+    });
+    const server = createGraphleLocalServer({
+      project,
+      sqlite,
+      auth,
+      siteAuthority,
+      now: () => new Date("2026-04-18T00:00:00.000Z"),
+      deployCloudflarePublicSite: async () => {
+        throw new CloudflareDeployError(
+          "Cloudflare rejected API token secret-token.",
+          "cloudflare.api_failed",
+          { status: 403 },
+        );
+      },
+    });
+
+    try {
+      const cookie = await redeemAdminCookie(server, auth.initToken);
+      const response = await server.fetch(
+        new Request("http://127.0.0.1:4318/api/deploy", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            cookie,
+          },
+          body: JSON.stringify({
+            accountId: "account-1",
+            apiToken: "secret-token",
+            workerName: "graphle-project",
+          }),
+        }),
+      );
+      const payload = await response.json();
+
+      expect(response.status).toBe(502);
+      expect(payload).toEqual({
+        error: "Cloudflare rejected API token [redacted].",
+        code: "cloudflare.api_failed",
+        status: 403,
+        retryable: false,
+      });
+      expect(JSON.stringify(payload)).not.toContain("secret-token");
+    } finally {
+      sqlite.close();
+      await rm(cwd, { force: true, recursive: true });
+    }
   });
 
   it("reports graph startup health and renders seeded home content", async () => {

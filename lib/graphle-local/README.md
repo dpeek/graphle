@@ -15,12 +15,13 @@ personal-site product path.
 - generated `GRAPHLE_AUTH_SECRET` and `GRAPHLE_PROJECT_ID` values
 - local `graphle.sqlite` opening through `@dpeek/graphle-sqlite`
 - opening the persisted local site authority over `minimalCore`, `core:tag`,
-  `core:color`, and `site` definitions
+  `core:color`, `site`, and the Cloudflare deploy metadata definitions
 - first-run seed content for public and private `site:item` records
 - the Bun HTTP request handler for `/api/health`, `/api/session`, `/api/init`,
   authenticated generic graph transport at `/api/sync` and `/api/tx`,
-  unknown `/api/*` JSON 404s, package-owned browser assets, and the site host
-  document rendered from a sanitized public graph projection
+  authenticated deploy status/request endpoints at `/api/deploy/status` and
+  `/api/deploy`, unknown `/api/*` JSON 404s, package-owned browser assets, and
+  the site host document rendered from a sanitized public graph projection
 - public graph baseline projection and route resolution for exact
   `site:item.path` values
 - signed local admin cookies and process-local init-token redemption
@@ -30,7 +31,8 @@ personal-site product path.
 
 - packaged browser source or Vite dev-server ownership
 - Better Auth or `AUTH_DB` migrations
-- site item schema ownership, browser editor UI, deploy, or remote graph sync
+- site item schema ownership, browser editor UI, Cloudflare API internals,
+  Worker runtime internals, or remote graph sync
 - the existing operator CLI package
 
 ## Validation

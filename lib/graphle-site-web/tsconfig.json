@@ -7,7 +7,8 @@
     "rootDir": "./src",
     "paths": {
       "@dpeek/graphle-site-web": ["./src/index.ts"],
-      "@dpeek/graphle-site-web/assets": ["./src/assets.ts"]
+      "@dpeek/graphle-site-web/assets": ["./src/assets.ts"],
+      "@dpeek/graphle-site-web/public-runtime": ["./src/public-runtime.ts"]
     }
   },
   "include": ["src/**/*"],

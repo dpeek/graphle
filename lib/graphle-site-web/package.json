@@ -14,6 +14,10 @@
     "./assets": {
       "types": "./src/assets.ts",
       "default": "./out/assets.js"
+    },
+    "./public-runtime": {
+      "types": "./src/public-runtime.ts",
+      "default": "./out/public-runtime.js"
     }
   },
   "scripts": {

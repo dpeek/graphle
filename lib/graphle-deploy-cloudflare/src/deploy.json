@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "keys": {
+    "deploy:cloudflareTarget": "49932d42-945f-47f0-9910-67ed1a5d14b0",
+    "deploy:cloudflareTarget:accountId": "d2e0a088-5cc1-45ae-af5e-1a01e9dbe640",
+    "deploy:cloudflareTarget:baselineHash": "e7b60c87-a369-4dd8-be13-f8c38027ef42",
+    "deploy:cloudflareTarget:deployedAt": "7738d6f0-1910-421b-862d-b5ed5adb90cf",
+    "deploy:cloudflareTarget:durableObjectBinding": "dd81af0b-cf89-4d44-89ba-cde70fb1a3e9",
+    "deploy:cloudflareTarget:durableObjectClass": "0363b055-8c84-4e90-b8f9-5c2f8be758fd",
+    "deploy:cloudflareTarget:errorSummary": "79022b46-500e-4085-84d2-8c19f10de543",
+    "deploy:cloudflareTarget:sourceCursor": "30a72963-828d-4525-8254-dd74ed817c0f",
+    "deploy:cloudflareTarget:status": "2106501e-ab9a-4a63-834d-42462747ab35",
+    "deploy:cloudflareTarget:workerName": "4c1d0d12-8517-45cf-abcb-b901acc02253",
+    "deploy:cloudflareTarget:workerUrl": "d5c8790b-2df9-4099-90cd-ec9fb2621700"
+  }
+}

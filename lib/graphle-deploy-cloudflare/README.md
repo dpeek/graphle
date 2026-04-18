@@ -6,8 +6,8 @@ boundary for the personal-site MVP.
 ## Package Docs
 
 - [`./doc/cloudflare-public-rendering.md`](./doc/cloudflare-public-rendering.md):
-  Worker runtime, Durable Object baseline storage, cache policy, and publish
-  handoff.
+  Worker runtime, Durable Object baseline storage, Cloudflare provisioning,
+  credential handling, cache policy, and publish handoff.
 
 ## What It Owns
 
@@ -18,8 +18,13 @@ boundary for the personal-site MVP.
 - SSR of public routes through `@dpeek/graphle-site-web`'s shared
   `renderPublicSiteRoute(...)`
 - CDN cache headers for public HTML, missing routes, APIs, and static assets
+- Cloudflare input validation, deterministic Worker naming, Worker bundle
+  generation, Worker script upload metadata, Durable Object binding/migration
+  metadata, workers.dev enablement, and account subdomain lookup
+- graph-backed nonsecret deploy metadata schema for local persistence
 - publish helpers that replace the remote baseline, verify health and `/`, and
-  hand known public paths to the deploy caller for purge
+  verify URL-only public item display when one exists, with bounded retries for
+  workers.dev propagation after Worker uploads
 
 ## What It Does Not Own
 
@@ -27,7 +32,7 @@ boundary for the personal-site MVP.
 - remote authoring, remote login, Better Auth, workflow, saved-query, or
   installed-module routes
 - Cloudflare API token persistence
-- custom domains or continuous sync
+- custom domains, zone routes, DNS, certificates, rollbacks, or continuous sync
 
 ## Validation
 

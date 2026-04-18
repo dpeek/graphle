@@ -11,12 +11,15 @@ import {
 import { GraphleSiteShell } from "./site-app.js";
 import { buildGraphleSiteOrderPayload, GraphleSitePreview } from "./site-feature.js";
 import type { GraphleSiteStatusState } from "./site-feature.js";
+import type { GraphleSiteDeployStatus } from "./status.js";
 import { resolveGraphleSiteTheme } from "./theme.js";
 
 function readyStatus({
   authenticated,
+  deploy,
 }: {
   readonly authenticated: boolean;
+  readonly deploy?: GraphleSiteDeployStatus;
 }): GraphleSiteStatusState {
   return {
     state: "ready",
@@ -32,6 +35,7 @@ function readyStatus({
         authenticated,
         session: authenticated ? { projectId: "project-1", subject: "local-admin" } : null,
       },
+      ...(deploy ? { deploy } : {}),
       path: "/",
     },
   };
@@ -147,6 +151,141 @@ describe("GraphleSiteShell", () => {
     expect(html).toContain("graph-markdown");
     expect(html).toContain("Public");
     expect(html).toContain("<strong>graph</strong>");
+  });
+
+  it("shows deploy controls only for authenticated sessions", () => {
+    const runtime = createSiteRuntime();
+    runtime.graph.item.create({
+      title: "Home",
+      path: "/",
+      body: "Public content.",
+      visibility: siteVisibilityIdFor("public"),
+      tags: [],
+      createdAt: new Date("2026-04-15T00:00:00.000Z"),
+      updatedAt: new Date("2026-04-15T00:00:00.000Z"),
+    });
+
+    const authenticatedHtml = renderToStaticMarkup(
+      <GraphleSitePreview
+        path="/"
+        runtime={runtime}
+        status={readyStatus({
+          authenticated: true,
+          deploy: {
+            state: "idle",
+            credentials: {
+              hasApiToken: false,
+              missing: ["accountId", "apiToken"],
+            },
+            metadata: null,
+            currentBaseline: {
+              sourceCursor: "cursor:1",
+              baselineHash: "sha256:1",
+              generatedAt: "2026-04-18T00:00:00.000Z",
+              matchesLastDeploy: false,
+            },
+          },
+        })}
+      />,
+    );
+    const visitorHtml = renderToStaticMarkup(
+      <GraphleSitePreview
+        path="/"
+        runtime={runtime}
+        status={readyStatus({ authenticated: false })}
+      />,
+    );
+
+    expect(authenticatedHtml).toContain("Cloudflare");
+    expect(authenticatedHtml).toContain("Cloudflare account ID");
+    expect(authenticatedHtml).toContain("Cloudflare API token");
+    expect(authenticatedHtml).toContain("Worker name");
+    expect(authenticatedHtml).toContain("New baseline pending");
+    expect(visitorHtml).not.toContain("Cloudflare");
+    expect(visitorHtml).not.toContain("Deploy");
+  });
+
+  it("renders deploy success and error states", () => {
+    const runtime = createSiteRuntime();
+    runtime.graph.item.create({
+      title: "Home",
+      path: "/",
+      body: "Public content.",
+      visibility: siteVisibilityIdFor("public"),
+      tags: [],
+      createdAt: new Date("2026-04-15T00:00:00.000Z"),
+      updatedAt: new Date("2026-04-15T00:00:00.000Z"),
+    });
+
+    const successHtml = renderToStaticMarkup(
+      <GraphleSitePreview
+        path="/"
+        runtime={runtime}
+        status={readyStatus({
+          authenticated: true,
+          deploy: {
+            state: "ready",
+            credentials: {
+              accountId: "account-1",
+              workerName: "graphle-project",
+              hasApiToken: false,
+              missing: ["apiToken"],
+            },
+            metadata: {
+              accountId: "account-1",
+              workerName: "graphle-project",
+              workerUrl: "https://graphle-project.example.workers.dev/",
+              sourceCursor: "cursor:1",
+              baselineHash: "sha256:1",
+              deployedAt: "2026-04-18T00:00:00.000Z",
+              status: "ready",
+            },
+            currentBaseline: {
+              sourceCursor: "cursor:1",
+              baselineHash: "sha256:1",
+              generatedAt: "2026-04-18T00:00:00.000Z",
+              matchesLastDeploy: true,
+            },
+          },
+        })}
+      />,
+    );
+    const errorHtml = renderToStaticMarkup(
+      <GraphleSitePreview
+        path="/"
+        runtime={runtime}
+        status={readyStatus({
+          authenticated: true,
+          deploy: {
+            state: "error",
+            credentials: {
+              accountId: "account-1",
+              workerName: "graphle-project",
+              hasApiToken: false,
+              missing: ["apiToken"],
+            },
+            metadata: null,
+            currentBaseline: {
+              sourceCursor: "cursor:2",
+              baselineHash: "sha256:2",
+              generatedAt: "2026-04-18T00:00:00.000Z",
+              matchesLastDeploy: false,
+            },
+            error: {
+              code: "cloudflare.api_failed",
+              message: "Cloudflare rejected the deploy request.",
+              status: 403,
+              retryable: false,
+            },
+          },
+        })}
+      />,
+    );
+
+    expect(successHtml).toContain("https://graphle-project.example.workers.dev/");
+    expect(successHtml).toContain("Current baseline deployed");
+    expect(errorHtml).toContain("Cloudflare rejected the deploy request.");
+    expect(errorHtml).not.toContain("secret-token");
   });
 
   it("normalizes reorder payloads to consecutive sort order values", () => {

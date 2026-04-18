@@ -16,7 +16,7 @@ function createRuntime() {
 }
 
 describe("renderPublicSiteRoute", () => {
-  it("renders public routes from graph refs with sidebar links and view-surface fields", () => {
+  it("renders public routes from graph refs with sidebar links and static public fields", () => {
     const runtime = createRuntime();
     const graphleTag = runtime.graph.tag.create({
       color: "#2563eb",
@@ -69,9 +69,9 @@ describe("renderPublicSiteRoute", () => {
     expect(home.status).toBe(200);
     expect(home.title).toBe("Home");
     expect(home.route).toMatchObject({ kind: "item", path: "/" });
-    expect(home.html).toContain('data-entity-surface-title="title"');
+    expect(home.html).toContain('data-graphle-public-preview=""');
+    expect(home.html).toContain("data-graphle-public-item=");
     expect(home.html).toContain("November 01, 2023");
-    expect(home.html).toContain("data-web-reference-chip=");
     expect(home.html).toContain("Graphle");
     expect(home.html).toContain("<strong>home</strong>");
     expect(home.html).toContain("Public link");

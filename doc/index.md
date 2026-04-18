@@ -1,7 +1,7 @@
 ---
 name: Graphle docs index
 description: "Repo entrypoint for root docs, package-owned current-state docs, and branch specs."
-last_updated: 2026-04-15
+last_updated: 2026-04-18
 ---
 
 # Graphle docs index
@@ -37,8 +37,8 @@ composition. `@dpeek/graphle-web-ui` owns reusable browser primitives,
 `@dpeek/graphle-web-shell` owns generic browser shell composition,
 `@dpeek/graphle-site-web` owns the assembled personal-site browser app served
 by the local runtime, and `@dpeek/graphle-deploy-cloudflare` owns the
-Cloudflare public-site renderer and publish handoff. `@dpeek/utils` owns shared
-env, log, and process helpers.
+Cloudflare public-site renderer, provisioning client, deploy metadata contract,
+and publish handoff. `@dpeek/utils` owns shared env, log, and process helpers.
 
 ## Root docs
 
@@ -83,8 +83,8 @@ The current dependency chain is:
 - `../lib/graphle/README.md`: public `graphle` binary package and `graphle dev`
   dispatch boundary
 - `../lib/graphle-local/doc/local-dev.md`: local personal-site dev runtime,
-  project bootstrap, persisted site authority, signed-cookie auth, `/api/*`
-  routes, and browser opening
+  project bootstrap, persisted site authority, signed-cookie auth, deploy
+  endpoints, `/api/*` routes, and browser opening
 - `../lib/graphle-sqlite/doc/sqlite-bootstrap.md`: local `graphle.sqlite`
   creation, metadata bootstrap, persisted-authority storage, and health summary
 - `../lib/graphle-module-site/doc/site-schema.md`: built-in `site:item` schema,
@@ -94,11 +94,11 @@ The current dependency chain is:
 - `../lib/graphle-web-shell/doc/web-shell.md`: generic browser shell
   registration, host status, navigation, command, and content slots
 - `../lib/graphle-site-web/doc/site-web.md`: assembled personal-site browser app,
-  local route loading, inline authoring controls, and package-built static
-  assets
+  local route loading, inline authoring controls, deploy controls, and
+  package-built static assets
 - `../lib/graphle-deploy-cloudflare/doc/cloudflare-public-rendering.md`:
-  Cloudflare Worker public rendering, Durable Object baseline storage, cache
-  policy, and deploy/sync publish handoff
+  Cloudflare Worker public rendering, Durable Object baseline storage,
+  Cloudflare provisioning, cache policy, and deploy/sync publish handoff
 - `../lib/graphle-cli/doc/agent-runtime.md`: issue-driven automation runtime,
   scheduler, workspace lifecycle, and retained runtime behavior
 - `../lib/graphle-cli/doc/agent-workflow.md`: workflow loading, issue routing, context
@@ -149,7 +149,8 @@ The current dependency chain is:
   `bunx @dpeek/graphle dev`
 - `../lib/graphle-local/`: `@dpeek/graphle-local`, the local Bun server, cwd
   project bootstrap, local auth, persisted site authority startup, `/api/site/*`
-  route handling, browser opening, and graph-backed site rendering
+  route handling, deploy endpoints, browser opening, and graph-backed site
+  rendering
 - `../lib/graphle-sqlite/`: `@dpeek/graphle-sqlite`, the local
   `graphle.sqlite` open/bootstrap helper and persisted authority adapter
 - `../lib/graphle-module-site/`: `@dpeek/graphle-module-site`, the built-in
@@ -165,7 +166,8 @@ The current dependency chain is:
   served by `graphle dev`
 - `../lib/graphle-deploy-cloudflare/`: `@dpeek/graphle-deploy-cloudflare`, the
   Cloudflare public-site Worker runtime, Durable Object baseline storage,
-  server-rendered public routes, cache policy, and publish verification handoff
+  server-rendered public routes, Cloudflare provisioning, cache policy, and
+  publish verification handoff
 - `../lib/graphle-app/`: `@dpeek/graphle-app`, the app package for graph helper exports plus the
   browser Worker, routes, and app-owned web composition
 - `../lib/graphle-cli/`: `@dpeek/graphle-cli`, the operator shell package for command dispatch,

@@ -11,6 +11,8 @@ last_updated: 2026-04-18
 - you are changing the deployed personal-site Worker runtime
 - you are changing public baseline replacement or validation
 - you are changing Cloudflare cache behavior for public HTML
+- you are changing Cloudflare provisioning, Worker upload metadata, or deploy
+  input validation
 - you are wiring deploy or sync publishing into the remote runtime
 
 ## Current Contract
@@ -44,6 +46,42 @@ The baseline replacement secret is supplied by the Worker environment as
 `Authorization: Bearer <secret>` or `x-graphle-deploy-secret: <secret>`. If the
 secret is not configured, baseline replacement is unavailable.
 
+## Cloudflare Deploy Contract
+
+The package owns the Cloudflare API boundary for Phase 5. Local callers pass a
+project ID, account ID, API token, optional Worker name, and a projected
+`PublicSiteGraphBaseline`; this package validates the inputs, derives the
+default Worker name as `graphle-<project-slug>-<hash>`, builds the public Worker
+bundle from the existing runtime, and uploads it through Cloudflare's multipart
+Worker module API. Upload metadata declares:
+
+- `main_module` for module Worker syntax
+- `PUBLIC_SITE_BASELINE` as a Durable Object namespace binding
+- `GraphlePublicSiteBaselineDurableObject` as the Durable Object class
+- a one-run `GRAPHLE_DEPLOY_SECRET` secret binding
+- a first-deploy Durable Object SQLite migration tag
+
+The deployment path enables the Worker on `workers.dev`, reads the account
+subdomain, publishes the baseline through `publishPublicSiteBaseline(...)`, and
+verifies that `/api/health`, `/`, and any existing URL-only public item render
+from the remote Worker URL.
+
+`publishPublicSiteBaseline(...)` uses bounded retries around baseline
+replacement, health, and home verification because `workers.dev` can briefly
+serve the previous Worker after a successful upload. Replacement retries include
+401 responses so a previous deploy secret mismatch can recover once the new
+Worker version reaches the subdomain. Final failures include the upstream HTTP
+status and a trimmed, secret-redacted response body.
+
+Cloudflare API tokens are only process inputs. They are never returned in
+status payloads, logged, stored as graph facts, or persisted in deploy metadata.
+Cloudflare and publish failures are normalized to sanitized errors with a code,
+message, optional upstream status, and retryability flag.
+
+The graph-backed metadata schema in this package stores only nonsecret remote
+state: account ID, Worker name, Worker URL, Durable Object binding/class,
+source cursor, baseline hash, deploy time, status, and sanitized error summary.
+
 Public route rendering uses this flow:
 
 ```text
@@ -55,9 +93,11 @@ request path
   -> full HTML document
 ```
 
-`renderPublicSiteRoute(...)` comes from `@dpeek/graphle-site-web`, so local and
-cloud rendering share route resolution, sidebar item ordering, URL-only item
-display, missing-route behavior, and `siteItemViewSurface` rendering.
+`renderPublicSiteRoute(...)` comes from
+`@dpeek/graphle-site-web/public-runtime`, so local and cloud rendering share
+route resolution, sidebar item ordering, URL-only item display, missing-route
+behavior, and static public item rendering without bundling Node-only local
+asset helpers or browser authoring controls into the Worker.
 
 ## Cache Policy
 
@@ -91,6 +131,6 @@ replacement for the MVP.
 5. verifies `GET /` with a no-cache request
 
 That keeps invalidation independent from the mechanism that created the
-baseline. Phase 5 deploy can purge paths through the Cloudflare API, while a
-later sync publisher can use the same path list or switch to cache-tag/versioned
-invalidation without changing route rendering.
+baseline. Phase 5 deploy does not attach a custom domain or zone purge; Phase 6
+sync can reuse the same publish handoff and add cache-tag/versioned
+invalidation or custom-domain purge without changing route rendering.

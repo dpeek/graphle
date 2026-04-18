@@ -2,6 +2,14 @@ import { readFile } from "node:fs/promises";
 import { extname, resolve, sep } from "node:path";
 
 import {
+  deployCloudflarePublicSite as deployCloudflarePublicSiteDefault,
+  sanitizeCloudflareDeployError,
+  validateCloudflareDeployInput,
+  type CloudflareDeployInput,
+  type CloudflareDeployResult,
+  type CloudflareDeploySanitizedError,
+} from "@dpeek/graphle-deploy-cloudflare";
+import {
   GraphValidationError,
   readHttpSyncRequest,
   type GraphValidationIssue,
@@ -17,6 +25,13 @@ import { graphleSiteWebClientAssetsPath } from "@dpeek/graphle-site-web/assets";
 import type { PublicSiteGraphBaseline } from "@dpeek/graphle-module-site";
 
 import type { LocalAuthController } from "./auth.js";
+import {
+  buildLocalCloudflareDeployStatus,
+  mergeLocalCloudflareDeployInput,
+  persistLocalCloudflareDeployMetadata,
+  readLocalCloudflareDeployCredentials,
+  readLocalCloudflareDeployMetadata,
+} from "./deploy.js";
 import type { GraphleLocalProject } from "./project.js";
 import { buildPublicSiteGraphBaseline } from "./public-site-projection.js";
 import { readLocalSiteAuthorityHealth, type LocalSiteAuthority } from "./site-authority.js";
@@ -32,6 +47,7 @@ export interface CreateGraphleLocalServerOptions {
   readonly siteAuthority?: LocalSiteAuthority;
   readonly siteWebAssetsPath?: string;
   readonly now?: () => Date;
+  readonly deployCloudflarePublicSite?: typeof deployCloudflarePublicSiteDefault;
 }
 
 interface SiteWebClientAssetTags {
@@ -277,6 +293,40 @@ function graphTransportErrorResponse(error: unknown): Response {
   return errorResponse("Graph transport request failed.", "graph.request_failed", 500);
 }
 
+function deployErrorStatus(error: CloudflareDeploySanitizedError): number {
+  if (error.code === "settings.invalid") return 400;
+  return error.retryable ? 503 : 502;
+}
+
+function deployErrorResponse(error: CloudflareDeploySanitizedError): Response {
+  return jsonResponse(
+    {
+      error: error.message,
+      code: error.code,
+      ...(error.status ? { status: error.status } : {}),
+      retryable: error.retryable,
+    },
+    deployErrorStatus(error),
+  );
+}
+
+async function readDeployInputBody(request: Request): Promise<Partial<CloudflareDeployInput>> {
+  const text = await request.text();
+  if (text.trim().length === 0) return {};
+
+  const payload = JSON.parse(text) as unknown;
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    throw new Error("Deploy request body must be a JSON object.");
+  }
+
+  const record = payload as Record<string, unknown>;
+  return {
+    ...(typeof record.accountId === "string" ? { accountId: record.accountId } : {}),
+    ...(typeof record.apiToken === "string" ? { apiToken: record.apiToken } : {}),
+    ...(typeof record.workerName === "string" ? { workerName: record.workerName } : {}),
+  };
+}
+
 async function graphSyncResponse(
   request: Request,
   authority: LocalSiteAuthority | undefined,
@@ -334,9 +384,12 @@ export function createGraphleLocalServer({
   siteAuthority,
   siteWebAssetsPath = graphleSiteWebClientAssetsPath,
   now = () => new Date(),
+  deployCloudflarePublicSite = deployCloudflarePublicSiteDefault,
 }: CreateGraphleLocalServerOptions): GraphleLocalServer {
   const startedAt = now().toISOString();
   let assetTagsPromise: Promise<SiteWebClientAssetTags> | undefined;
+  let deployInFlight: Promise<CloudflareDeployResult> | undefined;
+  let lastDeployError: CloudflareDeploySanitizedError | undefined;
 
   function loadAssetTags(): Promise<SiteWebClientAssetTags> {
     assetTagsPromise ??= readClientAssetTags(siteWebAssetsPath);
@@ -418,6 +471,114 @@ export function createGraphleLocalServer({
           return authRequiredResponse();
         }
         return graphTransactionResponse(request, siteAuthority);
+      }
+
+      if (url.pathname === "/api/deploy/status") {
+        if (request.method !== "GET") {
+          return methodNotAllowed("GET");
+        }
+        if (!auth.getSession(cookieHeader)) {
+          return authRequiredResponse();
+        }
+
+        const baseline = buildPublicSiteGraphBaseline({
+          authority: siteAuthority,
+          now,
+        });
+        return jsonResponse(
+          buildLocalCloudflareDeployStatus({
+            authority: siteAuthority,
+            baseline,
+            credentials: await readLocalCloudflareDeployCredentials(project),
+            stateOverride: deployInFlight ? "deploying" : undefined,
+            error: lastDeployError,
+          }),
+        );
+      }
+
+      if (url.pathname === "/api/deploy") {
+        if (request.method !== "POST") {
+          return methodNotAllowed("POST");
+        }
+        if (!auth.getSession(cookieHeader)) {
+          return authRequiredResponse();
+        }
+        if (!siteAuthority) {
+          return graphAuthorityUnavailableResponse();
+        }
+        if (deployInFlight) {
+          return jsonResponse(
+            {
+              error: "A Cloudflare deploy is already running.",
+              code: "deploy.concurrent",
+            },
+            409,
+          );
+        }
+
+        let body: Partial<CloudflareDeployInput>;
+        try {
+          body = await readDeployInputBody(request);
+        } catch {
+          return graphTransportInputResponse(
+            "Deploy request body must be valid JSON.",
+            "deploy.body_invalid",
+          );
+        }
+
+        const baseline = buildPublicSiteGraphBaseline({
+          authority: siteAuthority,
+          now,
+        });
+        const credentials = await readLocalCloudflareDeployCredentials(project);
+        const existingMetadata = readLocalCloudflareDeployMetadata(siteAuthority);
+        const input = mergeLocalCloudflareDeployInput({
+          body,
+          credentials,
+          metadata: existingMetadata,
+          projectId: project.projectId,
+        });
+        const validation = validateCloudflareDeployInput(input);
+        if (!validation.ok) {
+          return jsonResponse(
+            {
+              error: "Cloudflare deploy settings are invalid.",
+              code: "deploy.settings_invalid",
+              issues: validation.issues,
+            },
+            400,
+          );
+        }
+
+        const deployTask = (async () => {
+          const result = await deployCloudflarePublicSite({
+            input,
+            baseline,
+            now,
+          });
+          await persistLocalCloudflareDeployMetadata(siteAuthority, result.metadata);
+          return result;
+        })();
+        deployInFlight = deployTask;
+
+        try {
+          const result = await deployTask;
+          lastDeployError = undefined;
+          return jsonResponse(result);
+        } catch (error) {
+          const sanitized = sanitizeCloudflareDeployError(error, [input.apiToken]);
+          lastDeployError = sanitized;
+          if (existingMetadata) {
+            await persistLocalCloudflareDeployMetadata(siteAuthority, {
+              ...existingMetadata,
+              status: "error",
+              errorSummary: sanitized.message,
+            });
+          }
+          return deployErrorResponse(sanitized);
+        } finally {
+          if (deployInFlight === deployTask) deployInFlight = undefined;
+        }
       }
 
       if (url.pathname.startsWith("/api/")) {

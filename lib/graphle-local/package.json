@@ -21,6 +21,7 @@
     "@dpeek/graphle-authority": "workspace:*",
     "@dpeek/graphle-bootstrap": "workspace:*",
     "@dpeek/graphle-client": "workspace:*",
+    "@dpeek/graphle-deploy-cloudflare": "workspace:*",
     "@dpeek/graphle-kernel": "workspace:*",
     "@dpeek/graphle-module-core": "workspace:*",
     "@dpeek/graphle-module-site": "workspace:*",

@@ -8,7 +8,7 @@ import {
   createGraphlePublicSiteRuntimeFromBaseline,
   renderPublicSiteRoute,
   type RenderedPublicSiteRoute,
-} from "@dpeek/graphle-site-web";
+} from "@dpeek/graphle-site-web/public-runtime";
 
 export const graphlePublicSiteBaselineObjectName = "public-site-baseline";
 export const graphlePublicSiteBaselineStorageKey = "graphle.public-site.baseline";

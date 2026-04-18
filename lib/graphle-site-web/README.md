@@ -15,7 +15,8 @@ browser primitives and the MVP site item contracts.
   assembly seam used for authenticated authoring through `/api/sync` and
   `/api/tx`
 - the public site graph runtime and `renderPublicSiteRoute(...)` entrypoint
-  used to render sanitized public graph baselines
+  used to render sanitized public graph baselines, exported through
+  `@dpeek/graphle-site-web/public-runtime` for Worker-safe consumers
 - the site-owned sidebar and centered content frame for the personal-site path
 - personal-site feature registration for future generic-shell composition
 - local status loading from `/api/health` and `/api/session`
@@ -23,8 +24,8 @@ browser primitives and the MVP site item contracts.
   menus, delete confirmation, drag reorder, and a theme toggle
 - one inline shared entity-surface `site:item` editor that appears only for
   authenticated local admin sessions
-- graph-backed `site:item` route preview through the authored view surface for
-  both sanitized public baselines and authenticated local admin sessions
+- graph-backed browser route preview through the authored view surface, plus a
+  static Worker-safe public renderer for Cloudflare deployment
 
 ## What It Does Not Own
 

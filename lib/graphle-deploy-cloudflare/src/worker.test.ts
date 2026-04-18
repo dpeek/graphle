@@ -8,7 +8,7 @@ import {
 } from "@dpeek/graphle-site-web";
 import { describe, expect, it } from "bun:test";
 
-import { publishPublicSiteBaseline } from "./publish.js";
+import { CloudflarePublicSitePublishError, publishPublicSiteBaseline } from "./publish.js";
 import {
   fetchCloudflarePublicSite,
   GraphlePublicSiteBaselineDurableObject,
@@ -322,7 +322,8 @@ describe("Cloudflare public site worker", () => {
     expect(homeHtml).toContain('<script type="module" src="/assets/site.js"></script>');
     expect(homeHtml).toContain("Home");
     expect(homeHtml).toContain("April 18, 2026");
-    expect(homeHtml).toContain("data-web-reference-chip=");
+    expect(homeHtml).toContain('data-graphle-public-preview=""');
+    expect(homeHtml).toContain("data-graphle-public-item=");
     expect(homeHtml).toContain("Graphle");
     expect(homeHtml).toContain("<strong>cloud</strong>");
     expect(homeHtml).toContain("External resource");
@@ -405,5 +406,80 @@ describe("Cloudflare public site publish handoff", () => {
       paths: ["/", "/notes/cloud"],
     });
     expect(purged).toEqual([["/", "/notes/cloud"]]);
+  });
+
+  it("retries baseline replacement while workers.dev serves the previous Worker", async () => {
+    const baseline = createTestBaseline();
+    const requested: string[] = [];
+    const slept: number[] = [];
+    let replaceAttempts = 0;
+
+    const result = await publishPublicSiteBaseline({
+      workerUrl: "https://worker.example.com",
+      baseline,
+      deploySecret: "deploy-secret",
+      retryDelaysMs: [0],
+      sleep(delayMs) {
+        slept.push(delayMs);
+      },
+      fetch: async (input, init) => {
+        const request = new Request(input, init);
+        const pathname = new URL(request.url).pathname;
+        requested.push(`${request.method} ${pathname}`);
+
+        if (pathname === graphlePublicSiteBaselinePath) {
+          replaceAttempts += 1;
+          if (replaceAttempts === 1) {
+            return Response.json(
+              {
+                error: "Baseline replacement requires deploy authorization.",
+                code: "deploy.unauthorized",
+              },
+              { status: 401 },
+            );
+          }
+        }
+
+        return Response.json({ ok: true });
+      },
+    });
+
+    expect(result.baselineHash).toBe(baseline.baselineHash);
+    expect(slept).toEqual([0]);
+    expect(requested).toEqual([
+      "PUT /api/baseline",
+      "PUT /api/baseline",
+      "GET /api/health",
+      "GET /",
+    ]);
+  });
+
+  it("reports final baseline replacement status and body without leaking secrets", async () => {
+    const baseline = createTestBaseline();
+
+    try {
+      await publishPublicSiteBaseline({
+        workerUrl: "https://worker.example.com",
+        baseline,
+        deploySecret: "deploy-secret",
+        retryDelaysMs: [],
+        fetch: async () =>
+          new Response("bad baseline for deploy-secret", {
+            status: 400,
+            statusText: "Bad Request",
+          }),
+      });
+      throw new Error("Expected publish to fail.");
+    } catch (error) {
+      expect(error).toBeInstanceOf(CloudflarePublicSitePublishError);
+      expect(error).toMatchObject({
+        code: "baseline.replace_failed",
+        status: 400,
+        retryable: false,
+      });
+      expect((error as Error).message).toContain("HTTP 400 Bad Request");
+      expect((error as Error).message).toContain("bad baseline for [redacted]");
+      expect((error as Error).message).not.toContain("deploy-secret");
+    }
   });
 });

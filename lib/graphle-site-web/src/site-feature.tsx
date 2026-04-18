@@ -46,6 +46,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@dpeek/graphle-web-ui/dropdown-menu";
+import { Input } from "@dpeek/graphle-web-ui/input";
 import {
   Sidebar,
   SidebarContent,
@@ -65,7 +66,9 @@ import type { GraphleShellFeature } from "@dpeek/graphle-web-shell";
 import {
   AtSignIcon,
   BookOpenIcon,
+  CloudUploadIcon,
   Edit3Icon,
+  ExternalLinkIcon,
   FileTextIcon,
   GithubIcon,
   GlobeIcon,
@@ -87,6 +90,7 @@ import {
   useState,
   type CSSProperties,
   type MouseEvent,
+  type FormEvent,
   type ReactNode,
 } from "react";
 
@@ -100,7 +104,7 @@ import {
   type GraphleSiteItemRef,
   type GraphleSiteItemView,
 } from "./site-items.js";
-import type { GraphleSiteStatusSnapshot } from "./status.js";
+import type { GraphleSiteDeployStatus, GraphleSiteStatusSnapshot } from "./status.js";
 import { useGraphleSiteTheme } from "./theme.js";
 
 export type GraphleSiteStatusState =
@@ -117,6 +121,13 @@ export interface GraphleSiteFeatureOptions {
   readonly onNavigatePath?: (path: string) => Promise<void> | void;
   readonly onRefresh?: () => void;
   readonly onReorderItems?: (items: readonly GraphleSiteItemOrder[]) => Promise<void>;
+  readonly onDeployCloudflare?: (input: GraphleCloudflareDeployRequest) => Promise<void>;
+}
+
+export interface GraphleCloudflareDeployRequest {
+  readonly accountId?: string;
+  readonly apiToken?: string;
+  readonly workerName?: string;
 }
 
 const iconByPreset = {
@@ -482,6 +493,129 @@ function ThemeToggle() {
   );
 }
 
+function deployStateLabel(deploy: GraphleSiteDeployStatus | undefined): string {
+  if (!deploy) return "Checking";
+  if (deploy.state === "deploying") return "Deploying";
+  if (deploy.state === "ready") return "Ready";
+  if (deploy.state === "error") return "Error";
+  return "Idle";
+}
+
+function baselineStatusLabel(deploy: GraphleSiteDeployStatus | undefined): string {
+  if (!deploy?.currentBaseline) return "Baseline pending";
+  return deploy.currentBaseline.matchesLastDeploy
+    ? "Current baseline deployed"
+    : "New baseline pending";
+}
+
+function DeployPanel({
+  deploy,
+  onDeploy,
+}: {
+  readonly deploy?: GraphleSiteDeployStatus;
+  readonly onDeploy?: (input: GraphleCloudflareDeployRequest) => Promise<void>;
+}) {
+  const [accountId, setAccountId] = useState(deploy?.credentials.accountId ?? "");
+  const [workerName, setWorkerName] = useState(deploy?.credentials.workerName ?? "");
+  const [apiToken, setApiToken] = useState("");
+  const [formError, setFormError] = useState("");
+  const deploying = deploy?.state === "deploying";
+  const missing = new Set(deploy?.credentials.missing ?? []);
+  const showAccountId = missing.has("accountId") || accountId.length > 0;
+  const showToken = missing.has("apiToken") || !deploy?.credentials.hasApiToken;
+  const showWorkerName = true;
+
+  useEffect(() => {
+    setAccountId(deploy?.credentials.accountId ?? "");
+    setWorkerName(deploy?.credentials.workerName ?? "");
+  }, [deploy?.credentials.accountId, deploy?.credentials.workerName]);
+
+  async function submitDeploy(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setFormError("");
+    try {
+      await onDeploy?.({
+        ...(accountId.trim() ? { accountId: accountId.trim() } : {}),
+        ...(apiToken.trim() ? { apiToken: apiToken.trim() } : {}),
+        ...(workerName.trim() ? { workerName: workerName.trim() } : {}),
+      });
+      setApiToken("");
+    } catch (error) {
+      setFormError(messageForError(error));
+    }
+  }
+
+  return (
+    <form
+      className="flex min-w-0 flex-col gap-2 border-t border-sidebar-border pt-3"
+      onSubmit={(event) => {
+        void submitDeploy(event);
+      }}
+    >
+      <div className="flex min-w-0 items-center justify-between gap-2">
+        <span className="truncate text-xs font-medium text-sidebar-foreground">Cloudflare</span>
+        <span className="shrink-0 text-[0.6875rem] text-sidebar-foreground/70">
+          {deployStateLabel(deploy)}
+        </span>
+      </div>
+      {deploy?.metadata?.workerUrl ? (
+        <a
+          className="inline-flex min-w-0 items-center gap-1 text-xs text-sidebar-foreground underline-offset-4 hover:underline"
+          href={deploy.metadata.workerUrl}
+          rel="noreferrer"
+          target="_blank"
+        >
+          <span className="truncate">{deploy.metadata.workerUrl}</span>
+          <ExternalLinkIcon aria-hidden={true} className="size-3 shrink-0" />
+        </a>
+      ) : null}
+      <p className="m-0 text-[0.6875rem] leading-4 text-sidebar-foreground/70">
+        {baselineStatusLabel(deploy)}
+      </p>
+      {showAccountId ? (
+        <Input
+          aria-label="Cloudflare account ID"
+          autoComplete="off"
+          disabled={deploying}
+          onChange={(event) => setAccountId(event.currentTarget.value)}
+          placeholder="Cloudflare account ID"
+          value={accountId}
+        />
+      ) : null}
+      {showToken ? (
+        <Input
+          aria-label="Cloudflare API token"
+          autoComplete="off"
+          disabled={deploying}
+          onChange={(event) => setApiToken(event.currentTarget.value)}
+          placeholder="Cloudflare API token"
+          type="password"
+          value={apiToken}
+        />
+      ) : null}
+      {showWorkerName ? (
+        <Input
+          aria-label="Worker name"
+          autoComplete="off"
+          disabled={deploying}
+          onChange={(event) => setWorkerName(event.currentTarget.value)}
+          placeholder="Worker name"
+          value={workerName}
+        />
+      ) : null}
+      {deploy?.error?.message || formError ? (
+        <p className="m-0 text-[0.6875rem] leading-4 text-destructive">
+          {formError || deploy?.error?.message}
+        </p>
+      ) : null}
+      <Button disabled={deploying || !onDeploy} size="sm" type="submit">
+        <CloudUploadIcon aria-hidden={true} data-icon="inline-start" />
+        {deploying ? "Deploying" : "Deploy"}
+      </Button>
+    </form>
+  );
+}
+
 function DeleteConfirmDialog({
   item,
   onConfirm,
@@ -516,6 +650,7 @@ function ReadySitePreview({
   items,
   onCreateBlankItem,
   onDeleteItem,
+  onDeployCloudflare,
   onNavigatePath,
   onReorderItems,
   route,
@@ -525,6 +660,7 @@ function ReadySitePreview({
   readonly items: readonly GraphleSiteItemView[];
   readonly onCreateBlankItem?: () => Promise<GraphleSiteItemView>;
   readonly onDeleteItem?: (id: string) => Promise<void>;
+  readonly onDeployCloudflare?: (input: GraphleCloudflareDeployRequest) => Promise<void>;
   readonly onNavigatePath?: (path: string) => Promise<void> | void;
   readonly onReorderItems?: (items: readonly GraphleSiteItemOrder[]) => Promise<void>;
   readonly route: GraphleSiteRoute;
@@ -609,6 +745,9 @@ function ReadySitePreview({
             onReorder={onReorderItems}
           />
           <SidebarFooter>
+            {snapshot.session.authenticated ? (
+              <DeployPanel deploy={snapshot.deploy} onDeploy={onDeployCloudflare} />
+            ) : null}
             <ThemeToggle />
           </SidebarFooter>
         </Sidebar>
@@ -703,6 +842,7 @@ export function GraphleSitePreview({
   status,
   onCreateBlankItem,
   onDeleteItem,
+  onDeployCloudflare,
   onNavigatePath,
   onReorderItems,
 }: GraphleSiteFeatureOptions) {
@@ -722,6 +862,7 @@ export function GraphleSitePreview({
         snapshot={status.snapshot}
         onCreateBlankItem={onCreateBlankItem}
         onDeleteItem={onDeleteItem}
+        onDeployCloudflare={onDeployCloudflare}
         onNavigatePath={onNavigatePath}
         onReorderItems={onReorderItems}
       />
@@ -736,6 +877,7 @@ export function GraphleSitePreview({
         snapshot={status.snapshot}
         onCreateBlankItem={onCreateBlankItem}
         onDeleteItem={onDeleteItem}
+        onDeployCloudflare={onDeployCloudflare}
         onNavigatePath={onNavigatePath}
         onReorderItems={onReorderItems}
       />

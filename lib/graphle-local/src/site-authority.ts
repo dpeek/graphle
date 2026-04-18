@@ -1,6 +1,7 @@
 import { createBootstrappedSnapshot } from "@dpeek/graphle-bootstrap";
 import type { PersistedAuthoritativeGraph } from "@dpeek/graphle-authority";
 import { createGraphStore } from "@dpeek/graphle-kernel";
+import { cloudflareDeploy } from "@dpeek/graphle-deploy-cloudflare";
 import { colorType, minimalCore, tag } from "@dpeek/graphle-module-core";
 import { site, siteIconPresetIdFor, siteVisibilityIdFor } from "@dpeek/graphle-module-site";
 import {
@@ -12,18 +13,21 @@ export const graphleLocalSiteAuthorityId = "site";
 
 export type LocalSiteGraphNamespace = typeof site & {
   readonly tag: typeof tag;
+  readonly cloudflareTarget: typeof cloudflareDeploy.cloudflareTarget;
 };
 export type LocalSiteGraphDefinitions = typeof minimalCore & {
   readonly color: typeof colorType;
   readonly tag: typeof tag;
-} & typeof site;
+} & typeof site &
+  typeof cloudflareDeploy;
 
-const localSiteGraphNamespace: LocalSiteGraphNamespace = { ...site, tag };
+const localSiteGraphNamespace: LocalSiteGraphNamespace = { ...site, tag, ...cloudflareDeploy };
 const localSiteGraphDefinitions: LocalSiteGraphDefinitions = {
   ...minimalCore,
   color: colorType,
   tag,
   ...site,
+  ...cloudflareDeploy,
 };
 const defaultTagColor = "#2563eb";
 

@@ -52,9 +52,9 @@
   predicate-backed edit mode, one-button create, URL-only item actions,
   persisted drag ordering, and dark mode.
 - [Personal site MVP phase 5](/Users/dpeek/code/graphle/pdr/personal-site-mvp/phase-5-cloudflare-deploy.md):
-  plan Cloudflare deployment from the local shell: credential input, Worker and
-  Durable Object provisioning, public `site:item` baseline publish, remote
-  metadata, and deploy status/errors.
+  implemented Cloudflare deployment from the local shell: credential input,
+  Worker and Durable Object provisioning, public `site:item` baseline publish,
+  graph-backed remote metadata, and deploy status/errors.
 - [Dedicated auth routes](/Users/dpeek/code/graphle/pdr/dedicated-auth-routes.md):
   move inline auth into dedicated sign-in/sign-up routes with TanStack
   Router route guards and Better Auth-aligned session context.
@@ -62,3 +62,22 @@
 - [Markdown code blocks](/Users/dpeek/code/graphle/pdr/markdown-code-blocks.md):
   add lazy Shiki highlighting, copy-to-clipboard controls, and
   filename/language detection to the shared markdown renderer.
+- [Plate markdown editor](/Users/dpeek/code/graphle/pdr/plate-markdown-editor/spec.md):
+  replace the markdown renderer and editor stack with Plate, share view/edit
+  document styling, support editable highlighted code blocks, and remove Monaco.
+- [Plate markdown editor phase 1](/Users/dpeek/code/graphle/pdr/plate-markdown-editor/01-plate-foundation.md):
+  add Plate dependencies and tested markdown conversion helpers without
+  changing the production renderer.
+- [Plate markdown editor phase 2](/Users/dpeek/code/graphle/pdr/plate-markdown-editor/02-read-only-renderer.md):
+  switch the read-only markdown renderer to Plate while preserving shared
+  markdown styles.
+- [Plate markdown editor phase 3](/Users/dpeek/code/graphle/pdr/plate-markdown-editor/03-code-blocks-lowlight.md):
+  move code blocks to Plate and Lowlight so highlighting works in editable
+  documents.
+- [Plate markdown editor phase 4](/Users/dpeek/code/graphle/pdr/plate-markdown-editor/04-editor-field-integration.md):
+  add the Plate markdown editor, floating toolbar, and graph field integration.
+- [Plate markdown editor phase 5](/Users/dpeek/code/graphle/pdr/plate-markdown-editor/05-monaco-deletion-svg-fallback.md):
+  remove Monaco and replace SVG editing with the plain source editor fallback.
+- [Plate markdown editor phase 6](/Users/dpeek/code/graphle/pdr/plate-markdown-editor/06-verification-docs-cleanup.md):
+  clean stale docs and dependencies, run full checks, and verify browser
+  authoring behavior.

@@ -47,6 +47,8 @@ The first screen is the current website route preview. The app loads:
 
 - `GET /api/health`
 - `GET /api/session`
+- `GET /api/deploy/status` only after `/api/session` reports an authenticated
+  local admin
 
 Those payloads drive service and auth state. Public route content and the flat
 item sidebar come from the embedded sanitized public graph baseline. That keeps
@@ -88,6 +90,15 @@ Authenticated sessions can delete items through the sidebar action menu after a
 confirmation dialog. Drag-and-drop ordering uses `@dnd-kit/sortable` and writes
 normalized consecutive `site:item.sortOrder` values as graph transactions.
 
+Authenticated sessions also get a compact Cloudflare deploy panel in the
+existing sidebar footer. It shows the last Worker URL, last deploy state,
+whether the current public baseline matches the last deploy, missing account
+ID/token controls, an optional Worker name control, progress while
+`POST /api/deploy` is running, and sanitized errors. Visitors never load deploy
+status and never see deploy controls. Site-web does not import the deploy
+package or know Durable Object details; it only talks to local `/api/deploy/*`
+endpoints.
+
 The local theme helper reads and writes `localStorage.graphle.theme`, supports
 `light`, `dark`, and `system`, applies `light`/`dark` classes to
 `document.documentElement`, and updates when the system preference changes. The
@@ -105,6 +116,12 @@ them through `/api/tx`. Browser authoring no longer calls `/api/site/items`,
 assets under `out/client/`. The local runtime imports the asset directory from
 `@dpeek/graphle-site-web/assets` and serves those files directly. The default
 `graphle dev` command doesn't run Vite in the user's current working directory.
+Cloudflare Workers and other browser-only runtimes import shared public
+rendering from `@dpeek/graphle-site-web/public-runtime` so they don't pull in
+the Node-only asset path helper from the package root or browser-only authoring
+controls. That subpath renders static public item markup from serialized item
+views; the richer `siteItemViewSurface` route preview remains part of the
+browser app.
 
 ## Boundary
 
@@ -113,4 +130,5 @@ schema. Schema stays in `@dpeek/graphle-module-site`; local route handling stays
 in `@dpeek/graphle-local`.
 
 The browser app does not import `@dpeek/graphle-app`, Better Auth providers,
-query/workflow surfaces, deploy wiring, or user-project source files.
+query/workflow surfaces, Cloudflare SDK/API wiring, or user-project source
+files.
