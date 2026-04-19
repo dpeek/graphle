@@ -56,7 +56,10 @@ When storage is empty, the seed callback creates:
 - at least one `core:tag` referenced by site items
 
 Reopening the same SQLite file loads the persisted authority state and does not
-seed duplicate records.
+seed duplicate records. After load, startup re-applies the current local schema
+bootstrap additively and persists only when new schema facts were missing, so
+older `graphle.sqlite` files can learn newly introduced local metadata types
+without resetting site content.
 
 ## HTTP Surface
 

@@ -16,6 +16,8 @@ personal-site product path.
 - local `graphle.sqlite` opening through `@dpeek/graphle-sqlite`
 - opening the persisted local site authority over `minimalCore`, `core:tag`,
   `core:color`, `site`, and the Cloudflare deploy metadata definitions
+- additive schema bootstrap repair for older `graphle.sqlite` files when new
+  local metadata definitions are introduced
 - first-run seed content for public and private `site:item` records
 - the Bun HTTP request handler for `/api/health`, `/api/session`, `/api/init`,
   authenticated generic graph transport at `/api/sync` and `/api/tx`,

@@ -1,4 +1,4 @@
-import { createBootstrappedSnapshot } from "@dpeek/graphle-bootstrap";
+import { bootstrap, createBootstrappedSnapshot } from "@dpeek/graphle-bootstrap";
 import type { PersistedAuthoritativeGraph } from "@dpeek/graphle-authority";
 import { createGraphStore } from "@dpeek/graphle-kernel";
 import { cloudflareDeploy } from "@dpeek/graphle-deploy-cloudflare";
@@ -29,6 +29,11 @@ const localSiteGraphDefinitions: LocalSiteGraphDefinitions = {
   ...site,
   ...cloudflareDeploy,
 };
+const localSiteGraphBootstrapOptions = Object.freeze({
+  availableDefinitions: localSiteGraphDefinitions,
+  cacheKey: localSiteGraphDefinitions,
+  coreSchema: minimalCore,
+});
 const defaultTagColor = "#2563eb";
 
 export type LocalSiteStartupDiagnostics = {
@@ -49,18 +54,23 @@ export interface OpenLocalSiteAuthorityOptions {
 
 function createLocalSiteStore() {
   return createGraphStore(
-    createBootstrappedSnapshot(localSiteGraphDefinitions, {
-      availableDefinitions: localSiteGraphDefinitions,
-      coreSchema: minimalCore,
-    }),
+    createBootstrappedSnapshot(localSiteGraphDefinitions, localSiteGraphBootstrapOptions),
   );
+}
+
+async function ensureLocalSiteSchema(authority: LocalSiteAuthority): Promise<void> {
+  const beforeVersion = authority.store.version();
+  bootstrap(authority.store, localSiteGraphDefinitions, localSiteGraphBootstrapOptions);
+  if (authority.store.version() !== beforeVersion) {
+    await authority.persist();
+  }
 }
 
 export async function openLocalSiteAuthority({
   sqlite,
   now = () => new Date(),
 }: OpenLocalSiteAuthorityOptions): Promise<LocalSiteAuthority> {
-  return createGraphleSqlitePersistedAuthoritativeGraph(
+  const authority = await createGraphleSqlitePersistedAuthoritativeGraph(
     createLocalSiteStore(),
     localSiteGraphNamespace,
     {
@@ -141,6 +151,8 @@ export async function openLocalSiteAuthority({
       },
     },
   );
+  await ensureLocalSiteSchema(authority);
+  return authority;
 }
 
 export function readLocalSiteAuthorityHealth(authority: LocalSiteAuthority | undefined) {

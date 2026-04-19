@@ -60,6 +60,9 @@ package boundaries or future direction.
 - `createSyncedGraphClient()` and `createHttpGraphClient()` accept bootstrap
   options or a prebuilt schema snapshot when callers need
   `@dpeek/graphle-bootstrap`-owned schema materialization.
+- `createHttpGraphClient()` retries with a total sync payload when an
+  incremental HTTP sync response reports fallback and the client has no pending
+  local writes.
 - `GraphClientSyncStatus` widens sync-core status with `"pushing"` while pending
   writes are flushing.
 - `flush()` preserves optimistic local mutations until each pending transaction

@@ -84,7 +84,9 @@ trimmed, secret-redacted response body.
 Cloudflare API tokens are only process inputs. They are never returned in
 status payloads, logged, stored as graph facts, or persisted in deploy metadata.
 Cloudflare and publish failures are normalized to sanitized errors with a code,
-message, optional upstream status, and retryability flag.
+message, deploy step label, optional upstream status, and retryability flag.
+The step label identifies the failing boundary, such as `worker.upload`,
+`assets.upload`, `baseline.replace`, `health.verify`, or `home.verify`.
 
 The graph-backed metadata schema in this package stores only nonsecret remote
 state: account ID, Worker name, Worker URL, Durable Object binding/class,

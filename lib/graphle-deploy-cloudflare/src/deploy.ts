@@ -8,6 +8,7 @@ import {
   CloudflareDeployError,
   generateCloudflareDeploySecret,
   validateCloudflareDeployInput,
+  withCloudflareDeployStep,
   type CloudflareDeployInput,
   type CloudflareDeployResult,
 } from "./contracts.js";
@@ -60,7 +61,7 @@ async function verifyUrlOnlyPublicItem({
   throw new CloudflareDeployError(
     "Cloudflare public site verification did not find a URL-only public item on the home route.",
     "verify.url_only_item_missing",
-    { status: response.status, retryable: true },
+    { step: "url_only.verify", status: response.status, retryable: true },
   );
 }
 
@@ -77,30 +78,35 @@ export async function deployCloudflarePublicSite({
   const validation = validateCloudflareDeployInput(input);
   if (!validation.ok) {
     throw new CloudflareDeployError("Cloudflare deploy settings are invalid.", "settings.invalid", {
+      step: "settings.validate",
       status: 400,
     });
   }
 
   const deploySecret = generateDeploySecret();
-  const provisioned = await provisionCloudflarePublicSiteWorker({
-    input: validation.value,
-    deploySecret,
-    siteWebAssetsPath,
-    workerBundle,
-    apiBaseUrl,
-    fetch: fetcher,
-  });
+  const provisioned = await withCloudflareDeployStep("worker.upload", () =>
+    provisionCloudflarePublicSiteWorker({
+      input: validation.value,
+      deploySecret,
+      siteWebAssetsPath,
+      workerBundle,
+      apiBaseUrl,
+      fetch: fetcher,
+    }),
+  );
   const publish = await publishPublicSiteBaseline({
     workerUrl: provisioned.workerUrl,
     baseline,
     deploySecret,
     fetch: fetcher,
   });
-  await verifyUrlOnlyPublicItem({
-    baseline,
-    fetcher,
-    workerUrl: provisioned.workerUrl,
-  });
+  await withCloudflareDeployStep("url_only.verify", () =>
+    verifyUrlOnlyPublicItem({
+      baseline,
+      fetcher,
+      workerUrl: provisioned.workerUrl,
+    }),
+  );
 
   return {
     ok: true,

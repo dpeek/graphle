@@ -364,7 +364,7 @@ describe("createHttpGraphClient", () => {
     ]);
   });
 
-  it("surfaces scoped fallback without widening and recovers through a new whole-graph bootstrap", async () => {
+  it("recovers scoped fallback by refetching the requested scope without after", async () => {
     const authority = createAuthority();
     const requestedScope = {
       kind: "module" as const,
@@ -429,34 +429,22 @@ describe("createHttpGraphClient", () => {
       requestedScope,
     });
 
-    await expect(scopedClient.sync.sync()).rejects.toBeInstanceOf(GraphValidationError);
+    const recoveredPayload = await scopedClient.sync.sync();
+
+    expect(recoveredPayload.mode).toBe("total");
     expect(scopedClient.sync.getState()).toMatchObject({
       requestedScope,
       scope: deliveredScope,
       cursor: "module:1",
       completeness: "incomplete",
       freshness: "stale",
-      fallbackReason: "policy-changed",
-      status: "error",
-    });
-
-    const recovered = await createHttpGraphClient(testGraph, {
-      bootstrap: coreGraphBootstrapOptions,
-      definitions: testDefs,
-      fetch,
-    });
-
-    expect(recovered.sync.getState()).toMatchObject({
-      requestedScope: { kind: "graph" },
-      scope: { kind: "graph" },
-      cursor: "graph:1",
-      freshness: "current",
       status: "ready",
     });
+    expect(scopedClient.sync.getState().fallbackReason).toBeUndefined();
     expect(requestedUrls).toEqual([
       "http://graphle.localhost:1355/api/sync?scopeKind=module&moduleId=workflow&scopeId=scope%3Aworkflow%3Areview",
       "http://graphle.localhost:1355/api/sync?after=module%3A1&scopeKind=module&moduleId=workflow&scopeId=scope%3Aworkflow%3Areview",
-      "http://graphle.localhost:1355/api/sync?scopeKind=graph",
+      "http://graphle.localhost:1355/api/sync?scopeKind=module&moduleId=workflow&scopeId=scope%3Aworkflow%3Areview",
     ]);
   });
 
@@ -638,11 +626,17 @@ describe("createHttpGraphClient", () => {
       },
     );
 
+    client.graph.hiddenCursorProbe.update(authority.probeId, {
+      name: "Pending local rename",
+    });
+    expect(client.sync.getPendingTransactions()).toHaveLength(1);
+
     await expect(client.sync.sync()).rejects.toBeInstanceOf(GraphValidationError);
     expect(client.sync.getState()).toMatchObject({
       cursor: firstHidden.cursor,
       fallbackReason: "gap",
       freshness: "stale",
+      pendingCount: 1,
       status: "error",
       diagnostics: {
         retainedBaseCursor: secondHidden.cursor,
@@ -654,7 +648,7 @@ describe("createHttpGraphClient", () => {
     });
   });
 
-  it("surfaces graph fallback reasons over http until the caller recovers with a new total bootstrap", async () => {
+  it("recovers graph fallback reasons over http with a total refetch", async () => {
     for (const fallback of ["unknown-cursor", "gap", "reset"] as const) {
       const authority = createAuthority();
       const requestedUrls: string[] = [];
@@ -698,39 +692,25 @@ describe("createHttpGraphClient", () => {
         fetch,
       });
 
-      await expect(client.sync.sync()).rejects.toBeInstanceOf(GraphValidationError);
+      const recoveredPayload = await client.sync.sync();
+
+      expect(recoveredPayload.mode).toBe("total");
       expect(client.sync.getState()).toMatchObject({
-        requestedScope: { kind: "graph" },
-        scope: { kind: "graph" },
-        cursor: "server:1",
-        fallbackReason: fallback,
-        freshness: "stale",
-        status: "error",
-      });
-
-      const activity = client.sync.getState().recentActivities.at(-1);
-      if (!activity || activity.kind !== "fallback") {
-        throw new Error(`Expected the ${fallback} HTTP sync to record a fallback activity.`);
-      }
-      expect(activity).toMatchObject({
-        after: "server:1",
-        cursor: fallbackCursor,
-        fallbackReason: fallback,
-        freshness: "current",
-      });
-
-      const recovered = await createHttpGraphClient(testGraph, {
-        bootstrap: coreGraphBootstrapOptions,
-        definitions: testDefs,
-        fetch,
-      });
-
-      expect(recovered.sync.getState()).toMatchObject({
         requestedScope: { kind: "graph" },
         scope: { kind: "graph" },
         cursor: recoveryCursor,
         freshness: "current",
         status: "ready",
+      });
+      expect(client.sync.getState().fallbackReason).toBeUndefined();
+
+      const activity = client.sync.getState().recentActivities.at(-1);
+      if (!activity || activity.kind !== "total") {
+        throw new Error(`Expected the ${fallback} HTTP sync to recover through a total activity.`);
+      }
+      expect(activity).toMatchObject({
+        cursor: recoveryCursor,
+        freshness: "current",
       });
       expect(requestedUrls).toEqual([
         "http://graphle.localhost:1355/api/sync?scopeKind=graph",

@@ -6,6 +6,8 @@ import { fileURLToPath } from "node:url";
 import {
   CloudflareDeployError,
   redactCloudflareDeploySecrets,
+  withCloudflareDeployStep,
+  type CloudflareDeployStep,
   type ValidatedCloudflareDeployInput,
 } from "./contracts.js";
 
@@ -97,6 +99,7 @@ type SiteWebStaticAsset = {
   readonly hash: string;
   readonly size: number;
   readonly bytes: Uint8Array;
+  readonly contentType: string;
 };
 
 type SiteWebStaticAssets = {
@@ -283,6 +286,39 @@ function assetHash(bytes: Uint8Array, path: string): string {
     .slice(0, 32);
 }
 
+function siteWebAssetContentType(path: string): string {
+  switch (extname(path).toLowerCase()) {
+    case ".css":
+      return "text/css";
+    case ".js":
+    case ".mjs":
+      return "text/javascript";
+    case ".json":
+      return "application/json";
+    case ".webmanifest":
+      return "application/manifest+json";
+    case ".svg":
+      return "image/svg+xml";
+    case ".png":
+      return "image/png";
+    case ".jpg":
+    case ".jpeg":
+      return "image/jpeg";
+    case ".webp":
+      return "image/webp";
+    case ".gif":
+      return "image/gif";
+    case ".ico":
+      return "image/x-icon";
+    case ".woff":
+      return "font/woff";
+    case ".woff2":
+      return "font/woff2";
+    default:
+      return "application/null";
+  }
+}
+
 function shouldUploadSiteWebAsset(relativePath: string): boolean {
   const normalized = relativePath.replaceAll(sep, "/");
   return (
@@ -336,6 +372,7 @@ async function collectSiteWebStaticAssets(root: string): Promise<SiteWebStaticAs
         hash,
         size: bytes.byteLength,
         bytes,
+        contentType: siteWebAssetContentType(publicPath),
       } satisfies SiteWebStaticAsset;
       assetsByHash.set(hash, asset);
       manifest[publicPath] = {
@@ -356,9 +393,17 @@ async function collectSiteWebStaticAssets(root: string): Promise<SiteWebStaticAs
   };
 }
 
-function createAssetUploadFormData(payload: Record<string, string>): FormData {
+function createAssetUploadFormData(assets: readonly SiteWebStaticAsset[]): FormData {
   const form = new FormData();
-  form.append("body", JSON.stringify(payload));
+  for (const asset of assets) {
+    form.append(
+      asset.hash,
+      new File([Buffer.from(asset.bytes).toString("base64")], asset.hash, {
+        type: asset.contentType,
+      }),
+      asset.hash,
+    );
+  }
   return form;
 }
 
@@ -382,32 +427,34 @@ async function existingWorkerEntrypoint(): Promise<string> {
 }
 
 export async function buildCloudflarePublicSiteWorkerBundle(): Promise<CloudflareWorkerBundle> {
-  if (!("Bun" in globalThis)) {
-    throw new CloudflareDeployError(
-      "Cloudflare Worker bundle generation requires the Bun runtime.",
-      "worker.bundle_runtime_missing",
-    );
-  }
+  return await withCloudflareDeployStep("worker.bundle", async () => {
+    if (!("Bun" in globalThis)) {
+      throw new CloudflareDeployError(
+        "Cloudflare Worker bundle generation requires the Bun runtime.",
+        "worker.bundle_runtime_missing",
+      );
+    }
 
-  const result = await Bun.build({
-    entrypoints: [await existingWorkerEntrypoint()],
-    format: "esm",
-    minify: true,
-    target: "browser",
+    const result = await Bun.build({
+      entrypoints: [await existingWorkerEntrypoint()],
+      format: "esm",
+      minify: true,
+      target: "browser",
+    });
+
+    if (!result.success || !result.outputs[0]) {
+      const message = result.logs.map((entry) => entry.message).join(" ");
+      throw new CloudflareDeployError(
+        message || "Cloudflare Worker bundle generation failed.",
+        "worker.bundle_failed",
+      );
+    }
+
+    return {
+      mainModule: cloudflarePublicSiteWorkerMainModule,
+      source: await result.outputs[0].text(),
+    };
   });
-
-  if (!result.success || !result.outputs[0]) {
-    const message = result.logs.map((entry) => entry.message).join(" ");
-    throw new CloudflareDeployError(
-      message || "Cloudflare Worker bundle generation failed.",
-      "worker.bundle_failed",
-    );
-  }
-
-  return {
-    mainModule: cloudflarePublicSiteWorkerMainModule,
-    source: await result.outputs[0].text(),
-  };
 }
 
 export function createCloudflareApiClient({
@@ -420,17 +467,26 @@ export function createCloudflareApiClient({
     return `${apiBaseUrl}/accounts/${encodedPathPart(accountId)}${path}`;
   }
 
-  async function jsonRequest<T>(path: string, init: Omit<RequestInit, "headers"> = {}): Promise<T> {
-    const response = await fetcher(endpoint(path), {
-      ...init,
-      headers: createRequestHeaders(apiToken, "application/json"),
+  async function jsonRequest<T>(
+    step: CloudflareDeployStep,
+    path: string,
+    init: Omit<RequestInit, "headers"> = {},
+  ): Promise<T> {
+    return await withCloudflareDeployStep(step, async () => {
+      const response = await fetcher(endpoint(path), {
+        ...init,
+        headers: createRequestHeaders(apiToken, "application/json"),
+      });
+      const envelope = await parseEnvelope<T>(response, apiToken);
+      return envelope.result as T;
     });
-    const envelope = await parseEnvelope<T>(response, apiToken);
-    return envelope.result as T;
   }
 
   async function listWorkerScripts(): Promise<readonly CloudflareScriptSummary[]> {
-    const result = await jsonRequest<readonly CloudflareScriptSummary[]>("/workers/scripts");
+    const result = await jsonRequest<readonly CloudflareScriptSummary[]>(
+      "cloudflare.scripts.list",
+      "/workers/scripts",
+    );
     return Array.isArray(result) ? result : [];
   }
 
@@ -439,6 +495,7 @@ export function createCloudflareApiClient({
     manifest: CloudflareAssetManifest,
   ): Promise<CloudflareAssetUploadSession> {
     return await jsonRequest<CloudflareAssetUploadSession>(
+      "assets.session",
       `/workers/scripts/${encodedPathPart(workerName)}/assets-upload-session`,
       {
         method: "POST",
@@ -449,17 +506,19 @@ export function createCloudflareApiClient({
 
   async function uploadAssetPayload(
     uploadJwt: string,
-    payload: Record<string, string>,
+    assets: readonly SiteWebStaticAsset[],
   ): Promise<CloudflareAssetUploadResult> {
-    const response = await fetcher(endpoint("/workers/assets/upload?base64=true"), {
-      method: "POST",
-      headers: createRequestHeaders(uploadJwt),
-      body: createAssetUploadFormData(payload),
+    return await withCloudflareDeployStep("assets.upload", async () => {
+      const response = await fetcher(endpoint("/workers/assets/upload?base64=true"), {
+        method: "POST",
+        headers: createRequestHeaders(uploadJwt),
+        body: createAssetUploadFormData(assets),
+      });
+      const envelope = await parseEnvelope<CloudflareAssetUploadResult>(response, uploadJwt, [
+        apiToken,
+      ]);
+      return isObjectRecord(envelope.result) ? envelope.result : {};
     });
-    const envelope = await parseEnvelope<CloudflareAssetUploadResult>(response, uploadJwt, [
-      apiToken,
-    ]);
-    return isObjectRecord(envelope.result) ? envelope.result : {};
   }
 
   async function uploadWorkerModule({
@@ -475,26 +534,29 @@ export function createCloudflareApiClient({
     readonly workerBundle: CloudflareWorkerBundle;
     readonly workerName: string;
   }): Promise<CloudflareScriptSummary> {
-    const form = createCloudflareWorkerUploadFormData({
-      bundle: workerBundle,
-      deploySecret,
-      includeDurableObjectMigration:
-        existingMigrationTag !== cloudflarePublicSiteDurableObjectMigrationTag,
-      staticAssets,
+    return await withCloudflareDeployStep("worker.upload", async () => {
+      const form = createCloudflareWorkerUploadFormData({
+        bundle: workerBundle,
+        deploySecret,
+        includeDurableObjectMigration:
+          existingMigrationTag !== cloudflarePublicSiteDurableObjectMigrationTag,
+        staticAssets,
+      });
+      const response = await fetcher(endpoint(`/workers/scripts/${encodedPathPart(workerName)}`), {
+        method: "PUT",
+        headers: createRequestHeaders(apiToken),
+        body: form,
+      });
+      const envelope = await parseEnvelope<CloudflareScriptSummary>(response, apiToken);
+      return isObjectRecord(envelope.result) ? envelope.result : {};
     });
-    const response = await fetcher(endpoint(`/workers/scripts/${encodedPathPart(workerName)}`), {
-      method: "PUT",
-      headers: createRequestHeaders(apiToken),
-      body: form,
-    });
-    const envelope = await parseEnvelope<CloudflareScriptSummary>(response, apiToken);
-    return isObjectRecord(envelope.result) ? envelope.result : {};
   }
 
   async function enableWorkerSubdomain(
     workerName: string,
   ): Promise<CloudflareWorkerSubdomainResult> {
     return await jsonRequest<CloudflareWorkerSubdomainResult>(
+      "worker.subdomain.enable",
       `/workers/scripts/${encodedPathPart(workerName)}/subdomain`,
       {
         method: "POST",
@@ -507,15 +569,20 @@ export function createCloudflareApiClient({
   }
 
   async function getAccountSubdomain(): Promise<string> {
-    const result = await jsonRequest<CloudflareSubdomainResult>("/workers/subdomain");
-    if (!result?.subdomain) {
-      throw new CloudflareDeployError(
-        "Cloudflare account does not have a workers.dev subdomain configured.",
-        "cloudflare.subdomain_missing",
-        { status: 400 },
+    return await withCloudflareDeployStep("cloudflare.subdomain.get", async () => {
+      const result = await jsonRequest<CloudflareSubdomainResult>(
+        "cloudflare.subdomain.get",
+        "/workers/subdomain",
       );
-    }
-    return result.subdomain;
+      if (!result?.subdomain) {
+        throw new CloudflareDeployError(
+          "Cloudflare account does not have a workers.dev subdomain configured.",
+          "cloudflare.subdomain_missing",
+          { status: 400 },
+        );
+      }
+      return result.subdomain;
+    });
   }
 
   return {
@@ -538,7 +605,9 @@ async function uploadCloudflareSiteWebAssets({
   readonly workerName: string;
 }): Promise<CloudflareWorkerStaticAssets | undefined> {
   if (!siteWebAssetsPath) return undefined;
-  const staticAssets = await collectSiteWebStaticAssets(siteWebAssetsPath);
+  const staticAssets = await withCloudflareDeployStep("assets.collect", () =>
+    collectSiteWebStaticAssets(siteWebAssetsPath),
+  );
   if (!staticAssets) return undefined;
 
   const uploadSession = await client.createAssetUploadSession(workerName, staticAssets.manifest);
@@ -546,27 +615,27 @@ async function uploadCloudflareSiteWebAssets({
     throw new CloudflareDeployError(
       "Cloudflare static asset upload session did not return an upload token.",
       "cloudflare.assets_upload_failed",
-      { retryable: true },
+      { step: "assets.session", retryable: true },
     );
   }
 
   let completionJwt = uploadSession.jwt;
   for (const bucket of uploadSession.buckets ?? []) {
-    const payload: Record<string, string> = {};
+    const assets: SiteWebStaticAsset[] = [];
     for (const hash of bucket) {
       const asset = staticAssets.assetsByHash.get(hash);
       if (!asset) {
         throw new CloudflareDeployError(
           `Cloudflare static asset upload requested unknown asset hash "${hash}".`,
           "cloudflare.assets_upload_failed",
-          { retryable: true },
+          { step: "assets.upload", retryable: true },
         );
       }
-      payload[hash] = Buffer.from(asset.bytes).toString("base64");
+      assets.push(asset);
     }
-    if (Object.keys(payload).length === 0) continue;
+    if (assets.length === 0) continue;
 
-    const uploadResult = await client.uploadAssetPayload(uploadSession.jwt, payload);
+    const uploadResult = await client.uploadAssetPayload(uploadSession.jwt, assets);
     if (uploadResult.jwt) completionJwt = uploadResult.jwt;
   }
 

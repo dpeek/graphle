@@ -545,6 +545,12 @@ function DeployPanel({
     }
   }
 
+  const deployErrorMessage = deploy?.error
+    ? deploy.error.step
+      ? `${deploy.error.message} (${deploy.error.step})`
+      : deploy.error.message
+    : formError;
+
   return (
     <form
       className="flex min-w-0 flex-col gap-2 border-t border-sidebar-border pt-3"
@@ -603,10 +609,8 @@ function DeployPanel({
           value={workerName}
         />
       ) : null}
-      {deploy?.error?.message || formError ? (
-        <p className="m-0 text-[0.6875rem] leading-4 text-destructive">
-          {formError || deploy?.error?.message}
-        </p>
+      {deployErrorMessage ? (
+        <p className="m-0 text-[0.6875rem] leading-4 text-destructive">{deployErrorMessage}</p>
       ) : null}
       <Button disabled={deploying || !onDeploy} size="sm" type="submit">
         <CloudUploadIcon aria-hidden={true} data-icon="inline-start" />

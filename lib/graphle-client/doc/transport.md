@@ -47,6 +47,11 @@ Unknown scope kinds fail closed.
 - optional bootstrap or schema snapshot inputs
 
 It fetches an initial sync payload immediately after construction.
+After startup, it requests incremental sync from the last local cursor. If the
+authority reports an incremental fallback such as a reset or unknown cursor, the
+client automatically retries without `after` and applies the returned total
+snapshot when there are no pending local writes. Pending local writes still keep
+the fallback fatal so optimistic edits are not silently discarded.
 
 `createHttpGraphTxIdFactory()` provides the default local tx id generator for that client path.
 

@@ -166,7 +166,9 @@ Behavior:
 
 - unauthenticated deploy reads and writes return JSON 401
 - invalid settings return JSON 400 with field-level diagnostics
-- Cloudflare API failures return JSON 502 or 503 with sanitized details
+- Cloudflare API failures return JSON 502 or 503 with sanitized details,
+  including a deploy step label so the browser can distinguish Worker upload,
+  static asset upload, baseline replacement, and verification failures
 - unknown `/api/*` keeps the existing JSON 404 behavior
 - requests should serialize or reject concurrent deploy attempts for the same
   local project instead of racing resource updates

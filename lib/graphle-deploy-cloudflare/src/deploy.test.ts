@@ -104,7 +104,7 @@ describe("Cloudflare deploy contracts", () => {
     const error = new CloudflareDeployError(
       "Cloudflare rejected token super-secret-token.",
       "cloudflare.api_failed",
-      { status: 403 },
+      { step: "worker.upload", status: 403 },
     );
 
     expect(redactCloudflareDeploySecrets("value super-secret-token", ["super-secret-token"])).toBe(
@@ -113,6 +113,7 @@ describe("Cloudflare deploy contracts", () => {
     expect(sanitizeCloudflareDeployError(error, ["super-secret-token"])).toEqual({
       code: "cloudflare.api_failed",
       message: "Cloudflare rejected token [redacted].",
+      step: "worker.upload",
       status: 403,
       retryable: false,
     });
@@ -375,7 +376,8 @@ describe("Cloudflare deploy API requests", () => {
 
     const requests: string[] = [];
     const metadataUploads: unknown[] = [];
-    const uploadedAssetPayloads: unknown[] = [];
+    const uploadedAssetPayloads: string[] = [];
+    const assetPathsByHash = new Map<string, string>();
     const fetcher = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
       const request = new Request(input, init);
       const url = new URL(request.url);
@@ -396,6 +398,9 @@ describe("Cloudflare deploy API requests", () => {
           readonly manifest: Record<string, { readonly hash: string; readonly size: number }>;
         };
         expect(Object.keys(body.manifest).sort()).toEqual(["/assets/main.css", "/assets/main.js"]);
+        for (const [path, entry] of Object.entries(body.manifest)) {
+          assetPathsByHash.set(entry.hash, path);
+        }
         return Response.json({
           success: true,
           result: {
@@ -408,10 +413,23 @@ describe("Cloudflare deploy API requests", () => {
       if (url.pathname === "/client/v4/accounts/account-1/workers/assets/upload") {
         expect(url.searchParams.get("base64")).toBe("true");
         expect(request.headers.get("authorization")).toBe("Bearer upload-jwt");
+        const rawMultipart = await request.clone().text();
         const form = await request.formData();
-        const payload = JSON.parse(String(form.get("body"))) as Record<string, string>;
-        uploadedAssetPayloads.push(payload);
-        expect(Object.keys(payload)).toHaveLength(2);
+        expect(form.has("body")).toBe(false);
+        for (const [hash, value] of form.entries()) {
+          expect(value).toBeInstanceOf(File);
+          const file = value as File;
+          expect(file.name).toBe(hash);
+          expect(Buffer.from(await file.text(), "base64").byteLength).toBeGreaterThan(0);
+          uploadedAssetPayloads.push(hash);
+          expect(rawMultipart).toContain(`name="${hash}"; filename="${hash}"`);
+        }
+        expect(uploadedAssetPayloads.map((hash) => assetPathsByHash.get(hash)).sort()).toEqual([
+          "/assets/main.css",
+          "/assets/main.js",
+        ]);
+        expect(rawMultipart).toContain("Content-Type: text/css");
+        expect(rawMultipart).toContain("Content-Type: text/javascript");
         return Response.json(
           {
             success: true,
@@ -525,7 +543,7 @@ describe("Cloudflare deploy API requests", () => {
       "GET /",
       "GET /",
     ]);
-    expect(uploadedAssetPayloads).toHaveLength(1);
+    expect(uploadedAssetPayloads).toHaveLength(2);
     expect(metadataUploads).toHaveLength(1);
   });
 });

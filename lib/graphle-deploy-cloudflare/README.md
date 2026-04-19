@@ -22,6 +22,8 @@ boundary for the personal-site MVP.
   generation, Worker script upload metadata, Durable Object binding/migration
   metadata, packaged public stylesheet asset upload, workers.dev enablement, and
   account subdomain lookup
+- sanitized deploy errors with step labels for Worker upload, asset upload,
+  baseline publish, and remote verification failures
 - graph-backed nonsecret deploy metadata schema for local persistence
 - publish helpers that replace the remote baseline, verify health and `/`, and
   verify URL-only public item display when one exists, with bounded retries for

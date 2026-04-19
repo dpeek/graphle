@@ -5,6 +5,7 @@ import {
   deployCloudflarePublicSite as deployCloudflarePublicSiteDefault,
   sanitizeCloudflareDeployError,
   validateCloudflareDeployInput,
+  withCloudflareDeployStep,
   type CloudflareDeployInput,
   type CloudflareDeployResult,
   type CloudflareDeploySanitizedError,
@@ -303,6 +304,7 @@ function deployErrorResponse(error: CloudflareDeploySanitizedError): Response {
     {
       error: error.message,
       code: error.code,
+      ...(error.step ? { step: error.step } : {}),
       ...(error.status ? { status: error.status } : {}),
       retryable: error.retryable,
     },
@@ -557,7 +559,9 @@ export function createGraphleLocalServer({
             siteWebAssetsPath,
             now,
           });
-          await persistLocalCloudflareDeployMetadata(siteAuthority, result.metadata);
+          await withCloudflareDeployStep("metadata.persist", () =>
+            persistLocalCloudflareDeployMetadata(siteAuthority, result.metadata),
+          );
           return result;
         })();
         deployInFlight = deployTask;

@@ -57,6 +57,7 @@ async function withServer<T>(
 async function withGraphServer<T>(
   run: (input: {
     readonly server: ReturnType<typeof createGraphleLocalServer>;
+    readonly siteAuthority: Awaited<ReturnType<typeof openLocalSiteAuthority>>;
     readonly initToken: string;
   }) => Promise<T>,
 ): Promise<T> {
@@ -88,6 +89,7 @@ async function withGraphServer<T>(
   try {
     return await run({
       server,
+      siteAuthority,
       initToken: auth.initToken,
     });
   } finally {
@@ -775,6 +777,30 @@ describe("local server routes", () => {
       secondSqlite.close();
       await rm(cwd, { force: true, recursive: true });
     }
+  });
+
+  it("recovers HTTP graph clients when the authority requires total snapshot fallback", async () => {
+    await withGraphServer(async ({ server, siteAuthority, initToken }) => {
+      const cookie = await redeemAdminCookie(server, initToken);
+      const client = await createGraphleSiteHttpGraphClient({
+        url: "http://127.0.0.1:4318/",
+        fetch: createAdminCookieFetch(server, cookie),
+      });
+      const initialState = client.sync.getState();
+
+      expect(initialState.cursor).toBeDefined();
+
+      await siteAuthority.persist();
+
+      const applied = await client.sync.sync();
+      const recoveredState = client.sync.getState();
+
+      expect(applied.mode).toBe("total");
+      expect(recoveredState.status).toBe("ready");
+      expect(recoveredState.fallbackReason).toBeUndefined();
+      expect(recoveredState.cursor).not.toBe(initialState.cursor);
+      expect(client.graph.item.list().some((item) => item.title === "Home")).toBe(true);
+    });
   });
 
   it("renders public site pages from the sanitized graph projection", async () => {

@@ -41,9 +41,26 @@ export type CloudflareDeployInputValidationResult =
 export interface CloudflareDeploySanitizedError {
   readonly code: string;
   readonly message: string;
+  readonly step?: CloudflareDeployStep;
   readonly status?: number;
   readonly retryable: boolean;
 }
+
+export type CloudflareDeployStep =
+  | "settings.validate"
+  | "worker.bundle"
+  | "cloudflare.scripts.list"
+  | "assets.collect"
+  | "assets.session"
+  | "assets.upload"
+  | "worker.upload"
+  | "worker.subdomain.enable"
+  | "cloudflare.subdomain.get"
+  | "baseline.replace"
+  | "health.verify"
+  | "home.verify"
+  | "url_only.verify"
+  | "metadata.persist";
 
 export interface CloudflareDeployResult {
   readonly ok: true;
@@ -77,6 +94,7 @@ export interface CloudflareDeployStatus {
 
 export class CloudflareDeployError extends Error {
   readonly code: string;
+  readonly step?: CloudflareDeployStep;
   readonly status?: number;
   readonly retryable: boolean;
 
@@ -84,6 +102,7 @@ export class CloudflareDeployError extends Error {
     message: string,
     code: string,
     options: {
+      readonly step?: CloudflareDeployStep;
       readonly status?: number;
       readonly retryable?: boolean;
       readonly cause?: unknown;
@@ -92,8 +111,34 @@ export class CloudflareDeployError extends Error {
     super(message, { cause: options.cause });
     this.name = "CloudflareDeployError";
     this.code = code;
+    this.step = options.step;
     this.status = options.status;
     this.retryable = options.retryable ?? false;
+  }
+}
+
+export async function withCloudflareDeployStep<T>(
+  step: CloudflareDeployStep,
+  action: () => Promise<T> | T,
+): Promise<T> {
+  try {
+    return await action();
+  } catch (error) {
+    if (error instanceof CloudflareDeployError) {
+      if (error.step) throw error;
+      throw new CloudflareDeployError(error.message, error.code, {
+        step,
+        status: error.status,
+        retryable: error.retryable,
+        cause: error,
+      });
+    }
+
+    const message = error instanceof Error ? error.message : String(error);
+    throw new CloudflareDeployError(message || "Cloudflare deploy failed.", "deploy.failed", {
+      step,
+      cause: error,
+    });
   }
 }
 
@@ -202,6 +247,7 @@ export function sanitizeCloudflareDeployError(
     return {
       code: error.code,
       message: redactCloudflareDeploySecrets(error.message, secrets),
+      ...(error.step ? { step: error.step } : {}),
       ...(error.status ? { status: error.status } : {}),
       retryable: error.retryable,
     };

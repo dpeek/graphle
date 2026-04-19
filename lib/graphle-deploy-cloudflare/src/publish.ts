@@ -4,7 +4,11 @@ import {
   listGraphleSiteItemViews,
 } from "@dpeek/graphle-site-web/public-runtime";
 
-import { CloudflareDeployError, redactCloudflareDeploySecrets } from "./contracts.js";
+import {
+  CloudflareDeployError,
+  redactCloudflareDeploySecrets,
+  type CloudflareDeployStep,
+} from "./contracts.js";
 import { graphlePublicSiteBaselinePath, graphlePublicSiteHealthPath } from "./worker.js";
 
 export class CloudflarePublicSitePublishError extends CloudflareDeployError {
@@ -12,6 +16,7 @@ export class CloudflarePublicSitePublishError extends CloudflareDeployError {
     message: string,
     code: string,
     options: {
+      readonly step?: CloudflareDeployStep;
       readonly status?: number;
       readonly retryable?: boolean;
       readonly cause?: unknown;
@@ -86,12 +91,14 @@ async function throwPublishResponseError({
   message,
   response,
   secrets,
+  step,
 }: {
   readonly attemptCount: number;
   readonly code: string;
   readonly message: string;
   readonly response: Response;
   readonly secrets: readonly string[];
+  readonly step: CloudflareDeployStep;
 }): Promise<never> {
   const summary = await summarizeFailureResponse(response, secrets);
   const retryable = isRetryablePublishStatus(response.status);
@@ -102,6 +109,7 @@ async function throwPublishResponseError({
     `${message} Cloudflare returned HTTP ${response.status}${statusText}${attempts}${suffix}`,
     code,
     {
+      step,
       status: response.status,
       retryable,
     },
@@ -116,6 +124,7 @@ async function fetchPublishStep({
   retryDelaysMs,
   secrets,
   sleep,
+  step,
 }: {
   readonly code: string;
   readonly message: string;
@@ -124,6 +133,7 @@ async function fetchPublishStep({
   readonly retryDelaysMs: readonly number[];
   readonly secrets: readonly string[];
   readonly sleep: (delayMs: number) => Promise<void> | void;
+  readonly step: CloudflareDeployStep;
 }): Promise<Response> {
   let attempt = 0;
 
@@ -136,6 +146,7 @@ async function fetchPublishStep({
       if (!retryable) {
         const detail = error instanceof Error ? error.message : String(error);
         throw new CloudflarePublicSitePublishError(`${message} ${detail}`, code, {
+          step,
           retryable: true,
           cause: error,
         });
@@ -157,6 +168,7 @@ async function fetchPublishStep({
         message,
         response,
         secrets,
+        step,
       });
     }
 
@@ -193,6 +205,7 @@ export async function publishPublicSiteBaseline({
 }: PublishPublicSiteBaselineOptions): Promise<PublishPublicSiteBaselineResult> {
   const paths = listPublicSiteBaselineCachePaths(baseline);
   await fetchPublishStep({
+    step: "baseline.replace",
     code: "baseline.replace_failed",
     message: "Cloudflare public baseline replacement failed.",
     retryStatus: (status) => status === 400 || isRetryablePublishStatus(status),
@@ -213,6 +226,7 @@ export async function publishPublicSiteBaseline({
   await purgePaths?.(paths);
 
   const health = await fetchPublishStep({
+    step: "health.verify",
     code: "health.failed",
     message: "Cloudflare public site health verification failed.",
     retryDelaysMs,
@@ -222,6 +236,7 @@ export async function publishPublicSiteBaseline({
   });
 
   const home = await fetchPublishStep({
+    step: "home.verify",
     code: "home.failed",
     message: "Cloudflare public home route verification failed.",
     retryDelaysMs,

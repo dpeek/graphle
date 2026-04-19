@@ -487,7 +487,12 @@ export function createSyncedGraphClient<
       async sync() {
         clearOverrides();
         try {
-          const applied = await session.pull(options.pull);
+          const applied = await session.pull((state) =>
+            options.pull({
+              ...state,
+              pendingCount: pendingTransactions.length,
+            }),
+          );
           if (applied.mode === "total") pendingTransactions = [];
           replaceLocalFromAuthority();
           publishState();

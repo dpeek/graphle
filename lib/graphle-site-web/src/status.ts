@@ -62,6 +62,7 @@ export interface GraphleSiteDeployStatus {
   readonly error?: {
     readonly code: string;
     readonly message: string;
+    readonly step?: string;
     readonly status?: number;
     readonly retryable: boolean;
   };

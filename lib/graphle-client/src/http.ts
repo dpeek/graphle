@@ -6,6 +6,7 @@ import type {
 } from "@dpeek/graphle-kernel";
 import { createGraphId } from "@dpeek/graphle-kernel";
 import type { AnyTypeOutput } from "@dpeek/graphle-kernel";
+import { isIncrementalSyncFallback } from "@dpeek/graphle-sync";
 import type { SyncPayload, SyncScopeRequest, SyncState } from "@dpeek/graphle-sync";
 
 import { applyHttpSyncRequest } from "./http-sync-request";
@@ -160,14 +161,13 @@ export async function createHttpGraphClient<
   const createTxId = options.createTxId ?? createHttpGraphTxIdFactory();
   const bearerToken = options.bearerToken?.trim() || undefined;
 
-  async function fetchSyncPayload(
-    state: Pick<SyncState, "requestedScope"> & {
-      cursor?: SyncState["cursor"];
-    },
+  async function fetchSyncRequest(
+    state: Pick<SyncState, "requestedScope">,
+    after?: SyncState["cursor"],
   ): Promise<SyncPayload> {
     const requestUrl = new URL(syncUrl);
     applyHttpSyncRequest(requestUrl, {
-      after: state.cursor,
+      after,
       scope: state.requestedScope,
     });
 
@@ -190,6 +190,21 @@ export async function createHttpGraphClient<
     }
 
     return payload as SyncPayload;
+  }
+
+  async function fetchSyncPayload(
+    state: Pick<SyncState, "cursor" | "pendingCount" | "requestedScope">,
+  ): Promise<SyncPayload> {
+    const payload = await fetchSyncRequest(state, state.cursor);
+    if (
+      state.pendingCount === 0 &&
+      payload.mode === "incremental" &&
+      isIncrementalSyncFallback(payload)
+    ) {
+      return await fetchSyncRequest(state);
+    }
+
+    return payload;
   }
 
   async function pushTransaction(

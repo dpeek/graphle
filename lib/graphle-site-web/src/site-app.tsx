@@ -95,6 +95,7 @@ function failedDeployStatus(
   const message =
     typeof record.error === "string" ? record.error : "Cloudflare deploy request failed.";
   const code = typeof record.code === "string" ? record.code : "deploy.failed";
+  const step = typeof record.step === "string" ? record.step : undefined;
   const status = typeof record.status === "number" ? record.status : undefined;
   const retryable = typeof record.retryable === "boolean" ? record.retryable : false;
 
@@ -109,6 +110,7 @@ function failedDeployStatus(
     error: {
       code,
       message,
+      ...(step ? { step } : {}),
       ...(status ? { status } : {}),
       retryable,
     },
