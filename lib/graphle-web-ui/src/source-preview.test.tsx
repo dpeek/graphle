@@ -40,7 +40,7 @@ describe("SourcePreviewFieldEditor", () => {
   it("renders source mode by default", () => {
     const markup = renderToStaticMarkup(
       <SourcePreviewFieldEditor
-        kind="markdown"
+        kind="json"
         preview={<div data-preview="ready">Preview</div>}
         source={<div data-source="ready">Source</div>}
       />,
@@ -74,13 +74,13 @@ describe("SourcePreviewFieldEditor", () => {
 
   it("keeps the shared panel styles available to browser editors", () => {
     const emptyMarkup = renderToStaticMarkup(
-      <EmptyPreview attribute="markdown">Start writing to preview rendered markdown.</EmptyPreview>,
+      <EmptyPreview attribute="source">Add source text to preview rendered output.</EmptyPreview>,
     );
 
     expect(sourcePreviewPanelClassName).toContain("min-h-[22rem]");
     expect(sourcePreviewEditorFrameClassName).toContain("overflow-hidden");
     expect(sourcePreviewTextareaClassName).toContain("min-h-[22rem]");
-    expect(emptyMarkup).toContain('data-web-source-preview-empty="markdown"');
+    expect(emptyMarkup).toContain('data-web-source-preview-empty="source"');
     expect(emptyMarkup).toContain("border-dashed");
   });
 });

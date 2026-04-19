@@ -1,7 +1,7 @@
 ---
 name: Graphle docs index
 description: "Repo entrypoint for root docs, package-owned current-state docs, and branch specs."
-last_updated: 2026-04-18
+last_updated: 2026-04-19
 ---
 
 # Graphle docs index
@@ -156,8 +156,8 @@ The current dependency chain is:
 - `../lib/graphle-module-site/`: `@dpeek/graphle-module-site`, the built-in
   `site:` namespace for flat `site:item` records in the personal-site MVP
 - `../lib/graphle-web-ui/`: `@dpeek/graphle-web-ui`, the shared browser
-  primitive package for reusable controls, markdown, Monaco, and
-  source-preview chrome
+  primitive package for reusable controls, Plate markdown, plain source-preview
+  editing, and shared browser chrome
 - `../lib/graphle-web-shell/`: `@dpeek/graphle-web-shell`, the generic browser
   shell library for feature registration, host status, navigation, commands,
   and content slots

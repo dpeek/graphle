@@ -63,21 +63,21 @@
   add lazy Shiki highlighting, copy-to-clipboard controls, and
   filename/language detection to the shared markdown renderer.
 - [Plate markdown editor](/Users/dpeek/code/graphle/pdr/plate-markdown-editor/spec.md):
-  replace the markdown renderer and editor stack with Plate, share view/edit
-  document styling, support editable highlighted code blocks, and remove Monaco.
+  implemented the Plate markdown renderer/editor stack, shared view/edit
+  document styling, editable highlighted code blocks, and Monaco removal.
 - [Plate markdown editor phase 1](/Users/dpeek/code/graphle/pdr/plate-markdown-editor/01-plate-foundation.md):
-  add Plate dependencies and tested markdown conversion helpers without
-  changing the production renderer.
+  implemented Plate dependencies and tested markdown conversion helpers.
 - [Plate markdown editor phase 2](/Users/dpeek/code/graphle/pdr/plate-markdown-editor/02-read-only-renderer.md):
-  switch the read-only markdown renderer to Plate while preserving shared
+  implemented the Plate read-only markdown renderer while preserving shared
   markdown styles.
 - [Plate markdown editor phase 3](/Users/dpeek/code/graphle/pdr/plate-markdown-editor/03-code-blocks-lowlight.md):
-  move code blocks to Plate and Lowlight so highlighting works in editable
+  implemented Plate and Lowlight code blocks so highlighting works in editable
   documents.
 - [Plate markdown editor phase 4](/Users/dpeek/code/graphle/pdr/plate-markdown-editor/04-editor-field-integration.md):
-  add the Plate markdown editor, floating toolbar, and graph field integration.
+  implemented the Plate markdown editor, floating toolbar, and graph field
+  integration.
 - [Plate markdown editor phase 5](/Users/dpeek/code/graphle/pdr/plate-markdown-editor/05-monaco-deletion-svg-fallback.md):
-  remove Monaco and replace SVG editing with the plain source editor fallback.
+  implemented Monaco removal and replaced SVG editing with the plain source
+  editor fallback.
 - [Plate markdown editor phase 6](/Users/dpeek/code/graphle/pdr/plate-markdown-editor/06-verification-docs-cleanup.md):
-  clean stale docs and dependencies, run full checks, and verify browser
-  authoring behavior.
+  implemented stale dependency/docs cleanup and recorded final verification.
