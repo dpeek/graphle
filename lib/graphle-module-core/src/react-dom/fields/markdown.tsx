@@ -4,8 +4,7 @@ import {
   usePredicateField,
   type PredicateFieldViewCapability,
 } from "@dpeek/graphle-react";
-import { MarkdownRenderer } from "@dpeek/graphle-web-ui/markdown";
-import { MonacoSourceEditor, sourcePreviewMonacoOptions } from "@dpeek/graphle-web-ui/monaco";
+import { MarkdownEditor, MarkdownRenderer } from "@dpeek/graphle-web-ui/markdown";
 import { useEffect, useState } from "react";
 
 import {
@@ -60,13 +59,11 @@ export function MarkdownFieldEditor({
   }
 
   return (
-    <div aria-invalid={isInvalid || undefined} data-web-field-kind="markdown">
-      <MonacoSourceEditor
-        language="markdown"
+    <div data-web-field-kind="markdown">
+      <MarkdownEditor
+        aria-invalid={isInvalid || undefined}
         onChange={applyDraft}
-        options={sourcePreviewMonacoOptions}
         placeholder={placeholder}
-        sourceKind="markdown"
         value={draft}
       />
     </div>

@@ -282,6 +282,32 @@
   color: var(--foreground);
 }
 
+.graph-markdown.graph-markdown-editor {
+  min-height: 8rem;
+  border-radius: var(--radius-sm);
+  outline: 1px solid transparent;
+  outline-offset: 0.5rem;
+  transition:
+    outline-color 150ms ease,
+    box-shadow 150ms ease;
+}
+
+.graph-markdown.graph-markdown-editor:focus-visible,
+.graph-markdown.graph-markdown-editor:focus-within {
+  outline-color: color-mix(in oklch, var(--ring) 72%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--ring) 20%, transparent);
+}
+
+.graph-markdown.graph-markdown-editor[aria-invalid="true"] {
+  outline-color: var(--destructive);
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--destructive) 18%, transparent);
+}
+
+.graph-markdown.graph-markdown-editor [data-slate-placeholder="true"] {
+  color: var(--muted-foreground);
+  opacity: 0.78;
+}
+
 .graph-markdown .graph-markdown-list,
 .graph-markdown .graph-markdown-task-list {
   margin-block: 1.25em;

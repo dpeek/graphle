@@ -24,11 +24,15 @@ layout constraints, but product apps should not redefine markdown typography
 locally. Graphle-specific markdown CSS should be limited to design-token
 bridging around the upstream typography rules.
 
-Markdown rendering uses Plate's markdown deserialization with GFM support and a
-Plate static read-only render path. `MarkdownRenderer` decorates headings with
+Markdown rendering and editing use Plate's markdown deserialization with GFM
+support. `MarkdownRenderer` uses Plate's static read-only render path and
+`MarkdownEditor` uses the same Plate document model as an uncontrolled rich
+editor that serializes changes back to markdown strings. Both primitives share
+the `.graph-markdown` document skin. `MarkdownRenderer` decorates headings with
 deterministic IDs for display only. Fenced code blocks use Plate code-block
-nodes with Lowlight-backed syntax leaves, copy controls, and filename/language
-labels. The markdown code-block path is owned entirely by Plate and Lowlight.
+nodes with Lowlight-backed syntax leaves, copy controls in read-only mode, and
+filename/language labels. The markdown code-block path is owned entirely by
+Plate and Lowlight.
 
 The package exports source-level component subpaths such as
 `@dpeek/graphle-web-ui/button`, `@dpeek/graphle-web-ui/badge`, and

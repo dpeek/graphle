@@ -8,7 +8,7 @@ import {
   deserializeMarkdownToPlateValue,
   serializePlateValueToMarkdown,
 } from "./markdown-plate-value.js";
-import { MarkdownRenderer } from "./markdown.js";
+import { MarkdownEditor, MarkdownRenderer } from "./markdown.js";
 
 type BunMarkdownApi = typeof Bun.markdown;
 
@@ -163,6 +163,35 @@ describe("MarkdownRenderer", () => {
     expect(markup).toContain("prose");
     expect(markup).toContain("max-w-[48rem]");
     expect(markup).not.toContain("max-w-none");
+  });
+});
+
+describe("MarkdownEditor", () => {
+  it("renders editable Plate markup with the shared markdown skin", () => {
+    const markup = renderToStaticMarkup(
+      <MarkdownEditor onChange={() => undefined} placeholder="Write notes" value="# Probe notes" />,
+    );
+
+    expect(markup).toContain("graph-markdown");
+    expect(markup).toContain("graph-markdown-editor");
+    expect(markup).toContain("prose");
+    expect(markup).toContain("max-w-none");
+    expect(markup).toContain('data-web-markdown-editor="plate"');
+    expect(markup).toContain('data-slate-editor="true"');
+    expect(markup).toContain('contentEditable="true"');
+    expect(markup).toContain("<h1");
+    expect(markup).toContain('id="probe-notes"');
+    expect(markup).toContain("Probe notes");
+  });
+
+  it("passes invalid state to the editable markdown root", () => {
+    const markup = renderToStaticMarkup(
+      <MarkdownEditor aria-invalid onChange={() => undefined} placeholder="Write notes" value="" />,
+    );
+
+    expect(markup).toContain('data-web-markdown-editor="plate"');
+    expect(markup).toContain('aria-invalid="true"');
+    expect(markup).not.toContain('data-web-markdown-source="textarea"');
   });
 });
 

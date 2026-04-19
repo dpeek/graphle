@@ -294,18 +294,23 @@ describe("@dpeek/graphle-module-core/react-dom resolver", () => {
     expect(statusFieldMarkup).toContain("Status must be selected");
   });
 
-  it("keeps markdown control rendering write-only and leaves rendering to view mode", () => {
+  it("renders markdown controls with editable Plate markup", () => {
     const { notes: notesField } = createProbeFields();
 
     const controlMarkup = renderToStaticMarkup(<PredicateFieldControl predicate={notesField} />);
     const viewMarkup = renderToStaticMarkup(<PredicateFieldView predicate={notesField} />);
 
     expect(controlMarkup).toContain('data-web-field-kind="markdown"');
-    expect(controlMarkup).toContain('data-web-markdown-source="textarea"');
+    expect(controlMarkup).toContain("graph-markdown");
+    expect(controlMarkup).toContain('data-web-markdown-editor="plate"');
+    expect(controlMarkup).toContain('data-slate-editor="true"');
+    expect(controlMarkup).toContain('contentEditable="true"');
+    expect(controlMarkup).toContain("Probe notes");
+    expect(controlMarkup).not.toContain('data-web-markdown-source="textarea"');
+    expect(controlMarkup).not.toContain("Monaco");
     expect(controlMarkup).not.toContain("Preview");
     expect(controlMarkup).not.toContain("data-web-source-preview-toggle");
     expect(controlMarkup).not.toContain("data-web-markdown-preview");
-    expect(controlMarkup).not.toContain("graph-markdown");
     expect(viewMarkup).toContain('data-web-field-kind="markdown"');
     expect(viewMarkup).toContain("graph-markdown");
     expect(viewMarkup).toContain("Probe notes");

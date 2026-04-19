@@ -1,7 +1,7 @@
 ---
 name: Graph module core react-dom
 description: "The react-dom subpath, browser field resolver defaults, and query-editor authoring support in @dpeek/graphle-module-core."
-last_updated: 2026-04-17
+last_updated: 2026-04-19
 ---
 
 # Graph module core react-dom
@@ -59,9 +59,9 @@ Important rules:
   default `field` wrappers automatically
 - `PredicateFieldControl` and `PredicateField` accept shared `controller` and
   `issues` props so validation state can flow through one editor path
-- markdown controls are write-only source editors; hosts that need rendered
-  markdown switch the predicate to `view` mode instead of asking the editor to
-  render its own preview
+- markdown controls use the shared Plate-backed `MarkdownEditor`, so view and
+  edit modes share the `.graph-markdown` document skin while this layer keeps
+  validation and graph mutation ownership
 
 ## Shared form composition
 

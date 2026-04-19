@@ -218,7 +218,10 @@ describe("@dpeek/graphle-module-core/react-dom generic field registry coverage",
     expect(markdownViewMarkup).toContain("<strong");
     expect(markdownViewMarkup).toContain("markdown");
     expect(markdownEditorMarkup).toContain('data-web-field-kind="markdown"');
-    expect(markdownEditorMarkup).toContain('data-web-markdown-source="textarea"');
+    expect(markdownEditorMarkup).toContain("graph-markdown");
+    expect(markdownEditorMarkup).toContain('data-web-markdown-editor="plate"');
+    expect(markdownEditorMarkup).toContain('data-slate-editor="true"');
+    expect(markdownEditorMarkup).not.toContain('data-web-markdown-source="textarea"');
     expect(svgViewMarkup).toContain('data-web-field-kind="svg"');
     expect(svgViewMarkup).toContain('data-web-svg-preview="ready"');
     expect(svgEditorMarkup).toContain('data-web-field-kind="svg"');

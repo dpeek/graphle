@@ -1,16 +1,26 @@
 import { cn } from "@dpeek/graphle-web-ui/utils";
 import { createElement, type ComponentPropsWithoutRef, type CSSProperties } from "react";
 import type { NodeComponents } from "platejs";
+import {
+  PlateElement,
+  PlateLeaf,
+  type PlateElementProps,
+  type PlateLeafProps,
+} from "platejs/react";
 import type { SlateElementProps, SlateLeafProps } from "platejs/static";
 
 import {
   MarkdownCodeBlockElement,
   MarkdownCodeLineElement,
   MarkdownCodeSyntaxLeaf,
+  MarkdownEditableCodeBlockElement,
+  MarkdownEditableCodeLineElement,
+  MarkdownEditableCodeSyntaxLeaf,
 } from "./markdown-code-block-node.js";
 import type { MarkdownPlateElementNode } from "./markdown-plate-value.js";
 
 type MarkdownPlateElementProps = SlateElementProps<MarkdownPlateElementNode>;
+type MarkdownPlateEditableElementProps = PlateElementProps<MarkdownPlateElementNode>;
 
 const ORDERED_LIST_STYLES = new Set([
   "decimal",
@@ -42,6 +52,30 @@ export const markdownPlateComponents = {
   td: TableCellElement,
   th: TableHeaderCellElement,
   tr: TableRowElement,
+} satisfies NodeComponents;
+
+export const markdownPlateEditorComponents = {
+  a: EditableLinkElement,
+  blockquote: EditableBlockquoteElement,
+  bold: EditableBoldLeaf,
+  code: EditableInlineCodeLeaf,
+  code_block: MarkdownEditableCodeBlockElement,
+  code_line: MarkdownEditableCodeLineElement,
+  code_syntax: MarkdownEditableCodeSyntaxLeaf,
+  h1: EditableH1Element,
+  h2: EditableH2Element,
+  h3: EditableH3Element,
+  h4: EditableH4Element,
+  h5: EditableH5Element,
+  h6: EditableH6Element,
+  hr: EditableHorizontalRuleElement,
+  italic: EditableItalicLeaf,
+  p: EditableParagraphElement,
+  strikethrough: EditableStrikethroughLeaf,
+  table: EditableTableElement,
+  td: EditableTableCellElement,
+  th: EditableTableHeaderCellElement,
+  tr: EditableTableRowElement,
 } satisfies NodeComponents;
 
 function ParagraphElement(props: MarkdownPlateElementProps) {
@@ -202,6 +236,214 @@ function StrikethroughLeaf(props: SlateLeafProps) {
 
 function InlineCodeLeaf(props: SlateLeafProps) {
   return <code {...elementAttributes<"code">(props.attributes)}>{props.children}</code>;
+}
+
+function EditableParagraphElement(props: MarkdownPlateEditableElementProps) {
+  const listStyleType = stringNodeProperty(props.element, "listStyleType");
+
+  if (listStyleType === "todo") {
+    return <EditableTaskListItemElement {...props} />;
+  }
+
+  if (listStyleType) {
+    return <EditableListItemElement {...props} listStyleType={listStyleType} />;
+  }
+
+  return (
+    <PlateElement {...props} as="p">
+      {props.children}
+    </PlateElement>
+  );
+}
+
+function EditableListItemElement({
+  children,
+  element,
+  listStyleType,
+  ...props
+}: MarkdownPlateEditableElementProps & { listStyleType: string }) {
+  const listStart = numberNodeProperty(element, "listStart");
+  const ordered = ORDERED_LIST_STYLES.has(listStyleType);
+  const List = ordered ? "ol" : "ul";
+  const listProps = ordered
+    ? ({ start: listStart ?? undefined } satisfies ComponentPropsWithoutRef<"ol">)
+    : ({} satisfies ComponentPropsWithoutRef<"ul">);
+
+  return (
+    <List
+      className="graph-markdown-list"
+      style={
+        listStyleType === "disc" || listStyleType === "decimal" ? undefined : { listStyleType }
+      }
+      {...listProps}
+    >
+      <PlateElement
+        {...props}
+        as="li"
+        className="graph-markdown-list-item"
+        element={element}
+        style={listItemStyle(element, undefined)}
+      >
+        {children}
+      </PlateElement>
+    </List>
+  );
+}
+
+function EditableTaskListItemElement({
+  children,
+  element,
+  ...props
+}: MarkdownPlateEditableElementProps) {
+  const checked = booleanNodeProperty(element, "checked");
+
+  return (
+    <ul className="graph-markdown-task-list">
+      <PlateElement
+        {...props}
+        as="li"
+        className="graph-markdown-task-list-item"
+        element={element}
+        style={listItemStyle(element, undefined)}
+      >
+        <input checked={checked} contentEditable={false} disabled readOnly type="checkbox" />
+        <span>{children}</span>
+      </PlateElement>
+    </ul>
+  );
+}
+
+function EditableBlockquoteElement(props: MarkdownPlateEditableElementProps) {
+  return (
+    <PlateElement {...props} as="blockquote">
+      {props.children}
+    </PlateElement>
+  );
+}
+
+function EditableH1Element(props: MarkdownPlateEditableElementProps) {
+  return renderEditableHeadingElement("h1", props);
+}
+
+function EditableH2Element(props: MarkdownPlateEditableElementProps) {
+  return renderEditableHeadingElement("h2", props);
+}
+
+function EditableH3Element(props: MarkdownPlateEditableElementProps) {
+  return renderEditableHeadingElement("h3", props);
+}
+
+function EditableH4Element(props: MarkdownPlateEditableElementProps) {
+  return renderEditableHeadingElement("h4", props);
+}
+
+function EditableH5Element(props: MarkdownPlateEditableElementProps) {
+  return renderEditableHeadingElement("h5", props);
+}
+
+function EditableH6Element(props: MarkdownPlateEditableElementProps) {
+  return renderEditableHeadingElement("h6", props);
+}
+
+function renderEditableHeadingElement(
+  tagName: "h1" | "h2" | "h3" | "h4" | "h5" | "h6",
+  props: MarkdownPlateEditableElementProps,
+) {
+  return (
+    <PlateElement
+      {...props}
+      attributes={{
+        ...props.attributes,
+        id: stringNodeProperty(props.element, "headingId") ?? undefined,
+      }}
+      as={tagName}
+    >
+      {props.children}
+    </PlateElement>
+  );
+}
+
+function EditableHorizontalRuleElement(props: MarkdownPlateEditableElementProps) {
+  return <PlateElement {...props} as="hr" />;
+}
+
+function EditableLinkElement(props: MarkdownPlateEditableElementProps) {
+  return (
+    <PlateElement
+      {...props}
+      attributes={{
+        ...props.attributes,
+        href: stringNodeProperty(props.element, "url") ?? undefined,
+      }}
+      as="a"
+    >
+      {props.children}
+    </PlateElement>
+  );
+}
+
+function EditableTableElement(props: MarkdownPlateEditableElementProps) {
+  return (
+    <PlateElement {...props} as="table">
+      <tbody>{props.children}</tbody>
+    </PlateElement>
+  );
+}
+
+function EditableTableRowElement(props: MarkdownPlateEditableElementProps) {
+  return (
+    <PlateElement {...props} as="tr">
+      {props.children}
+    </PlateElement>
+  );
+}
+
+function EditableTableCellElement(props: MarkdownPlateEditableElementProps) {
+  return (
+    <PlateElement {...props} as="td">
+      {props.children}
+    </PlateElement>
+  );
+}
+
+function EditableTableHeaderCellElement(props: MarkdownPlateEditableElementProps) {
+  return (
+    <PlateElement {...props} as="th">
+      {props.children}
+    </PlateElement>
+  );
+}
+
+function EditableBoldLeaf(props: PlateLeafProps) {
+  return (
+    <PlateLeaf {...props} as="strong">
+      {props.children}
+    </PlateLeaf>
+  );
+}
+
+function EditableItalicLeaf(props: PlateLeafProps) {
+  return (
+    <PlateLeaf {...props} as="em">
+      {props.children}
+    </PlateLeaf>
+  );
+}
+
+function EditableStrikethroughLeaf(props: PlateLeafProps) {
+  return (
+    <PlateLeaf {...props} as="del">
+      {props.children}
+    </PlateLeaf>
+  );
+}
+
+function EditableInlineCodeLeaf(props: PlateLeafProps) {
+  return (
+    <PlateLeaf {...props} as="code">
+      {props.children}
+    </PlateLeaf>
+  );
 }
 
 function listItemStyle(
