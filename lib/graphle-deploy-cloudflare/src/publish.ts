@@ -22,7 +22,7 @@ export class CloudflarePublicSitePublishError extends CloudflareDeployError {
   }
 }
 
-export const defaultCloudflarePublishRetryDelaysMs = [500, 1000, 2000, 4000, 8000] as const;
+export const defaultCloudflarePublishRetryDelaysMs = [500, 1000, 2000, 4000, 8000, 16000] as const;
 
 export interface PublishPublicSiteBaselineOptions {
   readonly workerUrl: string | URL;
@@ -110,6 +110,7 @@ async function fetchPublishStep({
   code,
   message,
   request,
+  retryStatus,
   retryDelaysMs,
   secrets,
   sleep,
@@ -117,6 +118,7 @@ async function fetchPublishStep({
   readonly code: string;
   readonly message: string;
   readonly request: () => Promise<Response>;
+  readonly retryStatus?: (status: number) => boolean;
   readonly retryDelaysMs: readonly number[];
   readonly secrets: readonly string[];
   readonly sleep: (delayMs: number) => Promise<void> | void;
@@ -143,7 +145,9 @@ async function fetchPublishStep({
 
     if (response.ok) return response;
 
-    const retryable = isRetryablePublishStatus(response.status) && attempt < retryDelaysMs.length;
+    const retryable =
+      (retryStatus?.(response.status) ?? isRetryablePublishStatus(response.status)) &&
+      attempt < retryDelaysMs.length;
     if (!retryable) {
       await throwPublishResponseError({
         attemptCount: attempt + 1,
@@ -189,6 +193,7 @@ export async function publishPublicSiteBaseline({
   await fetchPublishStep({
     code: "baseline.replace_failed",
     message: "Cloudflare public baseline replacement failed.",
+    retryStatus: (status) => status === 400 || isRetryablePublishStatus(status),
     retryDelaysMs,
     secrets: [deploySecret],
     sleep,

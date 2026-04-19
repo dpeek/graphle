@@ -418,7 +418,7 @@ describe("Cloudflare public site publish handoff", () => {
       workerUrl: "https://worker.example.com",
       baseline,
       deploySecret: "deploy-secret",
-      retryDelaysMs: [0],
+      retryDelaysMs: [0, 0],
       sleep(delayMs) {
         slept.push(delayMs);
       },
@@ -430,6 +430,16 @@ describe("Cloudflare public site publish handoff", () => {
         if (pathname === graphlePublicSiteBaselinePath) {
           replaceAttempts += 1;
           if (replaceAttempts === 1) {
+            return Response.json(
+              {
+                error:
+                  'Validation failed for "type": Field "type" must reference an existing "Type" entity.',
+                code: "baseline.invalid",
+              },
+              { status: 400 },
+            );
+          }
+          if (replaceAttempts === 2) {
             return Response.json(
               {
                 error: "Baseline replacement requires deploy authorization.",
@@ -445,8 +455,9 @@ describe("Cloudflare public site publish handoff", () => {
     });
 
     expect(result.baselineHash).toBe(baseline.baselineHash);
-    expect(slept).toEqual([0]);
+    expect(slept).toEqual([0, 0]);
     expect(requested).toEqual([
+      "PUT /api/baseline",
       "PUT /api/baseline",
       "PUT /api/baseline",
       "GET /api/health",

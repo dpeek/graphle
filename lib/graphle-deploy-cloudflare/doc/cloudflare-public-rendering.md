@@ -69,9 +69,10 @@ from the remote Worker URL.
 `publishPublicSiteBaseline(...)` uses bounded retries around baseline
 replacement, health, and home verification because `workers.dev` can briefly
 serve the previous Worker after a successful upload. Replacement retries include
-401 responses so a previous deploy secret mismatch can recover once the new
-Worker version reaches the subdomain. Final failures include the upstream HTTP
-status and a trimmed, secret-redacted response body.
+400 and 401 responses so previous-version baseline validation or deploy secret
+mismatch can recover once the new Worker version reaches the subdomain. Final
+failures include the upstream HTTP status and a trimmed, secret-redacted
+response body.
 
 Cloudflare API tokens are only process inputs. They are never returned in
 status payloads, logged, stored as graph facts, or persisted in deploy metadata.
