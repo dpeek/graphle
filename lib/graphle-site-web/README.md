@@ -20,10 +20,10 @@ browser primitives and the MVP site item contracts.
 - the site-owned sidebar and centered content frame for the personal-site path
 - personal-site feature registration for future generic-shell composition
 - local status loading from `/api/health` and `/api/session`
-- a flat item sidebar with path navigation, URL-only external links, action
-  menus, delete confirmation, drag reorder, and a theme toggle
-- one inline shared entity-surface `site:item` editor that appears only for
-  authenticated local admin sessions
+- a flat item sidebar with visitor path navigation, visitor URL-only external
+  links, authenticated item selection, drag reorder, and a theme toggle
+- one inline shared entity-surface `site:item` editor with page-level delete
+  confirmation for authenticated local admin sessions
 - graph-backed browser route preview through the authored view surface, plus a
   static Worker-safe public renderer for Cloudflare deployment
 

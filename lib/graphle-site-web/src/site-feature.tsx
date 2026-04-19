@@ -39,13 +39,6 @@ import {
   AlertDialogTitle,
 } from "@dpeek/graphle-web-ui/alert-dialog";
 import { Button } from "@dpeek/graphle-web-ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@dpeek/graphle-web-ui/dropdown-menu";
 import { Input } from "@dpeek/graphle-web-ui/input";
 import {
   Sidebar,
@@ -56,7 +49,6 @@ import {
   SidebarHeader,
   SidebarInset,
   SidebarMenu,
-  SidebarMenuAction,
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarProvider,
@@ -67,7 +59,6 @@ import {
   AtSignIcon,
   BookOpenIcon,
   CloudUploadIcon,
-  Edit3Icon,
   ExternalLinkIcon,
   FileTextIcon,
   GithubIcon,
@@ -76,7 +67,6 @@ import {
   LinkedinIcon,
   MailIcon,
   MoonIcon,
-  MoreHorizontalIcon,
   PlusIcon,
   RssIcon,
   SunIcon,
@@ -252,6 +242,36 @@ function ItemEditor({
   );
 }
 
+function ItemEditorPage({
+  entity,
+  item,
+  onDelete,
+  runtime,
+}: {
+  readonly entity: GraphleSiteItemRef;
+  readonly item: GraphleSiteItemView;
+  readonly onDelete: () => void;
+  readonly runtime: GraphleSiteGraphClient;
+}) {
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex justify-end">
+        <Button
+          aria-label={`Delete ${item.title}`}
+          onClick={onDelete}
+          size="sm"
+          type="button"
+          variant="destructive"
+        >
+          <Trash2Icon aria-hidden={true} data-icon="inline-start" />
+          Delete
+        </Button>
+      </div>
+      <ItemEditor entity={entity} runtime={runtime} />
+    </div>
+  );
+}
+
 function selectedContentItem({
   editItemId,
   items,
@@ -278,15 +298,11 @@ function SortableItemRow({
   active,
   authenticated,
   item,
-  onDelete,
-  onEdit,
   onNavigate,
 }: {
   readonly active: boolean;
   readonly authenticated: boolean;
   readonly item: GraphleSiteItemView;
-  readonly onDelete: (item: GraphleSiteItemView) => void;
-  readonly onEdit: (item: GraphleSiteItemView) => void;
   readonly onNavigate: (item: GraphleSiteItemView, event: MouseEvent<HTMLAnchorElement>) => void;
 }) {
   const { attributes, isDragging, listeners, setNodeRef, transform, transition } = useSortable({
@@ -298,8 +314,8 @@ function SortableItemRow({
     transition,
   } satisfies CSSProperties;
   const Icon = iconForItem(item);
-  const external = !item.path && Boolean(item.url);
-  const href = item.path ?? item.url ?? "#";
+  const external = !authenticated && !item.path && Boolean(item.url);
+  const href = authenticated ? (item.path ?? "#") : (item.path ?? item.url ?? "#");
 
   return (
     <SidebarMenuItem
@@ -326,32 +342,6 @@ function SortableItemRow({
         <Icon aria-hidden={true} />
         <span>{item.title}</span>
       </SidebarMenuButton>
-      {authenticated && canRenderPortaledUi() ? (
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            aria-label={`Actions for ${item.title}`}
-            render={<SidebarMenuAction showOnHover={true} />}
-          >
-            <MoreHorizontalIcon aria-hidden={true} />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuGroup>
-              <DropdownMenuItem onClick={() => onEdit(item)}>
-                <Edit3Icon aria-hidden={true} />
-                Edit
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => onDelete(item)} variant="destructive">
-                <Trash2Icon aria-hidden={true} />
-                Delete
-              </DropdownMenuItem>
-            </DropdownMenuGroup>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      ) : authenticated ? (
-        <SidebarMenuAction aria-label={`Actions for ${item.title}`} showOnHover={true}>
-          <MoreHorizontalIcon aria-hidden={true} />
-        </SidebarMenuAction>
-      ) : null}
     </SidebarMenuItem>
   );
 }
@@ -361,8 +351,6 @@ function ItemSidebar({
   authenticated,
   items,
   onCreate,
-  onDelete,
-  onEdit,
   onNavigate,
   onReorder,
 }: {
@@ -370,8 +358,6 @@ function ItemSidebar({
   readonly authenticated: boolean;
   readonly items: readonly GraphleSiteItemView[];
   readonly onCreate: () => void;
-  readonly onDelete: (item: GraphleSiteItemView) => void;
-  readonly onEdit: (item: GraphleSiteItemView) => void;
   readonly onNavigate: (item: GraphleSiteItemView, event: MouseEvent<HTMLAnchorElement>) => void;
   readonly onReorder?: (items: readonly GraphleSiteItemOrder[]) => Promise<void>;
 }) {
@@ -427,8 +413,6 @@ function ItemSidebar({
           authenticated={authenticated}
           item={item}
           key={item.id}
-          onDelete={onDelete}
-          onEdit={onEdit}
           onNavigate={onNavigate}
         />
       ))}
@@ -675,33 +659,32 @@ function ReadySitePreview({
   const [actionError, setActionError] = useState("");
   const activeItem = selectedContentItem({ editItemId, items, route });
   const mutationRuntime = graphRuntime && "sync" in graphRuntime ? graphRuntime : null;
-  const activeItemRef =
-    mutationRuntime && editItemId ? findGraphleSiteItemRef(mutationRuntime, editItemId) : undefined;
   const routeItemId = route.kind === "item" ? route.itemId : undefined;
+  const activeEditorItemId = editItemId ?? routeItemId;
+  const activeItemRef =
+    mutationRuntime && activeEditorItemId
+      ? findGraphleSiteItemRef(mutationRuntime, activeEditorItemId)
+      : undefined;
   const routeItemRef =
     graphRuntime && route.kind === "item"
       ? findGraphleSiteItemRef(graphRuntime, route.itemId)
       : undefined;
-  const isEditing =
-    snapshot.session.authenticated &&
-    editItemId !== null &&
-    activeItem &&
-    activeItemRef &&
-    mutationRuntime;
 
   function navigateToItem(item: GraphleSiteItemView, event: MouseEvent<HTMLAnchorElement>) {
+    if (snapshot.session.authenticated) {
+      event.preventDefault();
+      setEditItemId(item.id);
+      setActionError("");
+      if (item.path && item.path !== route.path) {
+        void onNavigatePath?.(item.path);
+      }
+      return;
+    }
+
     if (!item.path) return;
     event.preventDefault();
     setEditItemId(null);
     void onNavigatePath?.(item.path);
-  }
-
-  function editItem(item: GraphleSiteItemView) {
-    setEditItemId(item.id);
-    setActionError("");
-    if (item.path && item.path !== route.path) {
-      void onNavigatePath?.(item.path);
-    }
   }
 
   async function createBlankItem() {
@@ -737,14 +720,12 @@ function ReadySitePreview({
       <SidebarProvider style={{ "--sidebar-width": "15rem" } as CSSProperties}>
         <Sidebar collapsible="none" variant="sidebar">
           <ItemSidebar
-            activeItemId={editItemId ?? routeItemId}
+            activeItemId={activeEditorItemId}
             authenticated={snapshot.session.authenticated}
             items={items}
             onCreate={() => {
               void createBlankItem();
             }}
-            onDelete={setDeleteItem}
-            onEdit={editItem}
             onNavigate={navigateToItem}
             onReorder={onReorderItems}
           />
@@ -762,8 +743,13 @@ function ReadySitePreview({
                 {actionError}
               </p>
             ) : null}
-            {isEditing && activeItemRef && mutationRuntime ? (
-              <ItemEditor entity={activeItemRef} runtime={mutationRuntime} />
+            {snapshot.session.authenticated && activeItem && activeItemRef && mutationRuntime ? (
+              <ItemEditorPage
+                entity={activeItemRef}
+                item={activeItem}
+                onDelete={() => setDeleteItem(activeItem)}
+                runtime={mutationRuntime}
+              />
             ) : (
               <RouteView itemRef={routeItemRef} route={route} />
             )}

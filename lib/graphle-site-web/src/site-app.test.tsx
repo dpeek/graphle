@@ -79,6 +79,11 @@ describe("GraphleSiteShell", () => {
     expect(html).toContain("Home");
     expect(html).toContain("Private bookmark");
     expect(html).toContain("graph-markdown");
+    expect(html).toContain('data-entity-surface-mode="edit"');
+    expect(html).toContain('aria-label="Delete Home"');
+    expect(html).toContain('href="#"');
+    expect(html).not.toContain('target="_blank"');
+    expect(html).not.toContain("Actions for Private bookmark");
     expect(html).not.toContain("Welcome home.");
     expect(html).not.toContain("graphle-site-");
     expect(html).not.toContain("Site preview");
@@ -90,7 +95,7 @@ describe("GraphleSiteShell", () => {
     expect(html).not.toContain("Admin active");
   });
 
-  it("renders graph-backed route items through the authored view surface", () => {
+  it("renders authenticated route items through the authored editor surface", () => {
     const runtime = createSiteRuntime();
     const tagId = runtime.graph.tag.create({
       color: "#2563eb",
@@ -115,12 +120,15 @@ describe("GraphleSiteShell", () => {
       />,
     );
 
-    expect(html).toContain("<h1");
-    expect(html).toContain('data-entity-surface-title="title"');
+    expect(html).toContain('data-entity-surface-mode="edit"');
+    expect(html).toContain('aria-label="Delete Home"');
+    expect(html).toContain('data-explorer-field-path="title"');
+    expect(html).toContain('data-explorer-field-path="body"');
+    expect(html).toContain('data-explorer-field-path="path"');
     expect(html).toContain("Home");
-    expect(html).toContain("November 01, 2023");
-    expect(html).toContain('data-web-field-kind="entity-reference-list"');
-    expect(html).toContain("data-web-reference-chip=");
+    expect(html).toContain("2023-11-01T00:00:00.000Z");
+    expect(html).toContain('data-web-field-kind="entity-reference-combobox"');
+    expect(html).toContain('data-web-reference-selected-id="');
     expect(html).toContain("Graphle");
     expect(html).toContain('data-web-field-kind="markdown"');
     expect(html).toContain("graph-markdown");
@@ -150,6 +158,7 @@ describe("GraphleSiteShell", () => {
     );
 
     expect(html).toContain("graph-markdown");
+    expect(html).toContain('data-entity-surface-title="title"');
     expect(html).toContain("Public");
     expect(html).toContain("<strong");
     expect(html).toContain("graph");

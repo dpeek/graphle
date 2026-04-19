@@ -1,7 +1,7 @@
 ---
 name: Graphle site web
 description: "Assembled personal-site browser app, feature registration, and package-owned client assets for @dpeek/graphle-site-web."
-last_updated: 2026-04-18
+last_updated: 2026-04-19
 ---
 
 # Graphle Site Web
@@ -20,7 +20,7 @@ last_updated: 2026-04-18
 `@dpeek/graphle-site-web` builds the browser app that `@dpeek/graphle-local`
 serves from package assets. The product path renders a site-owned frame, not
 the generic Graphle shell chrome. It uses `@dpeek/graphle-web-ui` sidebar,
-dropdown, dialog, form, tooltip, button, and markdown primitives plus
+dialog, form, tooltip, button, and markdown primitives plus
 browser-safe item helpers from `@dpeek/graphle-module-site`.
 Markdown typography comes from `@dpeek/graphle-web-ui`'s shared
 Tailwind Typography-backed renderer; site-web only adds route-level layout
@@ -54,22 +54,26 @@ Those payloads drive service and auth state. Public route content and the flat
 item sidebar come from the embedded sanitized public graph baseline. That keeps
 public hydration off `/api/sync` and away from private local-authoring facts.
 
-The first screen is the website preview with one left sidebar and centered
-route content. Sidebar rows show only item icon and item title. Path-backed
-items navigate to exact local routes with `history.pushState`; URL-only items
-open their external URL in a new tab and do not create public permalinks.
-`popstate` reloads status and resolves the route against the current graph
-runtime. URL-only items appear in the sidebar but do not resolve as pages.
+The first screen is the current item route with one left sidebar and centered
+content. Sidebar rows show only item icon and item title. For visitors,
+path-backed items navigate to exact local routes with `history.pushState`;
+URL-only items open their external URL in a new tab and do not create public
+permalinks. For authenticated sessions, clicking any sidebar item selects the
+item for editing instead. URL-only items therefore open the item editor rather
+than navigating to the external URL. `popstate` reloads status and resolves the
+route against the current graph runtime. URL-only items appear in the sidebar
+but do not resolve as public pages.
 
-Authenticated sessions can edit either the current route item or a URL-only
-item selected from the sidebar action menu. Edit mode keeps the same content
-layout and mounts the shared `EntitySurface` from
-`@dpeek/graphle-surface/react-dom` over a live `site:item` entity ref, with the
-authored `siteItemSurface` section chrome and field labels visible. Field
-selection, markdown editing, tag/reference editing, enum selects, URL/date,
-boolean, number, and text controls come from shared predicate metadata and
+Authenticated sessions always show the shared `EntitySurface` editor for the
+selected item. Route-backed items use the current route item by default, and
+URL-only items use the selected sidebar item. Edit mode keeps the same content
+layout and mounts `EntitySurface` from `@dpeek/graphle-surface/react-dom` over
+a live `site:item` entity ref, with the authored `siteItemSurface` section
+chrome and field labels visible. Field selection, markdown editing,
+tag/reference editing, enum selects, URL/date, boolean, number, and text
+controls come from shared predicate metadata and
 `@dpeek/graphle-module-core/react-dom`; site-web keeps only product chrome such
-as the sidebar, route preview, action menu, and theme toggle. The browser app
+as the sidebar, route preview, delete action, and theme toggle. The browser app
 does not ship package-local CSS overrides for predicate editors or display
 rows; it imports the shared `@dpeek/graphle-web-ui/global.css` styles and uses
 the default shared surface rendering wherever possible.
@@ -79,16 +83,17 @@ Route preview resolves the current item id back to a graph ref and renders
 pieces in view mode. That view surface preserves authored field order while
 hiding visible field labels so public pages render as post content. Public
 visitors use the sanitized public graph runtime. Authenticated sessions use the
-private synced graph runtime and can switch the selected item into the authored
+private synced graph runtime and render the selected item through the authored
 `siteItemSurface` editor.
 
 There are no creation presets. The single `+` action creates a private
 `Untitled` routed item through the graph runtime, flushes the transaction
 through `/api/tx`, navigates to the new path, and enters edit mode.
 
-Authenticated sessions can delete items through the sidebar action menu after a
-confirmation dialog. Drag-and-drop ordering uses `@dnd-kit/sortable` and writes
-normalized consecutive `site:item.sortOrder` values as graph transactions.
+Authenticated sessions can delete the current item from the item editor page
+after a confirmation dialog. Navigation rows do not carry disclosure menus.
+Drag-and-drop ordering uses `@dnd-kit/sortable` and writes normalized
+consecutive `site:item.sortOrder` values as graph transactions.
 
 Authenticated sessions also get a compact Cloudflare deploy panel in the
 existing sidebar footer. It shows the last Worker URL, last deploy state,
